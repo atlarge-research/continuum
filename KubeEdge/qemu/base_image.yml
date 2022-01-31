@@ -1,0 +1,14 @@
+---
+- hosts: all_hosts
+  become: true
+  tasks:
+  - name: Install cloudinit requirements
+    apt:
+      name: cloud-image-utils
+      state: present
+
+  - name: Create base image
+    command: qemu-img create -f qcow2 -F qcow2 -b /var/lib/libvirt/images/ubuntu2004.qcow2 "/var/lib/libvirt/images/base.qcow2"
+
+  - name: Add cloudinit disk for base
+    command: cloud-localds -N "/home/{{ username }}/.edge/network_config_{{ base }}.yml" "/var/lib/libvirt/images/user_data_base.img" "/home/{{ username }}/.edge/user_data_{{ base }}.yml"

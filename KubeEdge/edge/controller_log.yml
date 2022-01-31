@@ -1,0 +1,34 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+  - name: Get cergen and fix permissions
+    get_url:
+      url: https://raw.githubusercontent.com/kubeedge/kubeedge/master/build/tools/certgen.sh
+      dest: "/home/{{ username }}"
+      mode: '0755'
+
+  - name: Move certgen to KubeEdge directory
+    command: mv "/home/{{ username }}/certgen.sh" /etc/kubeedge/
+
+  - name: Execute certgen
+    shell: CLOUDCOREIPS="{{ cloud_ip }}" /etc/kubeedge/certgen.sh stream
+  
+  - name: Add ip to ip table
+    command: iptables -t nat -A OUTPUT -p tcp --dport 10351 -j DNAT --to {{ cloud_ip }}:10003
+
+  - name: Enable cloudstream
+    shell: "sed -z 's/enable: false/enable: true/2' /etc/kubeedge/config/cloudcore.yaml > cloudcore.yaml" 
+    args:
+      warn: false
+
+  - name: Move the newly created cloudcore to KubeEdge directory
+    command: mv -f "/home/{{ username }}/cloudcore.yaml" /etc/kubeedge/config/cloudcore.yaml
+
+  - name: Kill cloudcore
+    command: pkill cloudcore
+
+  - name: Restart cloudcore
+    command: sudo su -c 'nohup cloudcore > cloudcore.log 2>&1 &'
+    args:
+      warn: false

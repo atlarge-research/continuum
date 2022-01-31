@@ -1,0 +1,60 @@
+---
+- hosts: clouds
+  become: true
+  tasks:
+  - name: Ensure docker service is running
+    systemd:
+      name: docker
+      state: started
+  
+  - name: Add cloud user to docker group
+    user:
+      name: "{{ username }}"
+      group: docker
+
+  - name: Allow HTTP pulling from private docker registry
+    shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json
+
+  - name: Restart docker service
+    command: systemctl restart docker
+
+  - name: Reload ip settings
+    command: sysctl -p
+
+  - name: Install Mosquitto
+    apt: 
+      name: "{{ packages }}"
+      state: present
+      update_cache: true
+    vars:
+      packages:
+        - mosquitto=1.6.9-1
+
+  - name: Run Mosquitto
+    command: mosquitto -d -p 1883
+
+  - name: Wait for join command to be finished on cloud controller
+    local_action:
+      module: wait_for
+      path: /tmp/join-command.txt
+    become: false
+
+  - name: Copy the join command to the cloud node
+    copy: 
+      src: /tmp/join-command.txt 
+      dest: /tmp/join-command.txt
+
+  - name: Make the join command file executable
+    file:
+      dest: /tmp/join-command.txt
+      mode: +x
+
+  - name: Execute the join command
+    shell: bash /tmp/join-command.txt
+
+  - name: Run Netserver
+    command: netserver
+
+  handlers:
+    - name: docker status
+      service: name=docker state=started
