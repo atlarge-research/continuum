@@ -2,10 +2,17 @@
 - hosts: all_hosts
   become: true
   tasks:
-  - name: Install cloudinit requirements
-    apt:
+  - name: Install cloudinit requirements if on Debian OS
+    package:
       name: cloud-image-utils
       state: present
+    when: ansible_os_family == "Debian"
+  
+  - name: Install cloudinit requirements if on RedHat OS
+    package:
+      name: cloud-utils
+      state: present
+    when: ansible_os_family == "RedHat"
 
   - name: Create base image
     command: qemu-img create -f qcow2 -F qcow2 -b /var/lib/libvirt/images/ubuntu2004.qcow2 "/var/lib/libvirt/images/base.qcow2"

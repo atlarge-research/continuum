@@ -1,0 +1,9 @@
+__pycache__
+.terraform
+*.tfstate*
+*.backup
+*.lock.hcl
+id_rsa*
+*.tf
+.tmp
+logs/

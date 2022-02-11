@@ -2,18 +2,10 @@
 - hosts: all_hosts
   become: true
   tasks:
-  - name: Install packages that allow apt to be used over HTTPS
-    apt:
-      name: "{{ packages }}"
+  - name: Install packages that allow downloads over HTTPS
+    package:
+      name: curl
       state: present
-      update_cache: true
-    vars:
-      packages:
-      - apt-transport-https
-      - ca-certificates
-      - curl
-      - gnupg-agent
-      - software-properties-common
 
   - name: Get ubuntu source image
     get_url:
