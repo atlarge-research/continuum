@@ -236,6 +236,15 @@ def schedule(args, machines):
         if cores_per_type[machine_type] <= machine_cores_left:
             machine_cores_left -= cores_per_type[machine_type]
             machines_per_node[node][machine_type] += 1
+            types_to_go[machine_type] -= 1
+
+            if types_to_go[machine_type] == 0:
+                if machine_type == 'cloud':
+                    machine_type = 'edge'
+                elif machine_type == 'edge':
+                    machine_type = 'endpoint'
+                else:
+                    continue
 
             if machine_cores_left == 0:
                 node += 1
@@ -246,13 +255,6 @@ def schedule(args, machines):
                 machine_cores_left = machines[node].cores
                 machines_per_node.append(
                     {'cloud': 0, 'edge': 0, 'endpoint': 0})
-
-            types_to_go[machine_type] -= 1
-            if types_to_go[machine_type] == 0:
-                if machine_type == 'cloud':
-                    machine_type = 'edge'
-                elif machine_type == 'edge':
-                    machine_type = 'endpoint'
         else:
             node += 1
 
