@@ -12,6 +12,8 @@
     package:
       name: cloud-utils
       state: present
+    vars:
+      ansible_python_interpreter: "/usr/bin/python"
     when: ansible_os_family == "RedHat"
 
   - name: Create base image

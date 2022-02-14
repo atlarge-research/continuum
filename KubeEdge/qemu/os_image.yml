@@ -2,10 +2,22 @@
 - hosts: all_hosts
   become: true
   tasks:
-  - name: Install packages that allow downloads over HTTPS
+  - name: Install curl if not RedHat
     package:
       name: curl
       state: present
+    when: ansible_os_family != "RedHat"
+  
+  - name: Install curl and selinux binding for RedHat
+    package:
+      name: "{{ item }}"
+      state: present
+    with_items:
+      - curl
+      - libselinux-python3
+    vars:
+      ansible_python_interpreter: "/usr/bin/python"
+    when: ansible_os_family == "RedHat"
 
   - name: Get ubuntu source image
     get_url:

@@ -1,14 +1,11 @@
 # Network
-This file describes how to setup and configure bridge network interfaces in case you want to use this benchmark with multiple physical machines so as to deploy more VMs and containers. Network bridges are needed so VMs and containers deployed on different physical machines can directly access each other.
-
-Ignore this file if using the Terraform version of the benchmark, as that version only works on a single physical machine. 
-For the QEMU version, the use of a network bridge is mandatory, even when only using a single physical machine. If your system already uses network bridges, skip the next section.
+This file describes how to setup and configure bridged network interfaces if you want to use Continuum with Libvirt (so not Terraform) on multiple physical machines. This allows for large scale infrastructure deployments. The network bridge is required for VMs on different physical machines to directly communicate with each other.
 
 ## Creating a network bridge
-We assume the operating system is Ubuntu 20.04 with Netcat for network configuration, and that a default, bridgeless Netcat configuration file already exists.
+We assume the operating system is Ubuntu 20.04 with Netcat for network configuration, and that a default, bridgeless Netcat configuration file already exists. Simimlar network bridge configuration can be done on other operating systems.
 
 ```
-# Check if there is a network bridge active on your machine. If so, stop.
+# Check if there already is a network bridge active on your machine. If so, you are done.
 # Ignore virtual bridges such as docker0 and virbr0. Most often a bridge is called 'br0'.
 brctl show
 
@@ -66,4 +63,4 @@ sysctl -p /etc/sysctl.conf
 ```
 
 ## Updating network configuration
-Finally, update the benchmark code with the correct gateway4 and nameserver settings among others. Please see `KubeEdge/qemu_generate.py`, and update the `NETWORK_CONFIG` string to reflect your settings. Do only replace the hardcoded values.
+Finally, update the network infrastructure configuration template `NETWORK_CONFIG` in `KubeEdge/qemu_generate.py` to reflect the settings of your network bridge. Do not replace the variables (marked with `%`)
