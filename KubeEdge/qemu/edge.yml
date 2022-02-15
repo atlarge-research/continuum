@@ -11,5 +11,5 @@
   - name: Add cloudinit disk
     shell: |
       for i in $(seq "{{ edge_start }}" "{{ edge_end }}"); do
-        cloud-localds -N "/home/{{ username }}/.edge/network_config_edge${i}.yml" /var/lib/libvirt/images/user_data_edge${i}.img "/home/{{ username }}/.edge/user_data_edge${i}.yml"
+        cloud-localds /var/lib/libvirt/images/user_data_edge${i}.img "/home/{{ username }}/.edge/user_data_edge${i}.yml"
       done

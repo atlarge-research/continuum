@@ -2,22 +2,22 @@
 - hosts: all_hosts
   become: true
   tasks:
-  - name: Install cloudinit requirements if on Debian OS
+  - name: Create base image
+    command: qemu-img create -f qcow2 -F qcow2 -b /var/lib/libvirt/images/ubuntu2004.qcow2 "/var/lib/libvirt/images/base.qcow2"
+
+  - name: Install cloudinit requirements
     package:
       name: cloud-image-utils
       state: present
     when: ansible_os_family == "Debian"
   
-  - name: Install cloudinit requirements if on RedHat OS
+  - name: Install cloudinit requirements
     package:
       name: cloud-utils
       state: present
     vars:
       ansible_python_interpreter: "/usr/bin/python"
     when: ansible_os_family == "RedHat"
-
-  - name: Create base image
-    command: qemu-img create -f qcow2 -F qcow2 -b /var/lib/libvirt/images/ubuntu2004.qcow2 "/var/lib/libvirt/images/base.qcow2"
-
+  
   - name: Add cloudinit disk for base
-    command: cloud-localds -N "/home/{{ username }}/.edge/network_config_{{ base }}.yml" "/var/lib/libvirt/images/user_data_base.img" "/home/{{ username }}/.edge/user_data_{{ base }}.yml"
+    command: cloud-localds "/var/lib/libvirt/images/user_data_base.img" "/home/{{ username }}/.edge/user_data_{{ base }}.yml"

@@ -46,18 +46,6 @@ DOMAIN = """\
 </domain>
 """
 
-NETWORK_CONFIG = """\
-version: 2
-ethernets:
-  ens2:
-    dhcp4: false
-    addresses: [%s/16]
-    gateway4: 192.168.1.100
-    nameservers:
-      addresses: [1.1.1.1, 8.8.8.8]
-      search: []
-"""
-
 USER_DATA = """\
 #cloud-config
 hostname: %s
@@ -78,10 +66,31 @@ chpasswd:
   list: |
      %s:password
   expire: False
+write_files:
+- path: /etc/cloud/cloud.cfg.d/99-custom-networking.cfg
+  permissions: '0644'
+  content: |
+    network: {config: disabled}
+- path: /etc/netplan/new-config.yaml
+  permissions: '0644'
+  content: |
+    network:
+      version: 2
+      ethernets:
+        ens2:
+          dhcp4: false
+          addresses: [%s/16]
+          gateway4: 192.168.1.100
+          nameservers:
+            addresses: [1.1.1.1, 8.8.8.8]
+            search: []
+runcmd:
+ - rm /etc/netplan/50-cloud-init.yaml
+ - netplan generate
+ - netplan apply
 # written to /var/log/cloud-init-output.log
 final_message: "The system is finally up, after $UPTIME seconds"
 """
-
 
 def generate_config(args, machines):
     """Create QEMU config files for each machine
@@ -112,13 +121,9 @@ def generate_config(args, machines):
             f.write(DOMAIN % (name, memory, args.cloud_cores, 10000 * 10, 10000 * 10, '\n'.join(pinnings), name, name))
             f.close()
 
-            f = open('.tmp/network_config_%s.yml' % (name), 'w')
-            f.write(NETWORK_CONFIG % (ip))
-            f.close()
-
             f = open('.tmp/user_data_%s.yml' % (name), 'w')
             hostname = name.replace('_', '')
-            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name))
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip))
             f.close()
 
         # Edges
@@ -130,12 +135,8 @@ def generate_config(args, machines):
             f.write(DOMAIN % (name, memory, args.edge_cores, 10000 * 10, args.edge_quota * 10, '\n'.join(pinnings), name, name))
             f.close()
 
-            f = open('.tmp/network_config_%s.yml' % (name), 'w')
-            f.write(NETWORK_CONFIG % (ip))
-            f.close()
-
             f = open('.tmp/user_data_%s.yml' % (name), 'w')
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name))
+            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip))
             f.close()
 
         # Endpoints
@@ -147,12 +148,8 @@ def generate_config(args, machines):
             f.write(DOMAIN % (name, memory, args.endpoint_cores, 10000 * 10, args.endpoint_quota * 10, '\n'.join(pinnings), name, name))
             f.close()
 
-            f = open('.tmp/network_config_%s.yml' % (name), 'w')
-            f.write(NETWORK_CONFIG % (ip))
-            f.close()
-
             f = open('.tmp/user_data_%s.yml' % (name), 'w')
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name))
+            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip))
             f.close()
 
         # Base image
@@ -163,10 +160,6 @@ def generate_config(args, machines):
         f.write(DOMAIN % (machine.base_name, memory, args.cloud_cores, 0, 0, '\n'.join(pinnings), 'base', 'base'))
         f.close()
 
-        f = open('.tmp/network_config_base%i.yml' % (i), 'w')
-        f.write(NETWORK_CONFIG % (machine.base_ip))
-        f.close()
-
         f = open('.tmp/user_data_base%i.yml' % (i), 'w')
-        f.write(USER_DATA % (machine.base_name, machine.base_name, machine.base_name, machine.base_name, ssh_key, machine.base_name))
+        f.write(USER_DATA % (machine.base_name, machine.base_name, machine.base_name, machine.base_name, ssh_key, machine.base_name, machine.base_ip))
         f.close()

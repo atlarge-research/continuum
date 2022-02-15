@@ -370,7 +370,6 @@ def copy_files(machines):
                 continue
 
             out.append(machine.copy_files(benchmark_path + '/.tmp/domain_' + name + '.xml', dest))
-            out.append(machine.copy_files(benchmark_path + '/.tmp/network_config_' + name + '.yml', dest))
             out.append(machine.copy_files(benchmark_path + '/.tmp/user_data_' + name + '.yml', dest))
 
         # Copy Ansible YML files to each node
