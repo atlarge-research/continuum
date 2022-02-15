@@ -77,9 +77,9 @@ def base_image(machines):
         processes = []
         for machine in machines:
             if machine.is_local:
-                command = 'virsh create %s/.edge/domain_%s.xml' % (home, machine.base_name)
+                command = 'virsh --connect qemu:///system create %s/.edge/domain_%s.xml' % (home, machine.base_name)
             else:
-                command = 'ssh %s -t \'bash -l -c "virsh create %s/.edge/domain_%s.xml"\'' % (
+                command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system create %s/.edge/domain_%s.xml"\'' % (
                     machine.name, home, machine.base_name)
 
             processes.append(machine.process(command, shell=True, output=False))
@@ -184,9 +184,9 @@ def start_qemu(args, machines):
                 continue
 
             if machine.is_local:
-                command = 'virsh create %s/.edge/domain_%s.xml' % (home, name)
+                command = 'virsh --connect qemu:///system create %s/.edge/domain_%s.xml' % (home, name)
             else:
-                command = 'ssh %s -t \'bash -l -c "virsh create %s/.edge/domain_%s.xml"\'' % (
+                command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system create %s/.edge/domain_%s.xml"\'' % (
                     machine.name, home, name)
 
             processes.append(machine.process(command, shell=True, output=False))

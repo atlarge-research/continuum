@@ -63,4 +63,6 @@ sysctl -p /etc/sysctl.conf
 ```
 
 ## Updating network configuration
-Finally, update the network infrastructure configuration template `NETWORK_CONFIG` in `KubeEdge/qemu_generate.py` to reflect the settings of your network bridge. Do not replace the variables (marked with `%`)
+Finally, update the framework to reflect your network bridge settings in `KubeEdge/qemu_generate.py`.
+Search for `path: /etc/netplan/new-config.yaml` and update the template after `config: |` with your network bridge settings. The current settings serve as an example. \
+If your network bridge is not called br0, please edit the br0 string inside `KubeEdge/qemu_generate.py`.

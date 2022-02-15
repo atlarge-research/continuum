@@ -107,10 +107,10 @@ def generate_config(args, machines):
     ssh_key = f.read().rstrip()
     f.close()
 
-    # Counter for pinning vcpu to physical cpu
-    start_core = 0
-
     for i, machine in enumerate(machines):
+        # Counter for pinning vcpu to physical cpu
+        start_core = 0
+
         # Clouds
         for ip, name in zip(machine.cloud_controller_ips + machine.cloud_ips, 
                             machine.cloud_controller_names + machine.cloud_names):        
@@ -155,8 +155,7 @@ def generate_config(args, machines):
         # Base image
         f = open('.tmp/domain_base%i.xml' % (i), 'w')
         memory = 1048576 * args.cloud_cores
-        pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(args.cloud_cores), range(start_core,start_core+args.cloud_cores))]
-        start_core += args.cloud_cores
+        pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(args.cloud_cores), range(0,args.cloud_cores))]
         f.write(DOMAIN % (machine.base_name, memory, args.cloud_cores, 0, 0, '\n'.join(pinnings), 'base', 'base'))
         f.close()
 
