@@ -5,7 +5,9 @@ General tips for debugging:
 1. Check the generated log file in /edge-benchmark-RM/logs/<timestamp.log>.
 2. If the benchmark hangs on an VM related command, delete the VMs (`virsh delete ...`), delete the VMs images and disks (in `/var/lib/libvirt/images`) and try running the benchmark again.
 
-## Terrafrom
+## Terrafrom (can also apply for Libvirt/KVM/QEMU)
+For Terraform support, please contact the developers. Currently, Terraform support is not publicly available.
+
 1. Command `terraform apply` outputs `Could not open '/var/lib/libvirt/images/<FILE_NAME>': Permission denied`
 
     You can find the solution here: [link](https://github.com/dmacvicar/terraform-provider-libvirt/commit/22f096d9). A restart may require the following command: `systemctl restart libvirtd.service` <br>
@@ -145,3 +147,7 @@ General tips for debugging:
     # Reset network filter
     sysctl -p /etc/sysctl.conf
     ```
+
+2. Ansible Playbook crashes on permission denied error
+
+    The framework should be executed without sudo, however the Ansible playbooks will execute commands with superuser rights (this is required for installing packages, booting up VMs, etc.). To make this work, you need to set up passwordless sudo access. On most operating systems this can be managed via the `sudo visudo` command, where the sudo/wheel group (depending on your OS the group name changes) should have `NOPASSWD: ALL` in the last column. Most often this option is commented out in the `sudo visudo` file in favor of a version without this option. Please comment the NOPASSWD version out, and comment out the out the other one.

@@ -1,5 +1,5 @@
 # Network
-This file describes how to setup and configure bridged network interfaces if you want to use Continuum with Libvirt (so not Terraform) on multiple physical machines. This allows for large scale infrastructure deployments. The network bridge is required for VMs on different physical machines to directly communicate with each other.
+This file describes how to setup and configure bridged network interfaces if you want to use Continuum with Libvirt on multiple physical machines. This allows for large scale infrastructure deployments. The network bridge is required for VMs on different physical machines to directly communicate with each other.
 
 ## Creating a network bridge
 We assume the operating system is Ubuntu 20.04 with Netcat for network configuration, and that a default, bridgeless Netcat configuration file already exists. Simimlar network bridge configuration can be done on other operating systems.
@@ -63,6 +63,5 @@ sysctl -p /etc/sysctl.conf
 ```
 
 ## Updating network configuration
-Finally, update the framework to reflect your network bridge settings in `KubeEdge/qemu_generate.py`.
-Search for `path: /etc/netplan/new-config.yaml` and update the template after `config: |` with your network bridge settings. The current settings serve as an example. \
-If your network bridge is not called br0, please edit the br0 string inside `KubeEdge/qemu_generate.py`.
+Finally, update the framework to reflect your network bridge settings. In `KubeEdge/main.py`, update the `prefixIP` constant at the top if the created VMs should have a different IP range. 
+In `KubeEdge/qemu_generate.py`, search for `path: /etc/netplan/new-config.yaml` and update the nameserver addresses if needed. If network errors still occur, check the `NOTE` comment in this same file. We assume the network bridge is called `br0`, otherwise in this file change all occurences into the name of your network bridge.
