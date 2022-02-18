@@ -112,11 +112,11 @@ def find_bridge(machine, bridge):
     return int(output[0].rstrip())
 
 
-def generate_config(args, machines):
+def generate_config(config, machines):
     """Create QEMU config files for each machine
 
     Args:
-        args (Namespace): Argparse object
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info('Start writing QEMU config files for cloud / edge')
@@ -168,6 +168,12 @@ def generate_config(args, machines):
                 gateway = gatewaylist[1].rstrip()
     # ------------------------------------------------------------------------------------------------
 
+    cc = config['infrastructure']['cloud_cores']
+    ec = config['infrastructure']['edge_cores']
+    pc = config['infrastructure']['endpoint_cores']
+
+    period = 100000
+
     for i, machine in enumerate(machines):
         # Counter for pinning vcpu to physical cpu
         start_core = 0
@@ -176,10 +182,10 @@ def generate_config(args, machines):
         for ip, name in zip(machine.cloud_controller_ips + machine.cloud_ips, 
                             machine.cloud_controller_names + machine.cloud_names):        
             f = open('.tmp/domain_%s.xml' % (name), 'w')
-            memory = 1048576 * args.cloud_cores
-            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(args.cloud_cores), range(start_core,start_core+args.cloud_cores))]
-            start_core += args.cloud_cores
-            f.write(DOMAIN % (name, memory, args.cloud_cores, 10000 * 10, 10000 * 10, '\n'.join(pinnings), bridge_name, name, name))
+            memory = 1048576 * cc
+            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(start_core,start_core+cc))]
+            start_core += cc
+            f.write(DOMAIN % (name, memory, cc, period, int(period * config['infrastructure']['cloud_quota']), '\n'.join(pinnings), bridge_name, name, name))
             f.close()
 
             f = open('.tmp/user_data_%s.yml' % (name), 'w')
@@ -190,10 +196,10 @@ def generate_config(args, machines):
         # Edges
         for ip, name in zip(machine.edge_ips, machine.edge_names):
             f = open('.tmp/domain_%s.xml' % (name), 'w')
-            memory = 1048576 * args.edge_cores
-            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(args.edge_cores), range(start_core,start_core+args.edge_cores))]
-            start_core += args.edge_cores
-            f.write(DOMAIN % (name, memory, args.edge_cores, 10000 * 10, args.edge_quota * 10, '\n'.join(pinnings), bridge_name, name, name))
+            memory = 1048576 * ec
+            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(ec), range(start_core,start_core+ec))]
+            start_core += ec
+            f.write(DOMAIN % (name, memory, ec, period, int(period * config['infrastructure']['edge_quota']), '\n'.join(pinnings), bridge_name, name, name))
             f.close()
 
             f = open('.tmp/user_data_%s.yml' % (name), 'w')
@@ -203,10 +209,10 @@ def generate_config(args, machines):
         # Endpoints
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
             f = open('.tmp/domain_%s.xml' % (name), 'w')
-            memory = 1048576 * args.endpoint_cores
-            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(args.endpoint_cores), range(start_core,start_core+args.endpoint_cores))]
-            start_core += args.endpoint_cores
-            f.write(DOMAIN % (name, memory, args.endpoint_cores, 10000 * 10, args.endpoint_quota * 10, '\n'.join(pinnings), bridge_name, name, name))
+            memory = 1048576 * pc
+            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(pc), range(start_core,start_core+pc))]
+            start_core += pc
+            f.write(DOMAIN % (name, memory, pc, period, int(period * config['infrastructure']['endpoint_quota']), '\n'.join(pinnings), bridge_name, name, name))
             f.close()
 
             f = open('.tmp/user_data_%s.yml' % (name), 'w')
@@ -215,9 +221,9 @@ def generate_config(args, machines):
 
         # Base image
         f = open('.tmp/domain_base%i.xml' % (i), 'w')
-        memory = 1048576 * args.cloud_cores
-        pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(args.cloud_cores), range(0,args.cloud_cores))]
-        f.write(DOMAIN % (machine.base_name, memory, args.cloud_cores, 0, 0, '\n'.join(pinnings), bridge_name, 'base', 'base'))
+        memory = 1048576 * cc
+        pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(0,cc))]
+        f.write(DOMAIN % (machine.base_name, memory, cc, 0, 0, '\n'.join(pinnings), bridge_name, 'base', 'base'))
         f.close()
 
         f = open('.tmp/user_data_base%i.yml' % (i), 'w')

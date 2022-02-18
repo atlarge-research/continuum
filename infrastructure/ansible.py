@@ -7,11 +7,11 @@ import logging
 import socket
 
 
-def create_inventory_machine(args, machines):
+def create_inventory_machine(config, machines):
     """Create ansible inventory for creating VMs, so ssh to all physical machines is needed
 
     Args:
-        args (Namespace): Argparse object
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info('Generate Ansible inventory file for physical machines')
@@ -33,7 +33,7 @@ def create_inventory_machine(args, machines):
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
 
     # Cloud (controller / worker) VM group
-    if args.mode == 'cloud' or args.mode == 'edge':
+    if config['benchmark']['mode'] == 'cloud' or config['benchmark']['mode'] == 'edge':
         f.write('\n[clouds]\n')
         clouds = 0
 
@@ -51,7 +51,7 @@ def create_inventory_machine(args, machines):
             clouds += machine.clouds
 
     # Edge VM group
-    if args.mode == 'edge':
+    if config['benchmark']['mode'] == 'edge':
         f.write('\n[edges]\n')
         edges = 0
 
@@ -86,11 +86,11 @@ def create_inventory_machine(args, machines):
     f.close()
 
 
-def create_inventory_vm(args, machines):
+def create_inventory_vm(config, machines):
     """Create ansible inventory for setting up Kubernetes and KubeEdge, so ssh to all VMs is needed
 
     Args:
-        args (Namespace): Argparse object
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info('Generate Ansible inventory file for VMs')
@@ -111,7 +111,7 @@ def create_inventory_vm(args, machines):
     f.write('ansible_ssh_private_key_file=~/.ssh/id_rsa_benchmark\n')
     f.write('registry_ip=%s:%i\n' % (host_ip, 5000))
 
-    if args.mode == 'cloud' or args.mode == 'edge':
+    if config['benchmark']['mode'] == 'cloud' or config['benchmark']['mode'] == 'edge':
         f.write('cloud_ip=%s\n' % (machines[0].cloud_controller_ips[0]))
 
         # Cloud controller (is always on machine 0)
@@ -119,10 +119,10 @@ def create_inventory_vm(args, machines):
         f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s cloud_mode=%i\n' % (
                     machines[0].cloud_controller_names[0], machines[0].cloud_controller_ips[0],
                     machines[0].cloud_controller_names[0], machines[0].cloud_controller_names[0],
-                    args.mode == 'cloud'))
+                    config['benchmark']['mode'] == 'cloud'))
 
     # Cloud worker VM group
-    if args.mode == 'cloud':
+    if config['benchmark']['mode'] == 'cloud':
         f.write('[clouds]\n')
 
         for machine in machines:
@@ -131,7 +131,7 @@ def create_inventory_vm(args, machines):
                     name, ip, name, name))
 
     # Edge VM group
-    if args.mode == 'edge':
+    if config['benchmark']['mode'] == 'edge':
         f.write('\n[edges]\n')
 
         for machine in machines:

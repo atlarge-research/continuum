@@ -56,7 +56,7 @@ class Machine:
         """Returns this string when called as print(machine_object)
         """
         return '''
-MACHINE NAME            %s
+[ MACHINE NAME: %20s ]
 IS_LOCAL                %s
 NAME_SANITIZED          %s
 USER                    %s
@@ -75,8 +75,7 @@ CLOUD_CONTROLLER_NAMES  %s
 CLOUD_NAMES             %s
 EDGE_NAMES              %s
 ENDPOINT_NAMES          %s
-BASE_NAME               %s
-------------------------------------------------------------''' % (
+BASE_NAME               %s''' % (
             self.name, str(self.is_local), self.name_sanitized, 
             self.user, self.ip, self.cores,
             self.cloud_controller, self.clouds, self.edges, self.endpoints,
@@ -195,18 +194,20 @@ BASE_NAME               %s
         return self.process(command, shell=True)
 
 
-def make_machine_objects(args):
+def make_machine_objects(config):
     """Initialize machine objects
 
     Args:
-        args (Namespace): Argparse object
+        config (dict): Parsed configuration
 
     Returns:
         list(Machine object): List of machine objects representing physical machines
     """
     logging.info('Initialize machine objects')
     machines = []
-    names = ['local'] + args.file if args.file else ['local']
+    names = ['local'] 
+    if 'external_physical_machines' in config['infrastructure']:
+        names += config['infrastructure']['external_physical_machines']
 
     for name in names:
         machine = Machine(name, 'local' in name)
@@ -244,21 +245,24 @@ def remove_idle(machines, nodes_per_machine):
             new_machines.append(machines[i])
             new_nodes_per_machine.append(nodes_per_machine[i])
 
-    logging.debug('User offered %i machines, we will use %i machines' % (len(machines), len(new_machines)))
+    m1 = '' if len(machines) <= 1 else 's'
+    m2 = '' if len(new_machines) <= 1 else 's'
+    logging.debug('User offered %i machine%s, we will use %i machine%s' % (
+        len(machines), m1, len(new_machines), m2))
     return new_machines, new_nodes_per_machine
 
 
-def set_ip_names(args, machines, nodes_per_machine, prefixIP, postfixIP):
+def set_ip_names(config, machines, nodes_per_machine):
     """Set amount of cloud / edge / endpoints nodes per machine, and their IPs / hostnames.
 
     Args:
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
         nodes_per_machine (list(set)): List of 'cloud', 'edge', 'endpoint' sets containing 
             the number of those machines per physical node
-        prefixIP (str): First part of the static IP
-        postfixIP (str): Start offset for the last part of the static IP
     """
     logging.info('Set the IPs and names of all VMs for each physical machine')
+    infra_only = config['infrastructure']['infra_only']
     i = 0
     postfix_i = 0
     cloud_index = 0
@@ -267,9 +271,9 @@ def set_ip_names(args, machines, nodes_per_machine, prefixIP, postfixIP):
 
     for machine, nodes in zip(machines, nodes_per_machine):
         # Cloud controller only on the first machine
-        if (args.mode == 'cloud' or args.mode == 'edge') and machine == machines[0]:
-            machine.cloud_controller = 1
-            machine.clouds = nodes['cloud'] - 1
+        if machine == machines[0] and not infra_only:
+            machine.cloud_controller = int(nodes['cloud'] > 0)
+            machine.clouds = nodes['cloud'] - int(nodes['cloud'] > 0)
         else:
             machine.cloud_controller = 0
             machine.clouds = nodes['cloud']
@@ -278,15 +282,15 @@ def set_ip_names(args, machines, nodes_per_machine, prefixIP, postfixIP):
         machine.endpoints = nodes['endpoint']
 
         # Set IP / name for controller
-        if args.mode == 'cloud' or args.mode == 'edge':
-            ip = prefixIP + '.' + str(postfixIP + postfix_i)
+        if machine == machines[0] and not infra_only and machine.cloud_controller == 1:
+            ip = config['prefixIP'] + '.' + str(config['postfixIP'] + postfix_i)
             machine.cloud_controller_ips.append(ip)
             machine.cloud_controller_names.append('cloud_controller')
             postfix_i += 1
 
         # Set IP / name for cloud
         for _ in range(machine.clouds):
-            ip = prefixIP + '.' + str(postfixIP + postfix_i)
+            ip = config['prefixIP'] + '.' + str(config['postfixIP'] + postfix_i)
             machine.cloud_ips.append(ip)
             postfix_i += 1
 
@@ -296,7 +300,7 @@ def set_ip_names(args, machines, nodes_per_machine, prefixIP, postfixIP):
 
         # Set IP / name for edge
         for _ in range(machine.edges):
-            ip = prefixIP + '.' + str(postfixIP + postfix_i)
+            ip = config['prefixIP'] + '.' + str(config['postfixIP'] + postfix_i)
             machine.edge_ips.append(ip)
             postfix_i += 1
 
@@ -306,7 +310,7 @@ def set_ip_names(args, machines, nodes_per_machine, prefixIP, postfixIP):
         
         # Set IP / name for endpoint
         for _ in range(machine.endpoints):
-            ip = prefixIP + '.' + str(postfixIP + postfix_i)
+            ip = config['prefixIP'] + '.' + str(config['postfixIP'] + postfix_i)
             machine.endpoint_ips.append(ip)
             postfix_i += 1
 
@@ -314,14 +318,20 @@ def set_ip_names(args, machines, nodes_per_machine, prefixIP, postfixIP):
             machine.endpoint_names.append(name)
             endpoint_index += 1
 
-        # Set base name / ip
-        machine.base_ip = prefixIP + '.' + str(postfixIP + 200 + i)
-        machine.base_name = 'base' + str(i)
+        # Set base name / ip (only in benchmark mode)
+        if not config['infrastructure']['infra_only']:
+            machine.base_ip = config['prefixIP'] + '.' + str(config['postfixIP'] + 200 + i)
+            machine.base_name = 'base' + str(i)
 
         i += 1
 
 
 def print_schedule(machines):
+    """Print the VM to physical machine scheduling
+
+    Args:
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
     logging.info('-' * 78)
     logging.info('Schedule of VMs and containers on physical machines')
     logging.info('-' * 78)
@@ -331,6 +341,6 @@ def print_schedule(machines):
 
     for machine in machines:
         logging.info('%-30s %-15s %-15s %-15s' %
-            (machine.name, machine.clouds, machine.edges, machine.endpoints))
+            (machine.name, machine.cloud_controller + machine.clouds, machine.edges, machine.endpoints))
 
     logging.info('-' * 78)
