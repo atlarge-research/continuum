@@ -110,6 +110,7 @@ def parse_config(parser, arg):
     if config.has_section(sec):
         new[sec] = dict()
         option_check(parser, config, new, sec, 'provider', str, lambda x : x in ['qemu'])
+        option_check(parser, config, new, sec, 'infra_only', bool, lambda x : x in [True, False])
         option_check(parser, config, new, sec, 'cloud_nodes', int, lambda x : x >= 0)
         option_check(parser, config, new, sec, 'edge_nodes', int, lambda x : x >= 0)
         option_check(parser, config, new, sec, 'endpoint_nodes', int, lambda x : x >= 0)
@@ -131,7 +132,6 @@ def parse_config(parser, arg):
             option_check(parser, config, new, sec, 'endpoint_throughput', float, lambda x : x >= 1.0)
     
         option_check(parser, config, new, sec, 'external_physical_machines', list, lambda x : True, mandatory=False)
-
     else:
         parser.error('Config: infrastructure section missing')
 
@@ -142,64 +142,52 @@ def parse_config(parser, arg):
     if cloud + edge + endpoint == 0:
         parser.error('Config: number of cloud+edge+endpoint nodes should be >= 1, not 0')
 
+    # Check deployment mode in case we use the resource_manager and/or benchmark
+    mode = 'endpoint'
+    if edge:
+        mode = 'edge'
+    elif cloud:
+        mode = 'cloud'
+
     # Check resource manager
     sec = 'resource_manager'
-    if config.has_section(sec):
+    if not new['infrastructure']['infra_only'] and config.has_section(sec):
         new[sec] = dict()
-        if config.has_option(sec, 'cloud_rm'):
-            option_check(parser, config, new, sec, 'cloud_rm', str, lambda x : x in ['kubernetes'])
-        if config.has_option(sec, 'cloud_rm'):
-            option_check(parser, config, new, sec, 'edge_rm', str, lambda x : x in ['kubeedge'])
 
+        # Can only use RM when you create the correct nodes
+        if config.has_option(sec, 'cloud_rm') and new['infrastructure']['cloud_nodes'] > 0:
+            option_check(parser, config, new, sec, 'cloud_rm', str, lambda x : x in ['kubernetes'])
+        elif config.has_option(sec, 'cloud_rm') and new['infrastructure']['cloud_nodes'] == 0:
+            parser.error('Config: cloud_rm has been set, but cloud_nodes=0')
+        elif not config.has_option(sec, 'cloud_rm') and new['infrastructure']['cloud_nodes'] > 0:
+            parser.error('Config: cloud_nodes>0, but no cloud_rm has been set while infra_only=False')
+
+        # Same checks for edge RM
+        if config.has_option(sec, 'edge_rm') and new['infrastructure']['edge_nodes'] > 0:
+            option_check(parser, config, new, sec, 'edge_rm', str, lambda x : x in ['kubeedge'])
+        elif config.has_option(sec, 'edge_rm') and new['infrastructure']['edge_nodes'] == 0:
+            parser.error('Config: edge_rm has been set, but edge_nodes=0')
+        elif not config.has_option(sec, 'edge_rm') and new['infrastructure']['edge_nodes'] > 0:
+            parser.error('Config: edge_nodes>0, but no edge_rm has been set while infra_only=False')
+
+        # Endpoint-only mode, this section is not needed
         if new[sec] == dict():
             parser.error('Config: resource_manager section declared but empty')
+    elif new['infrastructure']['infra_only'] and config.has_section(sec):
+        parser.error('Config: resource_manager section is present but infra_only=True')
+    elif not new['infrastructure']['infra_only'] and not config.has_section(sec) and mode != 'endpoint':
+        parser.error('Config: no resource_manager section is present but infra_only=False and not endpoint-only')
 
-        sec = 'benchmark'
-        if config.has_section(sec):
-            new[sec] = dict()
-            option_check(parser, config, new, sec, 'mode', str, lambda x : x in ['cloud', 'edge', 'endpoint'])
-            option_check(parser, config, new, sec, 'docker_pull', bool, lambda x : x in [True, False])
-            option_check(parser, config, new, sec, 'delete', bool, lambda x : x in [True, False])
-            option_check(parser, config, new, sec, 'netperf', bool, lambda x : x in [True, False])
-            option_check(parser, config, new, sec, 'application', str, lambda x : x in ['image_classification'])
-            option_check(parser, config, new, sec, 'frequency', int, lambda x : x >= 1)
-
-
-
-        # Check resource manager at the end as setting depends on benchmark mode
-        sec = 'resource_manager'
-        if config.has_section(sec):
-            if mode == 'cloud':
-                new[sec] = dict()
-                option_check(parser, config, new, sec, 'cloud_rm', str, lambda x : x in ['kubernetes'])
-            elif mode == 'edge':
-                new[sec] = dict()
-                option_check(parser, config, new, sec, 'cloud_rm', str, lambda x : x in ['kubernetes'])
-                option_check(parser, config, new, sec, 'edge_rm', str, lambda x : x in ['kubeedge'])
-        else:
-            parser.error('Config: resource_manager section missing')
-
-
-
-        sec = 'application'
-        if config.has_section(sec):
-            new[sec] = dict()
-            option_check(parser, config, new, sec, 'application', str, lambda x : x in ['image_classification'])
-            option_check(parser, config, new, sec, 'frequency', int, lambda x : x >= 1)
-        else:
-            parser.error('Config: application section missing')
-
-        sec = 'benchmark'
-        if config.has_section(sec):
-            new[sec] = dict()
-            option_check(parser, config, new, sec, 'mode', str, lambda x : x in ['cloud', 'edge', 'endpoint'])
-            option_check(parser, config, new, sec, 'docker_pull', bool, lambda x : x in [True, False])
-            option_check(parser, config, new, sec, 'delete', bool, lambda x : x in [True, False])
-            option_check(parser, config, new, sec, 'netperf', bool, lambda x : x in [True, False])
-        else:
-            parser.error('Config: benchmark section missing')
-        
-        mode = new["benchmark"]['mode']
+    # Check benchmark
+    sec = 'benchmark'
+    if not new['infrastructure']['infra_only'] and config.has_section(sec):
+        new[sec] = dict()
+        option_check(parser, config, new, sec, 'mode', str, lambda x : x in ['cloud', 'edge', 'endpoint'])
+        option_check(parser, config, new, sec, 'docker_pull', bool, lambda x : x in [True, False])
+        option_check(parser, config, new, sec, 'delete', bool, lambda x : x in [True, False])
+        option_check(parser, config, new, sec, 'netperf', bool, lambda x : x in [True, False])
+        option_check(parser, config, new, sec, 'application', str, lambda x : x in ['image_classification'])
+        option_check(parser, config, new, sec, 'frequency', int, lambda x : x >= 1)
 
         # Extended checks: Number of nodes should match deployment mode
         if mode == 'cloud' and ((cloud < 2 or edge != 0 or endpoint == 0) or cloud % endpoint != 0):
@@ -208,7 +196,11 @@ def parse_config(parser, arg):
             parser.error('Config: For edge benchmark, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0')
         elif mode == 'endpoint' and (cloud != 0 or edge != 0 or endpoint == 0):
             parser.error('Config: For endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0')
- 
+        elif mode != new["benchmark"]['mode']:
+            parser.error('Mismatch between predicted mode and actual mode')
+    elif new['infrastructure']['infra_only'] and config.has_section(sec):
+        parser.error('Config: benchmark section is present but infra_only=True')
+
     return new
 
 
@@ -222,7 +214,7 @@ def add_constants(config):
     config['base'] = str(os.path.dirname(os.path.realpath(__file__)))
 
     if not config['infrastructure']['infra_only']:
-        if config['application']['application'] == 'image_classification':
+        if config['benchmark']['application'] == 'image_classification':
             config['images'] = ['redplanet00/kubeedge-applications:image_classification_subscriber',
                                 'redplanet00/kubeedge-applications:image_classification_publisher',
                                 'redplanet00/kubeedge-applications:image_classification_combined']
@@ -249,7 +241,7 @@ def set_logging(args):
     if args.config['infrastructure']['infra_only']:
         log_name = '%s_infra_only.log' % (t)
     else:
-        log_name = '%s_%s_%s.log' % (t, args.config['benchmark']['mode'], args.config['application']['application'])
+        log_name = '%s_%s_%s.log' % (t, args.config['benchmark']['mode'], args.config['benchmark']['application'])
 
     file_handler = logging.FileHandler(log_dir + '/' + log_name)
     file_handler.setLevel(logging.DEBUG)

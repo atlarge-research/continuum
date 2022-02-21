@@ -360,7 +360,7 @@ def format_output(args, sub_metrics, endpoint_metrics):
 # ------------------------------------
 # WHAT                        PATH
 # VM images                   /var/lib/libvirt/images/
-# Configuration files         ${HOME}/.edge/
+# Configuration files         ${HOME}/.continuum/
 # Logs                        <path>/edge-benchmark-RM/logs/
 # SSH key                     ${HOME}/.ssh/id_rsa_benchmark
 

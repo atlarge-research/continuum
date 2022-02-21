@@ -20,4 +20,4 @@
     when: ansible_os_family == "RedHat"
   
   - name: Add cloudinit disk for base
-    command: cloud-localds "/var/lib/libvirt/images/user_data_base.img" "/home/{{ username }}/.edge/user_data_{{ base }}.yml"
+    command: cloud-localds "/var/lib/libvirt/images/user_data_base.img" "/home/{{ username }}/.continuum/user_data_{{ base }}.yml"

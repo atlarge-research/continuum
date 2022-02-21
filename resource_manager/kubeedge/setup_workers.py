@@ -15,36 +15,6 @@ images = {'image-classification': ['redplanet00/kubeedge-applications:image_clas
                                    'redplanet00/kubeedge-applications:image_classification_combined']}
 
 
-def get_ips(machines):
-    """Get a list of all VM ips
-
-    Args:
-        machines (list(Machine object)): List of machine objects representing physical machines
-
-    Returns:
-        list(str x 4: Lists of cloud controller, cloud/edge worker, endpoint, and base VM ips
-    """
-    logging.debug('Get ips of controllers/workers')
-    control_ips = []
-    worker_ips = []
-    endpoint_ips = []
-    base_ips = []
-
-    for machine in machines:
-        if machine.cloud_controller > 0:
-            control_ips += machine.cloud_controller_ips
-        if machine.clouds > 0:
-            worker_ips += machine.cloud_ips
-        if machine.edges > 0:
-            worker_ips += machine.edge_ips
-        if machine.endpoints > 0:
-            endpoint_ips += machine.endpoint_ips
-        if machine.base_ip != None:
-            base_ips += [machine.base_ip]
-
-    return control_ips, worker_ips, endpoint_ips, base_ips
-
-
 def network_delay_commands(latency_avg, latency_var, throughput, overhead, ips):
     """Generate TC commands
 
@@ -78,7 +48,7 @@ def network_delay_commands(latency_avg, latency_var, throughput, overhead, ips):
     return commands
 
 
-def network_delay(args, machines):
+def network_delay(config, machines):
     """Add network latency between VMs to emulate edge continuum networking
     Finally, benchmark the latency to check if the latency is as expected
 
@@ -89,6 +59,7 @@ def network_delay(args, machines):
     logging.info('Add network latency between VMs')
 
     # Set [latency_avg, latency_var, throughput]
+    if args.
     if args.mode == 'cloud':
         controller = args.controller_network
         if controller == []:
@@ -117,28 +88,27 @@ def network_delay(args, machines):
                 endpoint = [7.5, 2.5, 29.66]
 
     overhead = 2 # Increase buffer by *x for safety
-    control_ips, worker_ips, _, _ = get_ips(machines)
     out = []
 
     # Generate all TC commands, and execute them
     for machine in machines:
         # Controller
         for name, ip in zip(machine.cloud_controller_names, machine.cloud_controller_ips):
-            commands = network_delay_commands(controller[0], controller[1], controller[2], overhead, worker_ips)
+            commands = network_delay_commands(controller[0], controller[1], controller[2], overhead, config['worker_ips'])
             vm = name + '@' + ip
             for command in commands:
                 out.append(machines[0].process(command, ssh=True, ssh_target=vm))
 
         # Worker
         for name, ip in zip(machine.cloud_names + machine.edge_names, machine.cloud_ips + machine.edge_ips):
-            commands = network_delay_commands(controller[0], controller[1], controller[2], overhead, control_ips)
+            commands = network_delay_commands(controller[0], controller[1], controller[2], overhead, config['control_ips'])
             vm = name + '@' + ip
             for command in commands:
                 out.append(machines[0].process(command, ssh=True, ssh_target=vm))
         
         # Endpoint
         for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
-            commands = network_delay_commands(endpoint[0], endpoint[1], endpoint[2], overhead, worker_ips)
+            commands = network_delay_commands(endpoint[0], endpoint[1], endpoint[2], overhead, config['worker_ips'])
             vm = name + '@' + ip
             for command in commands:
                 out.append(machines[0].process(command, ssh=True, ssh_target=vm))
@@ -181,11 +151,9 @@ def benchmark_network(args, machines):
         args (Namespace): Argparse object
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    control_ips, worker_ips, endpoint_ips, _ = get_ips(machines)
-
     # Test controller -> worker(s) 
-    lat_commands, tp_commands = netperf_commands(worker_ips)
-    for ip in control_ips:
+    lat_commands, tp_commands = netperf_commands(config['worker_ips'])
+    for ip in config['control_ips']:
         vm = 'cloud_controller@' + ip
 
         for command in lat_commands + tp_commands:
@@ -195,8 +163,8 @@ def benchmark_network(args, machines):
             logging.info('\n' + ''.join(error))
 
     # Test worker(s) -> controller
-    lat_commands, tp_commands = netperf_commands(control_ips)
-    for i, ip in enumerate(worker_ips):
+    lat_commands, tp_commands = netperf_commands(config['control_ips'])
+    for i, ip in enumerate(config['worker_ips']):
         if args.mode == 'cloud':
             vm = 'cloud%i@%s' % (i, ip)
         elif args.mode == 'edge':
@@ -209,8 +177,8 @@ def benchmark_network(args, machines):
             logging.info('\n' + ''.join(error))
 
     # Test endpoint(s) -> worker(s)
-    lat_commands, tp_commands = netperf_commands(worker_ips)
-    for i, ip in enumerate(endpoint_ips):
+    lat_commands, tp_commands = netperf_commands(config['worker_ips'])
+    for i, ip in enumerate(config['endpoint_ips']):
         vm = 'endpoint%i@%s' % (i, ip)
 
         for command in lat_commands + tp_commands:
@@ -230,12 +198,12 @@ def start_kube(args, machines):
     logging.info('Start Kubernetes/KubeEdge cluster on VMs')
     processes = []
 
-    command = ['ansible-playbook', '-i', home + '/.edge/inventory_vms', 
-               home + '/.edge/%s/controller_startup.yml' % (args.mode)]
+    command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+               home + '/.continuum/%s/controller_startup.yml' % (args.mode)]
     processes.append(machines[0].process(command, output=False))
 
-    command = ['ansible-playbook', '-i', home + '/.edge/inventory_vms', 
-               home + '/.edge/%s/%s_startup.yml' % (args.mode, args.mode)]
+    command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+               home + '/.continuum/%s/%s_startup.yml' % (args.mode, args.mode)]
     processes.append(machines[0].process(command, output=False))
 
     # All previous Ansible commands are running, check on Success
@@ -269,10 +237,10 @@ def start_kube(args, machines):
 
     if args.mode == 'edge':
         # Fix logs of KubeEdge on the cloud and edge
-        commands = [['ansible-playbook', '-i', home + '/.edge/inventory_vms', 
-                    home + '/.edge/edge/controller_log.yml'],
-                    ['ansible-playbook', '-i', home + '/.edge/inventory_vms', 
-                    home + '/.edge/edge/edge_log.yml']]
+        commands = [['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+                    home + '/.continuum/edge/controller_log.yml'],
+                    ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+                    home + '/.continuum/edge/edge_log.yml']]
 
         for command in commands:
             output, error = machines[0].process(command)
@@ -327,8 +295,8 @@ def start_subscribers(args, machines):
         ' replicas=' + str(nodes - 1) + \
         ' cpu_threads=' + str(cores)
 
-    command = ['ansible-playbook', '-i', home + '/.edge/inventory_vms',
-               '--extra-vars', extra_vars, home + '/.edge/launch_benchmark.yml']
+    command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms',
+               '--extra-vars', extra_vars, home + '/.continuum/launch_benchmark.yml']
     output, error = machines[0].process(command)
 
     if error != []:

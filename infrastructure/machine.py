@@ -252,6 +252,37 @@ def remove_idle(machines, nodes_per_machine):
     return new_machines, new_nodes_per_machine
 
 
+def gather_ips(config, machines):
+    """Get a list of all VM ips, save to config for easy access
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.debug('Get ips of controllers/workers')
+    control_ips = []
+    worker_ips = []
+    endpoint_ips = []
+    base_ips = []
+
+    for machine in machines:
+        if machine.cloud_controller > 0:
+            control_ips += machine.cloud_controller_ips
+        if machine.clouds > 0:
+            worker_ips += machine.cloud_ips
+        if machine.edges > 0:
+            worker_ips += machine.edge_ips
+        if machine.endpoints > 0:
+            endpoint_ips += machine.endpoint_ips
+        if machine.base_ip != None:
+            base_ips += [machine.base_ip]
+
+    config['control_ips'] = control_ips
+    config['worker_ips'] = worker_ips
+    config['endpoint_ips'] = endpoint_ips
+    config['base_ips'] = base_ips
+
+
 def set_ip_names(config, machines, nodes_per_machine):
     """Set amount of cloud / edge / endpoints nodes per machine, and their IPs / hostnames.
 
@@ -262,7 +293,6 @@ def set_ip_names(config, machines, nodes_per_machine):
             the number of those machines per physical node
     """
     logging.info('Set the IPs and names of all VMs for each physical machine')
-    infra_only = config['infrastructure']['infra_only']
     i = 0
     postfix_i = 0
     cloud_index = 0
@@ -271,7 +301,7 @@ def set_ip_names(config, machines, nodes_per_machine):
 
     for machine, nodes in zip(machines, nodes_per_machine):
         # Cloud controller only on the first machine
-        if machine == machines[0] and not infra_only:
+        if machine == machines[0] and not config['infrastructure']['infra_only']:
             machine.cloud_controller = int(nodes['cloud'] > 0)
             machine.clouds = nodes['cloud'] - int(nodes['cloud'] > 0)
         else:
@@ -282,7 +312,7 @@ def set_ip_names(config, machines, nodes_per_machine):
         machine.endpoints = nodes['endpoint']
 
         # Set IP / name for controller
-        if machine == machines[0] and not infra_only and machine.cloud_controller == 1:
+        if machine == machines[0] and not config['infrastructure']['infra_only'] and machine.cloud_controller == 1:
             ip = config['prefixIP'] + '.' + str(config['postfixIP'] + postfix_i)
             machine.cloud_controller_ips.append(ip)
             machine.cloud_controller_names.append('cloud_controller')
@@ -319,10 +349,8 @@ def set_ip_names(config, machines, nodes_per_machine):
             endpoint_index += 1
 
         # Set base name / ip (only in benchmark mode)
-        if not config['infrastructure']['infra_only']:
-            machine.base_ip = config['prefixIP'] + '.' + str(config['postfixIP'] + 200 + i)
-            machine.base_name = 'base' + str(i)
-
+        machine.base_ip = config['prefixIP'] + '.' + str(config['postfixIP'] + 200 + i)
+        machine.base_name = 'base' + str(i)
         i += 1
 
 

@@ -11,5 +11,5 @@
   - name: Add cloudinit disk
     shell: |
       for i in $(seq "{{ endpoint_start }}" "{{ endpoint_end }}"); do
-        cloud-localds /var/lib/libvirt/images/user_data_endpoint${i}.img "/home/{{ username }}/.edge/user_data_endpoint${i}.yml"
+        cloud-localds /var/lib/libvirt/images/user_data_endpoint${i}.img "/home/{{ username }}/.continuum/user_data_endpoint${i}.yml"
       done

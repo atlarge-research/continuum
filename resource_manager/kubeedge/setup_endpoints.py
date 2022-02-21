@@ -23,8 +23,8 @@ def setup_docker(machines):
     logging.info('Start and set up Docker on VMs')
 
     # Start Docker in endpoints
-    command = ['ansible-playbook', '-i', home + '/.edge/inventory_vms', 
-               home + '/.edge/endpoint/endpoint_startup.yml']
+    command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+               home + '/.continuum/endpoint/endpoint_startup.yml']
     output, error = machines[0].process(command)
 
     if error != []:

@@ -113,8 +113,8 @@ def main(args):
     # ansible_inventory.create_inventory_machine(args, machines)
     # ansible_inventory.create_inventory_vm(args, machines)
 
-    qemu_generate.generate_config(args, machines)
-    copy_files(machines)
+    # qemu_generate.generate_config(args, machines)
+    # copy_files(machines)
 
     logging.info('Setting up the infrastructure')
     qemu.start_qemu(args, machines)

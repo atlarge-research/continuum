@@ -17,11 +17,11 @@
   - name: Add cloudinit disk for cloud controller
     shell: |
       if [ "{{ cloud_controller }}" -gt "0" ]; then
-        cloud-localds /var/lib/libvirt/images/user_data_cloud_controller.img "/home/{{ username }}/.edge/user_data_cloud_controller.yml"
+        cloud-localds /var/lib/libvirt/images/user_data_cloud_controller.img "/home/{{ username }}/.continuum/user_data_cloud_controller.yml"
       fi
 
   - name: Add cloudinit disk for cloud
     shell: |
       for i in $(seq "{{ cloud_start }}" "{{ cloud_end }}"); do
-        cloud-localds /var/lib/libvirt/images/user_data_cloud${i}.img "/home/{{ username }}/.edge/user_data_cloud${i}.yml"
+        cloud-localds /var/lib/libvirt/images/user_data_cloud${i}.img "/home/{{ username }}/.continuum/user_data_cloud${i}.yml"
       done

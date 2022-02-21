@@ -3,9 +3,11 @@ Impelemnt infrastructure
 '''
 import logging
 import sys
+import time
 
 from . import machine as m
 from . import ansible
+from . import network
 
 
 def schedule(config, machines):
@@ -147,17 +149,6 @@ def copy_files(config, machines):
     """
     logging.info('Start copying files to all nodes')
 
-    # Need to discover what RM is used -- and if it is used (e.g. edge can be omitted)
-    cloudpath = ''
-    edgepath = ''
-    endpointpath = ''
-    if not config['infrastructure']['infra_only']:
-        if config['benchmark']
-        cloud_path = 
-
-    # path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm']
-    # path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm']
-
     for machine in machines:
         # Create a source directory on each machiine
         if machine.is_local:
@@ -186,8 +177,13 @@ def copy_files(config, machines):
             out.append(machine.copy_files(config['base'] + '/.tmp/inventory', dest))
             out.append(machine.copy_files(config['base'] + '/.tmp/inventory_vms', dest))
 
-            if config['benchmark']['mode'] == 'cloud' or config['benchmark']['mode'] == 'edge':
-                out.append(machine.copy_files(config['base'] + '/launch_benchmark.yml', dest))
+            if 'benchmark' in config:
+                if config['benchmark']['mode'] == 'cloud':
+                    path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/launch_benchmark.yml'
+                elif config['benchmark']['mode'] == 'edge':
+                    path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/launch_benchmark.yml'
+                
+                out.append(machine.copy_files(path, dest))
 
         # Start selectevily copying Infra files for each VM
         for name in machine.cloud_controller_names + machine.cloud_names + machine.edge_names + machine.endpoint_names + [machine.base_name]:
@@ -198,10 +194,27 @@ def copy_files(config, machines):
             out.append(machine.copy_files(config['base'] + '/.tmp/user_data_' + name + '.yml', dest))
 
         # Copy Ansible YML files to each node
-        # out.append(machine.copy_files(config['base'] + '/cloud/', dest, recursive=True))
-        # out.append(machine.copy_files(config['base'] + '/edge/', dest, recursive=True))
-        # out.append(machine.copy_files(config['base'] + '/endpoint/', dest, recursive=True))
-        # out.append(machine.copy_files(config['base'] + '/qemu/', dest, recursive=True))
+        # For infrastructure
+        path = config['base'] + '/infrastructure/' + config['infrastructure']['provider'] + '/infrastructure/'
+        out.append(machine.copy_files(path, dest, recursive=True))
+
+        # For cloud/edge RM
+        if 'resource_manager' in config:
+            if 'cloud_rm' in config['resource_manager']:
+                path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/cloud/'
+                out.append(machine.copy_files(path, dest, recursive=True))
+            if 'edge_rm' in config['resource_manager']:
+                path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/edge/'
+                out.append(machine.copy_files(path, dest, recursive=True))
+
+        # For endpoint
+        if 'benchmark' in config:
+            if config['benchmark']['mode'] == 'cloud':
+                path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/endpoint/'
+            elif config['benchmark']['mode'] == 'edge':
+                path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/endpoint/'
+
+            out.append(machine.copy_files(path, dest, recursive=True))
 
         for output, error in out:
             if error != []:
@@ -277,6 +290,7 @@ def start(config):
     nodes_per_machine = schedule(config, machines)
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
     m.set_ip_names(config, machines, nodes_per_machine)
+    m.gather_ips(config, machines)
     delete_vms(machines)
     m.print_schedule(machines)
 
@@ -290,19 +304,19 @@ def start(config):
     ansible.create_inventory_machine(config, machines)
     ansible.create_inventory_vm(config, machines)
 
-    generate.generate_config(config, machines)
+    generate.start(config, machines)
     copy_files(config, machines)
 
-    # logging.info('Setting up the infrastructure')
-    # qemu.start_qemu(args, machines)
+    logging.info('Setting up the infrastructure')
+    start.start(config, machines)
     # add_ssh(machines)
 
     # logging.info('Install software on the infrastructure')
     # if args.mode == 'cloud' or args.mode == 'edge':
-    #     setup_workers.network_delay(args, machines)
+    #     network.start(args, machines)
 
     #     if args.netperf:
-    #         setup_workers.benchmark_network(args, machines) 
+    #         network.benchmark(config, machines)
 
     return machines
 

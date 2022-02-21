@@ -112,7 +112,7 @@ def find_bridge(machine, bridge):
     return int(output[0].rstrip())
 
 
-def generate_config(config, machines):
+def start(config, machines):
     """Create QEMU config files for each machine
 
     Args:
