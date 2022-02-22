@@ -229,15 +229,18 @@ def remove_idle(machines, nodes_per_machine):
         list(Machine object): List of machine objects representing physical machines
     """
     logging.info('Update machine list based on whether they will actually be used')
+
+    # Create mask of used machines
     used_machines = [False] * len(machines)
     for i, nodes in enumerate(nodes_per_machine):
-        if i >= len(machines) and nodes['cloud'] + nodes['edge'] + nodes['endpoint'] > 0:
-            logging.error('Scheduler has crashed')
-            sys.exit()
-
         if nodes['cloud'] + nodes['edge'] + nodes['endpoint'] > 0:
+            if i >= len(machines):
+                logging.error('Scheduler has crashed')
+                sys.exit()
+
             used_machines[i] = True
 
+    # Remove machines using the mask
     new_machines = []
     new_nodes_per_machine = []
     for i, used in enumerate(used_machines):
@@ -252,6 +255,33 @@ def remove_idle(machines, nodes_per_machine):
     return new_machines, new_nodes_per_machine
 
 
+def gather_ssh(config, machines):
+    """Get a list of all VM name@ip for SSH, save to config for easy access
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.debug('Get ips of controllers/workers')
+    cloud_ssh = []
+    edge_ssh = []
+    endpoint_ssh = []
+
+    for machine in machines:
+        for name, ip in zip(machine.cloud_controller_names + machine.cloud_names, machine.cloud_controller_ips + machine.cloud_ips):
+            cloud_ssh += [name + '@' + ip]
+
+        for name, ip in zip(machine.edge_names, machine.edge_ips):
+            edge_ssh += [name + '@' + ip]
+
+        for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
+            endpoint_ssh += [name + '@' + ip]
+
+    config['cloud_ssh'] = cloud_ssh
+    config['edge_ssh'] = edge_ssh
+    config['endpoint_ssh'] = endpoint_ssh
+
+
 def gather_ips(config, machines):
     """Get a list of all VM ips, save to config for easy access
 
@@ -261,7 +291,8 @@ def gather_ips(config, machines):
     """
     logging.debug('Get ips of controllers/workers')
     control_ips = []
-    worker_ips = []
+    cloud_ips = []
+    edge_ips = []
     endpoint_ips = []
     base_ips = []
 
@@ -269,16 +300,17 @@ def gather_ips(config, machines):
         if machine.cloud_controller > 0:
             control_ips += machine.cloud_controller_ips
         if machine.clouds > 0:
-            worker_ips += machine.cloud_ips
+            cloud_ips += machine.cloud_ips
         if machine.edges > 0:
-            worker_ips += machine.edge_ips
+            edge_ips += machine.edge_ips
         if machine.endpoints > 0:
             endpoint_ips += machine.endpoint_ips
         if machine.base_ip != None:
             base_ips += [machine.base_ip]
 
     config['control_ips'] = control_ips
-    config['worker_ips'] = worker_ips
+    config['cloud_ips'] = cloud_ips
+    config['edge_ips'] = edge_ips
     config['endpoint_ips'] = endpoint_ips
     config['base_ips'] = base_ips
 

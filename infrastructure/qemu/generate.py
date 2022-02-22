@@ -173,6 +173,7 @@ def start(config, machines):
     pc = config['infrastructure']['endpoint_cores']
 
     period = 100000
+    pinnings = []
 
     for i, machine in enumerate(machines):
         # Counter for pinning vcpu to physical cpu
@@ -183,8 +184,11 @@ def start(config, machines):
                             machine.cloud_controller_names + machine.cloud_names):        
             f = open('.tmp/domain_%s.xml' % (name), 'w')
             memory = 1048576 * cc
-            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(start_core,start_core+cc))]
-            start_core += cc
+
+            if config['infrastructure']['cpu_pin']:
+                pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(start_core,start_core+cc))]
+                start_core += cc
+
             f.write(DOMAIN % (name, memory, cc, period, int(period * config['infrastructure']['cloud_quota']), '\n'.join(pinnings), bridge_name, name, name))
             f.close()
 
@@ -197,8 +201,11 @@ def start(config, machines):
         for ip, name in zip(machine.edge_ips, machine.edge_names):
             f = open('.tmp/domain_%s.xml' % (name), 'w')
             memory = 1048576 * ec
-            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(ec), range(start_core,start_core+ec))]
-            start_core += ec
+
+            if config['infrastructure']['cpu_pin']:
+                pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(ec), range(start_core,start_core+ec))]
+                start_core += ec
+
             f.write(DOMAIN % (name, memory, ec, period, int(period * config['infrastructure']['edge_quota']), '\n'.join(pinnings), bridge_name, name, name))
             f.close()
 
@@ -210,8 +217,11 @@ def start(config, machines):
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
             f = open('.tmp/domain_%s.xml' % (name), 'w')
             memory = 1048576 * pc
-            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(pc), range(start_core,start_core+pc))]
-            start_core += pc
+
+            if config['infrastructure']['cpu_pin']:
+                pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(pc), range(start_core,start_core+pc))]
+                start_core += pc
+
             f.write(DOMAIN % (name, memory, pc, period, int(period * config['infrastructure']['endpoint_quota']), '\n'.join(pinnings), bridge_name, name, name))
             f.close()
 
@@ -222,7 +232,10 @@ def start(config, machines):
         # Base image
         f = open('.tmp/domain_base%i.xml' % (i), 'w')
         memory = 1048576 * cc
-        pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(0,cc))]
+
+        if config['infrastructure']['cpu_pin']:
+            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(0,cc))]
+
         f.write(DOMAIN % (machine.base_name, memory, cc, 0, 0, '\n'.join(pinnings), bridge_name, 'base', 'base'))
         f.close()
 

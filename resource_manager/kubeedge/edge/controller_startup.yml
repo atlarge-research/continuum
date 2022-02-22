@@ -87,9 +87,6 @@
   - name: Reset KubeEdge
     command: nohup keadm init --kube-config="/home/{{ username }}/.kube/config" --advertise-address={{ cloud_ip }} --kubeedge-version=1.8.1
 
-  - name: Run Netserver
-    command: netserver
-
   handlers:
     - name: docker status
       service: name=docker state=started

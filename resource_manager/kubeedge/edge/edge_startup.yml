@@ -64,9 +64,6 @@
     with_items:
       - /tmp/join-command.txt 
 
-  - name: Run Netserver
-    command: netserver
-
   handlers:
     - name: docker status
       service: name=docker state=started

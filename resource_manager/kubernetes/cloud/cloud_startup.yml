@@ -52,9 +52,6 @@
   - name: Execute the join command
     shell: bash /tmp/join-command.txt
 
-  - name: Run Netserver
-    command: netserver
-
   handlers:
     - name: docker status
       service: name=docker state=started

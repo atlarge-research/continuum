@@ -4,13 +4,53 @@ Impelemnt infrastructure
 import logging
 import sys
 import time
+import numpy as np
 
 from . import machine as m
 from . import ansible
 from . import network
 
 
-def schedule(config, machines):
+def schedule_equal(config, machines):
+    """Distribute the VMs equally over the available machines, based on utilization
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info('Schedule VMs on machine: Based on utilization')
+    machines_per_node = [{'cloud': 0, 'edge': 0, 'endpoint': 0} for _ in range(len(machines))]
+    machines_cores_used = [0 for _ in range(len(machines))]
+
+    types_to_go = {'cloud': config['infrastructure']['cloud_nodes'],
+                   'edge': config['infrastructure']['edge_nodes'],
+                   'endpoint': config['infrastructure']['endpoint_nodes']}
+    cores_per_type = {'cloud': config['infrastructure']['cloud_cores'],
+                      'edge': config['infrastructure']['edge_cores'],
+                      'endpoint': config['infrastructure']['endpoint_cores']}
+
+    machine_type = 'cloud'
+    while sum(types_to_go.values()) != 0:
+        if types_to_go[machine_type] == 0:
+            if machine_type == 'cloud':
+                machine_type = 'edge'
+            elif machine_type == 'edge':
+                machine_type = 'endpoint'
+
+            continue
+
+        # Get machine with least cores used compared to total cores
+        i = np.argmin([cores_used / m.cores for cores_used, m in zip(machines_cores_used, machines)])
+
+        # Place VM on that machine
+        machines_cores_used[i] += cores_per_type[machine_type]
+        machines_per_node[i][machine_type] += 1
+        types_to_go[machine_type] -= 1
+
+    return machines_per_node
+
+
+def schedule_pin(config, machines):
     """Check if the requested cloud / edge VMs and endpoint containers can be scheduled
     on the available hardware using a greedy algorithm:
     - If physical node 0 can fit the next cloud / edge VM or endpoint container, do it.
@@ -26,7 +66,7 @@ def schedule(config, machines):
         list(set): List of 'cloud', 'edge', 'endpoint' sets containing the number of 
             those machines per physical node
     """
-    logging.info('Trying to schedule all cloud / edge / endpoint nodes on the available hardware')
+    logging.info('Schedule VMs on machine: Based on CPU cores left / Greedy')
     machines_per_node = [{'cloud': 0, 'edge': 0, 'endpoint': 0}]
 
     node = 0
@@ -225,48 +265,47 @@ def copy_files(config, machines):
                 sys.exit()
 
 
-# def add_ssh(machines, base=False):
-#     """Add SSH keys for generated VMs to known_hosts file
-#     Since all VMs are connected via a network bridge, 
-#     only touch the known_hosts file of the main physical machine
+def add_ssh(config, machines, base=False):
+    """Add SSH keys for generated VMs to known_hosts file
+    Since all VMs are connected via a network bridge, 
+    only touch the known_hosts file of the main physical machine
 
-#     Args:
-#         machines (list(Machine object)): List of machine objects representing physical machines
-#     """
-#     logging.info('Start adding ssh keys to the known_hosts file for each VM (base=%s)' % (base))
+    Args:
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info('Start adding ssh keys to the known_hosts file for each VM (base=%s)' % (base))
 
-#     # Get IPs of all (base) machines
-#     control_ips, worker_ips, endpoint_ips, base_ips = setup_workers.get_ips(machines)
-#     if base:
-#         ips = base_ips
-#     else:
-#         ips = control_ips + worker_ips + endpoint_ips
+    # Get IPs of all (base) machines
+    if base:
+        ips = config['base_ips']
+    else:
+        ips = config['control_ips'] + config['cloud_ips'] + config['edge_ips'] + config['endpoint_ips']
  
-#     # Check if old keys are still in the known hosts file
-#     for ip in ips:
-#         command = ['ssh-keygen', '-f', home +
-#                 '/.ssh/known_hosts', '-R', ip]
-#         _, error = machines[0].process(command)
+    # Check if old keys are still in the known hosts file
+    for ip in ips:
+        command = ['ssh-keygen', '-f', config['home'] +
+                '/.ssh/known_hosts', '-R', ip]
+        _, error = machines[0].process(command)
 
-#         if error != [] and not any('not found in' in err for err in error):
-#             logging.error(''.join(error))
-#             sys.exit()
+        if error != [] and not any('not found in' in err for err in error):
+            logging.error(''.join(error))
+            sys.exit()
 
-#     # Once the known_hosts file has been cleaned up, add all new keys
-#     for ip in ips:
-#         command = 'ssh-keyscan %s >> %s/.ssh/known_hosts' % (ip, home)
-#         _, error = machines[0].process(command, shell=True)
+    # Once the known_hosts file has been cleaned up, add all new keys
+    for ip in ips:
+        command = 'ssh-keyscan %s >> %s/.ssh/known_hosts' % (ip, config['home'])
+        _, error = machines[0].process(command, shell=True)
 
-#         # If VM is not yet up, wait
-#         if error == [] or not any('# ' + str(ip) + ':' in err for err in error):
-#             logging.info('Wait for VM to have started up')
-#             while True:
-#                 time.sleep(5)
-#                 command = 'ssh-keyscan %s >> %s/.ssh/known_hosts' % (ip, home)
-#                 _, error = machines[0].process(command, shell=True)
+        # If VM is not yet up, wait
+        if error == [] or not any('# ' + str(ip) + ':' in err for err in error):
+            logging.info('Wait for VM to have started up')
+            while True:
+                time.sleep(5)
+                command = 'ssh-keyscan %s >> %s/.ssh/known_hosts' % (ip, config['home'])
+                _, error = machines[0].process(command, shell=True)
 
-#                 if error != [] and any('# ' + str(ip) + ':' in err for err in error):
-#                     break
+                if error != [] and any('# ' + str(ip) + ':' in err for err in error):
+                    break
 
 
 def start(config):
@@ -287,10 +326,15 @@ def start(config):
     for machine in machines:
         machine.check_hardware()
 
-    nodes_per_machine = schedule(config, machines)
+    if config['infrastructure']['cpu_pin']:
+        nodes_per_machine = schedule_pin(config, machines)
+    else:
+        nodes_per_machine = schedule_equal(config, machines)
+
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
     m.set_ip_names(config, machines, nodes_per_machine)
     m.gather_ips(config, machines)
+    m.gather_ssh(config, machines)
     delete_vms(machines)
     m.print_schedule(machines)
 
@@ -309,14 +353,13 @@ def start(config):
 
     logging.info('Setting up the infrastructure')
     start.start(config, machines)
-    # add_ssh(machines)
+    add_ssh(config, machines)
 
-    # logging.info('Install software on the infrastructure')
-    # if args.mode == 'cloud' or args.mode == 'edge':
-    #     network.start(args, machines)
+    if config['infrastructure']['network_emulation']:
+        network.start(config, machines)
 
-    #     if args.netperf:
-    #         network.benchmark(config, machines)
+    if config['infrastructure']['netperf']:
+        network.benchmark(config, machines)
 
     return machines
 

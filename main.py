@@ -120,18 +120,29 @@ def parse_config(parser, arg):
         option_check(parser, config, new, sec, 'cloud_quota', float, lambda x : 0.1 <=x <= 1.0)
         option_check(parser, config, new, sec, 'edge_quota', float, lambda x : 0.1 <=x <= 1.0)
         option_check(parser, config, new, sec, 'endpoint_quota', float, lambda x : 0.1 <=x <= 1.0)
+        option_check(parser, config, new, sec, 'cpu_pin', bool, lambda x : x in [True, False])
+
+        option_check(parser, config, new, sec, 'network_emulation', bool, lambda x : x in [True, False])
         option_check(parser, config, new, sec, 'network_preset', str, lambda x : x in ['4g', '5g'], mandatory=False)
 
-        # # Only check these options if network_preset is not used
-        if not config.has_option(sec, 'network_preset'):
-            option_check(parser, config, new, sec, 'cloud_latency_avg', float, lambda x : x >= 5.0)
-            option_check(parser, config, new, sec, 'cloud_latency_var', float, lambda x : x >= 0.0)
-            option_check(parser, config, new, sec, 'cloud_throughput', float, lambda x : x >= 1.0)
-            option_check(parser, config, new, sec, 'endpoint_latency_avg', float, lambda x : x >= 5.0)
-            option_check(parser, config, new, sec, 'endpoint_latency_var', float, lambda x : x >= 0.0)
-            option_check(parser, config, new, sec, 'endpoint_throughput', float, lambda x : x >= 1.0)
-    
+        option_check(parser, config, new, sec, 'cloud_latency_avg', float, lambda x : x >= 5.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_latency_var', float, lambda x : x >= 0.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_throughput', float, lambda x : x >= 1.0, mandatory=False)
+        option_check(parser, config, new, sec, 'edge_latency_avg', float, lambda x : x >= 5.0, mandatory=False)
+        option_check(parser, config, new, sec, 'edge_latency_var', float, lambda x : x >= 0.0, mandatory=False)
+        option_check(parser, config, new, sec, 'edge_throughput', float, lambda x : x >= 1.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_edge_latency_avg', float, lambda x : x >= 5.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_edge_latency_var', float, lambda x : x >= 0.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_edge_throughput', float, lambda x : x >= 1.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_endpoint_latency_avg', float, lambda x : x >= 5.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_endpoint_latency_var', float, lambda x : x >= 0.0, mandatory=False)
+        option_check(parser, config, new, sec, 'cloud_endpoint_throughput', float, lambda x : x >= 1.0, mandatory=False)
+        option_check(parser, config, new, sec, 'edge_endpoint_latency_avg', float, lambda x : x >= 5.0, mandatory=False)
+        option_check(parser, config, new, sec, 'edge_endpoint_latency_var', float, lambda x : x >= 0.0, mandatory=False)
+        option_check(parser, config, new, sec, 'edge_endpoint_throughput', float, lambda x : x >= 1.0, mandatory=False)
+
         option_check(parser, config, new, sec, 'external_physical_machines', list, lambda x : True, mandatory=False)
+        option_check(parser, config, new, sec, 'netperf', bool, lambda x : x in [True, False])
     else:
         parser.error('Config: infrastructure section missing')
 
@@ -185,7 +196,6 @@ def parse_config(parser, arg):
         option_check(parser, config, new, sec, 'mode', str, lambda x : x in ['cloud', 'edge', 'endpoint'])
         option_check(parser, config, new, sec, 'docker_pull', bool, lambda x : x in [True, False])
         option_check(parser, config, new, sec, 'delete', bool, lambda x : x in [True, False])
-        option_check(parser, config, new, sec, 'netperf', bool, lambda x : x in [True, False])
         option_check(parser, config, new, sec, 'application', str, lambda x : x in ['image_classification'])
         option_check(parser, config, new, sec, 'frequency', int, lambda x : x >= 1)
 
@@ -292,13 +302,13 @@ def main(args):
     """    
     machines = infrastructure.start(args.config)
 
-    if not args.config['infrastructure']['infra_only']:
-        resource_manager.start(args.config, machines)
-        output = benchmark.start(args.config, machines)
-        results.start(args.config, machines, output)
+    # if not args.config['infrastructure']['infra_only']:
+    #     resource_manager.start(args.config, machines)
+    #     output = benchmark.start(args.config, machines)
+    #     results.start(args.config, machines, output)
 
-        if args.config['benchmark']['delete']:
-            infrastructure.delete(machines)
+    #     if args.config['benchmark']['delete']:
+    #         infrastructure.delete(machines)
 
 
 if __name__ == '__main__':

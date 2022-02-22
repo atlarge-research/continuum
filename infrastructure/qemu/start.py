@@ -51,10 +51,11 @@ def os_image(machines):
         check_ansible_proc(machines[0].process(command))
 
 
-def base_image(machines):
+def base_image(config, machines):
     """Check if the base image with Kubernetes installed already exists, and if not create the image
 
     Args:
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info('Check if a new base image needs to be created')
@@ -95,12 +96,51 @@ def base_image(machines):
                 sys.exit('ERROR: %s' % (''.join(output)))
 
         # Fix SSH keys for each base image
-        infrastructure.add_ssh(machines, base=True)
+        infrastructure.add_ssh(config, machines, base=True)
 
-        # Install the software on the base image
-        command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
-                   home + '/.continuum/infrastructure/base_install.yml']
-        check_ansible_proc(machines[0].process(command))
+        # TODO
+        # - Install the software on the base image based on which RM is used (or non)
+        # - Copy the base_install.yml files from RM to the infrastructure folder in .continuum
+        # - There will be multiple base images, not just one
+
+        # Install netperf
+        if config['infrastructure']['netperf']:
+            command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+                   home + '/.continuum/infrastructure/netperf.yml']
+            check_ansible_proc(machines[0].process(command))
+
+        if 'resource_manager' in config:
+            if 'cloud_rm' in config['resource_manager']:
+                command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+                        home + '/.continuum/infrastructure/base_install_cloud.yml']
+                check_ansible_proc(machines[0].process(command))
+
+            if 'edge_rm' in config['resource_manager']:
+                command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+                        home + '/.continuum/infrastructure/base_install_edge.yml']
+                check_ansible_proc(machines[0].process(command))
+        
+        # TODO 
+        # - Where does this file come from
+        # - Already pull the docker container in the base image? Full all base images?
+        #   - Note: Will this base image stuff work for firecracker? Disk is similar so I assume it will
+        #   - This requires an extra mode argument, probably in Ansible config file (or command line here)
+        if 'benchmark' in config:
+            command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
+                        home + '/.continuum/infrastructure/base_install_endpoint.yml']
+            check_ansible_proc(machines[0].process(command))
+
+
+
+
+
+
+
+
+
+
+
+
 
         # Clean the VM
         processes = []
@@ -157,7 +197,7 @@ def start(config, machines):
 
     # Check if os and base image need to be created, and if so do create them
     os_image(machines)
-    base_image(machines)
+    base_image(config, machines)
 
     # Create cloud images
     if config['infrastructure']['cloud_nodes']:
