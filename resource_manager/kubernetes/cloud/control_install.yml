@@ -12,9 +12,6 @@
       name: "{{ username }}"
       group: docker
 
-  - name: Reload ip settings
-    command: sysctl -p
-
   - name: Configure node ip
     lineinfile:
       path: /etc/default/kubelet
@@ -46,7 +43,7 @@
   - name: Enable networking with Calico, only for cloud mode
     shell: |
       if [ "{{ cloud_mode }}" -gt "0" ]; then
-        kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f https://docs.projectcalico.org/manifests/calico.yaml
+        kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f /tmp/calico.yaml
       fi
 
   - name: Create join command for worker nodes (cloud-only)

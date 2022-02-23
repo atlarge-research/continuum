@@ -1,5 +1,5 @@
 ---
-- hosts: base
+- hosts: base_endpoint
   become: true
   tasks:
   - name: Install packages that allow apt to be used over HTTPS
@@ -39,25 +39,5 @@
   - name: Reload ip settings
     command: sysctl -p
 
-  - name: Add an apt signing key for Kubernetes
-    apt_key:
-      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-      state: present
-
-  - name: Adding apt repository for Kubernetes
-    apt_repository:
-      repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
-      state: present
-      filename: kubernetes.list
-
-  # Use this version with KubeEdge 1.6.1
-  - name: Install Kubernetes binaries
-    apt: 
-      name: "{{ packages }}"
-      state: present
-      update_cache: true
-    vars:
-      packages:
-        - kubelet=1.21.0-00
-        - kubeadm=1.21.0-00
-        - kubectl=1.21.0-00
+  - name: Allow HTTP pulling from private docker registry
+    shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json

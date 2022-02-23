@@ -4,7 +4,7 @@
   tasks:
   - name: Remove existing base image user data (if any) from /var/lib/libvirt/images to free up space
     shell: |
-      rm -f /var/lib/libvirt/images/user_data_base.img
+      rm -f /var/lib/libvirt/images/user_data_base*.img
     args:
       warn: false
 

@@ -33,8 +33,10 @@ class Machine:
             self.user = name.split('@')[0]
             self.ip = name.split('@')[1]
 
+        # Cores on this machine
         self.cores = None
 
+        # VM info
         self.cloud_controller = None
         self.clouds = None
         self.edges = None
@@ -44,13 +46,14 @@ class Machine:
         self.cloud_ips = []
         self.edge_ips = []
         self.endpoint_ips = []
-        self.base_ip = None
+        self.base_ips = []
 
         self.cloud_controller_names = []
         self.cloud_names = []
         self.edge_names = []
         self.endpoint_names = []
-        self.base_name = None
+        self.base_names = []
+
 
     def __repr__(self):
         """Returns this string when called as print(machine_object)
@@ -70,19 +73,19 @@ CLOUD_CONTROLLER_IPS    %s
 CLOUD_IPS               %s
 EDGE_IPS                %s
 ENDPOINT_IPS            %s
-BASE_IP                 %s
+BASE_IPS                %s
 CLOUD_CONTROLLER_NAMES  %s
 CLOUD_NAMES             %s
 EDGE_NAMES              %s
 ENDPOINT_NAMES          %s
-BASE_NAME               %s''' % (
+BASE_NAMES              %s''' % (
             self.name, str(self.is_local), self.name_sanitized, 
             self.user, self.ip, self.cores,
             self.cloud_controller, self.clouds, self.edges, self.endpoints,
             ', '.join(self.cloud_controller_ips),', '.join(self.cloud_ips), 
-            ', '.join(self.edge_ips), ', '.join(self.endpoint_ips), self.base_ip,
+            ', '.join(self.edge_ips), ', '.join(self.endpoint_ips), ', '.join(self.base_ips),
             ', '.join(self.cloud_controller_names),', '.join(self.cloud_names), 
-            ', '.join(self.edge_names), ', '.join(self.endpoint_names), self.base_name)
+            ', '.join(self.edge_names), ', '.join(self.endpoint_names), ', '.join(self.base_names))
 
     def process(self, command, shell=False, env=None, output=True, ssh=False, ssh_target=None):
         """Execute a process using the subprocess library, and return the output/error or the process
@@ -229,24 +232,12 @@ def remove_idle(machines, nodes_per_machine):
         list(Machine object): List of machine objects representing physical machines
     """
     logging.info('Update machine list based on whether they will actually be used')
-
-    # Create mask of used machines
-    used_machines = [False] * len(machines)
-    for i, nodes in enumerate(nodes_per_machine):
-        if nodes['cloud'] + nodes['edge'] + nodes['endpoint'] > 0:
-            if i >= len(machines):
-                logging.error('Scheduler has crashed')
-                sys.exit()
-
-            used_machines[i] = True
-
-    # Remove machines using the mask
     new_machines = []
     new_nodes_per_machine = []
-    for i, used in enumerate(used_machines):
-        if used:
-            new_machines.append(machines[i])
-            new_nodes_per_machine.append(nodes_per_machine[i])
+    for machine, nodes in zip(machines, nodes_per_machine):
+        if nodes['cloud'] + nodes['edge'] + nodes['endpoint'] > 0:
+            new_machines.append(machine)
+            new_nodes_per_machine.append(nodes)
 
     m1 = '' if len(machines) <= 1 else 's'
     m2 = '' if len(new_machines) <= 1 else 's'
@@ -305,8 +296,8 @@ def gather_ips(config, machines):
             edge_ips += machine.edge_ips
         if machine.endpoints > 0:
             endpoint_ips += machine.endpoint_ips
-        if machine.base_ip != None:
-            base_ips += [machine.base_ip]
+        if machine.base_ips != []:
+            base_ips += machine.base_ips
 
     config['control_ips'] = control_ips
     config['cloud_ips'] = cloud_ips
@@ -325,13 +316,13 @@ def set_ip_names(config, machines, nodes_per_machine):
             the number of those machines per physical node
     """
     logging.info('Set the IPs and names of all VMs for each physical machine')
-    i = 0
     postfix_i = 0
     cloud_index = 0
     edge_index = 0
     endpoint_index = 0
+    base_index = 0
 
-    for machine, nodes in zip(machines, nodes_per_machine):
+    for i, (machine, nodes) in enumerate(zip(machines, nodes_per_machine)):
         # Cloud controller only on the first machine
         if machine == machines[0] and not config['infrastructure']['infra_only']:
             machine.cloud_controller = int(nodes['cloud'] > 0)
@@ -380,10 +371,26 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.endpoint_names.append(name)
             endpoint_index += 1
 
-        # Set base name / ip (only in benchmark mode)
-        machine.base_ip = config['prefixIP'] + '.' + str(config['postfixIP'] + 200 + i)
-        machine.base_name = 'base' + str(i)
-        i += 1
+        # Set IP / name for base image(s)
+        if config['infrastructure']['infra_only']:
+            machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
+            machine.base_names.append('base' + str(i))
+            base_index += 1
+        else:
+            if machine.cloud_controller + machine.clouds > 0:
+                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
+                machine.base_names.append('base_cloud_%s%i' % (config['resource_manager']['cloud_rm'], i))
+                base_index += 1
+
+            if machine.edges > 0:
+                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
+                machine.base_names.append('base_edge_%s%i' % (config['resource_manager']['edge_rm'], i))
+                base_index += 1
+
+            if machine.endpoints > 0:
+                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
+                machine.base_names.append('base_endpoint%i' % (i))
+                base_index += 1
 
 
 def print_schedule(machines):

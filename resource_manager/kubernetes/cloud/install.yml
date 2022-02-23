@@ -12,24 +12,6 @@
       name: "{{ username }}"
       group: docker
 
-  - name: Allow HTTP pulling from private docker registry
-    shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json
-
-  - name: Restart docker service
-    command: systemctl restart docker
-
-  - name: Reload ip settings
-    command: sysctl -p
-
-  - name: Install Mosquitto
-    apt: 
-      name: "{{ packages }}"
-      state: present
-      update_cache: true
-    vars:
-      packages:
-        - mosquitto=1.6.9-1
-
   - name: Run Mosquitto
     command: mosquitto -d -p 1883
 

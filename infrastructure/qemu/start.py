@@ -4,12 +4,10 @@ Create and use QEMU Vms
 
 import sys
 import logging
-import os
 import time
+import string
 
 from .. import start as infrastructure
-
-home = str(os.getenv('HOME'))
 
 
 def check_ansible_proc(out):
@@ -28,10 +26,11 @@ def check_ansible_proc(out):
         sys.exit()
 
 
-def os_image(machines):
+def os_image(config, machines):
     """Check if the os image with Ubuntu 20.04 already exists, and if not create the image (on all machines)
 
     Args:
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info('Check if a new OS image needs to be created')
@@ -46,139 +45,151 @@ def os_image(machines):
             break
 
     if need_image:
-        command = ['ansible-playbook', '-i', home + '/.continuum/inventory', 
-                   home + '/.continuum/infrastructure/os_image.yml']
+        command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+                   config['home'] + '/.continuum/infrastructure/os.yml']
         check_ansible_proc(machines[0].process(command))
 
 
 def base_image(config, machines):
-    """Check if the base image with Kubernetes installed already exists, and if not create the image
+    """Check if a base image already exists, and if not create the image
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info('Check if a new base image needs to be created')
-    need_image = False
+    logging.info('Check if new base image(s) needs to be created')
+    base_names = [machine.base_names for machine in machines]
+    base_names = list(set([item.rstrip(string.digits) for sublist in base_names for item in sublist]))
+    need_images = [False for _ in range(len(base_names))]
     for machine in machines:
-        command = ['find', '/var/lib/libvirt/images/base.qcow2']
-        output, error = machine.process(command)
+        for base_name in machine.base_names:
+            command = ['find', '/var/lib/libvirt/images/%s.qcow2' % (base_name)]
+            output, error = machine.process(command)
 
-        if error != [] or output == []:
-            logging.info('Need to install base image')
-            need_image = True
-            break
+            if error != [] or output == []:
+                base_name = base_name.rstrip(string.digits)
+                need_images[base_names.index(base_name)] = True
 
-    if need_image:
-        command = ['ansible-playbook', '-i', home + '/.continuum/inventory', 
-                   home + '/.continuum/infrastructure/base_image.yml']
+    # Stop if no base images are required
+    base_names = [name for name, need in zip(base_names, need_images) if need]
+    if base_names == []:
+        return
+
+    # Create base images
+    for base_name in base_names:
+        logging.info('Create base image %s' % (base_name))
+        if base_name == 'base':
+            command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+                config['home'] + '/.continuum/infrastructure/base_start.yml']
+        elif 'base_cloud' in base_name:
+            command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+                config['home'] + '/.continuum/infrastructure/base_cloud_start.yml']
+        elif 'base_edge' in base_name:
+            command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+                config['home'] + '/.continuum/infrastructure/base_edge_start.yml']
+        elif 'base_endpoint' in base_name:
+            command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+                config['home'] + '/.continuum/infrastructure/base_endpoint_start.yml']
+
         check_ansible_proc(machines[0].process(command))
 
-        # Launch the base VMs manually, one per physical machine
-        processes = []
+    # Launch the base VMs concurrently
+    processes = []
+    for base_name in base_names: 
         for machine in machines:
-            if machine.is_local:
-                command = 'virsh --connect qemu:///system create %s/.continuum/domain_%s.xml' % (home, machine.base_name)
-            else:
-                command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"\'' % (
-                    machine.name, home, machine.base_name)
+            if any([base_name in name for name in machine.base_names]):
+                if machine.is_local:
+                    command = 'virsh --connect qemu:///system create %s/.continuum/domain_%s.xml' % (config['home'], base_name)
+                else:
+                    command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"\'' % (
+                        machine.name, config['home'], base_name)
+                
+                processes.append(machine.process(command, shell=True, output=False))
 
-            processes.append(machine.process(command, shell=True, output=False))
+    for process in processes:
+        logging.debug('Check output for command [%s]' % (''.join(process.args)))
+        output = [line.decode('utf-8') for line in process.stdout.readlines()]
+        error = [line.decode('utf-8') for line in process.stderr.readlines()]
 
-        for process in processes:
-            logging.debug('Check output for command [%s]' % (''.join(process.args)))
-            output = [line.decode('utf-8') for line in process.stdout.readlines()]
-            error = [line.decode('utf-8') for line in process.stderr.readlines()]
+        if error != [] and 'Connection to ' not in error[0]:
+            logging.error('ERROR: %s' % (''.join(error)))
+            sys.exit()
+        elif 'Domain ' not in output[0] or ' created from ' not in output[0]:
+            logging.error('ERROR: %s' % (''.join(output)))
+            sys.exit()
 
-            if error != [] and 'Connection to ' not in error[0]:
-                sys.exit('ERROR: %s' % (''.join(error)))
-            elif 'Domain ' + machine.base_name + ' created from ' not in output[0]:
-                sys.exit('ERROR: %s' % (''.join(output)))
+    # Fix SSH keys for each base image
+    infrastructure.add_ssh(config, machines, base=True)
 
-        # Fix SSH keys for each base image
-        infrastructure.add_ssh(config, machines, base=True)
+    # Install software concurrently (ignore infra_only)
+    processes = []
+    for base_name in base_names:
+        if 'base_cloud' in base_name:
+            command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
+                config['home'] + '/.continuum/cloud/base_install.yml']
 
-        # TODO
-        # - Install the software on the base image based on which RM is used (or non)
-        # - Copy the base_install.yml files from RM to the infrastructure folder in .continuum
-        # - There will be multiple base images, not just one
+        if 'base_edge' in base_name:
+            command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
+                config['home'] + '/.continuum/edge/base_install.yml']
 
-        # Install netperf
-        if config['infrastructure']['netperf']:
-            command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
-                   home + '/.continuum/infrastructure/netperf.yml']
-            check_ansible_proc(machines[0].process(command))
+        if 'base_endpoint' in base_name:
+            command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
+                config['home'] + '/.continuum/endpoint/base_install.yml']
 
-        if 'resource_manager' in config:
-            if 'cloud_rm' in config['resource_manager']:
-                command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
-                        home + '/.continuum/infrastructure/base_install_cloud.yml']
-                check_ansible_proc(machines[0].process(command))
+        processes.append(machines[0].process(command, output=False))
 
-            if 'edge_rm' in config['resource_manager']:
-                command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
-                        home + '/.continuum/infrastructure/base_install_edge.yml']
-                check_ansible_proc(machines[0].process(command))
-        
-        # TODO 
-        # - Where does this file come from
-        # - Already pull the docker container in the base image? Full all base images?
-        #   - Note: Will this base image stuff work for firecracker? Disk is similar so I assume it will
-        #   - This requires an extra mode argument, probably in Ansible config file (or command line here)
-        if 'benchmark' in config:
-            command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
-                        home + '/.continuum/infrastructure/base_install_endpoint.yml']
-            check_ansible_proc(machines[0].process(command))
+    for process in processes:
+        logging.debug('Check output for command [%s]' % (''.join(process.args)))
+        output = [line.decode('utf-8') for line in process.stdout.readlines()]
+        error = [line.decode('utf-8') for line in process.stderr.readlines()]
+        check_ansible_proc((output, error))
 
+    # Install netperf
+    if config['infrastructure']['netperf']:
+        command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
+                config['home'] + '/.continuum/infrastructure/netperf.yml']
+        check_ansible_proc(machines[0].process(command))
 
-
-
-
-
-
-
-
-
-
-
-
-        # Clean the VM
-        processes = []
+    # Clean the VM
+    processes = []
+    for base_name in base_names: 
         for machine in machines:
-            command = 'ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean' % (machine.base_name, machine.base_ip, home)
-            processes.append(machine.process(command, shell=True, output=False))
+            if any([base_name in name for name in machine.base_names]):
 
-        for process in processes:
-            logging.info('Check output for command [%s]' % (''.join(process.args)))
-            output = [line.decode('utf-8') for line in process.stdout.readlines()]
-            error = [line.decode('utf-8') for line in process.stderr.readlines()]
-            check_ansible_proc((output, error))
+                command = 'ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean' % (base_name, machine.base_ip, home)
+                processes.append(machine.process(command, shell=True, output=False))
 
-        # Shutdown VMs
-        processes = []
-        for machine in machines:
-            if machine.is_local:
-                command = 'virsh shutdown %s' % (machine.base_name)
-            else:
-                command = 'ssh %s -t \'bash -l -c "virsh shutdown %s"\'' % (
-                    machine.name, machine.base_name)
+    for process in processes:
+        logging.info('Check output for command [%s]' % (''.join(process.args)))
+        output = [line.decode('utf-8') for line in process.stdout.readlines()]
+        error = [line.decode('utf-8') for line in process.stderr.readlines()]
+        check_ansible_proc((output, error))
 
-            processes.append(machine.process(command, shell=True, output=False))
+    # Shutdown VMs
+    processes = []
+    for machine in machines:
+        if machine.is_local:
+            command = 'virsh --connect qemu:///system shutdown %s' % (machine.base_name)
+        else:
+            command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system shutdown %s"\'' % (
+                machine.name, machine.base_name)
 
-        for process in processes:
-            logging.debug('Check output for command [%s]' % (''.join(process.args)))
-            output = [line.decode('utf-8') for line in process.stdout.readlines()]
-            error = [line.decode('utf-8') for line in process.stderr.readlines()]
+        processes.append(machine.process(command, shell=True, output=False))
 
-            if error != []:
-                logging.error(''.join(error))
-                sys.exit()
-            elif 'Domain ' + machine.base_name + ' is being shutdown' not in output[0]:
-                logging.error(''.join(output))
-                sys.exit()
-        
-        # Wait for the shutdown to be completed
-        time.sleep(5)
+    for process in processes:
+        logging.debug('Check output for command [%s]' % (''.join(process.args)))
+        output = [line.decode('utf-8') for line in process.stdout.readlines()]
+        error = [line.decode('utf-8') for line in process.stderr.readlines()]
+
+        if error != []:
+            logging.error(''.join(error))
+            sys.exit()
+        elif 'Domain ' + machine.base_name + ' is being shutdown' not in output[0]:
+            logging.error(''.join(output))
+            sys.exit()
+    
+    # Wait for the shutdown to be completed
+    time.sleep(5)
 
 
 def start(config, machines):
@@ -191,43 +202,41 @@ def start(config, machines):
     logging.info('Start VM creation using QEMU')
 
     # Delete older VM images
-    command = ['ansible-playbook', '-i', home + '/.continuum/inventory', 
-               home + '/.continuum/infrastructure/delete_images.yml']
+    command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+               config['home'] + '/.continuum/infrastructure/remove.yml']
     check_ansible_proc(machines[0].process(command))
 
     # Check if os and base image need to be created, and if so do create them
-    os_image(machines)
+    os_image(config, machines)
     base_image(config, machines)
 
     # Create cloud images
     if config['infrastructure']['cloud_nodes']:
-        command = ['ansible-playbook', '-i', home +
-                '/.continuum/inventory', home + '/.continuum/infrastructure/cloud.yml']
+        command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+            config['home'] + '/.continuum/infrastructure/cloud_start.yml']
         check_ansible_proc(machines[0].process(command))
 
     # Create edge images
     if config['infrastructure']['edge_nodes']:
-        command = ['ansible-playbook', '-i', home +
-            '/.continuum/inventory', home + '/.continuum/infrastructure/edge.yml']
+        command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+            config['home'] + '/.continuum/infrastructure/edge_start.yml']
         check_ansible_proc(machines[0].process(command))
 
     # Create endpoint images
-    command = ['ansible-playbook', '-i', home +
-            '/.continuum/inventory', home + '/.continuum/infrastructure/endpoint.yml']
-    check_ansible_proc(machines[0].process(command))
+    if config['infrastructure']['endpoint_nodes']:
+        command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
+            config['home'] + '/.continuum/infrastructure/endpoint_start.yml']
+        check_ansible_proc(machines[0].process(command))
 
-    # Launch the VMs manually
+    # Launch the VMs concurrently
     processes = []
-    for machine in machines:
+    for machine in machines: 
         for name in machine.cloud_controller_names + machine.cloud_names + machine.edge_names + machine.endpoint_names:
-            if name == None:
-                continue
-
             if machine.is_local:
-                command = 'virsh --connect qemu:///system create %s/.continuum/domain_%s.xml' % (home, name)
+                command = 'virsh --connect qemu:///system create %s/.continuum/domain_%s.xml' % (config['home'], name)
             else:
                 command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"\'' % (
-                    machine.name, home, name)
+                    machine.name, config['home'], name)
 
             processes.append(machine.process(command, shell=True, output=False))
 
@@ -236,9 +245,9 @@ def start(config, machines):
         output = [line.decode('utf-8') for line in process.stdout.readlines()]
         error = [line.decode('utf-8') for line in process.stderr.readlines()]
 
-        if error != []:
-            logging.error(''.join(error))
+        if error != [] and 'Connection to ' not in error[0]:
+            logging.error('ERROR: %s' % (''.join(error)))
             sys.exit()
         elif 'Domain ' not in output[0] or ' created from ' not in output[0]:
-            logging.error(''.join(output))
+            logging.error('ERROR: %s' % (''.join(output)))
             sys.exit()

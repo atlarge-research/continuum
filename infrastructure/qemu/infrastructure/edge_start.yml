@@ -5,7 +5,7 @@
   - name: Create edge images
     shell: |
       for i in $(seq "{{ edge_start }}" "{{ edge_end }}"); do
-        cp /var/lib/libvirt/images/base.qcow2 /var/lib/libvirt/images/edge${i}.qcow2
+        qemu-img create -f qcow2 -F qcow2 -b "/var/lib/libvirt/images/{{ base }}.qcow2" /var/lib/libvirt/images/edge${i}.qcow2
       done
 
   - name: Add cloudinit disk

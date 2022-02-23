@@ -225,35 +225,27 @@ def copy_files(config, machines):
                 
                 out.append(machine.copy_files(path, dest))
 
-        # Start selectevily copying Infra files for each VM
-        for name in machine.cloud_controller_names + machine.cloud_names + machine.edge_names + machine.endpoint_names + [machine.base_name]:
-            if name == None:
-                continue
-
+        # Copy VM creation files
+        for name in machine.cloud_controller_names + machine.cloud_names + machine.edge_names + machine.endpoint_names + machine.base_names:
             out.append(machine.copy_files(config['base'] + '/.tmp/domain_' + name + '.xml', dest))
             out.append(machine.copy_files(config['base'] + '/.tmp/user_data_' + name + '.yml', dest))
 
-        # Copy Ansible YML files to each node
-        # For infrastructure
+        # Copy Ansible files for infrastructure
         path = config['base'] + '/infrastructure/' + config['infrastructure']['provider'] + '/infrastructure/'
         out.append(machine.copy_files(path, dest, recursive=True))
 
-        # For cloud/edge RM
-        if 'resource_manager' in config:
-            if 'cloud_rm' in config['resource_manager']:
-                path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/cloud/'
-                out.append(machine.copy_files(path, dest, recursive=True))
+        # For cloud/edge/endpoint specific
+        if not config['infrastructure']['infra_only']:
             if 'edge_rm' in config['resource_manager']:
+                path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/cloud/'
+                out.append(machine.copy_files(path, dest, recursive=True))
                 path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/edge/'
                 out.append(machine.copy_files(path, dest, recursive=True))
+            elif 'cloud_rm' in config['resource_manager']:
+                path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/cloud/'
+                out.append(machine.copy_files(path, dest, recursive=True))
 
-        # For endpoint
-        if 'benchmark' in config:
-            if config['benchmark']['mode'] == 'cloud':
-                path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/endpoint/'
-            elif config['benchmark']['mode'] == 'edge':
-                path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/endpoint/'
-
+            path = config['base'] + '/resource_manager/endpoint/'
             out.append(machine.copy_files(path, dest, recursive=True))
 
         for output, error in out:
@@ -283,8 +275,7 @@ def add_ssh(config, machines, base=False):
  
     # Check if old keys are still in the known hosts file
     for ip in ips:
-        command = ['ssh-keygen', '-f', config['home'] +
-                '/.ssh/known_hosts', '-R', ip]
+        command = ['ssh-keygen', '-f', config['home'] + '/.ssh/known_hosts', '-R', ip]
         _, error = machines[0].process(command)
 
         if error != [] and not any('not found in' in err for err in error):
@@ -333,8 +324,10 @@ def start(config):
 
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
     m.set_ip_names(config, machines, nodes_per_machine)
+
     m.gather_ips(config, machines)
     m.gather_ssh(config, machines)
+
     delete_vms(machines)
     m.print_schedule(machines)
 

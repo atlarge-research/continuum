@@ -229,16 +229,14 @@ def start(config, machines):
             f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
             f.close()
 
-        # Base image
-        f = open('.tmp/domain_base%i.xml' % (i), 'w')
-        memory = 1048576 * cc
+        # Base image(s)
+        for ip, name in zip(machine.base_ips, machine.base_names):
+            f = open('.tmp/domain_%s.xml' % (name), 'w')
+            memory = 1048576 * cc
 
-        if config['infrastructure']['cpu_pin']:
-            pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(0,cc))]
+            f.write(DOMAIN % (name, memory, cc, 0, 0, '', bridge_name, name, name))
+            f.close()
 
-        f.write(DOMAIN % (machine.base_name, memory, cc, 0, 0, '\n'.join(pinnings), bridge_name, 'base', 'base'))
-        f.close()
-
-        f = open('.tmp/user_data_base%i.yml' % (i), 'w')
-        f.write(USER_DATA % (machine.base_name, machine.base_name, machine.base_name, machine.base_name, ssh_key, machine.base_name, machine.base_ip, gateway))
-        f.close()
+            f = open('.tmp/user_data_%s.yml' % (name), 'w')
+            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            f.close()
