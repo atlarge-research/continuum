@@ -288,16 +288,11 @@ def gather_ips(config, machines):
     base_ips = []
 
     for machine in machines:
-        if machine.cloud_controller > 0:
-            control_ips += machine.cloud_controller_ips
-        if machine.clouds > 0:
-            cloud_ips += machine.cloud_ips
-        if machine.edges > 0:
-            edge_ips += machine.edge_ips
-        if machine.endpoints > 0:
-            endpoint_ips += machine.endpoint_ips
-        if machine.base_ips != []:
-            base_ips += machine.base_ips
+        control_ips += machine.cloud_controller_ips
+        cloud_ips += machine.cloud_ips
+        edge_ips += machine.edge_ips
+        endpoint_ips += machine.endpoint_ips
+        base_ips += machine.base_ips
 
     config['control_ips'] = control_ips
     config['cloud_ips'] = cloud_ips
@@ -323,23 +318,21 @@ def set_ip_names(config, machines, nodes_per_machine):
     base_index = 0
 
     for i, (machine, nodes) in enumerate(zip(machines, nodes_per_machine)):
-        # Cloud controller only on the first machine
+        # Set IP / name for controller (on first machine only)
         if machine == machines[0] and not config['infrastructure']['infra_only']:
             machine.cloud_controller = int(nodes['cloud'] > 0)
             machine.clouds = nodes['cloud'] - int(nodes['cloud'] > 0)
+
+            ip = config['prefixIP'] + '.' + str(config['postfixIP'] + postfix_i)
+            machine.cloud_controller_ips.append(ip)
+            machine.cloud_controller_names.append('cloud_controller')
+            postfix_i += 1
         else:
             machine.cloud_controller = 0
             machine.clouds = nodes['cloud']
 
         machine.edges = nodes['edge']
         machine.endpoints = nodes['endpoint']
-
-        # Set IP / name for controller
-        if machine == machines[0] and not config['infrastructure']['infra_only'] and machine.cloud_controller == 1:
-            ip = config['prefixIP'] + '.' + str(config['postfixIP'] + postfix_i)
-            machine.cloud_controller_ips.append(ip)
-            machine.cloud_controller_names.append('cloud_controller')
-            postfix_i += 1
 
         # Set IP / name for cloud
         for _ in range(machine.clouds):
@@ -373,22 +366,22 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for base image(s)
         if config['infrastructure']['infra_only']:
-            machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
+            machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + config['postfixIP_base'] + base_index))
             machine.base_names.append('base' + str(i))
             base_index += 1
         else:
             if machine.cloud_controller + machine.clouds > 0:
-                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
-                machine.base_names.append('base_cloud_%s%i' % (config['resource_manager']['cloud_rm'], i))
+                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + config['postfixIP_base'] + base_index))
+                machine.base_names.append('base_cloud_%s%i' % (config['benchmark']['resource_manager'], i))
                 base_index += 1
 
             if machine.edges > 0:
-                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
-                machine.base_names.append('base_edge_%s%i' % (config['resource_manager']['edge_rm'], i))
+                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + config['postfixIP_base'] + base_index))
+                machine.base_names.append('base_edge_%s%i' % (config['benchmark']['resource_manager'], i))
                 base_index += 1
 
             if machine.endpoints > 0:
-                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + 210 + base_index))
+                machine.base_ips.append(config['prefixIP'] + '.' + str(config['postfixIP'] + config['postfixIP_base'] + base_index))
                 machine.base_names.append('base_endpoint%i' % (i))
                 base_index += 1
 

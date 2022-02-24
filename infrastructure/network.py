@@ -60,15 +60,12 @@ def tc_values(config):
     # Set values based on 4g/5g preset
     cloud_endpoint = [0, 0, 0]              # Between cloud and endpoint
     edge_endpoint = [0, 0, 0]               # Between edge and endpoint
-    if 'network_preset' in config['infrastructure']:
-        if config['infrastructure']['network_preset'] == '4g':
+    if 'wireless_network_preset' in config['infrastructure']:
+        if config['infrastructure']['wireless_network_preset'] == '4g':
             cloud_endpoint = [45, 5, 7.21]
-        elif config['infrastructure']['network_preset'] == '5g':
-            cloud_endpoint = [45, 5, 29.66]
-
-        if config['infrastructure']['network_preset'] == '4g':
             edge_endpoint = [7.5, 2.5, 7.21]
-        elif config['infrastructure']['network_preset'] == '5g':
+        elif config['infrastructure']['wireless_network_preset'] == '5g':
+            cloud_endpoint = [45, 5, 29.66]
             edge_endpoint = [7.5, 2.5, 29.66]
 
     # Overwrite with custom values

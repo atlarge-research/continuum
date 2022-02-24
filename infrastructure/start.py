@@ -217,12 +217,8 @@ def copy_files(config, machines):
             out.append(machine.copy_files(config['base'] + '/.tmp/inventory', dest))
             out.append(machine.copy_files(config['base'] + '/.tmp/inventory_vms', dest))
 
-            if 'benchmark' in config:
-                if config['benchmark']['mode'] == 'cloud':
-                    path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/launch_benchmark.yml'
-                elif config['benchmark']['mode'] == 'edge':
-                    path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/launch_benchmark.yml'
-                
+            if not config['infrastructure']['infra_only'] and (config['mode'] == 'cloud' or config['mode'] == 'edge'):
+                path = config['base'] + '/resource_manager/' + config['benchmark']['resource_manager'] + '/launch_benchmark.yml'
                 out.append(machine.copy_files(path, dest))
 
         # Copy VM creation files
@@ -236,14 +232,13 @@ def copy_files(config, machines):
 
         # For cloud/edge/endpoint specific
         if not config['infrastructure']['infra_only']:
-            if 'edge_rm' in config['resource_manager']:
-                path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/cloud/'
+            if config['mode'] == 'cloud' or config['mode'] == 'edge':
+                path = config['base'] + '/resource_manager/' + config['benchmark']['resource_manager'] + '/cloud/'
                 out.append(machine.copy_files(path, dest, recursive=True))
-                path = config['base'] + '/resource_manager/' + config['resource_manager']['edge_rm'] + '/edge/'
-                out.append(machine.copy_files(path, dest, recursive=True))
-            elif 'cloud_rm' in config['resource_manager']:
-                path = config['base'] + '/resource_manager/' + config['resource_manager']['cloud_rm'] + '/cloud/'
-                out.append(machine.copy_files(path, dest, recursive=True))
+
+                if config['mode'] == 'edge':
+                    path = config['base'] + '/resource_manager/' + config['benchmark']['resource_manager'] + '/edge/'
+                    out.append(machine.copy_files(path, dest, recursive=True))
 
             path = config['base'] + '/resource_manager/endpoint/'
             out.append(machine.copy_files(path, dest, recursive=True))
@@ -284,19 +279,15 @@ def add_ssh(config, machines, base=False):
 
     # Once the known_hosts file has been cleaned up, add all new keys
     for ip in ips:
-        command = 'ssh-keyscan %s >> %s/.ssh/known_hosts' % (ip, config['home'])
-        _, error = machines[0].process(command, shell=True)
+        logging.info('Wait for VM to have started up')
+        while True:
+            command = 'ssh-keyscan %s >> %s/.ssh/known_hosts' % (ip, config['home'])
+            _, error = machines[0].process(command, shell=True)
 
-        # If VM is not yet up, wait
-        if error == [] or not any('# ' + str(ip) + ':' in err for err in error):
-            logging.info('Wait for VM to have started up')
-            while True:
-                time.sleep(5)
-                command = 'ssh-keyscan %s >> %s/.ssh/known_hosts' % (ip, config['home'])
-                _, error = machines[0].process(command, shell=True)
+            if any('# ' + str(ip) + ':' in err for err in error):
+                break
 
-                if error != [] and any('# ' + str(ip) + ':' in err for err in error):
-                    break
+            time.sleep(5)
 
 
 def start(config):

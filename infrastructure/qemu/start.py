@@ -18,6 +18,11 @@ def check_ansible_proc(out):
     """
     output, error = out
 
+    lines = ['']
+    for line in output:
+        lines.append(line.rstrip())
+    logging.debug('\n'.join(lines))
+
     if error != []:
         logging.error(''.join(error))
         sys.exit()
@@ -75,7 +80,7 @@ def base_image(config, machines):
     if base_names == []:
         return
 
-    # Create base images
+    # Create base images        
     for base_name in base_names:
         logging.info('Create base image %s' % (base_name))
         if base_name == 'base':
@@ -95,16 +100,17 @@ def base_image(config, machines):
 
     # Launch the base VMs concurrently
     processes = []
-    for base_name in base_names: 
-        for machine in machines:
-            if any([base_name in name for name in machine.base_names]):
+    for machine in machines:
+        for base_name in machine.base_names:
+            base_name_r = base_name.rstrip(string.digits)
+            if base_name_r in base_names:
                 if machine.is_local:
                     command = 'virsh --connect qemu:///system create %s/.continuum/domain_%s.xml' % (config['home'], base_name)
                 else:
                     command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"\'' % (
                         machine.name, config['home'], base_name)
                 
-                processes.append(machine.process(command, shell=True, output=False))
+                processes.append(machines[0].process(command, shell=True, output=False))
 
     for process in processes:
         logging.debug('Check output for command [%s]' % (''.join(process.args)))
@@ -124,19 +130,19 @@ def base_image(config, machines):
     # Install software concurrently (ignore infra_only)
     processes = []
     for base_name in base_names:
+        command = []
         if 'base_cloud' in base_name:
             command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
                 config['home'] + '/.continuum/cloud/base_install.yml']
-
-        if 'base_edge' in base_name:
+        elif 'base_edge' in base_name:
             command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
                 config['home'] + '/.continuum/edge/base_install.yml']
-
-        if 'base_endpoint' in base_name:
+        elif 'base_endpoint' in base_name:
             command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
                 config['home'] + '/.continuum/endpoint/base_install.yml']
 
-        processes.append(machines[0].process(command, output=False))
+        if command != []:
+            processes.append(machines[0].process(command, output=False))
 
     for process in processes:
         logging.debug('Check output for command [%s]' % (''.join(process.args)))
@@ -152,12 +158,12 @@ def base_image(config, machines):
 
     # Clean the VM
     processes = []
-    for base_name in base_names: 
-        for machine in machines:
-            if any([base_name in name for name in machine.base_names]):
-
-                command = 'ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean' % (base_name, machine.base_ip, home)
-                processes.append(machine.process(command, shell=True, output=False))
+    for machine in machines:
+        for base_name, ip in zip(machine.base_names, machine.base_ips):
+            base_name_r = base_name.rstrip(string.digits)
+            if base_name_r in base_names:
+                command = 'ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean' % (base_name, ip, config['home'])
+                processes.append(machines[0].process(command, shell=True, output=False))
 
     for process in processes:
         logging.info('Check output for command [%s]' % (''.join(process.args)))
@@ -168,13 +174,16 @@ def base_image(config, machines):
     # Shutdown VMs
     processes = []
     for machine in machines:
-        if machine.is_local:
-            command = 'virsh --connect qemu:///system shutdown %s' % (machine.base_name)
-        else:
-            command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system shutdown %s"\'' % (
-                machine.name, machine.base_name)
+        for base_name in machine.base_names:
+            base_name_r = base_name.rstrip(string.digits)
+            if base_name_r in base_names:
+                if machine.is_local:
+                    command = 'virsh --connect qemu:///system shutdown %s' % (base_name)
+                else:
+                    command = 'ssh %s -t \'bash -l -c "virsh --connect qemu:///system shutdown %s"\'' % (
+                        machine.name, base_name)
 
-        processes.append(machine.process(command, shell=True, output=False))
+                processes.append(machines[0].process(command, shell=True, output=False))
 
     for process in processes:
         logging.debug('Check output for command [%s]' % (''.join(process.args)))
@@ -184,10 +193,10 @@ def base_image(config, machines):
         if error != []:
             logging.error(''.join(error))
             sys.exit()
-        elif 'Domain ' + machine.base_name + ' is being shutdown' not in output[0]:
+        elif 'Domain ' not in output[0] or ' is being shutdown' not in output[0]:
             logging.error(''.join(output))
             sys.exit()
-    
+ 
     # Wait for the shutdown to be completed
     time.sleep(5)
 

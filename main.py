@@ -123,7 +123,7 @@ def parse_config(parser, arg):
         option_check(parser, config, new, sec, 'cpu_pin', bool, lambda x : x in [True, False])
 
         option_check(parser, config, new, sec, 'network_emulation', bool, lambda x : x in [True, False])
-        option_check(parser, config, new, sec, 'network_preset', str, lambda x : x in ['4g', '5g'], mandatory=False)
+        option_check(parser, config, new, sec, 'wireless_network_preset', str, lambda x : x in ['4g', '5g'], mandatory=False)
 
         option_check(parser, config, new, sec, 'cloud_latency_avg', float, lambda x : x >= 5.0, mandatory=False)
         option_check(parser, config, new, sec, 'cloud_latency_var', float, lambda x : x >= 0.0, mandatory=False)
@@ -153,51 +153,33 @@ def parse_config(parser, arg):
     if cloud + edge + endpoint == 0:
         parser.error('Config: number of cloud+edge+endpoint nodes should be >= 1, not 0')
 
-    # Check deployment mode in case we use the resource_manager and/or benchmark
-    mode = 'endpoint'
-    if edge:
-        mode = 'edge'
-    elif cloud:
-        mode = 'cloud'
-
-    # Check resource manager
-    sec = 'resource_manager'
-    if not new['infrastructure']['infra_only'] and config.has_section(sec):
-        new[sec] = dict()
-
-        # Can only use RM when you create the correct nodes
-        if config.has_option(sec, 'cloud_rm') and new['infrastructure']['cloud_nodes'] > 0:
-            option_check(parser, config, new, sec, 'cloud_rm', str, lambda x : x in ['kubernetes'])
-        elif config.has_option(sec, 'cloud_rm') and new['infrastructure']['cloud_nodes'] == 0:
-            parser.error('Config: cloud_rm has been set, but cloud_nodes=0')
-        elif not config.has_option(sec, 'cloud_rm') and new['infrastructure']['cloud_nodes'] > 0:
-            parser.error('Config: cloud_nodes>0, but no cloud_rm has been set while infra_only=False')
-
-        # Same checks for edge RM
-        if config.has_option(sec, 'edge_rm') and new['infrastructure']['edge_nodes'] > 0:
-            option_check(parser, config, new, sec, 'edge_rm', str, lambda x : x in ['kubeedge'])
-        elif config.has_option(sec, 'edge_rm') and new['infrastructure']['edge_nodes'] == 0:
-            parser.error('Config: edge_rm has been set, but edge_nodes=0')
-        elif not config.has_option(sec, 'edge_rm') and new['infrastructure']['edge_nodes'] > 0:
-            parser.error('Config: edge_nodes>0, but no edge_rm has been set while infra_only=False')
-
-        # Endpoint-only mode, this section is not needed
-        if new[sec] == dict():
-            parser.error('Config: resource_manager section declared but empty')
-    elif new['infrastructure']['infra_only'] and config.has_section(sec):
-        parser.error('Config: resource_manager section is present but infra_only=True')
-    elif not new['infrastructure']['infra_only'] and not config.has_section(sec) and mode != 'endpoint':
-        parser.error('Config: no resource_manager section is present but infra_only=False and not endpoint-only')
-
     # Check benchmark
     sec = 'benchmark'
     if not new['infrastructure']['infra_only'] and config.has_section(sec):
         new[sec] = dict()
-        option_check(parser, config, new, sec, 'mode', str, lambda x : x in ['cloud', 'edge', 'endpoint'])
+        option_check(parser, config, new, sec, 'resource_manager', str, lambda x : x in ['kubernetes', 'kubeedge'], mandatory=False)
         option_check(parser, config, new, sec, 'docker_pull', bool, lambda x : x in [True, False])
         option_check(parser, config, new, sec, 'delete', bool, lambda x : x in [True, False])
         option_check(parser, config, new, sec, 'application', str, lambda x : x in ['image_classification'])
         option_check(parser, config, new, sec, 'frequency', int, lambda x : x >= 1)
+
+        # Set mode
+        mode = 'endpoint'
+        if edge:
+            mode = 'edge'
+        elif cloud:
+            mode = 'cloud'
+
+        new['mode'] = mode
+
+        # Check if mode and resource manager overlaps
+        if 'resource_manager' in new[sec]:
+            if mode == 'cloud' and not (new['benchmark']['resource_manager'] in ['kubernetes']):
+                parser.error('Config: Cloud-mode requires Kubernetes (#clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0)')
+            elif mode == 'edge' and not (new['benchmark']['resource_manager'] in ['kubeedge']):
+                parser.error('Config: Edge-mode requires KubeEdge (#clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0)')
+        elif mode != 'endpoint':
+            parser.error('Config: Only endpoint-only mode (#clouds=0, #edges=0, and #endpoints>0) doesnt require resource managers')
 
         # Extended checks: Number of nodes should match deployment mode
         if mode == 'cloud' and ((cloud < 2 or edge != 0 or endpoint == 0) or cloud % endpoint != 0):
@@ -206,8 +188,6 @@ def parse_config(parser, arg):
             parser.error('Config: For edge benchmark, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0')
         elif mode == 'endpoint' and (cloud != 0 or edge != 0 or endpoint == 0):
             parser.error('Config: For endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0')
-        elif mode != new["benchmark"]['mode']:
-            parser.error('Mismatch between predicted mode and actual mode')
     elif new['infrastructure']['infra_only'] and config.has_section(sec):
         parser.error('Config: benchmark section is present but infra_only=True')
 
@@ -231,6 +211,7 @@ def add_constants(config):
 
     config['prefixIP'] = '192.168.122'
     config['postfixIP'] = 10
+    config['postfixIP_base'] = 210
 
 
 def set_logging(args):
@@ -251,7 +232,7 @@ def set_logging(args):
     if args.config['infrastructure']['infra_only']:
         log_name = '%s_infra_only.log' % (t)
     else:
-        log_name = '%s_%s_%s.log' % (t, args.config['benchmark']['mode'], args.config['benchmark']['application'])
+        log_name = '%s_%s_%s.log' % (t, args.config['mode'], args.config['benchmark']['application'])
 
     file_handler = logging.FileHandler(log_dir + '/' + log_name)
     file_handler.setLevel(logging.DEBUG)

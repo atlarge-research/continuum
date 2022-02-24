@@ -27,13 +27,15 @@ def create_inventory_machine(config, machines):
     f.write('\n[all_hosts]\n')
 
     for machine in machines:
-        base = 'base=%s' % (machine.base_names[0])
+        base = ''
+        if config['infrastructure']['infra_only']:
+            base = 'base=%s' % (machine.base_names[0])
 
         if machine.is_local:
-            f.write('localhost ansible_connection=local username=%s base=%s\n' % (
+            f.write('localhost ansible_connection=local username=%s %s\n' % (
                 machine.user, base))
         else:
-            f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s base=%s\n' % (
+            f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n' % (
                 machine.name_sanitized, machine.ip, machine.user, machine.user, base))
 
     # Infra-only uses the same setup for all machines
@@ -51,14 +53,14 @@ def create_inventory_machine(config, machines):
             if machine.cloud_controller + machine.clouds == 0:
                 continue
 
-            base = 'base=%s' % ([name for name in machine.base_names if 'cloud' in name])[0]
+            base = [name for name in machine.base_names if 'cloud' in name][0]
 
             if machine.is_local:
-                f.write('localhost ansible_connection=local username=%s cloud_controller=%i cloud_start=%i cloud_end=%i edges=%i %s\n' % (
-                    machine.user, machine.cloud_controller, clouds, clouds + machine.clouds - 1, machine.edges, base))
+                f.write('localhost ansible_connection=local username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base=%s\n' % (
+                    machine.user, machine.cloud_controller, clouds, clouds + machine.clouds - 1, base))
             else:
-                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s cloud_controller=%i cloud_start=%i cloud_end=%i edges=%i %s\n' % (
-                    machine.name_sanitized, machine.ip, machine.user, machine.user, machine.cloud_controller, clouds, clouds + machine.clouds - 1, machine.edges, base))
+                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base=%s\n' % (
+                    machine.name_sanitized, machine.ip, machine.user, machine.user, machine.cloud_controller, clouds, clouds + machine.clouds - 1, base))
 
             clouds += machine.clouds
 
@@ -71,13 +73,13 @@ def create_inventory_machine(config, machines):
             if machine.edges == 0:
                 continue
 
-            base = 'base=%s' % ([name for name in machine.base_names if 'edge' in name])[0]
+            base = [name for name in machine.base_names if 'edge' in name][0]
 
             if machine.is_local:
-                f.write('localhost ansible_connection=local username=%s edge_start=%i edge_end=%i %s\n' % (
+                f.write('localhost ansible_connection=local username=%s edge_start=%i edge_end=%i base=%s\n' % (
                     machine.user, edges, edges + machine.edges - 1, base))
             else:
-                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s edge_start=%i edge_end=%i %s\n' % (
+                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s edge_start=%i edge_end=%i base=%s\n' % (
                     machine.name_sanitized, machine.ip, machine.user, machine.user, edges, edges + machine.edges - 1, base))
 
             edges += machine.edges
@@ -90,13 +92,13 @@ def create_inventory_machine(config, machines):
             if machine.endpoints == 0:
                 continue
 
-            base = 'base=%s' % ([name for name in machine.base_names if 'endpoint' in name])[0]
+            base = [name for name in machine.base_names if 'endpoint' in name][0]
 
             if machine.is_local:
-                f.write('localhost ansible_connection=local username=%s endpoint_start=%i endpoint_end=%i %s\n' % (
+                f.write('localhost ansible_connection=local username=%s endpoint_start=%i endpoint_end=%i base=%s\n' % (
                     machine.user, endpoints, endpoints + machine.endpoints - 1, base))
             else:
-                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s endpoint_start=%i endpoint_end=%i %s\n' % (
+                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s endpoint_start=%i endpoint_end=%i base=%s\n' % (
                     machine.name_sanitized, machine.ip, machine.user, machine.user, endpoints, endpoints + machine.endpoints - 1, base))
 
             endpoints += machine.endpoints
@@ -131,7 +133,7 @@ def create_inventory_vm(config, machines):
 
     if not config['infrastructure']['infra_only']:
         # Tier specific groups
-        if config['infrastructure']['cloud_nodes']:
+        if config['mode'] == 'cloud' or config['mode'] == 'edge':
             f.write('controller_ip=%s\n' % (machines[0].cloud_controller_ips[0]))
 
             # Cloud controller (is always on machine 0)
@@ -139,10 +141,10 @@ def create_inventory_vm(config, machines):
             f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s cloud_mode=%i\n' % (
                         machines[0].cloud_controller_names[0], machines[0].cloud_controller_ips[0],
                         machines[0].cloud_controller_names[0], machines[0].cloud_controller_names[0],
-                        config['benchmark']['mode'] == 'cloud'))
+                        config['mode'] == 'cloud'))
 
         # Cloud worker VM group
-        if config['infrastructure']['cloud_nodes'] > 1:
+        if config['mode'] == 'cloud':
             f.write('\n[clouds]\n')
 
             for machine in machines:
@@ -151,7 +153,7 @@ def create_inventory_vm(config, machines):
                         name, ip, name, name))
 
         # Edge VM group
-        if config['infrastructure']['edge_nodes'] > 0:
+        if config['mode'] == 'edge':
             f.write('\n[edges]\n')
 
             for machine in machines:
@@ -167,15 +169,16 @@ def create_inventory_vm(config, machines):
                     name, ip, name, name))
 
     # Make group with all base VMs for netperf installation
-    f.write('\n[base]\n')
-    for machine in machines:
-        for name, ip in zip(machine.base_names, machine.base_ips):
-            f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
-                name, ip, name, name))
+    if config['infrastructure']['netperf']:
+        f.write('\n[base]\n')
+        for machine in machines:
+            for name, ip in zip(machine.base_names, machine.base_ips):
+                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
+                    name, ip, name, name))
 
     # Make specific groups for cloud/edge/endpoint base VM
     if not config['infrastructure']['infra_only']:
-        if config['infrastructure']['cloud_nodes']:
+        if config['mode'] == 'cloud' or config['mode'] == 'edge':
             f.write('\n[base_cloud]\n')
             for machine in machines:
                 for name, ip in zip(machine.base_names, machine.base_ips):
@@ -183,7 +186,7 @@ def create_inventory_vm(config, machines):
                         f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
                             name, ip, name, name))
 
-        if config['infrastructure']['edge_nodes']:
+        if config['mode'] == 'edge':
             f.write('\n[base_edge]\n')
             for machine in machines:
                 for name, ip in zip(machine.base_names, machine.base_ips):
@@ -191,12 +194,11 @@ def create_inventory_vm(config, machines):
                         f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
                             name, ip, name, name))
 
-        if config['infrastructure']['endpoint_nodes']:
-            f.write('\n[base_endpoint]\n')
-            for machine in machines:
-                for name, ip in zip(machine.base_names, machine.base_ips):
-                    if 'base_endpoint' in name.rstrip(string.digits):
-                        f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
-                            name, ip, name, name))
+        f.write('\n[base_endpoint]\n')
+        for machine in machines:
+            for name, ip in zip(machine.base_names, machine.base_ips):
+                if 'base_endpoint' in name.rstrip(string.digits):
+                    f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
+                        name, ip, name, name))
 
     f.close()
