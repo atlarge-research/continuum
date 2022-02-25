@@ -18,11 +18,20 @@ def check_ansible_proc(out):
     """
     output, error = out
 
+    # Print summary of executioo times
+    summary = False
     lines = ['']
     for line in output:
-        lines.append(line.rstrip())
-    logging.debug('\n'.join(lines))
+        if summary:
+            lines.append(line.rstrip())
 
+        if '==========' in line:
+            summary = True
+
+    if lines != ['']:
+        logging.debug('\n'.join(lines))
+
+    # Check if executino was succesful
     if error != []:
         logging.error(''.join(error))
         sys.exit()
@@ -79,6 +88,8 @@ def base_image(config, machines):
     base_names = [name for name, need in zip(base_names, need_images) if need]
     if base_names == []:
         return
+
+    print(base_names)
 
     # Create base images        
     for base_name in base_names:
@@ -155,6 +166,10 @@ def base_image(config, machines):
         command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
                 config['home'] + '/.continuum/infrastructure/netperf.yml']
         check_ansible_proc(machines[0].process(command))
+
+    # Install docker containers if required
+    if not config['infrastructure']['infra_only']:
+        infrastructure.docker_pull(config, machines)
 
     # Clean the VM
     processes = []

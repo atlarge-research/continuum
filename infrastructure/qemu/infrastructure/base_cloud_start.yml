@@ -4,12 +4,12 @@
   tasks:
   - name: Remove old base image from /var/lib/libvirt/images
     shell: |
-      rm -f "/var/lib/libvirt/images/{{ base }}.qcow2"
+      rm -f "/var/lib/libvirt/images/{{ base_cloud }}.qcow2"
     args:
       warn: false
 
   - name: Create base image
-    command: qemu-img create -f qcow2 -F qcow2 -b /var/lib/libvirt/images/ubuntu2004.qcow2 "/var/lib/libvirt/images/{{ base }}.qcow2"
+    command: qemu-img create -f qcow2 -F qcow2 -b /var/lib/libvirt/images/ubuntu2004.qcow2 "/var/lib/libvirt/images/{{ base_cloud }}.qcow2"
 
   - name: Install cloudinit requirements
     package:
@@ -26,4 +26,4 @@
     when: ansible_os_family == "RedHat"
   
   - name: Add cloudinit disk for base
-    command: cloud-localds "/var/lib/libvirt/images/user_data_{{ base }}.img" "/home/{{ username }}/.continuum/user_data_{{ base }}.yml"
+    command: cloud-localds "/var/lib/libvirt/images/user_data_{{ base_cloud }}.img" "/home/{{ username }}/.continuum/user_data_{{ base_cloud }}.yml"

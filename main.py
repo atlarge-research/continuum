@@ -209,9 +209,19 @@ def add_constants(config):
                                 'redplanet00/kubeedge-applications:image_classification_publisher',
                                 'redplanet00/kubeedge-applications:image_classification_combined']
 
+            if config['mode'] == 'cloud' or config['mode'] == 'edge':
+                config['images'] = config['images'][:2]
+            else:
+                config['images'] = config['images'][2]
+ 
     config['prefixIP'] = '192.168.122'
     config['postfixIP'] = 10
-    config['postfixIP_base'] = 210
+    config['postfixIP_base'] = 200
+
+
+def shorten_filename(filename):
+    f = os.path.split(filename)[1]
+    return "%s~%s" % (f[:3], f[-16:]) if len(f) > 19 else f
 
 
 def set_logging(args):
@@ -245,7 +255,7 @@ def set_logging(args):
         stdout_handler.setLevel(logging.INFO)
 
     # Set parameters
-    logging.basicConfig(format="[%(asctime)s %(filename)20s:%(lineno)4s - %(funcName)25s() ] %(message)s", 
+    logging.basicConfig(format="[%(asctime)s %(pathname)s:%(lineno)s - %(funcName)s() ] %(message)s", 
         level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S', handlers=[file_handler, stdout_handler])
 
     logging.info('Logging has been enabled. Writing to stdout and file at %s/%s' % (log_dir, log_name))
@@ -283,13 +293,13 @@ def main(args):
     """    
     machines = infrastructure.start(args.config)
 
-    # if not args.config['infrastructure']['infra_only']:
+    if not args.config['infrastructure']['infra_only']:
     #     resource_manager.start(args.config, machines)
     #     output = benchmark.start(args.config, machines)
     #     results.start(args.config, machines, output)
 
-    #     if args.config['benchmark']['delete']:
-    #         infrastructure.delete(machines)
+        if args.config['benchmark']['delete']:
+            infrastructure.delete(machines)
 
 
 if __name__ == '__main__':

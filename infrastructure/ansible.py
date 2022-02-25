@@ -38,11 +38,6 @@ def create_inventory_machine(config, machines):
             f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n' % (
                 machine.name_sanitized, machine.ip, machine.user, machine.user, base))
 
-    # Infra-only uses the same setup for all machines
-    if config['infrastructure']['infra_only']:
-        f.close()
-        return
-
     # Specific cloud/edge/endpoint groups for installing RM software
     # For machines with cloud VMs
     if config['infrastructure']['cloud_nodes']:
@@ -53,13 +48,15 @@ def create_inventory_machine(config, machines):
             if machine.cloud_controller + machine.clouds == 0:
                 continue
 
-            base = [name for name in machine.base_names if 'cloud' in name][0]
+            base = machine.base_names[0]
+            if not config['infrastructure']['infra_only']:
+                base = [name for name in machine.base_names if '_cloud_' in name][0]
 
             if machine.is_local:
-                f.write('localhost ansible_connection=local username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base=%s\n' % (
+                f.write('localhost ansible_connection=local username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n' % (
                     machine.user, machine.cloud_controller, clouds, clouds + machine.clouds - 1, base))
             else:
-                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base=%s\n' % (
+                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n' % (
                     machine.name_sanitized, machine.ip, machine.user, machine.user, machine.cloud_controller, clouds, clouds + machine.clouds - 1, base))
 
             clouds += machine.clouds
@@ -73,13 +70,15 @@ def create_inventory_machine(config, machines):
             if machine.edges == 0:
                 continue
 
-            base = [name for name in machine.base_names if 'edge' in name][0]
+            base = machine.base_names[0]
+            if not config['infrastructure']['infra_only']:
+                base = [name for name in machine.base_names if '_edge_' in name][0]
 
             if machine.is_local:
-                f.write('localhost ansible_connection=local username=%s edge_start=%i edge_end=%i base=%s\n' % (
+                f.write('localhost ansible_connection=local username=%s edge_start=%i edge_end=%i base_edge=%s\n' % (
                     machine.user, edges, edges + machine.edges - 1, base))
             else:
-                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s edge_start=%i edge_end=%i base=%s\n' % (
+                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s edge_start=%i edge_end=%i base_edge=%s\n' % (
                     machine.name_sanitized, machine.ip, machine.user, machine.user, edges, edges + machine.edges - 1, base))
 
             edges += machine.edges
@@ -92,13 +91,15 @@ def create_inventory_machine(config, machines):
             if machine.endpoints == 0:
                 continue
 
-            base = [name for name in machine.base_names if 'endpoint' in name][0]
+            base = machine.base_names[0]
+            if not config['infrastructure']['infra_only']:
+                base = [name for name in machine.base_names if '_endpoint' in name][0]
 
             if machine.is_local:
-                f.write('localhost ansible_connection=local username=%s endpoint_start=%i endpoint_end=%i base=%s\n' % (
+                f.write('localhost ansible_connection=local username=%s endpoint_start=%i endpoint_end=%i base_endpoint=%s\n' % (
                     machine.user, endpoints, endpoints + machine.endpoints - 1, base))
             else:
-                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s endpoint_start=%i endpoint_end=%i base=%s\n' % (
+                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s endpoint_start=%i endpoint_end=%i base_endpoint=%s\n' % (
                     machine.name_sanitized, machine.ip, machine.user, machine.user, endpoints, endpoints + machine.endpoints - 1, base))
 
             endpoints += machine.endpoints

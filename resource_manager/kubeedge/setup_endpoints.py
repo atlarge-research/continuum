@@ -14,26 +14,6 @@ images = {'image-classification': ['redplanet00/kubeedge-applications:image_clas
                                    'redplanet00/kubeedge-applications:image_classification_combined']}
 
 
-def setup_docker(machines):
-    """Do the set up of Docker on each endpoint VM
-
-    Args:
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info('Start and set up Docker on VMs')
-
-    # Start Docker in endpoints
-    command = ['ansible-playbook', '-i', home + '/.continuum/inventory_vms', 
-               home + '/.continuum/endpoint/endpoint_startup.yml']
-    output, error = machines[0].process(command)
-
-    if error != []:
-        logging.error(''.join(error))
-        sys.exit()
-    elif any('FAILED!' in out for out in output):
-        logging.error(''.join(output))
-        sys.exit()
-
 
 def start_publisher(args, machines):
     """Start running the endpoint containers using Docker.

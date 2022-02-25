@@ -4,6 +4,8 @@ Impelemnt infrastructure
 import logging
 import sys
 import time
+import json
+import socket
 import numpy as np
 
 from . import machine as m
@@ -129,6 +131,30 @@ using the --file option''')
         sys.exit()
 
     return machines_per_node
+
+
+def delete_vms(machines):
+    """The benchmark has been completed succesfully, now delete the VMs.
+
+    Args:
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info('Start deleting VMs after benchmark has completed')
+    processes = []
+    for machine in machines:
+        if machine.is_local:
+            command = 'virsh list --all | grep -o -E "(cloud\w*|edge\w*|endpoint\w*|base\w*)" | xargs -I % sh -c "virsh destroy %"'
+        else:
+            comm = 'virsh list --all | grep -o -E \\"(cloud\w*|edge\w*|endpoint\w*|base\w*)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
+            command = 'ssh %s -t \'bash -l -c "%s"\'' % (machine.name, comm)
+
+        processes.append(machine.process(command, shell=True, output=False))
+
+    # Wait for process to finish. Outcome of destroy command does not matter
+    for process in processes:
+        logging.debug('Check output for command [%s]' % (''.join(process.args)))
+        _ = [line.decode('utf-8') for line in process.stdout.readlines()]
+        _ = [line.decode('utf-8') for line in process.stderr.readlines()]
 
 
 def create_keypair(config, machines):
@@ -290,6 +316,121 @@ def add_ssh(config, machines, base=False):
             time.sleep(5)
 
 
+def docker_registry(config, machines):
+    """Create and fill a local, private docker registry without the images needed for the benchmark.
+    This is to prevent each spawned VM to pull from DockerHub, which has a rate limit.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info('Create local Docker registry')
+    need_pull = [True for _ in range(len(config['images']))]
+
+    # Check if registry is up
+    command = ['curl', 'localhost:5000/v2/_catalog']
+    output, error = machines[0].process(command)
+
+    if error != [] and any('Failed to connect to' in line for line in error):
+        # Not yet up, so launch
+        command = ['docker', 'run', '-d', '-p', '5000:5000',
+                   '--restart=always', '--name', 'registry', 'registry:2']
+        output, error = machines[0].process(command)
+
+        if error != [] and not (any('Unable to find image' in line for line in error) and
+                                any('Pulling from' in line for line in error)):
+            logging.error(''.join(error))
+            sys.exit()
+    elif output == []:
+        # Crash
+        logging.error('No output from Docker container')
+        sys.exit()
+    elif not config['benchmark']['docker_pull']:
+        # Registry is already up, check if containers are present
+        repos = json.loads(output[0])['repositories']
+
+        for i, image in enumerate(config['images']):
+            if image.split(':')[1] in repos:
+                need_pull[i] = False
+
+    # Pull images which aren't present yet in the registry
+    for image, pull in zip(config['images'], need_pull):
+        if not pull:
+            continue
+
+        dest = 'localhost:5000/' + image.split(':')[1]
+        commands = [['docker', 'pull', image],
+                    ['docker', 'tag', image, dest],
+                    ['docker', 'push', dest]]
+
+        for command in commands:
+            output, error = machines[0].process(command)
+
+            if error != []:
+                logging.error(''.join(error))
+                sys.exit()
+
+
+def docker_pull(config, machines):
+    """Start running the endpoint containers using Docker.
+    Wait for them to finish, and get their output.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+
+    Returns:
+        list(list(str)): Names of docker containers launched per machine
+    """
+    logging.info('Pull docker containers into base images')
+
+    # Images need to be pulled from local registry, get address
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        host_ip = s.getsockname()[0]
+    except Exception as e:
+        logging.error('Could not get host ip: %s' % (e))
+        sys.exit()
+
+    # Pull the images
+    processes = []
+    for machine in machines:
+        for name, ip in zip(machine.base_names, machine.base_ips):
+            # Edge mode has cloud controllers, which don't need docker containers
+            if (config['mode'] == 'edge' and '_cloud_' in name):
+                continue
+
+            if '_cloud_' in name or '_endpoint' in name:
+                image = '%s:5000/%s' % (str(host_ip), config['images'][0].split(':')[1])
+            elif '_edge_' in name:
+                image = '%s:5000/%s' % (str(host_ip), config['images'][1].split(':')[1])
+
+            command = ['docker', 'pull', image]
+            processes.append([name, machines[0].process(command, output=False, ssh=True, ssh_target=name + '@' + ip)])
+
+    # Checkout process output
+    for name, process in processes:
+        logging.debug('Check output of command [%s]' % (' '.join(process.args)))
+        output = [line.decode('utf-8') for line in process.stdout.readlines()]
+        error = [line.decode('utf-8') for line in process.stderr.readlines()]
+
+        if error != [] and any('server gave HTTP response to HTTPS client' in line for line in error):
+            logging.warn('''\
+File /etc/docker/daemon.json does not exist, or is empty on Machine %s. 
+This will most likely prevent the machine from pulling endpoint docker images 
+from the private Docker registry running on the main machine %s.
+Please create this file on machine %s with content: { "insecure-registries":["%s:5000"] }
+Followed by a restart of Docker: systemctl restart docker''' % (
+                name, machines[0].name, name, host_ip))
+        if error != []:
+            logging.error(''.join(error))
+            sys.exit()
+        elif output == []:
+            logging.error('No output from command docker pull')
+            sys.exit()
+
+
 def start(config):
     """Create and manage infrastructure
 
@@ -336,6 +477,9 @@ def start(config):
     copy_files(config, machines)
 
     logging.info('Setting up the infrastructure')
+    if not config['infrastructure']['infra_only']:
+        docker_registry(config, machines)
+
     start.start(config, machines)
     add_ssh(config, machines)
 
@@ -346,27 +490,3 @@ def start(config):
         network.benchmark(config, machines)
 
     return machines
-
-
-def delete_vms(machines):
-    """The benchmark has been completed succesfully, now delete the VMs.
-
-    Args:
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info('Start deleting VMs after benchmark has completed')
-    processes = []
-    for machine in machines:
-        if machine.is_local:
-            command = 'virsh list --all | grep -o -E "(cloud\w*|edge\w*|endpoint\w*)" | xargs -I % sh -c "virsh destroy %"'
-        else:
-            comm = 'virsh list --all | grep -o -E \\"(cloud\w*|edge\w*|endpoint\w*)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
-            command = 'ssh %s -t \'bash -l -c "%s"\'' % (machine.name, comm)
-
-        processes.append(machine.process(command, shell=True, output=False))
-
-    # Wait for process to finish. Outcome of destroy command does not matter
-    for process in processes:
-        logging.debug('Check output for command [%s]' % (''.join(process.args)))
-        _ = [line.decode('utf-8') for line in process.stdout.readlines()]
-        _ = [line.decode('utf-8') for line in process.stderr.readlines()]
