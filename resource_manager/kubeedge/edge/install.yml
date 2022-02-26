@@ -12,6 +12,9 @@
       name: "{{ username }}"
       groups: "docker, systemd-journal"
 
+  - name: Restart docker service
+    command: systemctl restart docker
+
   - name: Wait for join command to be finished on cloud controller
     local_action:
       module: wait_for

@@ -20,6 +20,17 @@
       name: docker.io
       state: present
 
+  - name: Add cloud user to docker group
+    user:
+      name: "{{ username }}"
+      group: docker
+
+  - name: Allow HTTP pulling from private docker registry
+    shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json
+
+  - name: Restart docker service
+    command: systemctl restart docker
+
   - name: Remove swapfile from /etc/fstab
     mount:
       name: "{{ item }}"
@@ -60,6 +71,3 @@
     with_items:
       - "/tmp/keadm-v1.8.1-linux-amd64"
       - "/tmp/keadm-v1.8.1-linux-amd64.tar.gz"
-
-  - name: Allow HTTP pulling from private docker registry
-    shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json

@@ -12,6 +12,9 @@
       name: "{{ username }}"
       groups: "docker, systemd-journal"
 
+  - name: Restart docker service
+    command: systemctl restart docker
+
   handlers:
     - name: docker status
       service: name=docker state=started

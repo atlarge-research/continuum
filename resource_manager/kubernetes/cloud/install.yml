@@ -12,6 +12,9 @@
       name: "{{ username }}"
       group: docker
 
+  - name: Restart docker service
+    command: systemctl restart docker
+
   - name: Run Mosquitto
     command: mosquitto -d -p 1883
 

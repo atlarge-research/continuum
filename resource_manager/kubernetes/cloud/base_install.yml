@@ -20,6 +20,17 @@
       name: docker.io
       state: present
 
+  - name: Add cloud user to docker group
+    user:
+      name: "{{ username }}"
+      group: docker
+
+  - name: Allow HTTP pulling from private docker registry
+    shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json
+
+  - name: Restart docker service
+    command: systemctl restart docker
+
   - name: Remove swapfile from /etc/fstab
     mount:
       name: "{{ item }}"
@@ -61,9 +72,6 @@
         - kubelet=1.21.0-00
         - kubeadm=1.21.0-00
         - kubectl=1.21.0-00
-
-  - name: Allow HTTP pulling from private docker registry
-    shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json
 
   - name: Get Calico
     unarchive:
