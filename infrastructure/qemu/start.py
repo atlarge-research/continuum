@@ -6,38 +6,14 @@ import sys
 import logging
 import time
 import string
+import os
+import sys
 
 from .. import start as infrastructure
 
+sys.path.append(os.path.abspath('../..'))
 
-def check_ansible_proc(out):
-    """Check if an Ansible Playbook succeeded or failed
-
-    Args:
-        output (list(str), list(str)): List of process stdout and stderr
-    """
-    output, error = out
-
-    # Print summary of executioo times
-    summary = False
-    lines = ['']
-    for line in output:
-        if summary:
-            lines.append(line.rstrip())
-
-        if '==========' in line:
-            summary = True
-
-    if lines != ['']:
-        logging.debug('\n'.join(lines))
-
-    # Check if executino was succesful
-    if error != []:
-        logging.error(''.join(error))
-        sys.exit()
-    elif any('FAILED!' in out for out in output):
-        logging.error(''.join(output))
-        sys.exit()
+import main
 
 
 def os_image(config, machines):
@@ -61,7 +37,7 @@ def os_image(config, machines):
     if need_image:
         command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
                    config['home'] + '/.continuum/infrastructure/os.yml']
-        check_ansible_proc(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(command))
 
 
 def base_image(config, machines):
@@ -107,7 +83,7 @@ def base_image(config, machines):
             command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
                 config['home'] + '/.continuum/infrastructure/base_endpoint_start.yml']
 
-        check_ansible_proc(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(command))
 
     # Launch the base VMs concurrently
     processes = []
@@ -159,13 +135,13 @@ def base_image(config, machines):
         logging.debug('Check output for command [%s]' % (''.join(process.args)))
         output = [line.decode('utf-8') for line in process.stdout.readlines()]
         error = [line.decode('utf-8') for line in process.stderr.readlines()]
-        check_ansible_proc((output, error))
+        main.ansible_check_output((output, error))
 
     # Install netperf
     if config['infrastructure']['netperf']:
         command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
                 config['home'] + '/.continuum/infrastructure/netperf.yml']
-        check_ansible_proc(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(command))
 
     # Install docker containers if required
     if not config['infrastructure']['infra_only']:
@@ -184,7 +160,7 @@ def base_image(config, machines):
         logging.info('Check output for command [%s]' % (''.join(process.args)))
         output = [line.decode('utf-8') for line in process.stdout.readlines()]
         error = [line.decode('utf-8') for line in process.stderr.readlines()]
-        check_ansible_proc((output, error))
+        main.ansible_check_output((output, error))
 
     # Shutdown VMs
     processes = []
@@ -228,7 +204,7 @@ def start(config, machines):
     # Delete older VM images
     command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
                config['home'] + '/.continuum/infrastructure/remove.yml']
-    check_ansible_proc(machines[0].process(command))
+    main.ansible_check_output(machines[0].process(command))
 
     # Check if os and base image need to be created, and if so do create them
     os_image(config, machines)
@@ -238,19 +214,19 @@ def start(config, machines):
     if config['infrastructure']['cloud_nodes']:
         command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
             config['home'] + '/.continuum/infrastructure/cloud_start.yml']
-        check_ansible_proc(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(command))
 
     # Create edge images
     if config['infrastructure']['edge_nodes']:
         command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
             config['home'] + '/.continuum/infrastructure/edge_start.yml']
-        check_ansible_proc(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(command))
 
     # Create endpoint images
     if config['infrastructure']['endpoint_nodes']:
         command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory', 
             config['home'] + '/.continuum/infrastructure/endpoint_start.yml']
-        check_ansible_proc(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(command))
 
     # Launch the VMs concurrently
     processes = []

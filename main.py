@@ -12,11 +12,42 @@ import logging
 import os
 import time
 import configparser
+import socket
 
 import infrastructure.start as infrastructure
 import resource_manager.start as resource_manager
 import benchmark.start as benchmark
-import results.start as results
+
+
+def ansible_check_output(out):
+    """Check if an Ansible Playbook succeeded or failed
+    Shared by all files launching Ansible playbooks
+
+    Args:
+        output (list(str), list(str)): List of process stdout and stderr
+    """
+    output, error = out
+
+    # Print summary of executioo times
+    summary = False
+    lines = ['']
+    for line in output:
+        if summary:
+            lines.append(line.rstrip())
+
+        if '==========' in line:
+            summary = True
+
+    if lines != ['']:
+        logging.debug('\n'.join(lines))
+
+    # Check if executino was succesful
+    if error != []:
+        logging.error(''.join(error))
+        sys.exit()
+    elif any('FAILED!' in out for out in output):
+        logging.error(''.join(output))
+        sys.exit()
 
 
 def make_wide(formatter, w=120, h=36):
@@ -182,9 +213,9 @@ def parse_config(parser, arg):
             parser.error('Config: Only endpoint-only mode (#clouds=0, #edges=0, and #endpoints>0) doesnt require resource managers')
 
         # Extended checks: Number of nodes should match deployment mode
-        if mode == 'cloud' and ((cloud < 2 or edge != 0 or endpoint == 0) or cloud % endpoint != 0):
+        if mode == 'cloud' and (cloud < 2 or edge != 0 or endpoint == 0 or (cloud - 1) % endpoint != 0):
             parser.error('Config: For cloud benchmark, #clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0')
-        elif mode == 'edge' and ((cloud != 1 or edge == 0 or endpoint == 0) or edge % endpoint != 0):
+        elif mode == 'edge' and (cloud != 1 or edge == 0 or endpoint == 0 or edge % endpoint != 0):
             parser.error('Config: For edge benchmark, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0')
         elif mode == 'endpoint' and (cloud != 0 or edge != 0 or endpoint == 0):
             parser.error('Config: For endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0')
@@ -217,6 +248,17 @@ def add_constants(config):
     config['prefixIP'] = '192.168.122'
     config['postfixIP'] = 10
     config['postfixIP_base'] = 200
+
+    # Get Docker registry IP
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        host_ip = s.getsockname()[0]
+    except Exception as e:
+        logging.error('Could not get host ip: %s' % (e))
+        sys.exit()
+
+    config['registry'] = host_ip + ':5000'
 
 
 def shorten_filename(filename):
@@ -294,9 +336,8 @@ def main(args):
     machines = infrastructure.start(args.config)
 
     if not args.config['infrastructure']['infra_only']:
-    #     resource_manager.start(args.config, machines)
-    #     output = benchmark.start(args.config, machines)
-    #     results.start(args.config, machines, output)
+        resource_manager.start(args.config, machines)
+        benchmark.start(args.config, machines)
 
         if args.config['benchmark']['delete']:
             infrastructure.delete(machines)

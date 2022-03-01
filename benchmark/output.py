@@ -5,17 +5,19 @@ Get output from KubeEdge and Docker, and process it into readable format
 import sys
 import logging
 import copy
-from datetime import datetime
-import time
 import numpy as np
 import pandas as pd
 
-def endpoint_output(machines, endpoint_names):
+from datetime import datetime
+
+
+def get_endpoint_output(config, machines, container_names):
     """Get the output of endpoint docker containers.
 
     Args:
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
-        names (list(list(str))): Names of docker containers launched per machine
+        container_names (list(list(str))): Names of docker containers launched
 
     Returns:
         list(list(str)): Output of each endpoint container
@@ -23,92 +25,66 @@ def endpoint_output(machines, endpoint_names):
     logging.info('Extract output from endpoint publishers')
 
     endpoint_output = []
-    for machine, endpoint_list in zip(machines, endpoint_names):
-        for name, ip, dock_name in zip(machine.endpoint_names, machine.endpoint_ips, endpoint_list):
-            logging.info('Get output from endpoint: %s' % (dock_name))
-            endpoint_vm = name + '@' + ip
+    for ssh, cont_name in zip(config['endpoint_ssh'], container_names):
+        logging.info('Get output from endpoint %s on VM %s' % (cont_name, ssh))
 
-            # Alternatively, use docker logs -t container_name for detailed timestamps
-            # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
-            command = ['docker', 'logs', '-t', dock_name]
-            output, error = machines[0].process(command, ssh=True, ssh_target=endpoint_vm)
+        # Alternatively, use docker logs -t container_name for detailed timestamps
+        # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
+        command = ['docker', 'logs', '-t', cont_name]
+        output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
 
-            if error != []:
-                logging.error(''.join(error))
-                sys.exit()
-            elif output == []:
-                logging.error('Container %s output empty' % (dock_name))
-                sys.exit()
+        if error != []:
+            logging.error(''.join(error))
+            sys.exit()
+        elif output == []:
+            logging.error('Container %s output empty' % (cont_name))
+            sys.exit()
 
-            output = [line.rstrip() for line in output]
-            endpoint_output.append(output)
+        output = [line.rstrip() for line in output]
+        endpoint_output.append(output)
 
     return endpoint_output
 
 
-def get_subscriber_output(args, machines):
+def get_worker_output(config, machines):
     """Get the output of worker cloud / edge applications
 
     Args:
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
 
     Returns:
         list(list(str)): Output of each container ran on the cloud / edge
     """
     logging.info('Gather output from subscribers')
-    cloud_controller = machines[0].cloud_controller_names[0] + \
-        '@' + machines[0].cloud_controller_ips[0]
 
-    # Wait until the deployed pods are finished
-    get_list = True
-    i = 0
+    # Get list of pods
+    command = ['kubectl', 'get', 'pods', 
+        '-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase',
+        '--sort-by=.spec.nodeName']
+    output, error = machines[0].process(
+        command, ssh=True, ssh_target=config['cloud_ssh'][0])
 
-    while i < args.cloudnodes + args.edgenodes:
-        # Get the list of deployed pods
-        if get_list:
-            command = ['kubectl', 'get', 'pods', 
-                       '-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase',
-                       '--sort-by=.spec.nodeName']
-            output, error = machines[0].process(
-                command, ssh=True, ssh_target=cloud_controller)
+    if error != [] or output == []:
+        logging.error(''.join(error))
+        sys.exit()
 
-            if error != [] or output == []:
-                logging.error(''.join(error))
-                sys.exit()
-
-        # Parse list, get status of app i
-        line = output[i + 1].rstrip().split(' ')
-        app_name = line[0]
-        app_status = line[-1]
-
-        # Check status of app i
-        if app_status == 'Running':
-            time.sleep(5)
-            get_list = True
-        elif app_status == 'Succeeded':
-            i += 1
-            get_list = False
-        else:
-            logging.error(('ERROR: Container on cloud/edge %s has status %s, expected \"Running\" or \"Succeeded\"' % (
-                app_name, app_status)))
-            sys.exit()
-
-    # Given the list of pods, get their output
-    sub_output = []
+    # Get output from pods
+    worker_output = []
     for line in output[1:]:
         container = line.split(' ')[0]
         command = ['kubectl', 'logs', '--timestamps=true', container]
         output, error = machines[0].process(
-            command, ssh=True, ssh_target=cloud_controller)
+            command, ssh=True, ssh_target=config['cloud_ssh'][0])
 
         if error != [] or output == []:
             logging.error(''.join(error))
             sys.exit()
 
         output = [line.rstrip() for line in output]
-        sub_output.append(output)
+        worker_output.append(output)
 
-    return sub_output
+    return worker_output
 
 
 def to_datetime(s):
@@ -127,18 +103,17 @@ def to_datetime(s):
     return datetime.strptime(s, '%Y-%m-%d %H:%M:%S.%f')
 
 
-def gather_worker_metrics(args, worker_output):
+def gather_worker_metrics(worker_output):
     """Gather metrics from cloud or edge workers
 
     Args:
-        args (Namespace): Argparse object
         worker_output (list(list(str))): Output of each container ran on the edge
 
     Returns:
         list(dict): List of parsed output for each cloud or edge worker
     """
     worker_metrics = []
-    if not (args.mode == 'edge' or args.mode == 'cloud'):
+    if worker_output == []:
         return worker_metrics
 
     worker_set = {'worker_id': None,
@@ -193,18 +168,17 @@ def gather_worker_metrics(args, worker_output):
     return sorted(worker_metrics, key=lambda x: x['worker_id'])
 
 
-def gather_endpoint_metrics(args, endpoint_output, docker_names):
+def gather_endpoint_metrics(config, endpoint_output, container_names):
     """Gather metrics from endpoints
 
     Args:
-        args (Namespace): Argparse object
+        config (dict): Parsed configuration
         endpoint_output (list(list(str))): Output of each endpoint container
-        docker_names (list(list(str))): Names of docker containers launched per machine
+        container_names (list(str)): Names of docker containers launched
 
     Returns:
         list(dict): List of parsed output for each endpoint
     """
-    container_names = [item for sublist in docker_names for item in sublist]
     endpoint_metrics = []
     endpoint_set = {'worker_id': None,
                     'total_time': None,
@@ -223,13 +197,13 @@ def gather_endpoint_metrics(args, endpoint_output, docker_names):
         endpoint_metrics[-1]['proc_avg'] = 0.0
         endpoint_metrics[-1]['data_avg'] = 0.0
 
-        if args.mode == 'cloud':
+        if config['mode'] == 'cloud':
             name = container_name.split('_')[0]
             endpoint_metrics[-1]['worker_id'] = int(name[5:])
-        elif args.mode == 'edge':            
+        elif config['mode'] == 'edge':         
             name = container_name.split('_')[0]
             endpoint_metrics[-1]['worker_id'] = int(name[4:])
-        elif args.mode == 'endpoint':
+        elif config['mode'] == 'endpoint':
             endpoint_metrics[-1]['worker_id'] = int(container_name[8:])
 
         # Parse line by line to get preparation, preprocessing and processing times
@@ -269,22 +243,22 @@ def gather_endpoint_metrics(args, endpoint_output, docker_names):
     return endpoint_metrics
 
 
-def gather_metrics(args, worker_output, endpoint_output, docker_names):
+def gather_metrics(config, worker_output, endpoint_output, container_names):
     """Process the raw output to lists of dicts
 
     Args:
-        args (Namespace): Argparse object
+        config (dict): Parsed configuration
         worker_output (list(list(str))): Output of each container ran on the edge
         endpoint_output (list(list(str))): Output of each endpoint container
-        docker_names (list(list(str))): Names of docker containers launched per machine
+        container_names (list(str)): Names of docker containers launched
 
     Returns:
         2x list(dict): Metrics of worker nodes and endpoints
     """
     logging.debug('Print raw output from subscribers and publishers')
-    if args.mode == 'cloud' or args.mode == 'edge':
+    if config['mode'] == 'cloud' or config['mode'] == 'edge':
         logging.debug('------------------------------------')
-        logging.debug('%s OUTPUT' % (args.mode.upper()))
+        logging.debug('%s OUTPUT' % (config['mode'].upper()))
         logging.debug('------------------------------------')
         for out in worker_output:
             for line in out:
@@ -301,25 +275,25 @@ def gather_metrics(args, worker_output, endpoint_output, docker_names):
         
         logging.debug('------------------------------------')
 
-    worker_metrics = gather_worker_metrics(args, worker_output)
-    endpoint_metrics = gather_endpoint_metrics(args, endpoint_output, docker_names)
+    worker_metrics = gather_worker_metrics(worker_output)
+    endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
     return worker_metrics, endpoint_metrics
 
 
-def format_output(args, sub_metrics, endpoint_metrics):
+def format_output(config, worker_metrics, endpoint_metrics):
     """Format processed output to provide useful insights
 
     Args:
-        args (Namespace): Argparse object
+        config (dict): Parsed configuration
         sub_metrics (list(dict)): Metrics per worker node
         endpoint_metrics (list(dict)): Metrics per endpoint
     """
     df1 = None
-    if args.mode == 'cloud' or args.mode == 'edge':
+    if config['mode'] == 'cloud' or config['mode'] == 'edge':
         logging.info('------------------------------------')
-        logging.info('%s OUTPUT' % (args.mode.upper()))
+        logging.info('%s OUTPUT' % (config['mode'].upper()))
         logging.info('------------------------------------') 
-        df1 = pd.DataFrame(sub_metrics)
+        df1 = pd.DataFrame(worker_metrics)
         df1.rename(columns={'total_time': 'total_time (s)', 
                            'comm_delay_avg': 'delay_avg (ms)', 
                            'comm_delay_stdev': 'delay_stdev (ms)', 
@@ -331,7 +305,7 @@ def format_output(args, sub_metrics, endpoint_metrics):
     logging.info('------------------------------------')
     logging.info('ENDPOINT OUTPUT')
     logging.info('------------------------------------')
-    if args.mode == 'cloud' or args.mode == 'edge':
+    if config['mode'] == 'cloud' or config['mode'] == 'edge':
         df2 = pd.DataFrame(endpoint_metrics)
         df2.rename(columns={'worker_id': 'connected_to',
                            'total_time': 'total_time (s)', 
@@ -349,32 +323,7 @@ def format_output(args, sub_metrics, endpoint_metrics):
     logging.info('\n' + df2_no_indices)
 
     # Print ouput in csv format
-    if args.mode == 'cloud' or args.mode == 'edge':
+    if config['mode'] == 'cloud' or config['mode'] == 'edge':
         logging.debug('Output in csv format\n%s\n%s' % (repr(df1.to_csv()), repr(df2.to_csv())))
     else:
         logging.debug('Output in csv format\n%s' % (repr(df2.to_csv())))
-
-#     logging.debug('''
-# ------------------------------------
-# GENERATED FILES
-# ------------------------------------
-# WHAT                        PATH
-# VM images                   /var/lib/libvirt/images/
-# Configuration files         ${HOME}/.continuum/
-# Logs                        <path>/edge-benchmark-RM/logs/
-# SSH key                     ${HOME}/.ssh/id_rsa_benchmark
-
-# ------------------------------------
-# COMMANDS
-# ------------------------------------
-# COMMAND                     DESCRIPTION
-# virsh list                  List the running VMs
-# docker images               List available docker images
-# docker container ls -a      List running and exited docker containers
-# ssh name@ip -i key          SSH to a running VM. See printed machine objects for more info
-# docker container logs ID    Get the logs of a docker container
-# kubectl get nodes/pods      Get list of available nodes/pods in Kubernetes
-# kubectl describe node/pod   Get more info on nodes/pods
-# kubectl logs podname        Get the logs of a kubernetes pod
-# ''')
-# Shutdown all VMs: virsh list --all | grep -o -E "(cloud\w*|edge\w*|endpoint\w*)" | xargs -I % sh -c 'virsh destroy %'

@@ -5,7 +5,6 @@ import logging
 import sys
 import time
 import json
-import socket
 import numpy as np
 
 from . import machine as m
@@ -328,12 +327,13 @@ def docker_registry(config, machines):
     need_pull = [True for _ in range(len(config['images']))]
 
     # Check if registry is up
-    command = ['curl', 'localhost:5000/v2/_catalog']
+    command = ['curl', '%s/v2/_catalog' % (config['registry'])]
     output, error = machines[0].process(command)
 
     if error != [] and any('Failed to connect to' in line for line in error):
         # Not yet up, so launch
-        command = ['docker', 'run', '-d', '-p', '5000:5000',
+        port = config['registry'].split(':')[-1]
+        command = ['docker', 'run', '-d', '-p', '%s:%s' % (config['registry'], config['registry']),
                    '--restart=always', '--name', 'registry', 'registry:2']
         output, error = machines[0].process(command)
 
@@ -358,7 +358,7 @@ def docker_registry(config, machines):
         if not pull:
             continue
 
-        dest = 'localhost:5000/' + image.split(':')[1]
+        dest = config['registry'] + '/' + image.split(':')[1]
         commands = [['docker', 'pull', image],
                     ['docker', 'tag', image, dest],
                     ['docker', 'push', dest]]
@@ -384,30 +384,24 @@ def docker_pull(config, machines):
     """
     logging.info('Pull docker containers into base images')
 
-    # Images need to be pulled from local registry, get address
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        host_ip = s.getsockname()[0]
-    except Exception as e:
-        logging.error('Could not get host ip: %s' % (e))
-        sys.exit()
-
     # Pull the images
     processes = []
     for machine in machines:
         for name, ip in zip(machine.base_names, machine.base_ips):
-            # Edge mode has cloud controllers, which don't need docker containers
-            if (config['mode'] == 'edge' and '_cloud_' in name):
-                continue
+            image = ''
+            if (config['mode'] == 'cloud' and '_cloud_' in name) or \
+                (config['mode'] == 'edge' and '_edge_' in name) or \
+                (config['mode'] == 'endpoint' and '_endpoint' in name):
+               # Subscriber or combined
+               image = '%s/%s' % (config['registry'], config['images'][0].split(':')[1])
+            elif (config['mode'] == 'cloud' or config['mode'] == 'edge') and \
+                '_endpoint' in name:
+                # Publisher
+                image = '%s/%s' % (config['registry'], config['images'][1].split(':')[1])
 
-            if '_cloud_' in name or '_endpoint' in name:
-                image = '%s:5000/%s' % (str(host_ip), config['images'][0].split(':')[1])
-            elif '_edge_' in name:
-                image = '%s:5000/%s' % (str(host_ip), config['images'][1].split(':')[1])
-
-            command = ['docker', 'pull', image]
-            processes.append([name, machines[0].process(command, output=False, ssh=True, ssh_target=name + '@' + ip)])
+            if image != '':
+                command = ['docker', 'pull', image]
+                processes.append([name, machines[0].process(command, output=False, ssh=True, ssh_target=name + '@' + ip)])
 
     # Checkout process output
     for name, process in processes:
@@ -420,9 +414,9 @@ def docker_pull(config, machines):
 File /etc/docker/daemon.json does not exist, or is empty on Machine %s. 
 This will most likely prevent the machine from pulling endpoint docker images 
 from the private Docker registry running on the main machine %s.
-Please create this file on machine %s with content: { "insecure-registries":["%s:5000"] }
+Please create this file on machine %s with content: { "insecure-registries":["%s"] }
 Followed by a restart of Docker: systemctl restart docker''' % (
-                name, machines[0].name, name, host_ip))
+                name, machines[0].name, name, config['registry']))
         if error != []:
             logging.error(''.join(error))
             sys.exit()

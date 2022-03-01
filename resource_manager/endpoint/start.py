@@ -1,0 +1,27 @@
+'''\
+Setup endpoints
+'''
+
+import logging
+import os
+import sys
+
+sys.path.append(os.path.abspath('../..'))
+
+import main
+
+
+def start(config, machines):
+    """Setup endpoint VMs using Ansible.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info('Start setting up endpoint VMs')
+
+    command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
+               config['home'] + '/.continuum/endpoint/install.yml']
+
+    logging.debug('Check output for Ansible command [%s]' % (' '.join(command)))
+    main.ansible_check_output(machines[0].process(command))
