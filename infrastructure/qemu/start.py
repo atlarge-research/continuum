@@ -65,8 +65,6 @@ def base_image(config, machines):
     if base_names == []:
         return
 
-    print(base_names)
-
     # Create base images        
     for base_name in base_names:
         logging.info('Create base image %s' % (base_name))
@@ -87,8 +85,9 @@ def base_image(config, machines):
 
     # Launch the base VMs concurrently
     processes = []
+    base_ips = []
     for machine in machines:
-        for base_name in machine.base_names:
+        for base_name, base_ip in zip(machine.base_names, machine.base_ips):
             base_name_r = base_name.rstrip(string.digits)
             if base_name_r in base_names:
                 if machine.is_local:
@@ -98,6 +97,7 @@ def base_image(config, machines):
                         machine.name, config['home'], base_name)
                 
                 processes.append(machines[0].process(command, shell=True, output=False))
+                base_ips.append(base_ip)
 
     for process in processes:
         logging.debug('Check output for command [%s]' % (''.join(process.args)))
@@ -112,7 +112,7 @@ def base_image(config, machines):
             sys.exit()
 
     # Fix SSH keys for each base image
-    infrastructure.add_ssh(config, machines, base=True)
+    infrastructure.add_ssh(config, machines, base=base_ips)
 
     # Install software concurrently (ignore infra_only)
     processes = []
@@ -140,12 +140,12 @@ def base_image(config, machines):
     # Install netperf
     if config['infrastructure']['netperf']:
         command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
-                config['home'] + '/.continuum/infrastructure/netperf.yml']
+            config['home'] + '/.continuum/infrastructure/netperf.yml']
         main.ansible_check_output(machines[0].process(command))
 
     # Install docker containers if required
     if not config['infrastructure']['infra_only']:
-        infrastructure.docker_pull(config, machines)
+        infrastructure.docker_pull(config, machines, base_names)
 
     # Clean the VM
     processes = []

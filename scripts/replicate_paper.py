@@ -16,6 +16,9 @@ import math
 import time
 import pandas as pd
 
+# Home dir should be continuum/
+os.chdir('../')
+
 
 def enable_logging(verbose):
     """Enable logging
@@ -47,7 +50,7 @@ class Experiment():
         if self.resume == None:
             return
 
-        log_location = '../logs'
+        log_location = './logs'
         logs = [f for f in os.listdir(log_location) if f.endswith('.log')]
         logs.sort()
         exp_i = 0
@@ -130,15 +133,9 @@ class Figure4(Experiment):
     def __init__(self, resume):
         Experiment.__init__(self, resume)
 
-        self.app = 'image-classification'
         self.modes = ['cloud', 'edge', 'endpoint']
-
-        self.workers = 1
-        self.cloud_cores = 4
-        self.edge_cores = 2
-
+        self.cores = [4, 2, 1]
         self.endpoints = [1, 2, 4, 8]
-        self.endpoint_cores = 1
 
         self.y = None
 
@@ -146,17 +143,15 @@ class Figure4(Experiment):
         """Returns this string when called as print(object)
         """
         return '''
-APP                     %s
+APP                     image-classification
 MODES                   %s
-WORKERS                 %i
+WORKERS                 1
 CLOUD_CORES             %i
 EDGE_CORES              %i
-ENDPOINTS/WORKER        %s
-ENDPOINT_CORES          %i''' % (
-            self.app, ','.join(self.modes),
-            self.workers, self.cloud_cores, self.edge_cores,
-            ','.join([str(endpoint) for endpoint in self.endpoints]), 
-            self.endpoint_cores)
+ENDPOINT_CORES          %i
+ENDPOINTS/WORKER        %s''' % (
+            ','.join(self.modes), self.cores[0], self.cores[1], self.cores[2],
+            ','.join([str(endpoint) for endpoint in self.endpoints]))
 
     def generate(self):
         """Generate commands to run the benchmark based on the current settings
@@ -164,17 +159,14 @@ ENDPOINT_CORES          %i''' % (
         # Differ in deployment modes
         for mode in self.modes:
             if mode == 'cloud':
-                cloudnodes = self.workers
-                cores = self.cloud_cores
-                edgenodes = 0
+                config = 'cloud_endpoint'
+                cores = self.cores[0]
             elif mode == 'edge':
-                cloudnodes = 0
-                cores = self.edge_cores
-                edgenodes = self.workers
-            elif mode == 'endpoint':
-                cloudnodes = 0
-                cores = self.endpoint_cores
-                edgenodes = 0
+                config = 'edge_endpoint'
+                cores = self.cores[1]
+            else:
+                config = 'endpoint'
+                cores = self.cores[2]
 
             # Differ in #endpoints per worker
             for endpoint in self.endpoints:
@@ -182,12 +174,7 @@ ENDPOINT_CORES          %i''' % (
                 if mode == 'endpoint' and endpoint > 1:
                     continue
 
-                command = ['python3', 'main.py',
-                           '--cloudnodes', cloudnodes, '--cloud_cores', self.cloud_cores,
-                           '--edgenodes', edgenodes, '--edge_cores', self.edge_cores,
-                           '--endpoints', endpoint, '--endpoint_cores', self.endpoint_cores,
-                           '--mode', mode, '--delete', '--docker_pull', '--network', '4g',
-                           self.app]
+                command = ['python3', 'main.py', 'configuration/fig4/' + config + str(endpoint) + '.cfg']
                 command = [str(c) for c in command]
 
                 run = {'mode': mode, 
@@ -276,7 +263,7 @@ ENDPOINT_CORES          %i''' % (
         plt.yticks(np.arange(0, 500, 100))
 
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        plt.savefig('../logs/fig4_%s.png' % (t), bbox_inches='tight')
+        plt.savefig('./logs/fig4_%s.png' % (t), bbox_inches='tight')
 
         self.y = y_total
 
@@ -302,14 +289,9 @@ class Figure5(Experiment):
     def __init__(self, resume):
         Experiment.__init__(self, resume)
 
-        self.app = 'image-classification'
         self.modes = ['cloud', 'edge', 'endpoint']
-
-        self.workers = 1
         self.cloud_cores = [1, 2, 4]
         self.edge_cores = [1, 2, 4]
-
-        self.endpoints = 1
         self.endpoint_cores = [1, 2, 4]
 
         self.y = None
@@ -318,17 +300,16 @@ class Figure5(Experiment):
         """Returns this string when called as print(object)
         """
         return '''
-APP                     %s
+APP                     image-classificatiom
 MODES                   %s
-WORKERS                 %i
+WORKERS                 1
 CLOUD_CORES             %s
 EDGE_CORES              %s
-ENDPOINTS/WORKER        %i
-ENDPOINT_CORES          %s''' % (
-            self.app, ','.join(self.modes), self.workers, 
+ENDPOINT_CORES          %s
+ENDPOINTS/WORKER        1''' % (
+            ','.join(self.modes), 
             ','.join([str(x) for x in self.cloud_cores]),
             ','.join([str(x) for x in self.edge_cores]),
-            self.endpoints,
             ','.join([str(x) for x in self.endpoint_cores]))
 
     def generate(self):
@@ -337,56 +318,48 @@ ENDPOINT_CORES          %s''' % (
         # Differ in deployment modes
         for mode in self.modes:
             if mode == 'cloud':
-                for core in self.cloud_cores:
-                    command = ['python3', 'main.py',
-                               '--cloudnodes', self.workers, '--cloud_cores', core,
-                               '--edgenodes', 0, '--edge_cores', 0,
-                               '--endpoints', self.endpoints, '--endpoint_cores', 1,
-                               '--mode', mode, '--delete', '--docker_pull', '--network', '4g',
-                               self.app]
-                    command = [str(c) for c in command]
-
-                    run = {'mode': mode,
-                           'endpoints': self.endpoints,
-                           'cores': core, 
-                           'command': command, 
-                           'output': None, 
-                           'worker_time': None}
-                    self.runs.append(run)
+                config = 'cloud_endpoint'
+                cores = self.cores[0]
             elif mode == 'edge':
-                for core in self.cloud_cores:
-                    command = ['python3', 'main.py',
-                               '--cloudnodes', 0, '--cloud_cores', 4,
-                               '--edgenodes', self.workers, '--edge_cores', core,
-                               '--endpoints', self.endpoints, '--endpoint_cores', 1,
-                               '--mode', mode, '--delete', '--docker_pull', '--network', '4g',
-                               self.app]
-                    command = [str(c) for c in command]
+                config = 'edge_endpoint'
+                cores = self.cores[1]
+            else:
+                config = 'endpoint'
+                cores = self.cores[2]
 
-                    run = {'mode': mode, 
-                           'endpoints': self.endpoints,
-                           'cores': core, 
-                           'command': command, 
-                           'output': None, 
-                           'worker_time': None}
-                    self.runs.append(run)
-            elif mode == 'endpoint':
-                for core in self.endpoint_cores:
-                    command = ['python3', 'main.py',
-                               '--cloudnodes', 0, '--cloud_cores', 4,
-                               '--edgenodes', 0, '--edge_cores', 0,
-                               '--endpoints', 1, '--endpoint_cores', core,
-                               '--mode', mode, '--delete', '--docker_pull', '--network', '4g',
-                               self.app]
-                    command = [str(c) for c in command]
+            # Differ in #endpoints per worker
+            for endpoint in self.endpoints:
+                # No sense to use more than 1 endpoint in endpoint-only deployment mode
+                if mode == 'endpoint' and endpoint > 1:
+                    continue
 
-                    run = {'mode': mode, 
-                           'endpoints': 1,
-                           'cores': core, 
-                           'command': command, 
-                           'output': None, 
-                           'worker_time': None}
-                    self.runs.append(run)
+                command = ['python3', 'main.py', 'configuration/fig4/' + config + str(endpoint) + '.cfg']
+                command = [str(c) for c in command]
+
+                run = {'mode': mode, 
+                       'cores': cores,
+                       'endpoints': endpoint, 
+                       'command': command, 
+                       'output': None, 
+                       'worker_time': None}
+                self.runs.append(run)
+
+    def generate(self):
+        """Generate commands to run the benchmark based on the current settings
+        """
+        # Differ in deployment modes
+        for mode, cores in zip(self.modes, self.cloud_cores + self.edge_cores + self.endpoint_cores):
+            for core in cores:
+                command = ['python3', 'main.py', 'configuration/fig5/%s_cores%i.cfg' % (mode, core)]
+                command = [str(c) for c in command]
+
+                run = {'mode': mode,
+                       'endpoints': 1,
+                       'cores': core,
+                       'command': command, 
+                       'output': None, 
+                       'worker_time': None}
+                self.runs.append(run)
 
     def parse_output(self):
         """For all runs, get the worker runtime
@@ -467,7 +440,7 @@ ENDPOINT_CORES          %s''' % (
         plt.yticks(np.arange(0, 500, 100))
 
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        plt.savefig('../logs/fig5_%s.png' % (t), bbox_inches='tight')
+        plt.savefig('./logs/fig5_%s.png' % (t), bbox_inches='tight')
 
         self.y = y_total
 

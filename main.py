@@ -213,9 +213,9 @@ def parse_config(parser, arg):
             parser.error('Config: Only endpoint-only mode (#clouds=0, #edges=0, and #endpoints>0) doesnt require resource managers')
 
         # Extended checks: Number of nodes should match deployment mode
-        if mode == 'cloud' and (cloud < 2 or edge != 0 or endpoint == 0 or (cloud - 1) % endpoint != 0):
+        if mode == 'cloud' and (cloud < 2 or edge != 0 or endpoint == 0 or endpoint % (cloud - 1) != 0):
             parser.error('Config: For cloud benchmark, #clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0')
-        elif mode == 'edge' and (cloud != 1 or edge == 0 or endpoint == 0 or edge % endpoint != 0):
+        elif mode == 'edge' and (cloud != 1 or edge == 0 or endpoint == 0 or endpoint % edge != 0):
             parser.error('Config: For edge benchmark, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0')
         elif mode == 'endpoint' and (cloud != 0 or edge != 0 or endpoint == 0):
             parser.error('Config: For endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0')

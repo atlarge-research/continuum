@@ -74,9 +74,10 @@
         - kubectl=1.21.0-00
 
   - name: Get Calico
-    unarchive:
+    get_url:
       url: https://docs.projectcalico.org/manifests/calico.yaml
-      dest: "/tmp"
+      dest: "/"
+      mode: '0755'
 
   - name: Install Mosquitto
     apt: 

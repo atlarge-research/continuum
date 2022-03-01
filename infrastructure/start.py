@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 import json
+import string
 import numpy as np
 
 from . import machine as m
@@ -277,19 +278,21 @@ def copy_files(config, machines):
                 sys.exit()
 
 
-def add_ssh(config, machines, base=False):
+def add_ssh(config, machines, base=[]):
     """Add SSH keys for generated VMs to known_hosts file
     Since all VMs are connected via a network bridge, 
     only touch the known_hosts file of the main physical machine
 
     Args:
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        base (list, optional): Base image ips to check. Defaults to []
     """
-    logging.info('Start adding ssh keys to the known_hosts file for each VM (base=%s)' % (base))
+    logging.info('Start adding ssh keys to the known_hosts file for each VM (base=%s)' % (base == []))
 
     # Get IPs of all (base) machines
-    if base:
-        ips = config['base_ips']
+    if base != []:
+        ips = base
     else:
         ips = config['control_ips'] + config['cloud_ips'] + config['edge_ips'] + config['endpoint_ips']
  
@@ -371,13 +374,14 @@ def docker_registry(config, machines):
                 sys.exit()
 
 
-def docker_pull(config, machines):
+def docker_pull(config, machines, base_names):
     """Start running the endpoint containers using Docker.
     Wait for them to finish, and get their output.
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        base_names (list(str)): List of base images to actually pull to
 
     Returns:
         list(list(str)): Names of docker containers launched per machine
@@ -388,20 +392,22 @@ def docker_pull(config, machines):
     processes = []
     for machine in machines:
         for name, ip in zip(machine.base_names, machine.base_ips):
-            image = ''
-            if (config['mode'] == 'cloud' and '_cloud_' in name) or \
-                (config['mode'] == 'edge' and '_edge_' in name) or \
-                (config['mode'] == 'endpoint' and '_endpoint' in name):
-               # Subscriber or combined
-               image = '%s/%s' % (config['registry'], config['images'][0].split(':')[1])
-            elif (config['mode'] == 'cloud' or config['mode'] == 'edge') and \
-                '_endpoint' in name:
-                # Publisher
-                image = '%s/%s' % (config['registry'], config['images'][1].split(':')[1])
+            name_r = name.rstrip(string.digits)
+            if name_r in base_names:
+                image = ''
+                if (config['mode'] == 'cloud' and '_cloud_' in name) or \
+                    (config['mode'] == 'edge' and '_edge_' in name) or \
+                    (config['mode'] == 'endpoint' and '_endpoint' in name):
+                    # Subscriber or combined
+                    image = '%s/%s' % (config['registry'], config['images'][0].split(':')[1])
+                elif (config['mode'] == 'cloud' or config['mode'] == 'edge') and \
+                    '_endpoint' in name:
+                    # Publisher
+                    image = '%s/%s' % (config['registry'], config['images'][1].split(':')[1])
 
-            if image != '':
-                command = ['docker', 'pull', image]
-                processes.append([name, machines[0].process(command, output=False, ssh=True, ssh_target=name + '@' + ip)])
+                if image != '':
+                    command = ['docker', 'pull', image]
+                    processes.append([name, machines[0].process(command, output=False, ssh=True, ssh_target=name + '@' + ip)])
 
     # Checkout process output
     for name, process in processes:
