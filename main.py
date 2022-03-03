@@ -342,6 +342,12 @@ def main(args):
         if args.config['benchmark']['delete']:
             infrastructure.delete(machines)
 
+    s = []
+    for ssh in args.config['cloud_ssh'] + args.config['edge_ssh'] + args.config['endpoint_ssh']:
+        s.append('ssh %s -i %s.ssh/id_rsa_benchmark' % (ssh, args.config['home']))
+
+    logging.info('To access the VMs:\n\t' + '\n\t'.join(s) + '\n')
+
 
 if __name__ == '__main__':
     """Get input arguments, and validate those arguments
