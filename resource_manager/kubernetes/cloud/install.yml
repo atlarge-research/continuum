@@ -37,6 +37,13 @@
   - name: Execute the join command
     shell: bash /tmp/join-command.txt
 
+  - name: Remove unneeded KubeEdge join command file
+    file:
+      path: "{{ item }}"
+      state: absent
+    with_items:
+      - /tmp/join-command.txt 
+
   handlers:
     - name: docker status
       service: name=docker state=started

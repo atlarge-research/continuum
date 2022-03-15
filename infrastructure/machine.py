@@ -272,6 +272,10 @@ def gather_ssh(config, machines):
     config['edge_ssh'] = edge_ssh
     config['endpoint_ssh'] = endpoint_ssh
 
+    logging.debug('Cloud SSH: ' + ', '.join(config['cloud_ssh']))
+    logging.debug('Edge SSH: ' + ', '.join(config['edge_ssh']))
+    logging.debug('Endpoint SSH: ' + ', '.join(config['endpoint_ssh']))
+
 
 def gather_ips(config, machines):
     """Get a list of all VM ips, save to config for easy access
@@ -299,6 +303,12 @@ def gather_ips(config, machines):
     config['edge_ips'] = edge_ips
     config['endpoint_ips'] = endpoint_ips
     config['base_ips'] = base_ips
+
+    logging.debug('Control IPs: ' + ', '.join(config['control_ips']))
+    logging.debug('Cloud IPs: ' + ', '.join(config['cloud_ips']))
+    logging.debug('Edge IPs: ' + ', '.join(config['edge_ips']))
+    logging.debug('Endpoint IPs: ' + ', '.join(config['endpoint_ips']))
+    logging.debug('Base IPs: ' + ', '.join(config['base_ips']))
 
 
 def set_ip_names(config, machines, nodes_per_machine):

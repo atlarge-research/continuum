@@ -115,8 +115,13 @@ def start_endpoint(config, machines):
 
     processes = []
     container_names = []
-    end_per_work = int(config['infrastructure']['endpoint_nodes'] / 
-        (config['infrastructure']['cloud_nodes'] + config['infrastructure']['edge_nodes'] - int(config['mode'] == 'edge')))
+
+    # Calc endpoints per worker
+    workers = config['infrastructure']['cloud_nodes'] + config['infrastructure']['edge_nodes']
+    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+        workers -= 1
+
+    end_per_work = int(config['infrastructure']['endpoint_nodes'] / workers)
 
     # For each worker (cloud or edge), connect to end_per_work endpoints.
     for worker_i, worker_ip in enumerate(config['cloud_ips'] + config['edge_ips']):
@@ -210,6 +215,8 @@ def wait_endpoint_completion(config, machines, container_names):
                 logging.error('ERROR: Container %s failed in VM %s with status "%s"' % (
                     cont_name, ssh.split('@')[0], status_line))
                 sys.exit()
+    
+    logging.info('All endpoint containers have finished')
 
 
 def wait_worker_completion(config, machines):
@@ -219,11 +226,16 @@ def wait_worker_completion(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
+    logging.info('Wait for pods on cloud/edge workers to finish')
     get_list = True
     i = 0
 
+    workers = config['infrastructure']['cloud_nodes'] + config['infrastructure']['edge_nodes']
+    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+        workers -= 1
+
     # On the cloud controller, check the status of each pod, and wait until finished
-    while i < config['infrastructure']['cloud_nodes'] + config['infrastructure']['edge_nodes'] - int(config['mode'] == 'edge'):
+    while i < workers:
         # Get the list of deployed pods
         if get_list:
             command = ['kubectl', 'get', 'pods', 
@@ -266,7 +278,7 @@ def start(config, machines):
     """
     if config['mode'] == 'cloud' or config['mode'] == 'edge':
         start_worker(config, machines)
-    
+
     container_names = start_endpoint(config, machines)
 
     # Wait for benchmark to finish

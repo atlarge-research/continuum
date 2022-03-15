@@ -39,11 +39,6 @@ def start(config, machines):
         error = [line.decode('utf-8') for line in process.stderr.readlines()]
         main.ansible_check_output((output, error))
 
-    # Delete files created by Ansible on host
-    for machine in machines:
-        command = ['rm', '-f', '/tmp/join-command.txt']
-        output, error = machine.process(command, ssh=True)
-
     # Patch: Fix accessing KubeEdge logs from the cloud host
     logging.info('Enable KubeEdge logging feature')
     commands = []

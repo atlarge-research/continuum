@@ -59,13 +59,12 @@
       src: /tmp/join-command.txt 
       dest: /tmp/
       flat: true
-  
-  - name: Remove unneeded KubeEdge join command file
+
+  - name: Remove unneeded Kubernetes join command file
     file:
       path: "{{ item }}"
       state: absent
     with_items:
-      - /tmp/output.txt
       - /tmp/join-command.txt 
 
   handlers:

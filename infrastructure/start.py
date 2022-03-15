@@ -150,6 +150,9 @@ def delete_vms(machines):
 
         processes.append(machine.process(command, shell=True, output=False))
 
+        command = ['rm', '-f', '/tmp/join-command.txt']
+        processes.append(machine.process(command, ssh=True, output=False))
+
     # Wait for process to finish. Outcome of destroy command does not matter
     for process in processes:
         logging.debug('Check output for command [%s]' % (''.join(process.args)))

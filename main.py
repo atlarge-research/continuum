@@ -340,7 +340,7 @@ def main(args):
         benchmark.start(args.config, machines)
 
         if args.config['benchmark']['delete']:
-            infrastructure.delete(machines)
+            infrastructure.delete_vms(machines)
 
     s = []
     for ssh in args.config['cloud_ssh'] + args.config['edge_ssh'] + args.config['endpoint_ssh']:
