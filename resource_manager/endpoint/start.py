@@ -22,6 +22,4 @@ def start(config, machines):
 
     command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
                config['home'] + '/.continuum/endpoint/install.yml']
-
-    logging.debug('Check output for Ansible command [%s]' % (' '.join(command)))
     main.ansible_check_output(machines[0].process(command))

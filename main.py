@@ -240,11 +240,6 @@ def add_constants(config):
                                 'redplanet00/kubeedge-applications:image_classification_publisher',
                                 'redplanet00/kubeedge-applications:image_classification_combined']
 
-            if config['mode'] == 'cloud' or config['mode'] == 'edge':
-                config['images'] = config['images'][:2]
-            else:
-                config['images'] = config['images'][2]
- 
     config['prefixIP'] = '192.168.122'
     config['postfixIP'] = 10
     config['postfixIP_base'] = 200
@@ -334,6 +329,7 @@ def main(args):
         args (Namespace): Argparse object
     """    
     machines = infrastructure.start(args.config)
+    print_ssh = True
 
     if not args.config['infrastructure']['infra_only']:
         resource_manager.start(args.config, machines)
@@ -341,12 +337,14 @@ def main(args):
 
         if args.config['benchmark']['delete']:
             infrastructure.delete_vms(machines)
+            print_ssh = False
 
-    s = []
-    for ssh in args.config['cloud_ssh'] + args.config['edge_ssh'] + args.config['endpoint_ssh']:
-        s.append('ssh %s -i %s.ssh/id_rsa_benchmark' % (ssh, args.config['home']))
+    if print_ssh:
+        s = []
+        for ssh in args.config['cloud_ssh'] + args.config['edge_ssh'] + args.config['endpoint_ssh']:
+            s.append('ssh %s -i %s.ssh/id_rsa_benchmark' % (ssh, args.config['home']))
 
-    logging.info('To access the VMs:\n\t' + '\n\t'.join(s) + '\n')
+        logging.info('To access the VMs:\n\t' + '\n\t'.join(s) + '\n')
 
 
 if __name__ == '__main__':

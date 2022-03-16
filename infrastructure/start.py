@@ -378,8 +378,9 @@ def docker_registry(config, machines):
 
 
 def docker_pull(config, machines, base_names):
-    """Start running the endpoint containers using Docker.
-    Wait for them to finish, and get their output.
+    """Pull the correct docker images into the base images.
+    For endpoint, pull both the publisher and combined images, as it can be used in 
+    either cloud/edge mode, or in endpoint mode for publisher and subscriber are combined.
 
     Args:
         config (dict): Parsed configuration
@@ -397,18 +398,23 @@ def docker_pull(config, machines, base_names):
         for name, ip in zip(machine.base_names, machine.base_ips):
             name_r = name.rstrip(string.digits)
             if name_r in base_names:
-                image = ''
-                if (config['mode'] == 'cloud' and '_cloud_' in name) or \
-                    (config['mode'] == 'edge' and '_edge_' in name) or \
-                    (config['mode'] == 'endpoint' and '_endpoint' in name):
-                    # Subscriber or combined
-                    image = '%s/%s' % (config['registry'], config['images'][0].split(':')[1])
-                elif (config['mode'] == 'cloud' or config['mode'] == 'edge') and \
-                    '_endpoint' in name:
-                    # Publisher
-                    image = '%s/%s' % (config['registry'], config['images'][1].split(':')[1])
+                images = []
 
-                if image != '':
+                # Pull 
+                if config['mode'] == 'cloud' or config['mode'] == 'edge':
+                    if '_%s_' % (config['mode']) in name:
+                        # Subscriber
+                        images.append('%s/%s' % (config['registry'], config['images'][0].split(':')[1]))
+                    elif '_endpoint' in name:
+                        # Publisher (+ combined)
+                        images.append('%s/%s' % (config['registry'], config['images'][1].split(':')[1]))
+                        images.append('%s/%s' % (config['registry'], config['images'][2].split(':')[1]))
+                elif config['mode'] == 'endpoint' and '_endpoint' in name:
+                    # Combined (+ publisher)
+                    images.append('%s/%s' % (config['registry'], config['images'][2].split(':')[1]))
+                    images.append('%s/%s' % (config['registry'], config['images'][1].split(':')[1]))
+
+                for image in images:
                     command = ['docker', 'pull', image]
                     processes.append([name, machines[0].process(command, output=False, ssh=True, ssh_target=name + '@' + ip)])
 

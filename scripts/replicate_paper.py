@@ -79,6 +79,9 @@ class Experiment():
         """Execute all generated commands
         """
         for run in self.runs:
+            if run['command'] == []:
+                continue
+
             # Skip runs where we got output with --resume
             if run['output'] != None:
                 logging.info('Skip command: %s' % (' '.join(run['command'])))
@@ -190,9 +193,9 @@ ENDPOINTS/WORKER        %s''' % (
         """
         # Get the line containing the metrics
         for run in self.runs:
-            input = run['output'][-5][1:-2]
+            input = run['output'][-7][1:-2]
             if 'Output in csv' in input:
-                input = run['output'][-4][1:-2]
+                input = run['output'][-6][1:-2]
 
             # Split string into list
             l = [x.split(',') for x in input.split('\\n')]
@@ -206,7 +209,7 @@ ENDPOINTS/WORKER        %s''' % (
             # Convert into dataframe
             df = pd.DataFrame(data, columns=header)
             df['proc/data (ms)'] = pd.to_numeric(df['proc/data (ms)'], downcast='float')
-            
+
             # Calculate num. of images processed per second by the cloud/edge/endpoint
             processed_rate = df['proc/data (ms)'].mean()
             processed_rate = 1000.0 / processed_rate
@@ -290,9 +293,7 @@ class Figure5(Experiment):
         Experiment.__init__(self, resume)
 
         self.modes = ['cloud', 'edge', 'endpoint']
-        self.cloud_cores = [1, 2, 4]
-        self.edge_cores = [1, 2, 4]
-        self.endpoint_cores = [1, 2, 4]
+        self.cores = [1, 2, 4]
 
         self.y = None
 
@@ -303,59 +304,26 @@ class Figure5(Experiment):
 APP                     image-classificatiom
 MODES                   %s
 WORKERS                 1
-CLOUD_CORES             %s
-EDGE_CORES              %s
-ENDPOINT_CORES          %s
+CORES                   %s
 ENDPOINTS/WORKER        1''' % (
             ','.join(self.modes), 
-            ','.join([str(x) for x in self.cloud_cores]),
-            ','.join([str(x) for x in self.edge_cores]),
-            ','.join([str(x) for x in self.endpoint_cores]))
+            ','.join([str(x) for x in self.cores]))
 
     def generate(self):
         """Generate commands to run the benchmark based on the current settings
         """
         # Differ in deployment modes
         for mode in self.modes:
-            if mode == 'cloud':
-                config = 'cloud_endpoint'
-                cores = self.cores[0]
-            elif mode == 'edge':
-                config = 'edge_endpoint'
-                cores = self.cores[1]
-            else:
-                config = 'endpoint'
-                cores = self.cores[2]
-
-            # Differ in #endpoints per worker
-            for endpoint in self.endpoints:
-                # No sense to use more than 1 endpoint in endpoint-only deployment mode
-                if mode == 'endpoint' and endpoint > 1:
-                    continue
-
-                command = ['python3', 'main.py', 'configuration/fig4/' + config + str(endpoint) + '.cfg']
-                command = [str(c) for c in command]
+            # Differ in #cores per worker
+            for core in self.cores:
+                command = []
+                if not (mode == 'cloud' and core == 1):
+                    command = ['python3', 'main.py', 'configuration/fig5/%s_cores%i.cfg' % (mode, core)]
+                    command = [str(c) for c in command]
 
                 run = {'mode': mode, 
-                       'cores': cores,
-                       'endpoints': endpoint, 
-                       'command': command, 
-                       'output': None, 
-                       'worker_time': None}
-                self.runs.append(run)
-
-    def generate(self):
-        """Generate commands to run the benchmark based on the current settings
-        """
-        # Differ in deployment modes
-        for mode, cores in zip(self.modes, self.cloud_cores + self.edge_cores + self.endpoint_cores):
-            for core in cores:
-                command = ['python3', 'main.py', 'configuration/fig5/%s_cores%i.cfg' % (mode, core)]
-                command = [str(c) for c in command]
-
-                run = {'mode': mode,
-                       'endpoints': 1,
                        'cores': core,
+                       'endpoints': 1, 
                        'command': command, 
                        'output': None, 
                        'worker_time': None}
@@ -371,9 +339,9 @@ ENDPOINTS/WORKER        1''' % (
                 run['usage'] = 0
                 continue
 
-            input = run['output'][-5][1:-2]
+            input = run['output'][-7][1:-2]
             if 'Output in csv' in input:
-                input = run['output'][-4][1:-2]
+                input = run['output'][-6][1:-2]
 
             # Split string into list
             l = [x.split(',') for x in input.split('\\n')]
@@ -411,7 +379,7 @@ ENDPOINTS/WORKER        1''' % (
         colors = ['dimgray', 'gray', 'darkgray']
 
         y_total = []
-        for core, color in zip(self.cloud_cores, colors):
+        for core, color in zip(self.cores, colors):
             # Get the x and y data
             y = [run['usage'] for run in self.runs if run['cores'] == core]
             x = [x + math.log2(core) * barWidth * 1.2 for x in bars]
@@ -446,7 +414,7 @@ ENDPOINTS/WORKER        1''' % (
 
     def print_result(self):
         i = 0
-        for core in self.cloud_cores:
+        for core in self.cores:
             for mode in self.modes:
                 logging.info('Mode: %10s | Cores: %3s | System Load: %i%%' % (mode, core, self.y[i]))
                 i += 1

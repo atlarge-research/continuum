@@ -329,7 +329,7 @@ def set_ip_names(config, machines, nodes_per_machine):
 
     for i, (machine, nodes) in enumerate(zip(machines, nodes_per_machine)):
         # Set IP / name for controller (on first machine only)
-        if machine == machines[0] and not config['infrastructure']['infra_only']:
+        if machine == machines[0] and not config['infrastructure']['infra_only'] and not config['mode'] == 'endpoint':
             machine.cloud_controller = int(nodes['cloud'] > 0)
             machine.clouds = nodes['cloud'] - int(nodes['cloud'] > 0)
 

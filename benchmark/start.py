@@ -120,12 +120,17 @@ def start_endpoint(config, machines):
     workers = config['infrastructure']['cloud_nodes'] + config['infrastructure']['edge_nodes']
     if config['mode'] == 'cloud' or config['mode'] == 'edge':
         workers -= 1
-
-    end_per_work = int(config['infrastructure']['endpoint_nodes'] / workers)
+        end_per_work = int(config['infrastructure']['endpoint_nodes'] / workers)
+        worker_ips = config['cloud_ips'] + config['edge_ips']
+        off = 1
+    else:
+        end_per_work = 1
+        worker_ips = ['']
+        off = 10000000
 
     # For each worker (cloud or edge), connect to end_per_work endpoints.
-    for worker_i, worker_ip in enumerate(config['cloud_ips'] + config['edge_ips']):
-        for endpoint_i, endpoint_ssh in enumerate(config['endpoint_ssh'][worker_i * end_per_work:(worker_i+1)*end_per_work]):
+    for worker_i, worker_ip in enumerate(worker_ips):
+        for endpoint_i, endpoint_ssh in enumerate(config['endpoint_ssh'][worker_i * end_per_work:(worker_i+off)*end_per_work]):
             # Docker container name and variables depends on deployment mode
             cont_name = 'endpoint%i' % (worker_i * end_per_work + endpoint_i)
             env = ['FREQUENCY=%i' % (config['benchmark']['frequency'])]
@@ -145,7 +150,7 @@ def start_endpoint(config, machines):
                 '--network=host'] + \
                 ['--env %s' % (e) for e in env] + \
                 ['--name', cont_name,
-                config['registry'] + '/' + config['images'][1 - (int(config['mode'] == 'endpoint'))].split(':')[1]]
+                config['registry'] + '/' + config['images'][1 + (int(config['mode'] == 'endpoint'))].split(':')[1]]
 
             processes.append(machines[0].process(command, output=False, ssh=True, ssh_target=endpoint_ssh))
             container_names.append(cont_name)
