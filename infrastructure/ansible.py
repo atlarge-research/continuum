@@ -170,12 +170,11 @@ def create_inventory_vm(config, machines):
                     name, ip, name, name))
 
     # Make group with all base VMs for netperf installation
-    if config['infrastructure']['netperf']:
-        f.write('\n[base]\n')
-        for machine in machines:
-            for name, ip in zip(machine.base_names, machine.base_ips):
-                f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
-                    name, ip, name, name))
+    f.write('\n[base]\n')
+    for machine in machines:
+        for name, ip in zip(machine.base_names, machine.base_ips):
+            f.write('%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n' % (
+                name, ip, name, name))
 
     # Make specific groups for cloud/edge/endpoint base VM
     if not config['infrastructure']['infra_only']:

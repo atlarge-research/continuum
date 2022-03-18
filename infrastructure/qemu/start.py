@@ -137,11 +137,10 @@ def base_image(config, machines):
         error = [line.decode('utf-8') for line in process.stderr.readlines()]
         main.ansible_check_output((output, error))
 
-    # Install netperf
-    if config['infrastructure']['netperf']:
-        command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
-            config['home'] + '/.continuum/infrastructure/netperf.yml']
-        main.ansible_check_output(machines[0].process(command))
+    # Install netperf (always, because base images aren't updated)
+    command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms', 
+        config['home'] + '/.continuum/infrastructure/netperf.yml']
+    main.ansible_check_output(machines[0].process(command))
 
     # Install docker containers if required
     if not config['infrastructure']['infra_only']:
