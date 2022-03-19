@@ -1,0 +1,27 @@
+---
+- hosts: clouds
+  become: true
+  tasks:
+  - name: Create cloud controller image
+    shell: |
+      if [ "{{ cloud_controller }}" -gt "0" ]; then
+        qemu-img create -f qcow2 -F qcow2 -b "/var/lib/libvirt/images/{{ base_cloud }}.qcow2" /var/lib/libvirt/images/cloud_controller.qcow2
+      fi
+
+  - name: Create cloud images
+    shell: |
+      for i in $(seq "{{ cloud_start }}" "{{ cloud_end }}"); do
+        qemu-img create -f qcow2 -F qcow2 -b "/var/lib/libvirt/images/{{ base_cloud }}.qcow2" /var/lib/libvirt/images/cloud${i}.qcow2
+      done
+
+  - name: Add cloudinit disk for cloud controller
+    shell: |
+      if [ "{{ cloud_controller }}" -gt "0" ]; then
+        cloud-localds /var/lib/libvirt/images/user_data_cloud_controller.img "/home/{{ username }}/.continuum/user_data_cloud_controller.yml"
+      fi
+
+  - name: Add cloudinit disk for cloud
+    shell: |
+      for i in $(seq "{{ cloud_start }}" "{{ cloud_end }}"); do
+        cloud-localds /var/lib/libvirt/images/user_data_cloud${i}.img "/home/{{ username }}/.continuum/user_data_cloud${i}.yml"
+      done
