@@ -12,6 +12,15 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import sys
+
+sys.path.append(os.path.abspath('../'))
+
+import main as cont_main
+
+# Home dir should be continuum/
+os.chdir('../')
+
 
 def enable_logging(verbose):
     """Enable logging
@@ -29,48 +38,31 @@ def enable_logging(verbose):
     logging.info('Logging has been enabled')
 
 
-def is_valid_network(parser, arg):
-    """Check if custom network settings are as expected, and will work with TC
-
-    Args:
-        parser (ArgumentParser): Argparse object
-        arg (str): Network settings to use with TC
-
-    Returns:
-        list(float, float, int): Network delay average, network delay variance, throughput
-    """
-    split = arg.rstrip().split(',')
-    if len(split) == 3:
-        try:
-            vals =  [float(x) for x in split]
-            vals[2] = int(vals[2])
-            return vals
-        except:
-            pass
-
-    parser.error('Could not parse custom network setting. Please give --cloud_network x,y,z')
-
-
 class Model():
     """Model template / super class
     """
-    def __init__(self, args):
+    def __init__(self, args, config):
         self.resume = args.resume
         self.resume_index = 0
 
-        self.E = args.endpoints
+        # Set nodes/cores/quota/network
+        self.E = config['infrastructure']['endpoint_nodes']
 
-        self.C_w = args.worker_cores
-        self.C_e = args.endpoint_cores
+        if config['mode'] == 'cloud':
+            self.C_w = config['infrastructure']['cloud_cores']
+            self.Q_w = config['infrastructure']['cloud_quota']
+            self.B = config['infrastructure']['cloud_endpoint_throughput']
+        elif config['mode'] == 'edge':
+            self.C_w = config['infrastructure']['edge_cores']
+            self.Q_w = config['infrastructure']['edge_quota']
+            self.B = config['infrastructure']['edge_endpoint_throughput']
 
-        self.Q_w = args.worker_quota / 10000.0
-        self.Q_e = args.endpoint_quota / 10000.0
+        self.C_e = config['infrastructure']['endpoint_cores']
+        self.Q_e = config['infrastructure']['endpoint_quota']
 
-        self.L = args.endpoint_network[0]
-        self.B = args.endpoint_network[2]
-
-        self.f = args.frequency
-        self.p = float(1 / args.frequency)
+        # Set data frequency
+        self.f = config['benchmark']['frequency']
+        self.p = float(1 / self.f)
 
         # These variables will be used later on
         self.D = 0.0
@@ -96,10 +88,10 @@ class Model():
         return output, error
 
     def check_resume(self, local=True):
-        """If the resume argument is given, get the x log files >= the resume date,
-        and use that output instead of re-running an experiment.
+        """If the resume argument is given, get the first x log files >= the resume date,
+        and use their output instead of re-running the experiment.
         """
-        log_location = '../logs'
+        log_location = './logs'
         logs = [f for f in os.listdir(log_location) if f.endswith('.log')]
         logs.sort()
         index = 0
@@ -129,6 +121,7 @@ class Model():
                 else:
                     index += 1
         
+        self.resume_index += 1
         return [], []
 
     def str_to_df(self, input):
@@ -156,8 +149,10 @@ class Model():
 class ModelLocal(Model):
     """Model for local execution on endpoints
     """
-    def __init__(self, args):
-        Model.__init__(self, args)
+    def __init__(self, args, parser):
+        logging.info('Parse local config')
+        config = cont_main.parse_config(parser, 'configuration/model/local.cfg')
+        Model.__init__(self, args, config)
 
     def __repr__(self):
         return '''
@@ -183,21 +178,11 @@ T_proc      norm. processing time   %.2f sec
             output, _ = self.check_resume(local=True)
 
         if output == []:
-            command = ['python3', 'main.py',
-                '--cloudnodes', 0,
-                '--edgenodes', 0,
-                '--endpoints', 1, '--endpoint_cores', 1,
-                '--mode', 'endpoint',
-                '--verbose',
-                '--endpoint_quota', 10000,
-                '--frequency', self.f,
-                'image-classification']
-
-            command = [str(c) for c in command]
+            command = ['python3', 'main.py', '-v', 'configuration/model/local_normalize.cfg']
             output, _ = self.execute(command)
 
         # Parse output to dataframe
-        df = self.str_to_df(output[-1][1:-2])
+        df = self.str_to_df(output[-6][1:-2])
         logging.debug('\n' + df.to_string(index=False))
 
         # Extract the required data
@@ -246,32 +231,21 @@ To satisfy: (T_proc / (C_e * Q_e)) < P
             output, _ = self.check_resume(local=True)
 
         if output == []:
-            command = ['python3', 'main.py',
-                '--cloudnodes', 0,
-                '--edgenodes', 0,
-                '--endpoints', self.E, '--endpoint_cores', self.C_e,
-                '--mode', 'endpoint',
-                '--verbose',
-                '--endpoint_quota', int(self.Q_e * 10000.0),
-                '--frequency', self.f,
-                'image-classification']
-
-            command = [str(c) for c in command]
+            command = ['python3', 'main.py', '-v', 'configuration/model/local.cfg']
             output, _ = self.execute(command)
 
         # Parse output of endpoint to dataframe
-        df = self.str_to_df(output[-1][1:-2])
+        df = self.str_to_df(output[-6][1:-2])
         logging.info('\n' + df.to_string(index=False))
 
 
 class ModelOffload(Model):
     """Model for local execution on endpoints
     """
-    def __init__(self, args):
-        Model.__init__(self, args)
-        self.network_delay_avg = args.endpoint_network[0]
-        self.network_delay_var = args.endpoint_network[1]
-        self.network_throughput = args.endpoint_network[2]
+    def __init__(self, args, parser):
+        logging.info('Parse offload config')
+        config = cont_main.parse_config(parser, 'configuration/model/offload.cfg')
+        Model.__init__(self, args, config)
 
     def __repr__(self):
         return '''
@@ -283,7 +257,6 @@ C_w         cores per worker        %i
 C_e         cores per endp.         %i
 Q_w         worker CPU core quota   %.2f
 Q_e         endp. CPU core quota    %.2f
-L           latency                 %.2f ms
 B           bandwidth               %.2f Mbit
 f           Frequency               %i Hz
 p           Period (1/f)            %.2f
@@ -296,7 +269,7 @@ T_proc      norm. proc time         %.2f sec
 T_pre       norm. preproc time      %.2f sec
 --------------------------------------------------''' % (
             self.E, self.C_w, self.C_e, self.Q_w, self.Q_e,
-            self.L, self.B, self.f, self.p,
+            self.B, self.f, self.p,
             self.d, self.D, self.T_proc, self.T_pre)
 
     def benchmark_normalize(self):
@@ -307,30 +280,18 @@ T_pre       norm. preproc time      %.2f sec
             output, _ = self.check_resume(local=False)
 
         if output == []:
-            command = ['python3', 'main.py',
-                '--cloudnodes', 0,
-                '--edgenodes', 1, '--edge_cores', 4,
-                '--endpoints', 1, '--endpoint_cores', 1,
-                '--mode', 'edge',
-                '--verbose',
-                '--endpoint_network', '%f,%f,%f' % (self.network_delay_avg, self.network_delay_var, self.network_throughput),
-                '--edge_quota', 10000,
-                '--endpoint_quota', 10000,
-                '--frequency', self.f,
-                'image-classification']
-
-            command = [str(c) for c in command]
+            command = ['python3', 'main.py', '-v', 'configuration/model/offload_normalize.cfg']
             output, _ = self.execute(command)
 
         # Parse output of worker to dataframe, and extract required data
-        df_worker = self.str_to_df(output[-2][1:-2])
+        df_worker = self.str_to_df(output[-7][1:-2])
         logging.debug('\n' + df_worker.to_string(index=False))
 
         df_worker['proc/data (ms)'] = pd.to_numeric(df_worker['proc/data (ms)'], downcast='float')
         self.T_proc = df_worker['proc/data (ms)'].mean() / 1000.0
 
         # Parse output of endpoint to dataframe, and extract required data
-        df_endpoint = self.str_to_df(output[-1][1:-2])
+        df_endpoint = self.str_to_df(output[-6][1:-2])
         logging.debug('\n' + df_endpoint.to_string(index=False))
 
         df_endpoint['preproc/data (ms)'] = pd.to_numeric(df_endpoint['preproc/data (ms)'], downcast='float')
@@ -343,16 +304,16 @@ T_pre       norm. preproc time      %.2f sec
     def condition_processing(self):
         """Model worker data processing when offloading
         """
-        result = self.T_proc / (self.C_w * self.Q_w)
-        condition = self.p / self.E
+        result = (self.T_proc * self.E) / (self.C_w * self.Q_w)
+        condition = self.p
         satisfy = result < condition
 
         logging.info('''
-To satisfy: (T_proc / (C_w * Q_w)) < (P / E)
-            (%.2f / (%i * %.2f)) < (%.2f / %i)
+To satisfy: ((T_proc * E) / (C_w * Q_w)) < P
+            ((%.2f * %i) / (%i * %.2f)) < %.2f 
             %.2f < %.2f
             %s''' % (
-            self.T_proc, self.C_w, self.Q_w, self.p, self.E,
+            self.T_proc, self.E, self.C_w, self.Q_w, self.p,
             result, condition,
             satisfy))
 
@@ -420,27 +381,15 @@ To satisfy: D < B
             output, _ = self.check_resume(local=False)
 
         if output == []:
-            command = ['python3', 'main.py',
-                '--cloudnodes', 0,
-                '--edgenodes', 1, '--edge_cores', self.C_w,
-                '--endpoints', self.E, '--endpoint_cores', self.C_e,
-                '--mode', 'edge',
-                '--verbose',
-                '--endpoint_network', '%f,%f,%f' % (self.network_delay_avg, self.network_delay_var, self.network_throughput),
-                '--edge_quota', int(self.Q_w * 10000.0),
-                '--endpoint_quota', int(self.Q_e * 10000.0),
-                '--frequency', self.f,
-                'image-classification']
-
-            command = [str(c) for c in command]
+            command = ['python3', 'main.py', '-v', 'configuration/model/offload.cfg']
             output, _ = self.execute(command)
 
         # Parse output of worker to dataframe
-        df_worker = self.str_to_df(output[-2][1:-2])
+        df_worker = self.str_to_df(output[-7][1:-2])
         logging.info('\n' + df_worker.to_string(index=False))
 
         # Parse output of endpoint to dataframe
-        df_endpoint = self.str_to_df(output[-1][1:-2])
+        df_endpoint = self.str_to_df(output[-6][1:-2])
         logging.info('\n' + df_endpoint.to_string(index=False))
 
 
@@ -481,8 +430,8 @@ def heatmap(local, offload):
     # Plot the local / offload model result points
     plt.plot(cq_local, local.T_proc, 'ko', markersize=15)
     plt.text(cq_local+0.01, local.T_proc+0.01, 'Local')
-    plt.plot(cq_offload, offload.T_proc, 'ko', markersize=15)
-    plt.text(cq_offload+0.01, offload.T_proc+0.01, 'Offload')
+    plt.plot(cq_offload, offload.T_proc * offload.E, 'ko', markersize=15)
+    plt.text(cq_offload+0.01, offload.T_proc * offload.E + 0.01 , 'Offload')
 
     # Plot heatmap
     x2, y2 = np.meshgrid(np.linspace(0, xlim, 1000), np.linspace(0, ylim, 1000))
@@ -503,14 +452,18 @@ def heatmap(local, offload):
 
     # Save to file
     t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-    plt.savefig('../logs/heatmap2_%s.png' % (t), bbox_inches='tight')
+    plt.savefig('./logs/heatmap2_%s.png' % (t), bbox_inches='tight')
 
 
-def main(args):
+def main(args, parser):
     """Main function
+
+    Args:
+        args (Namespace): Argparse object
+        parser (ArgParse): Argparse object
     """
     logging.info('Local model')
-    local = ModelLocal(args)
+    local = ModelLocal(args, parser)
     local.benchmark_normalize()
     logging.info(local)
     local.condition_processing()
@@ -518,7 +471,7 @@ def main(args):
     local.verify()
 
     logging.info('Offload model')
-    offload = ModelOffload(args)
+    offload = ModelOffload(args, parser)
     offload.benchmark_normalize()
     logging.info(offload)
     offload.condition_processing()
@@ -527,42 +480,20 @@ def main(args):
     offload.satsify()
     offload.verify()
 
-    # Test hybrid variants
-    # model.hybrid()
-
     # Plot heatmap graph
     heatmap(local, offload)
-
 
 
 if __name__ == '__main__':
     """Get input arguments, and validate those arguments
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--endpoints', metavar='NODES', type=int, default=1,
-        help='number of endpoints to use per worker node (when mode=edge)')
-
-    parser.add_argument('--worker_cores', metavar='CORES', type=int, default=2,
-        help='number of cores per worker')
-    parser.add_argument('--endpoint_cores', metavar='CORES', type=int, default=1, 
-        help='number of cores per endpoint')
-
-    parser.add_argument('--worker_quota', metavar='QUOTA', type=float, default=6666,
-        help='cpu core quota for workers')
-    parser.add_argument('--endpoint_quota', metavar='QUOTA', type=float, default=3333, 
-        help='cpu core quota for endpoints')
-
-    parser.add_argument('--endpoint_network', type=lambda x: is_valid_network(parser, x), default=[45, 5, 7.21],
-        help='set endpoint network settings: avg_delay,var_delay,throughput')
-
-    parser.add_argument('--frequency', metavar='FREQ', type=int, default=5, 
-        help='data generation frequency')
 
     parser.add_argument('-v', '--verbose', action='store_true',
         help='increase verbosity level')
     parser.add_argument('-r', '--resume', type=lambda s: datetime.datetime.strptime(s, '%Y-%m-%d_%H:%M:%S'),
         help='Resume a previous figure replication from datetime "YYYY-MM-DD_HH:mm:ss"')
-
     args = parser.parse_args()
+
     enable_logging(args.verbose)
-    main(args)
+    main(args, parser)

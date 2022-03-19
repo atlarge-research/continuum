@@ -424,7 +424,7 @@ def main(args):
     """Main function
 
     Args:
-        experiment (str): Experiment to run
+        args (Namespace): Argparse object
     """
     if args.figure == 'figure4':
         logging.info('Replicate figure 4')

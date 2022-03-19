@@ -145,12 +145,29 @@ def parse_config(parser, arg):
         option_check(parser, config, new, sec, 'cloud_nodes', int, lambda x : x >= 0)
         option_check(parser, config, new, sec, 'edge_nodes', int, lambda x : x >= 0)
         option_check(parser, config, new, sec, 'endpoint_nodes', int, lambda x : x >= 0)
-        option_check(parser, config, new, sec, 'cloud_cores', int, lambda x : x >= 2)
-        option_check(parser, config, new, sec, 'edge_cores', int, lambda x : x >= 1)
-        option_check(parser, config, new, sec, 'endpoint_cores', int, lambda x : x >= 1)
-        option_check(parser, config, new, sec, 'cloud_quota', float, lambda x : 0.1 <=x <= 1.0)
-        option_check(parser, config, new, sec, 'edge_quota', float, lambda x : 0.1 <=x <= 1.0)
-        option_check(parser, config, new, sec, 'endpoint_quota', float, lambda x : 0.1 <=x <= 1.0)
+
+        # If no cloud nodes are given, it doesn't matter what their specifications are
+        if new['infrastructure']['cloud_nodes'] > 0:
+            option_check(parser, config, new, sec, 'cloud_cores', int, lambda x : x >= 2)
+            option_check(parser, config, new, sec, 'cloud_quota', float, lambda x : 0.1 <=x <= 1.0)
+        else:
+            option_check(parser, config, new, sec, 'cloud_cores', int, lambda x : x >= 0)
+            option_check(parser, config, new, sec, 'cloud_quota', float, lambda x : 0.0 <=x <= 1.0)
+        
+        if new['infrastructure']['edge_nodes'] > 0:
+            option_check(parser, config, new, sec, 'edge_cores', int, lambda x : x >= 1)
+            option_check(parser, config, new, sec, 'edge_quota', float, lambda x : 0.1 <=x <= 1.0)
+        else:
+            option_check(parser, config, new, sec, 'edge_cores', int, lambda x : x >= 0)
+            option_check(parser, config, new, sec, 'edge_quota', float, lambda x : 0.0 <=x <= 1.0)
+        
+        if new['infrastructure']['endpoint_nodes'] > 0:
+            option_check(parser, config, new, sec, 'endpoint_cores', int, lambda x : x >= 1)
+            option_check(parser, config, new, sec, 'endpoint_quota', float, lambda x : 0.1 <=x <= 1.0)
+        else:
+            option_check(parser, config, new, sec, 'endpoint_cores', int, lambda x : x >= 0)
+            option_check(parser, config, new, sec, 'endpoint_quota', float, lambda x : 0.0 <=x <= 1.0)
+
         option_check(parser, config, new, sec, 'cpu_pin', bool, lambda x : x in [True, False])
 
         option_check(parser, config, new, sec, 'network_emulation', bool, lambda x : x in [True, False])

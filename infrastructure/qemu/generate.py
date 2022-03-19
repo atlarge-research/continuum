@@ -232,9 +232,8 @@ def start(config, machines):
         # Base image(s)
         for ip, name in zip(machine.base_ips, machine.base_names):
             f = open('.tmp/domain_%s.xml' % (name), 'w')
-            memory = 1048576 * cc
 
-            f.write(DOMAIN % (name, memory, cc, 0, 0, '', bridge_name, name, name))
+            f.write(DOMAIN % (name, 1048576, 1, 0, 0, '', bridge_name, name, name))
             f.close()
 
             f = open('.tmp/user_data_%s.yml' % (name), 'w')
