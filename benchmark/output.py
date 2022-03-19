@@ -145,7 +145,7 @@ def gather_worker_metrics(worker_output):
                 except Exception as e:
                     logging.warn('Got an error while parsing line: %s. Exception: %s' % (line, e))
                     continue
-                
+
                 units = ['ns']
                 if time < 0:
                     logging.warn('Time < 0 should not be possible: %i' % (time))

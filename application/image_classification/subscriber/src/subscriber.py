@@ -25,16 +25,16 @@ images_processed = multiprocessing.Value('i', 0)
 
 
 def on_connect(client, userdata, flags, rc):
-    print("Connected with result code " + str(rc))
+    print("Connected with result code " + str(rc) + '\n', end='')
     client.subscribe(MQTT_TOPIC)
 
 
 def on_subscribe(mqttc, obj, mid, granted_qos):
-    print("Subscribed to topic")
+    print("Subscribed to topic\n", end='')
 
 
 def on_log(client, userdata, level, buff):
-    print('[ %s ] %s' % (str(level), buff))
+    print('[ %s ] %s\n' % (str(level), buff), end='')
 
 
 def on_message(client, userdata, msg):
@@ -49,7 +49,7 @@ def do_tflite(queue):
         data (bytestream): Raw received data
     """
     current = multiprocessing.current_process()
-    print('[%s] Start thread' % (current.name))
+    print('[%s] Start thread\n' % (current.name), end='')
 
     # Load the labels
     with open('labels.txt', 'r') as f:
@@ -67,10 +67,10 @@ def do_tflite(queue):
     iw = input_details[0]['shape'][2]
     ih = input_details[0]['shape'][1]
 
-    print('[%s] Preparations finished' % (current.name))
+    print('[%s] Preparations finished\n' % (current.name), end='')
 
     while True:
-        print('[%s] Get item' % (current.name))
+        print('[%s] Get item\n' % (current.name), end='')
         item = queue.get(block=True)
 
         start_time = time.time_ns()
@@ -84,10 +84,10 @@ def do_tflite(queue):
                     endpoints_connected.value -= 1
                     counter = endpoints_connected.value
 
-                print("[%s] A client disconnected, %i clients left" % (current.name, counter))
+                print("[%s] A client disconnected, %i clients left\n" % (current.name, counter), end='')
                 continue
         except:
-            print('[%s] Read image and apply ML' % (current.name))
+            print('[%s] Read image and apply ML\n' % (current.name), end='')
 
         # Read the image, do ML on it
         with images_processed.get_lock():
@@ -96,7 +96,7 @@ def do_tflite(queue):
         # Get timestamp to calculate latency. We prepended 0's to the time to make it a fixed length
         t_bytes = data[-25:]
         t_old = int(t_bytes.decode('utf-8'))
-        print('[%s] Latency (ns): %s' % (current.name, str(t_now - t_old)))
+        print('[%s] Latency (ns): %s\n' % (current.name, str(t_now - t_old)), end='')
 
         # Get data to process
         data = data[:-len(str(t_now))]
@@ -119,12 +119,12 @@ def do_tflite(queue):
         top_k = results.argsort()[-5:][::-1]
         for i in top_k:
             if floating_model:
-                print('\t{:08.6f} - {}'.format(float(results[i]), labels[i]))
+                print('\t{:08.6f} - {}\n'.format(float(results[i]), labels[i]), end='')
             else:
-                print('\t{:08.6f} - {}'.format(float(results[i] / 255.0), labels[i]))
+                print('\t{:08.6f} - {}\n'.format(float(results[i] / 255.0), labels[i]), end='')
 
         sec_frame = time.time_ns() - start_time
-        print('[%s] Processing (ns): %i' % (current.name, sec_frame))
+        print('[%s] Processing (ns): %i\n' % (current.name, sec_frame), end='')
 
 
 def main():
