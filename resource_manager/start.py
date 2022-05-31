@@ -1,6 +1,7 @@
-'''\
+"""\
 Select the correct resource manager, install required software and set them up.
-'''
+"""
+
 
 def start(config, machines):
     """Create and manage resource managers
@@ -11,14 +12,14 @@ def start(config, machines):
     """
     from .endpoint import start as endpoint
 
-    if 'resource_manager' in config['benchmark']:
-        if config['benchmark']['resource_manager'] == 'kubeedge':
+    if "resource_manager" in config["benchmark"]:
+        if config["benchmark"]["resource_manager"] == "kubeedge":
             from .kubeedge import start
-        elif config['benchmark']['resource_manager'] == 'kubernetes':
+        elif config["benchmark"]["resource_manager"] == "kubernetes":
             from .kubernetes import start
 
     # Install RM software on cloud/edge nodes
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+    if config["mode"] == "cloud" or config["mode"] == "edge":
         start.start(config, machines)
 
     # Start RM software on endpoints

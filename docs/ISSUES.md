@@ -70,19 +70,19 @@ For Terraform support, please contact the developers. Currently, Terraform suppo
     sudo apt install libspice-protocol-dev libspice-server-dev meson
     wget https://download.qemu.org/qemu-6.1.0.tar.xz
     tar xvf qemu-6.1.0.tar.xz
-    rm *.tar*
+    rm qemu-6.1.0.tar.xz
     cd qemu-6.1.0/
     mkdir build
     cd build
+
+    # Delete the QEMU files installed via the qemu-kvm package
+    rm /usr/bin/qemu-*
+    rm /usr/local/bin/qemu-*
 
     # This can be changed based on your system / OS
     ../configure --target-list=x86_64-softmmu --enable-kvm --enable-linux-aio  \
         --enable-trace-backend=log --disable-werror --disable-gtk --enable-spice
     make -j 
-
-    # Delete the QEMU files installed via the qemu-kvm package
-    rm /usr/bin/qemu-*
-    rm /usr/local/bin/qemu-*
 
     # Now, either add the qemu binary to your PATH, 
     # or move it to the /bin folder. We show the latter here. 
@@ -93,9 +93,6 @@ For Terraform support, please contact the developers. Currently, Terraform suppo
     # Same with the /share folder
     rm -rf /usr/share/qemu
     mv /usr/local/share/qemu /usr/share/
-
-    # Finally, start the virsh network by hand
-    virsh net-start default
     ```
 
 3. VM can't be accessed, `Destination Host Unreachable` and/or `No route to host`

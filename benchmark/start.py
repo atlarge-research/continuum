@@ -1,6 +1,6 @@
-'''\
+"""\
 Execute the benchmark and get raw output
-'''
+"""
 
 import logging
 import sys
@@ -8,7 +8,7 @@ import time
 import os
 import sys
 
-sys.path.append(os.path.abspath('..'))
+sys.path.append(os.path.abspath(".."))
 
 import main
 
@@ -25,42 +25,50 @@ def start_worker(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info('Start subscriber pods on %s' % (config['mode']))
+    logging.info("Start subscriber pods on %s" % (config["mode"]))
 
     # Set parameters based on mode
-    if config['mode'] == 'cloud':
-        workers = config['infrastructure']['cloud_nodes'] - 1 # Includes cloud controller
-        cores = config['infrastructure']['cloud_cores']
-    elif config['mode'] == 'edge':
-        workers = config['infrastructure']['edge_nodes']
-        cores = config['infrastructure']['edge_cores']
+    if config["mode"] == "cloud":
+        workers = (
+            config["infrastructure"]["cloud_nodes"] - 1
+        )  # Includes cloud controller
+        cores = config["infrastructure"]["cloud_cores"]
+    elif config["mode"] == "edge":
+        workers = config["infrastructure"]["edge_nodes"]
+        cores = config["infrastructure"]["edge_cores"]
 
     vars = {
-        'app_name': config['benchmark']['application'].replace('_', '-'),
-        'image': '%s/%s' % (config['registry'], config['images'][0].split(':')[1]),
-        'mqtt_logs': True,
-        'endpoint_connected': int(config['infrastructure']['endpoint_nodes'] / workers),
-        'memory_req': cores - 0.5,
-        'memory_lim': cores,
-        'cpu_req': cores - 0.5,
-        'cpu_lim': cores,
-        'replicas': workers - 1, # In cloud mode, this includes controller
-        'cpu_threads': cores
+        "app_name": config["benchmark"]["application"].replace("_", "-"),
+        "image": "%s/%s" % (config["registry"], config["images"][0].split(":")[1]),
+        "mqtt_logs": True,
+        "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / workers),
+        "memory_req": cores - 0.5,
+        "memory_lim": cores,
+        "cpu_req": cores - 0.5,
+        "cpu_lim": cores,
+        "replicas": workers - 1,  # In cloud mode, this includes controller
+        "cpu_threads": cores,
     }
 
-    vars_str = ''
-    for k, v in vars.items(): 
-        vars_str += (str(k) + '=' + str(v) + ' ')
+    vars_str = ""
+    for k, v in vars.items():
+        vars_str += str(k) + "=" + str(v) + " "
 
     # Launch applications on cloud/edge
-    command = ['ansible-playbook', '-i', config['home'] + '/.continuum/inventory_vms',
-               '--extra-vars', vars_str[:-1], config['home'] + '/.continuum/launch_benchmark.yml']
+    command = [
+        "ansible-playbook",
+        "-i",
+        config["home"] + "/.continuum/inventory_vms",
+        "--extra-vars",
+        vars_str[:-1],
+        config["home"] + "/.continuum/launch_benchmark.yml",
+    ]
     main.ansible_check_output(machines[0].process(command))
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
-    logging.info('Deployed %i %s applications' % (workers, config['mode']))
-    logging.info('Wait for subscriber applications to be scheduled and running')
+    logging.info("Deployed %i %s applications" % (workers, config["mode"]))
+    logging.info("Wait for subscriber applications to be scheduled and running")
 
     pending = True
     i = 0
@@ -68,35 +76,44 @@ def start_worker(config, machines):
     while i < workers:
         # Get the list of deployed pods
         if pending:
-            command = ['kubectl', 'get', 'pods', 
-                    '-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase',
-                    '--sort-by=.spec.nodeName']
+            command = [
+                "kubectl",
+                "get",
+                "pods",
+                "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
+                "--sort-by=.spec.nodeName",
+            ]
             output, error = machines[0].process(
-                command, ssh=True, ssh_target=config['cloud_ssh'][0])
+                command, ssh=True, ssh_target=config["cloud_ssh"][0]
+            )
 
-            if error != [] and any('couldn\'t find any field with path' in line for line in error):
-                logging.debug('Retry getting list of kubernetes pods')
+            if error != [] and any(
+                "couldn't find any field with path" in line for line in error
+            ):
+                logging.debug("Retry getting list of kubernetes pods")
                 time.sleep(5)
                 pending = True
                 continue
             elif error != [] or output == []:
-                logging.error(''.join(error))
+                logging.error("".join(error))
                 sys.exit()
 
-        line = output[i + 1].rstrip().split(' ')
+        line = output[i + 1].rstrip().split(" ")
         app_name = line[0]
         app_status = line[-1]
 
         # Check status of app
-        if app_status == 'Pending':
+        if app_status == "Pending":
             time.sleep(5)
             pending = True
-        elif app_status == 'Running':
+        elif app_status == "Running":
             i += 1
             pending = False
         else:
-            logging.error('Container on cloud/edge %s has status %s, expected \"Pending\" or \"Running\"' % (
-                app_name, app_status))
+            logging.error(
+                'Container on cloud/edge %s has status %s, expected "Pending" or "Running"'
+                % (app_name, app_status)
+            )
             sys.exit()
 
 
@@ -111,61 +128,89 @@ def start_endpoint(config, machines):
     Returns:
         list(list(str)): Names of docker containers launched per machine
     """
-    logging.info('Deploy Docker containers on endpoints with publisher application')
+    logging.info("Deploy Docker containers on endpoints with publisher application")
 
     processes = []
     container_names = []
 
     # Calc endpoints per worker
-    workers = config['infrastructure']['cloud_nodes'] + config['infrastructure']['edge_nodes']
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+    workers = (
+        config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
+    )
+    if config["mode"] == "cloud" or config["mode"] == "edge":
         workers -= 1
-        end_per_work = int(config['infrastructure']['endpoint_nodes'] / workers)
-        worker_ips = config['cloud_ips'] + config['edge_ips']
+        end_per_work = int(config["infrastructure"]["endpoint_nodes"] / workers)
+        worker_ips = config["cloud_ips"] + config["edge_ips"]
         off = 1
     else:
         end_per_work = 1
-        worker_ips = ['']
+        worker_ips = [""]
         off = 10000000
 
     # For each worker (cloud or edge), connect to end_per_work endpoints.
     for worker_i, worker_ip in enumerate(worker_ips):
-        for endpoint_i, endpoint_ssh in enumerate(config['endpoint_ssh'][worker_i * end_per_work:(worker_i+off)*end_per_work]):
+        for endpoint_i, endpoint_ssh in enumerate(
+            config["endpoint_ssh"][
+                worker_i * end_per_work : (worker_i + off) * end_per_work
+            ]
+        ):
             # Docker container name and variables depends on deployment mode
-            cont_name = 'endpoint%i' % (worker_i * end_per_work + endpoint_i)
-            env = ['FREQUENCY=%i' % (config['benchmark']['frequency'])]
+            cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
+            env = ["FREQUENCY=%i" % (config["benchmark"]["frequency"])]
 
-            if config['mode'] == 'cloud' or config['mode'] == 'edge':
-                cont_name = '%s%i_' % (config['mode'], worker_i) + cont_name
-                env.append('MQTT_SERVER_IP=%s' % (worker_ip))
+            if config["mode"] == "cloud" or config["mode"] == "edge":
+                cont_name = "%s%i_" % (config["mode"], worker_i) + cont_name
+                env.append("MQTT_SERVER_IP=%s" % (worker_ip))
             else:
-                env.append('CPU_THREADS=%i' % (config['infrastructure']['endpoint_cores']))
+                env.append(
+                    "CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"])
+                )
 
-            logging.info('Launch %s' % (cont_name))
+            logging.info("Launch %s" % (cont_name))
 
-            command = ['docker', 'container', 'run',
-                '--detach',
-                '--cpus=%i' % (config['infrastructure']['endpoint_cores']),
-                '--memory=%ig' % (config['infrastructure']['endpoint_cores']),
-                '--network=host'] + \
-                ['--env %s' % (e) for e in env] + \
-                ['--name', cont_name,
-                config['registry'] + '/' + config['images'][1 + (int(config['mode'] == 'endpoint'))].split(':')[1]]
+            command = (
+                [
+                    "docker",
+                    "container",
+                    "run",
+                    "--detach",
+                    "--cpus=%i" % (config["infrastructure"]["endpoint_cores"]),
+                    "--memory=%ig" % (config["infrastructure"]["endpoint_cores"]),
+                    "--network=host",
+                ]
+                + ["--env %s" % (e) for e in env]
+                + [
+                    "--name",
+                    cont_name,
+                    config["registry"]
+                    + "/"
+                    + config["images"][1 + (int(config["mode"] == "endpoint"))].split(
+                        ":"
+                    )[1],
+                ]
+            )
 
-            processes.append(machines[0].process(command, output=False, ssh=True, ssh_target=endpoint_ssh))
+            processes.append(
+                machines[0].process(
+                    command, output=False, ssh=True, ssh_target=endpoint_ssh
+                )
+            )
             container_names.append(cont_name)
 
     # Checkout process output
     for process in processes:
-        logging.debug('Check output of command [%s]' % (' '.join(process.args)))
-        output = [line.decode('utf-8') for line in process.stdout.readlines()]
-        error = [line.decode('utf-8') for line in process.stderr.readlines()]
+        logging.debug("Check output of command [%s]" % (" ".join(process.args)))
+        output = [line.decode("utf-8") for line in process.stdout.readlines()]
+        error = [line.decode("utf-8") for line in process.stderr.readlines()]
 
-        if error != [] and 'Your kernel does not support swap limit capabilities' not in error[0]:
-            logging.error(''.join(error))
+        if (
+            error != []
+            and "Your kernel does not support swap limit capabilities" not in error[0]
+        ):
+            logging.error("".join(error))
             sys.exit()
         elif output == []:
-            logging.error('No output from docker container')
+            logging.error("No output from docker container")
             sys.exit()
 
     return container_names
@@ -179,23 +224,32 @@ def wait_endpoint_completion(config, machines, container_names):
         machines (list(Machine object)): List of machine objects representing physical machines
         container_names (list(str)): Names of docker containers launched
     """
-    logging.info('Wait on all endpoint containers to finish')
+    logging.info("Wait on all endpoint containers to finish")
     time.sleep(10)
 
-    for ssh, cont_name in zip(config['endpoint_ssh'], container_names):
-        logging.info('Wait for container to finish: %s on VM %s' % (cont_name, ssh.split('@')[0]))
+    for ssh, cont_name in zip(config["endpoint_ssh"], container_names):
+        logging.info(
+            "Wait for container to finish: %s on VM %s" % (cont_name, ssh.split("@")[0])
+        )
         finished = False
 
         while not finished:
             # Get list of docker containers
-            command = ['docker', 'container', 'ls', '-a', '--format', '\"{{.ID}}: {{.Status}} {{.Names}}\"']
+            command = [
+                "docker",
+                "container",
+                "ls",
+                "-a",
+                "--format",
+                '"{{.ID}}: {{.Status}} {{.Names}}"',
+            ]
             output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
 
             if error != []:
-                logging.error(''.join(error))
+                logging.error("".join(error))
                 sys.exit()
             elif output == []:
-                logging.error('No output from docker container')
+                logging.error("No output from docker container")
                 sys.exit()
 
             # Get status of docker container
@@ -205,23 +259,27 @@ def wait_endpoint_completion(config, machines, container_names):
                     status_line = line
 
             if status_line == None:
-                logging.error('ERROR: Could not find status of container %s running in VM %s: %s' % (
-                    cont_name, ssh.split('@')[0], ''.join(output)))
+                logging.error(
+                    "ERROR: Could not find status of container %s running in VM %s: %s"
+                    % (cont_name, ssh.split("@")[0], "".join(output))
+                )
                 sys.exit()
 
-            parsed = line.rstrip().split(' ')
+            parsed = line.rstrip().split(" ")
 
             # Check status
-            if parsed[1] == 'Up':
+            if parsed[1] == "Up":
                 time.sleep(5)
-            elif parsed[1] == 'Exited' and parsed[2] == '(0)':
+            elif parsed[1] == "Exited" and parsed[2] == "(0)":
                 finished = True
             else:
-                logging.error('ERROR: Container %s failed in VM %s with status "%s"' % (
-                    cont_name, ssh.split('@')[0], status_line))
+                logging.error(
+                    'ERROR: Container %s failed in VM %s with status "%s"'
+                    % (cont_name, ssh.split("@")[0], status_line)
+                )
                 sys.exit()
-    
-    logging.info('All endpoint containers have finished')
+
+    logging.info("All endpoint containers have finished")
 
 
 def wait_worker_completion(config, machines):
@@ -231,43 +289,54 @@ def wait_worker_completion(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info('Wait for pods on cloud/edge workers to finish')
+    logging.info("Wait for pods on cloud/edge workers to finish")
     get_list = True
     i = 0
 
-    workers = config['infrastructure']['cloud_nodes'] + config['infrastructure']['edge_nodes']
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+    workers = (
+        config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
+    )
+    if config["mode"] == "cloud" or config["mode"] == "edge":
         workers -= 1
 
     # On the cloud controller, check the status of each pod, and wait until finished
     while i < workers:
         # Get the list of deployed pods
         if get_list:
-            command = ['kubectl', 'get', 'pods', 
-                '-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase',
-                '--sort-by=.spec.nodeName']
+            command = [
+                "kubectl",
+                "get",
+                "pods",
+                "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
+                "--sort-by=.spec.nodeName",
+            ]
             output, error = machines[0].process(
-                command, ssh=True, ssh_target=config['cloud_ssh'][0])
+                command, ssh=True, ssh_target=config["cloud_ssh"][0]
+            )
 
             if error != [] or output == []:
-                logging.error(''.join(error))
+                logging.error("".join(error))
                 sys.exit()
 
         # Parse list, get status of app i
-        line = output[i + 1].rstrip().split(' ')
+        line = output[i + 1].rstrip().split(" ")
         app_name = line[0]
         app_status = line[-1]
 
         # Check status of app i
-        if app_status == 'Running':
+        if app_status == "Running":
             time.sleep(5)
             get_list = True
-        elif app_status == 'Succeeded':
+        elif app_status == "Succeeded":
             i += 1
             get_list = False
         else:
-            logging.error(('ERROR: Container on cloud/edge %s has status %s, expected \"Running\" or \"Succeeded\"' % (
-                app_name, app_status)))
+            logging.error(
+                (
+                    'ERROR: Container on cloud/edge %s has status %s, expected "Running" or "Succeeded"'
+                    % (app_name, app_status)
+                )
+            )
             sys.exit()
 
 
@@ -277,29 +346,30 @@ def start(config, machines):
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
-    
+
     Returns:
         list(str): Raw output from the benchmark
     """
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+    if config["mode"] == "cloud" or config["mode"] == "edge":
         start_worker(config, machines)
 
     container_names = start_endpoint(config, machines)
 
     # Wait for benchmark to finish
     wait_endpoint_completion(config, machines, container_names)
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+    if config["mode"] == "cloud" or config["mode"] == "edge":
         wait_worker_completion(config, machines)
 
     # Now get raw output
-    logging.info('Benchmark has been finished, prepare results')
+    logging.info("Benchmark has been finished, prepare results")
     endpoint_output = output.get_endpoint_output(config, machines, container_names)
 
     worker_output = []
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+    if config["mode"] == "cloud" or config["mode"] == "edge":
         worker_output = output.get_worker_output(config, machines)
 
     # Parse output into dicts, and print result
     worker_metrics, endpoint_metrics = output.gather_metrics(
-        config, worker_output, endpoint_output, container_names)
+        config, worker_output, endpoint_output, container_names
+    )
     output.format_output(config, worker_metrics, endpoint_metrics)

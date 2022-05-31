@@ -1,6 +1,6 @@
-'''\
+"""\
 Get output from KubeEdge and Docker, and process it into readable format
-'''
+"""
 
 import sys
 import logging
@@ -22,22 +22,22 @@ def get_endpoint_output(config, machines, container_names):
     Returns:
         list(list(str)): Output of each endpoint container
     """
-    logging.info('Extract output from endpoint publishers')
+    logging.info("Extract output from endpoint publishers")
 
     endpoint_output = []
-    for ssh, cont_name in zip(config['endpoint_ssh'], container_names):
-        logging.info('Get output from endpoint %s on VM %s' % (cont_name, ssh))
+    for ssh, cont_name in zip(config["endpoint_ssh"], container_names):
+        logging.info("Get output from endpoint %s on VM %s" % (cont_name, ssh))
 
         # Alternatively, use docker logs -t container_name for detailed timestamps
         # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
-        command = ['docker', 'logs', '-t', cont_name]
+        command = ["docker", "logs", "-t", cont_name]
         output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
 
         if error != []:
-            logging.error(''.join(error))
+            logging.error("".join(error))
             sys.exit()
         elif output == []:
-            logging.error('Container %s output empty' % (cont_name))
+            logging.error("Container %s output empty" % (cont_name))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -56,29 +56,35 @@ def get_worker_output(config, machines):
     Returns:
         list(list(str)): Output of each container ran on the cloud / edge
     """
-    logging.info('Gather output from subscribers')
+    logging.info("Gather output from subscribers")
 
     # Get list of pods
-    command = ['kubectl', 'get', 'pods', 
-        '-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase',
-        '--sort-by=.spec.nodeName']
+    command = [
+        "kubectl",
+        "get",
+        "pods",
+        "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
+        "--sort-by=.spec.nodeName",
+    ]
     output, error = machines[0].process(
-        command, ssh=True, ssh_target=config['cloud_ssh'][0])
+        command, ssh=True, ssh_target=config["cloud_ssh"][0]
+    )
 
     if error != [] or output == []:
-        logging.error(''.join(error))
+        logging.error("".join(error))
         sys.exit()
 
     # Get output from pods
     worker_output = []
     for line in output[1:]:
-        container = line.split(' ')[0]
-        command = ['kubectl', 'logs', '--timestamps=true', container]
+        container = line.split(" ")[0]
+        command = ["kubectl", "logs", "--timestamps=true", container]
         output, error = machines[0].process(
-            command, ssh=True, ssh_target=config['cloud_ssh'][0])
+            command, ssh=True, ssh_target=config["cloud_ssh"][0]
+        )
 
         if error != [] or output == []:
-            logging.error(''.join(error))
+            logging.error("".join(error))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -95,12 +101,12 @@ def to_datetime(s):
 
     Returns:
         datetime: Python datetime object
-    """    
-    s = s.split(' ')[0]
-    s = s.replace('T', ' ')
-    s = s.replace('Z', '')
-    s = s[:s.find('.') + 7]
-    return datetime.strptime(s, '%Y-%m-%d %H:%M:%S.%f')
+    """
+    s = s.split(" ")[0]
+    s = s.replace("T", " ")
+    s = s.replace("Z", "")
+    s = s[: s.find(".") + 7]
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 
 
 def gather_worker_metrics(worker_output):
@@ -116,16 +122,18 @@ def gather_worker_metrics(worker_output):
     if worker_output == []:
         return worker_metrics
 
-    worker_set = {'worker_id': None,
-                  'total_time': None,
-                  'comm_delay_avg': None,
-                  'comm_delay_stdev': None,
-                  'proc_avg': None}
+    worker_set = {
+        "worker_id": None,
+        "total_time": None,
+        "comm_delay_avg": None,
+        "comm_delay_stdev": None,
+        "proc_avg": None,
+    }
 
     for i, out in enumerate(worker_output):
-        logging.info('Parse output from worker node %i' % (i))
+        logging.info("Parse output from worker node %i" % (i))
         worker_metrics.append(copy.deepcopy(worker_set))
-        worker_metrics[-1]['worker_id'] = i
+        worker_metrics[-1]["worker_id"] = i
 
         # Get network delay in ms (10**-3) and execution times
         # Sometimes, the program gets an incorrect line, then skip
@@ -134,38 +142,44 @@ def gather_worker_metrics(worker_output):
         start_time = 0
         end_time = 0
         for line in out:
-            if start_time == 0 and 'Read image and apply ML' in line:
+            if start_time == 0 and "Read image and apply ML" in line:
                 start_time = to_datetime(line)
-            elif 'Get item' in line:
+            elif "Get item" in line:
                 end_time = to_datetime(line)
-            elif any(word in line for word in ['Latency', 'Processing']):
+            elif any(word in line for word in ["Latency", "Processing"]):
                 try:
-                    unit = line[line.find('(')+1:line.find(')')]
-                    time = int(line.rstrip().split(':')[-1])
+                    unit = line[line.find("(") + 1 : line.find(")")]
+                    time = int(line.rstrip().split(":")[-1])
                 except Exception as e:
-                    logging.warn('Got an error while parsing line: %s. Exception: %s' % (line, e))
+                    logging.warn(
+                        "Got an error while parsing line: %s. Exception: %s" % (line, e)
+                    )
                     continue
 
-                units = ['ns']
+                units = ["ns"]
                 if time < 0:
-                    logging.warn('Time < 0 should not be possible: %i' % (time))
+                    logging.warn("Time < 0 should not be possible: %i" % (time))
                     continue
                 elif unit not in units:
-                    logging.warn('Unit should be [%s], got %s' % (','.join(units), unit))
+                    logging.warn(
+                        "Unit should be [%s], got %s" % (",".join(units), unit)
+                    )
                     continue
 
-                if unit == 'ns':
-                    if 'Latency' in line:
+                if unit == "ns":
+                    if "Latency" in line:
                         delays.append(round(time / 10**6, 4))
-                    elif 'Processing' in line:
+                    elif "Processing" in line:
                         processing.append(round(time / 10**6, 4))
 
-        worker_metrics[-1]['total_time'] = round((end_time - start_time).total_seconds(), 2)
-        worker_metrics[-1]['comm_delay_avg'] = round(np.mean(delays), 2)
-        worker_metrics[-1]['comm_delay_stdev'] = round(np.std(delays), 2)
-        worker_metrics[-1]['proc_avg'] = round(np.mean(processing), 2)
+        worker_metrics[-1]["total_time"] = round(
+            (end_time - start_time).total_seconds(), 2
+        )
+        worker_metrics[-1]["comm_delay_avg"] = round(np.mean(delays), 2)
+        worker_metrics[-1]["comm_delay_stdev"] = round(np.std(delays), 2)
+        worker_metrics[-1]["proc_avg"] = round(np.mean(processing), 2)
 
-    return sorted(worker_metrics, key=lambda x: x['worker_id'])
+    return sorted(worker_metrics, key=lambda x: x["worker_id"])
 
 
 def gather_endpoint_metrics(config, endpoint_output, container_names):
@@ -180,65 +194,78 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         list(dict): List of parsed output for each endpoint
     """
     endpoint_metrics = []
-    endpoint_set = {'worker_id': None,
-                    'total_time': None,
-                    'proc_avg': None,
-                    'data_avg': None}
+    endpoint_set = {
+        "worker_id": None,
+        "total_time": None,
+        "proc_avg": None,
+        "data_avg": None,
+    }
 
     for out, container_name in zip(endpoint_output, container_names):
-        logging.info('Parse output from endpoint %s' % (container_name))
+        logging.info("Parse output from endpoint %s" % (container_name))
         endpoint_metrics.append(copy.deepcopy(endpoint_set))
 
         # Get timestamp from first and last line
         start_time = to_datetime(out[0])
         end_time = to_datetime(out[-1])
 
-        endpoint_metrics[-1]['total_time'] = round((end_time - start_time).total_seconds(), 2)
-        endpoint_metrics[-1]['proc_avg'] = 0.0
-        endpoint_metrics[-1]['data_avg'] = 0.0
+        endpoint_metrics[-1]["total_time"] = round(
+            (end_time - start_time).total_seconds(), 2
+        )
+        endpoint_metrics[-1]["proc_avg"] = 0.0
+        endpoint_metrics[-1]["data_avg"] = 0.0
 
-        if config['mode'] == 'cloud':
-            name = container_name.split('_')[0]
-            endpoint_metrics[-1]['worker_id'] = int(name[5:])
-        elif config['mode'] == 'edge':         
-            name = container_name.split('_')[0]
-            endpoint_metrics[-1]['worker_id'] = int(name[4:])
-        elif config['mode'] == 'endpoint':
-            endpoint_metrics[-1]['worker_id'] = int(container_name[8:])
+        if config["mode"] == "cloud":
+            name = container_name.split("_")[0]
+            endpoint_metrics[-1]["worker_id"] = int(name[5:])
+        elif config["mode"] == "edge":
+            name = container_name.split("_")[0]
+            endpoint_metrics[-1]["worker_id"] = int(name[4:])
+        elif config["mode"] == "endpoint":
+            endpoint_metrics[-1]["worker_id"] = int(container_name[8:])
 
         # Parse line by line to get preparation, preprocessing and processing times
         processing = []
         data_size = []
         for line in out:
-            if any(word in line for word in ['Preparation and preprocessing', 
-                                             'Preparation, preprocessing and processing',
-                                             'Sending data']):
+            if any(
+                word in line
+                for word in [
+                    "Preparation and preprocessing",
+                    "Preparation, preprocessing and processing",
+                    "Sending data",
+                ]
+            ):
                 try:
-                    unit = line[line.find('(')+1:line.find(')')]
-                    number = int(line.rstrip().split(':')[-1])
+                    unit = line[line.find("(") + 1 : line.find(")")]
+                    number = int(line.rstrip().split(":")[-1])
                 except Exception as e:
-                    logging.warn('Got an error while parsing line: %s. Exception: %s' % (line, e))
+                    logging.warn(
+                        "Got an error while parsing line: %s. Exception: %s" % (line, e)
+                    )
                     continue
 
-                units = ['ns', 'bytes']
+                units = ["ns", "bytes"]
                 if number < 0:
-                    logging.warn('Time/Size < 0 should not be possible: %i' % (number))
+                    logging.warn("Time/Size < 0 should not be possible: %i" % (number))
                     continue
                 elif unit not in units:
-                    logging.warn('Unit should be one of [%s], got %s' % (','.join(units), unit))
+                    logging.warn(
+                        "Unit should be one of [%s], got %s" % (",".join(units), unit)
+                    )
                     continue
 
-                if unit == 'ns':
+                if unit == "ns":
                     processing.append(round(number / 10**6, 4))
-                elif unit == 'bytes':
+                elif unit == "bytes":
                     data_size.append(round(number / 10**3, 4))
 
         if processing != []:
-            endpoint_metrics[-1]['proc_avg'] = round(np.mean(processing), 2)
+            endpoint_metrics[-1]["proc_avg"] = round(np.mean(processing), 2)
         if data_size != []:
-            endpoint_metrics[-1]['data_avg'] = round(np.mean(data_size), 2)
+            endpoint_metrics[-1]["data_avg"] = round(np.mean(data_size), 2)
 
-    endpoint_metrics = sorted(endpoint_metrics, key=lambda x: x['worker_id'])
+    endpoint_metrics = sorted(endpoint_metrics, key=lambda x: x["worker_id"])
 
     return endpoint_metrics
 
@@ -255,25 +282,25 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
     Returns:
         2x list(dict): Metrics of worker nodes and endpoints
     """
-    logging.debug('Print raw output from subscribers and publishers')
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
-        logging.debug('------------------------------------')
-        logging.debug('%s OUTPUT' % (config['mode'].upper()))
-        logging.debug('------------------------------------')
+    logging.debug("Print raw output from subscribers and publishers")
+    if config["mode"] == "cloud" or config["mode"] == "edge":
+        logging.debug("------------------------------------")
+        logging.debug("%s OUTPUT" % (config["mode"].upper()))
+        logging.debug("------------------------------------")
         for out in worker_output:
             for line in out:
                 logging.debug(line)
 
-            logging.debug('------------------------------------')
+            logging.debug("------------------------------------")
 
-    logging.debug('------------------------------------')
-    logging.debug('ENDPOINT OUTPUT')
-    logging.debug('------------------------------------')
+    logging.debug("------------------------------------")
+    logging.debug("ENDPOINT OUTPUT")
+    logging.debug("------------------------------------")
     for out in endpoint_output:
         for line in out:
             logging.debug(line)
-        
-        logging.debug('------------------------------------')
+
+        logging.debug("------------------------------------")
 
     worker_metrics = gather_worker_metrics(worker_output)
     endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
@@ -289,41 +316,57 @@ def format_output(config, worker_metrics, endpoint_metrics):
         endpoint_metrics (list(dict)): Metrics per endpoint
     """
     df1 = None
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
-        logging.info('------------------------------------')
-        logging.info('%s OUTPUT' % (config['mode'].upper()))
-        logging.info('------------------------------------') 
+    if config["mode"] == "cloud" or config["mode"] == "edge":
+        logging.info("------------------------------------")
+        logging.info("%s OUTPUT" % (config["mode"].upper()))
+        logging.info("------------------------------------")
         df1 = pd.DataFrame(worker_metrics)
-        df1.rename(columns={'total_time': 'total_time (s)', 
-                           'comm_delay_avg': 'delay_avg (ms)', 
-                           'comm_delay_stdev': 'delay_stdev (ms)', 
-                           'proc_avg': 'proc/data (ms)'}, 
-                           inplace=True)
+        df1.rename(
+            columns={
+                "total_time": "total_time (s)",
+                "comm_delay_avg": "delay_avg (ms)",
+                "comm_delay_stdev": "delay_stdev (ms)",
+                "proc_avg": "proc/data (ms)",
+            },
+            inplace=True,
+        )
         df1_no_indices = df1.to_string(index=False)
-        logging.info('\n' + df1_no_indices)
+        logging.info("\n" + df1_no_indices)
 
-    logging.info('------------------------------------')
-    logging.info('ENDPOINT OUTPUT')
-    logging.info('------------------------------------')
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
+    logging.info("------------------------------------")
+    logging.info("ENDPOINT OUTPUT")
+    logging.info("------------------------------------")
+    if config["mode"] == "cloud" or config["mode"] == "edge":
         df2 = pd.DataFrame(endpoint_metrics)
-        df2.rename(columns={'worker_id': 'connected_to',
-                           'total_time': 'total_time (s)', 
-                           'proc_avg': 'preproc/data (ms)',
-                           'data_avg': 'data_size_avg (kb)'}, 
-                           inplace=True)
+        df2.rename(
+            columns={
+                "worker_id": "connected_to",
+                "total_time": "total_time (s)",
+                "proc_avg": "preproc/data (ms)",
+                "data_avg": "data_size_avg (kb)",
+            },
+            inplace=True,
+        )
     else:
-        df2 = pd.DataFrame(endpoint_metrics, columns=['worker_id', 'total_time', 'proc_avg'])
-        df2.rename(columns={'worker_id': 'endpoint_id',
-                           'total_time': 'total_time (s)', 
-                           'proc_avg': 'proc/data (ms)'}, 
-                           inplace=True)
+        df2 = pd.DataFrame(
+            endpoint_metrics, columns=["worker_id", "total_time", "proc_avg"]
+        )
+        df2.rename(
+            columns={
+                "worker_id": "endpoint_id",
+                "total_time": "total_time (s)",
+                "proc_avg": "proc/data (ms)",
+            },
+            inplace=True,
+        )
 
     df2_no_indices = df2.to_string(index=False)
-    logging.info('\n' + df2_no_indices)
+    logging.info("\n" + df2_no_indices)
 
     # Print ouput in csv format
-    if config['mode'] == 'cloud' or config['mode'] == 'edge':
-        logging.debug('Output in csv format\n%s\n%s' % (repr(df1.to_csv()), repr(df2.to_csv())))
+    if config["mode"] == "cloud" or config["mode"] == "edge":
+        logging.debug(
+            "Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2.to_csv()))
+        )
     else:
-        logging.debug('Output in csv format\n%s' % (repr(df2.to_csv())))
+        logging.debug("Output in csv format\n%s" % (repr(df2.to_csv())))

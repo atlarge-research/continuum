@@ -1,8 +1,8 @@
-'''\
+"""\
 Generate a QEMU configuration file
 The file is generated from scratch instead of using an existing template file as
 too many things can change depending on user input.
-'''
+"""
 
 import logging
 import sys
@@ -94,6 +94,7 @@ runcmd:
 final_message: "The system is finally up, after $UPTIME seconds"
 """
 
+
 def find_bridge(machine, bridge):
     """Check if bridge <bridge> is available on the system.
 
@@ -104,9 +105,11 @@ def find_bridge(machine, bridge):
     Returns:
         int: Bool representing if we found the bridge on this machine
     """
-    output, error = machine.process("brctl show | grep '^%s' | wc -l" % (bridge), shell=True)
+    output, error = machine.process(
+        "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
+    )
     if error != [] or output == []:
-        logging.error('ERROR: Could not find a network bridge')
+        logging.error("ERROR: Could not find a network bridge")
         sys.exit()
 
     return int(output[0].rstrip())
@@ -119,11 +122,11 @@ def start(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info('Start writing QEMU config files for cloud / edge')
+    logging.info("Start writing QEMU config files for cloud / edge")
 
     # Get the SSH public key
     home = str(Path.home())
-    f = open(home + '/.ssh/id_rsa_benchmark.pub', 'r')
+    f = open(home + "/.ssh/id_rsa_benchmark.pub", "r")
     ssh_key = f.read().rstrip()
     f.close()
 
@@ -135,26 +138,28 @@ def start(config, machines):
     # 3. Set the gateway variable to the IP of your gateway (e.g. 10.0.2.2, 192.168.122.1, etc)
     # ------------------------------------------------------------------------------------------------
     # Find out what bridge to use
-    bridge = find_bridge(machines[0], 'br0')
-    bridge_name = 'br0'
+    bridge = find_bridge(machines[0], "br0")
+    bridge_name = "br0"
     if bridge == 0:
-        bridge = find_bridge(machines[0], 'virbr0')
-        bridge_name = 'virbr0'
+        bridge = find_bridge(machines[0], "virbr0")
+        bridge_name = "virbr0"
         if bridge == 0:
-            logging.error('ERROR: Could not find a network bridge')
+            logging.error("ERROR: Could not find a network bridge")
             sys.exit()
 
     # Get gateway address
-    output, error = machines[0].process("ip route | grep ' %s '" % (bridge_name), shell=True)
+    output, error = machines[0].process(
+        "ip route | grep ' %s '" % (bridge_name), shell=True
+    )
     if error != [] or output == []:
-        logging.error('ERROR: Could not find gateway address')
+        logging.error("ERROR: Could not find gateway address")
         sys.exit()
 
     gateway = 0
-    pattern = re.compile(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})')
+    pattern = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
     gatewaylists = [pattern.findall(line) for line in output]
-    
-    if bridge_name == 'br0':
+
+    if bridge_name == "br0":
         # For br0, pick gateway of machine
         gateway = gatewaylists[0][0]
     else:
@@ -162,15 +167,15 @@ def start(config, machines):
         for gatewaylist in gatewaylists:
             if len(gatewaylist) > 1:
                 if gateway != 0:
-                    logging.error('ERROR: Found multiple gateways')
+                    logging.error("ERROR: Found multiple gateways")
                     sys.exit()
 
                 gateway = gatewaylist[1].rstrip()
     # ------------------------------------------------------------------------------------------------
 
-    cc = config['infrastructure']['cloud_cores']
-    ec = config['infrastructure']['edge_cores']
-    pc = config['infrastructure']['endpoint_cores']
+    cc = config["infrastructure"]["cloud_cores"]
+    ec = config["infrastructure"]["edge_cores"]
+    pc = config["infrastructure"]["endpoint_cores"]
 
     period = 100000
     pinnings = []
@@ -180,62 +185,114 @@ def start(config, machines):
         start_core = 0
 
         # Clouds
-        for ip, name in zip(machine.cloud_controller_ips + machine.cloud_ips, 
-                            machine.cloud_controller_names + machine.cloud_names):        
-            f = open('.tmp/domain_%s.xml' % (name), 'w')
+        for ip, name in zip(
+            machine.cloud_controller_ips + machine.cloud_ips,
+            machine.cloud_controller_names + machine.cloud_names,
+        ):
+            f = open(".tmp/domain_%s.xml" % (name), "w")
             memory = 1048576 * cc
 
-            if config['infrastructure']['cpu_pin']:
-                pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(cc), range(start_core,start_core+cc))]
+            if config["infrastructure"]["cpu_pin"]:
+                pinnings = [
+                    '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
+                    for a, b in zip(range(cc), range(start_core, start_core + cc))
+                ]
                 start_core += cc
 
-            f.write(DOMAIN % (name, memory, cc, period, int(period * config['infrastructure']['cloud_quota']), '\n'.join(pinnings), bridge_name, name, name))
+            f.write(
+                DOMAIN
+                % (
+                    name,
+                    memory,
+                    cc,
+                    period,
+                    int(period * config["infrastructure"]["cloud_quota"]),
+                    "\n".join(pinnings),
+                    bridge_name,
+                    name,
+                    name,
+                )
+            )
             f.close()
 
-            f = open('.tmp/user_data_%s.yml' % (name), 'w')
-            hostname = name.replace('_', '')
-            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
+            f = open(".tmp/user_data_%s.yml" % (name), "w")
+            hostname = name.replace("_", "")
+            f.write(
+                USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway)
+            )
             f.close()
 
         # Edges
         for ip, name in zip(machine.edge_ips, machine.edge_names):
-            f = open('.tmp/domain_%s.xml' % (name), 'w')
+            f = open(".tmp/domain_%s.xml" % (name), "w")
             memory = 1048576 * ec
 
-            if config['infrastructure']['cpu_pin']:
-                pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(ec), range(start_core,start_core+ec))]
+            if config["infrastructure"]["cpu_pin"]:
+                pinnings = [
+                    '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
+                    for a, b in zip(range(ec), range(start_core, start_core + ec))
+                ]
                 start_core += ec
 
-            f.write(DOMAIN % (name, memory, ec, period, int(period * config['infrastructure']['edge_quota']), '\n'.join(pinnings), bridge_name, name, name))
+            f.write(
+                DOMAIN
+                % (
+                    name,
+                    memory,
+                    ec,
+                    period,
+                    int(period * config["infrastructure"]["edge_quota"]),
+                    "\n".join(pinnings),
+                    bridge_name,
+                    name,
+                    name,
+                )
+            )
             f.close()
 
-            f = open('.tmp/user_data_%s.yml' % (name), 'w')
+            f = open(".tmp/user_data_%s.yml" % (name), "w")
             f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Endpoints
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
-            f = open('.tmp/domain_%s.xml' % (name), 'w')
+            f = open(".tmp/domain_%s.xml" % (name), "w")
             memory = 1048576 * pc
 
-            if config['infrastructure']['cpu_pin']:
-                pinnings = ['        <vcpupin vcpu="%i" cpuset="%i"/>' % (a,b) for a,b in zip(range(pc), range(start_core,start_core+pc))]
+            if config["infrastructure"]["cpu_pin"]:
+                pinnings = [
+                    '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
+                    for a, b in zip(range(pc), range(start_core, start_core + pc))
+                ]
                 start_core += pc
 
-            f.write(DOMAIN % (name, memory, pc, period, int(period * config['infrastructure']['endpoint_quota']), '\n'.join(pinnings), bridge_name, name, name))
+            f.write(
+                DOMAIN
+                % (
+                    name,
+                    memory,
+                    pc,
+                    period,
+                    int(period * config["infrastructure"]["endpoint_quota"]),
+                    "\n".join(pinnings),
+                    bridge_name,
+                    name,
+                    name,
+                )
+            )
             f.close()
 
-            f = open('.tmp/user_data_%s.yml' % (name), 'w')
+            f = open(".tmp/user_data_%s.yml" % (name), "w")
             f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Base image(s)
         for ip, name in zip(machine.base_ips, machine.base_names):
-            f = open('.tmp/domain_%s.xml' % (name), 'w')
+            f = open(".tmp/domain_%s.xml" % (name), "w")
 
-            f.write(DOMAIN % (name, 1048576, 1, 0, 0, '', bridge_name, name, name))
+            f.write(DOMAIN % (name, 1048576, 1, 0, 0, "", bridge_name, name, name))
             f.close()
 
-            f = open('.tmp/user_data_%s.yml' % (name), 'w')
+            f = open(".tmp/user_data_%s.yml" % (name), "w")
             f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
             f.close()
