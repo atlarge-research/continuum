@@ -27,7 +27,7 @@ def os_image(config, machines):
     need_image = False
     for machine in machines:
         command = ["find", "/var/lib/libvirt/images/ubuntu2004.qcow2"]
-        output, error = machine.process(command)
+        output, error = machine.process(command, ssh=True)
 
         if error != [] or output == []:
             logging.info("Need to install os image")
@@ -60,7 +60,7 @@ def base_image(config, machines):
     for machine in machines:
         for base_name in machine.base_names:
             command = ["find", "/var/lib/libvirt/images/%s.qcow2" % (base_name)]
-            output, error = machine.process(command)
+            output, error = machine.process(command, ssh=True)
 
             if error != [] or output == []:
                 base_name = base_name.rstrip(string.digits)
@@ -228,7 +228,7 @@ def base_image(config, machines):
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
 
-        if error != []:
+        if error != [] and not (process.args.split(' ')[0] == 'ssh' and any(['Connection to ' in e for e in error])):
             logging.error("".join(error))
             sys.exit()
         elif "Domain " not in output[0] or " is being shutdown" not in output[0]:
@@ -237,6 +237,67 @@ def base_image(config, machines):
 
     # Wait for the shutdown to be completed
     time.sleep(5)
+
+
+def launch_vms(config, machines, repeat=[]):
+    """Launch VMs concurrently
+    Moved into a function so it can be re-executed when a VM didn't start for some reason
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        repeat (list, optional): Repeat specific execution. If empty, start all VMs. Defaults to [].
+
+    Returns:
+        list: Commands to execute again
+    """
+    # Launch the VMs concurrently
+    logging.info('Start VMs')
+
+    processes = []
+    if repeat == []:
+        for machine in machines:
+            for name in (
+                machine.cloud_controller_names
+                + machine.cloud_names
+                + machine.edge_names
+                + machine.endpoint_names
+            ):
+                if machine.is_local:
+                    command = (
+                        "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
+                        % (config["home"], name)
+                    )
+                else:
+                    command = (
+                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s/.continuum/domain_%s.xml\"'"
+                        % (machine.name, config["home"], name)
+                    )
+
+                processes.append(machines[0].process(command, shell=True, output=False))
+    else:
+        # Only execute specific commands on repeat until VMs are launched succesfully
+        for rep in repeat:
+            processes.append(machines[0].process(rep, shell=True, output=False))
+
+    repeat = []
+    for process in processes:
+        logging.debug("Check output for command [%s]" % ("".join(process.args)))
+        output = [line.decode("utf-8") for line in process.stdout.readlines()]
+        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+
+        if error != [] and "kex_exchange_identification" in error[0]:
+            # Repeat execution if key exchange error, can be solved by executing again
+            logging.error("ERROR, REPEAT EXECUTION: %s" % ("".join(error)))
+            repeat.append("".join(process.args))
+        elif error != [] and "Connection to " not in error[0]:
+            logging.error("ERROR: %s" % ("".join(error)))
+            sys.exit()
+        elif "Domain " not in output[0] or " created from " not in output[0]:
+            logging.error("ERROR: %s" % ("".join(output)))
+            sys.exit()
+
+    return repeat
 
 
 def start(config, machines):
@@ -291,36 +352,15 @@ def start(config, machines):
         ]
         main.ansible_check_output(machines[0].process(command))
 
-    # Launch the VMs concurrently
-    processes = []
-    for machine in machines:
-        for name in (
-            machine.cloud_controller_names
-            + machine.cloud_names
-            + machine.edge_names
-            + machine.endpoint_names
-        ):
-            if machine.is_local:
-                command = (
-                    "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
-                    % (config["home"], name)
-                )
-            else:
-                command = (
-                    "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s/.continuum/domain_%s.xml\"'"
-                    % (machine.name, config["home"], name)
-                )
-
-            processes.append(machine.process(command, shell=True, output=False))
-
-    for process in processes:
-        logging.debug("Check output for command [%s]" % ("".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
-
-        if error != [] and "Connection to " not in error[0]:
-            logging.error("ERROR: %s" % ("".join(error)))
+    # Start VMs
+    repeat = []
+    i = 0
+    while True:
+        repeat = launch_vms(config, machines, repeat)
+        if repeat == []:
+            break
+        elif i == 1:
+            logging.error("ERROR AFTER %i REPS: %s" % (i+1, " | ".join(repeat)))
             sys.exit()
-        elif "Domain " not in output[0] or " created from " not in output[0]:
-            logging.error("ERROR: %s" % ("".join(output)))
-            sys.exit()
+
+        i += 1
