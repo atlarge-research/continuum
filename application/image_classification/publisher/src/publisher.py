@@ -6,7 +6,9 @@ import paho.mqtt.client as mqtt
 import time
 import os
 
-MQTT_SERVER = os.environ["MQTT_SERVER_IP"]
+MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
+MQTT_REMOTE_IP = os.environ["MQTT_REMOTE_IP"]
+MQTT_LOGS = os.environ["MQTT_LOGS"]
 FREQUENCY = int(os.environ["FREQUENCY"])
 MQTT_TOPIC = "kubeedge-image-classification"
 
@@ -15,26 +17,69 @@ DURATION = 300
 SEC_PER_FRAME = float(1 / FREQUENCY)
 MAX_IMGS = FREQUENCY * DURATION
 
+received = 0
+
+
+def on_connect(local_client, userdata, flags, rc):
+    print("Connected with result code " + str(rc) + "\n", end="")
+    local_client.subscribe(MQTT_TOPIC)
+
+
+def on_subscribe(mqttc, obj, mid, granted_qos):
+    print("Subscribed to topic\n", end="")
+
+
+def on_log(client, userdata, level, buff):
+    print("[ %s ] %s\n" % (str(level), buff), end="")
+
+
+def on_message(client, userdata, msg):
+    t_now = time.time_ns()
+
+    t_old_bytes = msg.payload[-25:]
+    t_old = int(t_old_bytes.decode("utf-8"))
+
+    print("Latency (ns): %i" % (t_now - t_old))
+    global received
+    received += 1
+
 
 def on_publish(mqttc, obj, mid):
     print("Published data")
 
 
-def main():
+def connect():
+    print("Start connecting to the local MQTT broker")
+    print("Broker ip: " + str(MQTT_LOCAL_IP))
+    print("Topic: " + str(MQTT_TOPIC))
+
+    local_client = mqtt.Client()
+    local_client.on_connect = on_connect
+    local_client.on_message = on_message
+    local_client.on_subscribe = on_subscribe
+
+    if MQTT_LOGS == "True":
+        local_client.on_log = on_log
+
+    local_client.connect(MQTT_LOCAL_IP, port=1883, keepalive=300)
+    local_client.loop_start()
+
+
+def send():
     # Loop over the dataset of 60 images
     files = []
     for file in os.listdir("images"):
         if file.endswith(".JPEG"):
             files.append(file)
 
-    print("Start connecting to the MQTT broker")
-    print("Broker ip: " + str(MQTT_SERVER))
+    print("Start connecting to the remote MQTT broker")
+    print("Broker ip: " + str(MQTT_REMOTE_IP))
     print("Topic: " + str(MQTT_TOPIC))
 
-    client = mqtt.Client()
-    client.on_publish = on_publish
+    remote_client = mqtt.Client()
+    remote_client.on_publish = on_publish
 
-    client.connect(MQTT_SERVER, port=1883, keepalive=120)
+    remote_client.connect(MQTT_REMOTE_IP, port=1883, keepalive=120)
     print("Connected with the broker")
 
     # Send all frames over MQTT, one by one
@@ -45,11 +90,15 @@ def main():
 
         # Prepend 0's to the time to get a fixed length string
         t = time.time_ns()
-        t = (25 - len(str(t))) * "0" + str(t)
+        t = (20 - len(str(t))) * "0" + str(t)
         byte_arr.extend(t.encode("utf-8"))
-        print("Sending data (bytes): %i" % (len(byte_arr)))
 
-        _ = client.publish(MQTT_TOPIC, byte_arr, qos=0)
+        # Append local IP address so edge or cloud knows who to send a reply to
+        ip_bytes = (15 - len(MQTT_LOCAL_IP)) * "-" + MQTT_LOCAL_IP
+        byte_arr.extend(ip_bytes.encode("utf-8"))
+
+        print("Sending data (bytes): %i" % (len(byte_arr)))
+        _ = remote_client.publish(MQTT_TOPIC, byte_arr, qos=0)
 
         # Try to keep a frame rate of X
         sec_frame = time.time_ns() - start_time
@@ -69,13 +118,21 @@ def main():
             )
 
     # Make sure the finish message arrives
-    client.loop_start()
-    client.publish(MQTT_TOPIC, "1", qos=2)
-    client.loop_stop()
+    remote_client.loop_start()
+    remote_client.publish(MQTT_TOPIC, "1", qos=2)
+    remote_client.loop_stop()
 
-    client.disconnect()
+    remote_client.disconnect()
     print("Finished, sent %i images" % (MAX_IMGS))
 
 
 if __name__ == "__main__":
-    main()
+    connect()
+    send()
+
+    print("Wait for all images to be received back")
+    while received != MAX_IMGS:
+        print("Waiting progress: %i / %i" % (received, MAX_IMGS))
+        time.sleep(10)
+
+    print("All %i images have been received back" % (MAX_IMGS))

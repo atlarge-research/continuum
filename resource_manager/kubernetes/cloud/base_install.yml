@@ -75,7 +75,7 @@
 
   - name: Get Calico
     get_url:
-      url: https://docs.projectcalico.org/manifests/calico.yaml
+      url: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
       dest: "/"
       mode: '0755'
 

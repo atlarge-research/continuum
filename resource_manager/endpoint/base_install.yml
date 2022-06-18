@@ -49,3 +49,12 @@
   
   - name: Reload ip settings
     command: sysctl -p
+
+  - name: Install Mosquitto
+    apt: 
+      name: "{{ packages }}"
+      state: present
+      update_cache: true
+    vars:
+      packages:
+        - mosquitto=1.6.9-1

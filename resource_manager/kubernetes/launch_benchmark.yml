@@ -28,7 +28,7 @@
                   memory: "{{ memory_lim }}Gi"
                   cpu: {{ cpu_lim }}
               env:
-              - name: MQTT_SERVER_IP
+              - name: MQTT_LOCAL_IP
                 valueFrom:
                   fieldRef:
                     fieldPath: status.hostIP

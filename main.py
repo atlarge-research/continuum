@@ -631,7 +631,7 @@ def main(args):
             + args.config["edge_ssh"]
             + args.config["endpoint_ssh"]
         ):
-            s.append("ssh %s -i %s.ssh/id_rsa_benchmark" % (ssh, args.config["home"]))
+            s.append("ssh %s -i %s/.ssh/id_rsa_benchmark" % (ssh, args.config["home"]))
 
         logging.info("To access the VMs:\n\t" + "\n\t".join(s) + "\n")
 

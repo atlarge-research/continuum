@@ -28,7 +28,7 @@
       state: restarted
 
   - name: Initialize the Kubernetes cluster using kubeadm
-    command: kubeadm init --apiserver-advertise-address={{ cloud_ip }} --apiserver-cert-extra-sans={{ cloud_ip }}  --node-name cloud-master --pod-network-cidr=192.168.0.0/16
+    command: kubeadm init --apiserver-advertise-address={{ cloud_ip }} --apiserver-cert-extra-sans={{ cloud_ip }}  --node-name cloud-master --pod-network-cidr=10.244.0.0/16
 
   - name: Create user Kubernetes directory
     file:
@@ -46,7 +46,7 @@
   - name: Enable networking with Calico, only for cloud mode
     shell: |
       if [ "{{ cloud_mode }}" -gt "0" ]; then
-        kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f /calico.yaml
+        kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f /kube-flannel.yml
       fi
 
   - name: Create join command for worker nodes (cloud-only)

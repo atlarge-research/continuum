@@ -123,12 +123,16 @@ def gather_worker_metrics(worker_output):
         return worker_metrics
 
     worker_set = {
-        "worker_id": None,
-        "total_time": None,
-        "comm_delay_avg": None,
-        "comm_delay_stdev": None,
-        "proc_avg": None,
+        "worker_id": None,  # ID of this worker
+        "total_time": None,  # Total runtime for the worker
+        "comm_delay_avg": None,  # Average endpoint -> worker delay
+        "comm_delay_stdev": None,  # Stdev of delay
+        "proc_avg": None,  # Average time to process 1 data element on worker
     }
+
+    # Use 5th-90th percentile for average
+    lower_percentile = 0.05
+    upper_percentile = 0.90
 
     for i, out in enumerate(worker_output):
         logging.info("Parse output from worker node %i" % (i))
@@ -141,6 +145,7 @@ def gather_worker_metrics(worker_output):
         processing = []
         start_time = 0
         end_time = 0
+        negatives = []
         for line in out:
             if start_time == 0 and "Read image and apply ML" in line:
                 start_time = to_datetime(line)
@@ -158,7 +163,7 @@ def gather_worker_metrics(worker_output):
 
                 units = ["ns"]
                 if time < 0:
-                    logging.warn("Time < 0 should not be possible: %i" % (time))
+                    negatives.append(time)
                     continue
                 elif unit not in units:
                     logging.warn(
@@ -175,9 +180,30 @@ def gather_worker_metrics(worker_output):
         worker_metrics[-1]["total_time"] = round(
             (end_time - start_time).total_seconds(), 2
         )
-        worker_metrics[-1]["comm_delay_avg"] = round(np.mean(delays), 2)
-        worker_metrics[-1]["comm_delay_stdev"] = round(np.std(delays), 2)
-        worker_metrics[-1]["proc_avg"] = round(np.mean(processing), 2)
+
+        if len(negatives) > 0:
+            logging.warn("Got %i negative time values" % (len(negatives)))
+
+        delays.sort()
+        processing.sort()
+
+        logging.info(
+            "Get percentile values between %i - %i"
+            % (lower_percentile * 100, upper_percentile * 100)
+        )
+
+        delays_perc = delays[
+            int(len(delays) * lower_percentile) : int(len(delays) * upper_percentile)
+        ]
+        processing_perc = processing[
+            int(len(processing) * lower_percentile) : int(
+                len(processing) * upper_percentile
+            )
+        ]
+
+        worker_metrics[-1]["comm_delay_avg"] = round(np.mean(delays_perc), 2)
+        worker_metrics[-1]["comm_delay_stdev"] = round(np.std(delays_perc), 2)
+        worker_metrics[-1]["proc_avg"] = round(np.mean(processing_perc), 2)
 
     return sorted(worker_metrics, key=lambda x: x["worker_id"])
 
@@ -195,11 +221,17 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     """
     endpoint_metrics = []
     endpoint_set = {
-        "worker_id": None,
-        "total_time": None,
-        "proc_avg": None,
-        "data_avg": None,
+        "worker_id": None,  # To which worker is this endpoint connected
+        "total_time": None,  # Total runtime of the endpoint
+        "proc_avg": None,  # Average procesing time per data element
+        "data_avg": None,  # Average generated data size
+        "latency_avg": None,  # Average end-to-end latency
+        "latency_stdev": None,  # Stdev latency
     }
+
+    # Use 5th-90th percentile for average
+    lower_percentile = 0.05
+    upper_percentile = 0.90
 
     for out, container_name in zip(endpoint_output, container_names):
         logging.info("Parse output from endpoint %s" % (container_name))
@@ -212,7 +244,6 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         endpoint_metrics[-1]["total_time"] = round(
             (end_time - start_time).total_seconds(), 2
         )
-        endpoint_metrics[-1]["proc_avg"] = 0.0
         endpoint_metrics[-1]["data_avg"] = 0.0
 
         if config["mode"] == "cloud":
@@ -226,6 +257,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
 
         # Parse line by line to get preparation, preprocessing and processing times
         processing = []
+        latency = []
         data_size = []
         for line in out:
             if any(
@@ -234,6 +266,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     "Preparation and preprocessing",
                     "Preparation, preprocessing and processing",
                     "Sending data",
+                    "Latency",
                 ]
             ):
                 try:
@@ -255,13 +288,36 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     )
                     continue
 
-                if unit == "ns":
+                if "Preparation, preprocessing and processing" in line:
                     processing.append(round(number / 10**6, 4))
-                elif unit == "bytes":
+                elif "Preparation and preprocessing" in line:
+                    processing.append(round(number / 10**6, 4))
+                elif "Latency" in line:
+                    latency.append(round(number / 10**6, 4))
+                elif "Sending data" in line:
                     data_size.append(round(number / 10**3, 4))
 
-        if processing != []:
-            endpoint_metrics[-1]["proc_avg"] = round(np.mean(processing), 2)
+        processing.sort()
+        latency.sort()
+
+        logging.info(
+            "Get percentile values between %i - %i"
+            % (lower_percentile * 100, upper_percentile * 100)
+        )
+
+        processing_perc = processing[
+            int(len(processing) * lower_percentile) : int(
+                len(processing) * upper_percentile
+            )
+        ]
+        latency_perc = latency[
+            int(len(latency) * lower_percentile) : int(len(latency) * upper_percentile)
+        ]
+
+        endpoint_metrics[-1]["proc_avg"] = round(np.mean(processing_perc), 2)
+        endpoint_metrics[-1]["latency_avg"] = round(np.mean(latency_perc), 2)
+        endpoint_metrics[-1]["latency_stdev"] = round(np.std(latency_perc), 2)
+
         if data_size != []:
             endpoint_metrics[-1]["data_avg"] = round(np.mean(data_size), 2)
 
@@ -326,7 +382,7 @@ def format_output(config, worker_metrics, endpoint_metrics):
                 "total_time": "total_time (s)",
                 "comm_delay_avg": "delay_avg (ms)",
                 "comm_delay_stdev": "delay_stdev (ms)",
-                "proc_avg": "proc/data (ms)",
+                "proc_avg": "proc_time/data (ms)",
             },
             inplace=True,
         )
@@ -342,20 +398,31 @@ def format_output(config, worker_metrics, endpoint_metrics):
             columns={
                 "worker_id": "connected_to",
                 "total_time": "total_time (s)",
-                "proc_avg": "preproc/data (ms)",
+                "proc_avg": "preproc_time/data (ms)",
                 "data_avg": "data_size_avg (kb)",
+                "latency_avg": "latency_avg (ms)",
+                "latency_stdev": "latency_stdev (ms)",
             },
             inplace=True,
         )
     else:
         df2 = pd.DataFrame(
-            endpoint_metrics, columns=["worker_id", "total_time", "proc_avg"]
+            endpoint_metrics,
+            columns=[
+                "worker_id",
+                "total_time",
+                "proc_avg",
+                "latency_avg",
+                "latency_stdev",
+            ],
         )
         df2.rename(
             columns={
                 "worker_id": "endpoint_id",
                 "total_time": "total_time (s)",
-                "proc_avg": "proc/data (ms)",
+                "proc_avg": "proc_time/data (ms)",
+                "latency_avg": "latency_avg (ms)",
+                "latency_stdev": "latency_stdev (ms)",
             },
             inplace=True,
         )

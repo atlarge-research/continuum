@@ -13,7 +13,7 @@ import os
 import time
 import multiprocessing
 
-MQTT_SERVER = os.environ["MQTT_SERVER_IP"]
+MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
 MQTT_LOGS = os.environ["MQTT_LOGS"]
 CPU_THREADS = int(os.environ["CPU_THREADS"])
 ENDPOINT_CONNECTED = int(os.environ["ENDPOINT_CONNECTED"])
@@ -39,6 +39,22 @@ def on_log(client, userdata, level, buff):
 
 def on_message(client, userdata, msg):
     work_queue.put([time.time_ns(), msg.payload])
+
+
+def on_publish(mqttc, obj, mid):
+    print("Published data")
+
+
+def connect_remote_client(current, ip):
+    # Save IPs from connected endpoints
+    print("[%s] Connect to remote broker on endpoint %s" % (current.name, ip))
+    remote_client = mqtt.Client()
+    remote_client.on_publish = on_publish
+
+    remote_client.connect(ip, port=1883, keepalive=120)
+    print("[%s] Connected with the remote broker" % (current.name))
+
+    return remote_client
 
 
 def do_tflite(queue):
@@ -68,6 +84,8 @@ def do_tflite(queue):
 
     print("[%s] Preparations finished\n" % (current.name), end="")
 
+    remote_clients = {}
+
     while True:
         print("[%s] Get item\n" % (current.name), end="")
         item = queue.get(block=True)
@@ -96,13 +114,19 @@ def do_tflite(queue):
         with images_processed.get_lock():
             images_processed.value += 1
 
+        # Get sender IP, needed to reply back
+        ip_bytes = data[-15:]
+        ip = ip_bytes.decode("utf-8")
+        while ip[0] == "-":
+            ip = ip[1:]
+
         # Get timestamp to calculate latency. We prepended 0's to the time to make it a fixed length
-        t_bytes = data[-25:]
+        t_bytes = data[-35:-15]
         t_old = int(t_bytes.decode("utf-8"))
         print("[%s] Latency (ns): %s\n" % (current.name, str(t_now - t_old)), end="")
 
         # Get data to process
-        data = data[: -len(str(t_now))]
+        data = data[:-35]
         image = Image.open(io.BytesIO(data))
         image = image.resize((iw, ih)).convert(mode="RGB")
 
@@ -132,24 +156,31 @@ def do_tflite(queue):
         sec_frame = time.time_ns() - start_time
         print("[%s] Processing (ns): %i\n" % (current.name, sec_frame), end="")
 
+        # Send result back (currently only timestamp, but adding real feedback is trivial and has no impact)
+        print("[%s] Send result to source: %s" % (current.name, ip))
+        if ip not in remote_clients:
+            remote_clients[ip] = connect_remote_client(current, ip)
+
+        _ = remote_clients[ip].publish(MQTT_TOPIC, t_bytes, qos=0)
+
 
 def main():
-    print("Start connecting to the MQTT broker")
-    print("Broker ip: " + str(MQTT_SERVER))
+    print("Start connecting to the local MQTT broker")
+    print("Broker ip: " + str(MQTT_LOCAL_IP))
     print("Topic: " + str(MQTT_TOPIC))
 
     pool = multiprocessing.Pool(CPU_THREADS, do_tflite, (work_queue,))
 
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.on_subscribe = on_subscribe
+    local_client = mqtt.Client()
+    local_client.on_connect = on_connect
+    local_client.on_message = on_message
+    local_client.on_subscribe = on_subscribe
 
     if MQTT_LOGS == "True":
-        client.on_log = on_log
+        local_client.on_log = on_log
 
-    client.connect(MQTT_SERVER, port=1883, keepalive=300)
-    client.loop_start()
+    local_client.connect(MQTT_LOCAL_IP, port=1883, keepalive=300)
+    local_client.loop_start()
 
     while True:
         time.sleep(1)
@@ -159,7 +190,7 @@ def main():
                 time.sleep(10)
                 break
 
-    client.loop_stop()
+    local_client.loop_stop()
 
     work_queue.close()
     work_queue.join_thread()

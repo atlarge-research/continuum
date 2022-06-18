@@ -160,7 +160,9 @@ def start_endpoint(config, machines):
 
             if config["mode"] == "cloud" or config["mode"] == "edge":
                 cont_name = "%s%i_" % (config["mode"], worker_i) + cont_name
-                env.append("MQTT_SERVER_IP=%s" % (worker_ip))
+                env.append("MQTT_LOCAL_IP=%s" % (endpoint_ssh.split("@")[1]))
+                env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
+                env.append("MQTT_LOGS=True")
             else:
                 env.append(
                     "CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"])

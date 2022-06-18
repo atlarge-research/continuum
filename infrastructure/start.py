@@ -171,7 +171,11 @@ def delete_vms(machines):
 
     # Wait for process to finish. Outcome of destroy command does not matter
     for process in processes:
-        logging.debug("Check output for command [%s]" % ("".join(process.args)))
+        args = process.args
+        if isinstance(args, list):
+            args = " ".join(args)
+
+        logging.debug("Check output for command [%s]" % (args))
         _ = [line.decode("utf-8") for line in process.stdout.readlines()]
         _ = [line.decode("utf-8") for line in process.stderr.readlines()]
 

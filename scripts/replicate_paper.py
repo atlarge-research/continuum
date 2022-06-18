@@ -104,6 +104,7 @@ class Experiment:
             f = open(logpath, "r")
             output = [line for line in f.readlines()]
             run["output"] = output
+            f.close()
 
     def execute(self, command):
         """Execute a process using the subprocess library, and return the output/error or the process
@@ -123,8 +124,8 @@ class Experiment:
         return output, error
 
 
-class Figure4(Experiment):
-    """Replicate figure 4:
+class EndpointScaling(Experiment):
+    """Experiment:
     System load with an increasing number of endpoints connected to a singleworker
 
     So:
@@ -181,7 +182,11 @@ ENDPOINTS/WORKER        %s""" % (
                 command = [
                     "python3",
                     "main.py",
-                    "configuration/fig4/" + config + str(endpoint) + ".cfg",
+                    "-v",
+                    "configuration/experiment_endpoint_scaling/"
+                    + config
+                    + str(endpoint)
+                    + ".cfg",
                 ]
                 command = [str(c) for c in command]
 
@@ -197,48 +202,66 @@ ENDPOINTS/WORKER        %s""" % (
 
     def parse_output(self):
         """For all runs, get the worker runtime"""
-        # Get the line containing the metrics
         for run in self.runs:
-            input = run["output"][-7][1:-2]
-            if "Output in csv" in input:
-                input = run["output"][-6][1:-2]
+            # Get the line containing the metrics
+            for i, line in enumerate(run["output"]):
+                if "Output in csv format" in line:
+                    break
 
-            # Split string into list
-            l = [x.split(",") for x in input.split("\\n")]
-            l = l[:-1]
-            l = [sub[1:] for sub in l]
+            # Get output based on type of run
+            if run["mode"] != "endpoint":
+                worker = run["output"][i + 1][1:-4]
+                endpoint = run["output"][i + 2][1:-4]
+            else:
+                worker = run["output"][i + 1][1:-4]
+                endpoint = run["output"][i + 1][1:-4]
 
-            # Split into header and data
-            header = l[0]
-            data = l[1:]
+            # Get worker output, parse into dataframe
+            w1 = [x.split(",") for x in worker.split("\\n")]
+            w2 = [sub[1:] for sub in w1]
+            wdf = pd.DataFrame(w2[1:], columns=w2[0])
+            wdf["proc_time/data (ms)"] = pd.to_numeric(
+                wdf["proc_time/data (ms)"], downcast="float"
+            )
 
-            # Convert into dataframe
-            df = pd.DataFrame(data, columns=header)
-            df["proc/data (ms)"] = pd.to_numeric(df["proc/data (ms)"], downcast="float")
+            # Get endpoint output, parse into dataframe
+            e1 = [x.split(",") for x in endpoint.split("\\n")]
+            e2 = [sub[1:] for sub in e1]
+            edf = pd.DataFrame(e2[1:], columns=e2[0])
+            edf["latency_avg (ms)"] = pd.to_numeric(
+                edf["latency_avg (ms)"], downcast="float"
+            )
 
-            # Calculate num. of images processed per second by the cloud/edge/endpoint
-            processed_rate = df["proc/data (ms)"].mean()
+            # For worker, get the number of images processed per second across all cores
+            processed_rate = wdf["proc_time/data (ms)"].mean()
             processed_rate = 1000.0 / processed_rate
             processed_rate *= run["cores"]
 
-            # Calculate number of images generated per second
+            # Calculate the generated number of images per second by endpoints
             frequency = 5
             requested_rate = float(frequency * run["endpoints"])
 
-            # Calculate usage of processors
+            # Calculate the utilization by comparing the generated workload to
+            # the time it took to process the workload
             run["usage"] = int((requested_rate / processed_rate) * 100)
+
+            # For endpoint, report the average end-to-end latency
+            run["latency"] = int(edf["latency_avg (ms)"].mean())
 
     def plot(self):
         # set width of bar
         plt.rcParams.update({"font.size": 22})
-        fig = plt.subplots(figsize=(12, 6))
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+        ax2 = ax1.twinx()
 
         barWidth = 0.2
         bars = np.arange(len(self.modes))
 
         colors = ["dimgray", "gray", "darkgray", "lightgray"]
 
-        y_total = []
+        y_total_load = []
+        y_total_latency = []
+        xs = []
         for endpoint, color in zip(self.endpoints, colors):
             # Get the x and y data
             y = [run["usage"] for run in self.runs if run["endpoints"] == endpoint]
@@ -249,42 +272,60 @@ ENDPOINTS/WORKER        %s""" % (
                 x = x[:-1]
 
             # Plot the bar
-            plt.bar(
+            ax1.bar(
                 x,
                 y,
                 color=color,
                 width=barWidth * 0.9,
                 label="Endpoints: %s" % (endpoint),
             )
-            y_total += y
+            y_total_load += y
+
+            # For the latency line plot
+            y = [run["latency"] for run in self.runs if run["endpoints"] == endpoint]
+            y_total_latency += y
+            xs += x
+
+        # Plot latency line
+        ys = y_total_latency
+        xs, ys = zip(*sorted(zip(xs, ys)))
+        ax2.plot(xs, ys, color="midnightblue", linewidth=3.0, marker="o", markersize=12)
 
         # Add horizontal lines every 100 percent
-        plt.axhline(y=100, color="k", linestyle="-", linewidth=3)
-        plt.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        plt.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=100, color="k", linestyle="-", linewidth=3)
+        ax1.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=400, color="k", linestyle="-", linewidth=1, alpha=0.5)
 
-        # Adding titles
+        # Set x axis with xticks
         plt.xlabel("Deployment Mode")
-        plt.ylabel("System Load")
-
-        # Adding Xticks
         label_ticks = [
             r + (len(self.modes) / 2) * barWidth for r in range(len(self.modes))
         ]
         label_ticks[-1] -= (
             len([endpoint for endpoint in self.endpoints if endpoint > 1]) / 2
         ) * barWidth
-        plt.xticks(label_ticks, [mode.capitalize() for mode in self.modes])
+        ax1.set_xticks(label_ticks, [mode.capitalize() for mode in self.modes])
 
-        plt.legend(loc="upper left", framealpha=1.0)
-        plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
-        plt.ylim(0, 400)
-        plt.yticks(np.arange(0, 500, 100))
+        # Set y axis 1: load
+        ax1.set_ylabel("System Load")
+        ax1.legend(loc="upper left", framealpha=1.0)
+        ax1.yaxis.set_major_formatter(mtick.PercentFormatter())
+        ax1.set_ylim(0, 500)
+        ax1.set_yticks(np.arange(0, 600, 100))
 
+        # Set y axis 2: latency
+        ax2.set_ylabel("End-to-end latency (ms)")
+        ax2.set_yscale("log")
+        ax2.set_ylim(100, 10000000)
+        ax2.legend(["End-to-end latency"], loc="upper right", framealpha=1.0)
+
+        # Save
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        plt.savefig("./logs/fig4_%s.png" % (t), bbox_inches="tight")
+        plt.savefig("./logs/EndpointScaling_load_%s.pdf" % (t), bbox_inches="tight")
 
-        self.y = y_total
+        self.y_load = y_total_load
+        self.y_latency = y_total_latency
 
     def print_result(self):
         i = 0
@@ -294,159 +335,8 @@ ENDPOINTS/WORKER        %s""" % (
                     break
 
                 logging.info(
-                    "Mode: %10s | Endpoints: %3s | System Load: %i%%"
-                    % (mode, endpoint, self.y[i])
-                )
-                i += 1
-
-
-class Figure5(Experiment):
-    """Replicate figure 5:
-    System load with an increasing number of CPU cores per worker
-
-    So:
-    - Run with all 3 deployment modes
-    - Vary number of CPU cores per worker
-    """
-
-    def __init__(self, resume):
-        Experiment.__init__(self, resume)
-
-        self.modes = ["cloud", "edge", "endpoint"]
-        self.cores = [1, 2, 4]
-
-        self.y = None
-
-    def __repr__(self):
-        """Returns this string when called as print(object)"""
-        return """
-APP                     image-classificatiom
-MODES                   %s
-WORKERS                 1
-CORES                   %s
-ENDPOINTS/WORKER        1""" % (
-            ",".join(self.modes),
-            ",".join([str(x) for x in self.cores]),
-        )
-
-    def generate(self):
-        """Generate commands to run the benchmark based on the current settings"""
-        # Differ in deployment modes
-        for mode in self.modes:
-            # Differ in #cores per worker
-            for core in self.cores:
-                command = []
-                if not (mode == "cloud" and core == 1):
-                    command = [
-                        "python3",
-                        "main.py",
-                        "configuration/fig5/%s_cores%i.cfg" % (mode, core),
-                    ]
-                    command = [str(c) for c in command]
-
-                run = {
-                    "mode": mode,
-                    "cores": core,
-                    "endpoints": 1,
-                    "command": command,
-                    "output": None,
-                    "worker_time": None,
-                }
-                self.runs.append(run)
-
-    def parse_output(self):
-        """For all runs, get the worker runtime"""
-        # Get the line containing the metrics
-        for run in self.runs:
-            # Kubernetes does not work with only 1 core
-            if run["mode"] == "cloud" and run["cores"] == 1:
-                run["usage"] = 0
-                continue
-
-            input = run["output"][-7][1:-2]
-            if "Output in csv" in input:
-                input = run["output"][-6][1:-2]
-
-            # Split string into list
-            l = [x.split(",") for x in input.split("\\n")]
-            l = l[:-1]
-            l = [sub[1:] for sub in l]
-
-            # Split into header and data
-            header = l[0]
-            data = l[1:]
-
-            # Convert into dataframe
-            df = pd.DataFrame(data, columns=header)
-            df["proc/data (ms)"] = pd.to_numeric(df["proc/data (ms)"], downcast="float")
-
-            # Calculate num. of images processed per second by the cloud/edge/endpoint
-            processed_rate = df["proc/data (ms)"].mean()
-            processed_rate = 1000.0 / processed_rate
-            processed_rate *= run["cores"]
-
-            # Calculate number of images generated per second
-            frequency = 5
-            requested_rate = float(frequency * run["endpoints"])
-
-            # Calculate usage of processors
-            run["usage"] = int((requested_rate / processed_rate) * 100)
-
-    def plot(self):
-        # set width of bar
-        plt.rcParams.update({"font.size": 22})
-        fig = plt.subplots(figsize=(12, 6))
-
-        barWidth = 0.2
-        bars = np.arange(len(self.modes))
-
-        colors = ["dimgray", "gray", "darkgray"]
-
-        y_total = []
-        for core, color in zip(self.cores, colors):
-            # Get the x and y data
-            y = [run["usage"] for run in self.runs if run["cores"] == core]
-            x = [x + math.log2(core) * barWidth * 1.2 for x in bars]
-
-            # Plot the bar
-            plt.bar(
-                x, y, color=color, width=barWidth * 1.1, label="CPU Cores: %s" % (core)
-            )
-
-            y_total += y
-
-        # Add horizontal lines every 100 percent
-        plt.axhline(y=100, color="k", linestyle="-", linewidth=3)
-        plt.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        plt.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
-
-        # Adding titles
-        plt.xlabel("Deployment Mode")
-        plt.ylabel("System Load")
-
-        # Adding Xticks
-        label_ticks = [
-            r + (len(self.modes) / 2) * barWidth for r in range(len(self.modes))
-        ]
-        plt.xticks(label_ticks, [mode.capitalize() for mode in self.modes])
-
-        plt.legend(loc="upper left", framealpha=1.0)
-        plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
-        plt.ylim(0, 400)
-        plt.yticks(np.arange(0, 500, 100))
-
-        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        plt.savefig("./logs/fig5_%s.png" % (t), bbox_inches="tight")
-
-        self.y = y_total
-
-    def print_result(self):
-        i = 0
-        for core in self.cores:
-            for mode in self.modes:
-                logging.info(
-                    "Mode: %10s | Cores: %3s | System Load: %i%%"
-                    % (mode, core, self.y[i])
+                    "Mode: %10s | Endpoints: %3s | System Load: %4i%% | Latency: %10i ms"
+                    % (mode, endpoint, self.y_load[i], self.y_latency[i])
                 )
                 i += 1
 
@@ -457,23 +347,24 @@ def main(args):
     Args:
         args (Namespace): Argparse object
     """
-    if args.figure == "figure4":
-        logging.info("Replicate figure 4")
-        fig = Figure4(args.resume)
-    elif args.figure == "figure5":
-        logging.info("Replicate figure 5")
-        fig = Figure5(args.resume)
+    if args.experiment == "EndpointScaling":
+        logging.info("Experiment: Scale endpoint connect to a single worker")
+        exp = EndpointScaling(args.resume)
+    elif args.experiment == "Deployments":
+        logging.info("Experiment: Change deployments between cloud, edge, and local")
+        pass
+        # exp = Deployments(args.resume)
     else:
-        logging.error("Invalid figure: %s" % (args.figure))
+        logging.error("Invalid experiment: %s" % (args.experiment))
         sys.exit()
 
-    logging.info(fig)
-    fig.generate()
-    fig.check_resume()
-    fig.run_commands()
-    fig.parse_output()
-    fig.plot()
-    fig.print_result()
+    logging.info(exp)
+    exp.generate()
+    exp.check_resume()
+    exp.run_commands()
+    exp.parse_output()
+    exp.plot()
+    exp.print_result()
 
 
 if __name__ == "__main__":
@@ -481,7 +372,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "figure", choices=["figure4", "figure5"], help="Figure to replicate"
+        "experiment",
+        choices=["EndpointScaling", "Deployments"],
+        help="Experiment to replicate",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="increase verbosity level"
@@ -490,7 +383,7 @@ if __name__ == "__main__":
         "-r",
         "--resume",
         type=lambda s: datetime.datetime.strptime(s, "%Y-%m-%d_%H:%M:%S"),
-        help='Resume a previous figure replication from datetime "YYYY-MM-DD_HH:mm:ss"',
+        help='Resume a previous Experiment from datetime "YYYY-MM-DD_HH:mm:ss"',
     )
     args = parser.parse_args()
 
