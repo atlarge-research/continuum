@@ -117,9 +117,134 @@ def start_worker(config, machines):
             sys.exit()
 
 
+def start_worker_mist(config, machines):
+    """Start running the mist worker subscriber containers using Docker.
+    Wait for them to finish, and get their output.
+    Every edge worker will only have 1 application running taking up all resources.
+    Multiple subscribers per node won't work, they all read the same messages from the MQTT bus.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+
+    Returns:
+        list(list(str)): Names of docker containers launched per machine
+    """
+    logging.info("Deploy Docker containers on endpoints with publisher application")
+
+    processes = []
+    container_names = []
+
+    for worker_ssh in config["edge_ssh"]:
+        cont_name = worker_ssh.split("@")[0]
+        worker_ip = worker_ssh.split("@")[1]
+
+        # Set variables for the application
+        env = [
+            "MQTT_LOCAL_IP=%s" % (worker_ip),
+            "MQTT_LOGS=True",
+            "CPU_THREADS=%i" % (config["infrastructure"]["edge_cores"]),
+            "ENDPOINT_CONNECTED=%i"
+            % (
+                int(
+                    config["infrastructure"]["endpoint_nodes"]
+                    / config["infrastructure"]["edge_nodes"]
+                )
+            ),
+        ]
+
+        logging.info("Launch %s" % (cont_name))
+
+        command = (
+            [
+                "docker",
+                "container",
+                "run",
+                "--detach",
+                "--cpus=%i" % (config["infrastructure"]["edge_cores"]),
+                "--memory=%ig" % (config["infrastructure"]["edge_cores"]),
+                "--network=host",
+            ]
+            + ["--env %s" % (e) for e in env]
+            + [
+                "--name",
+                cont_name,
+                "%s/%s" % (config["registry"], config["images"][0].split(":")[1]),
+            ]
+        )
+
+        processes.append(
+            machines[0].process(command, output=False, ssh=True, ssh_target=worker_ssh)
+        )
+        container_names.append(cont_name)
+
+    # Checkout process output
+    for process in processes:
+        logging.debug("Check output of command [%s]" % (" ".join(process.args)))
+        output = [line.decode("utf-8") for line in process.stdout.readlines()]
+        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+
+        if (
+            error != []
+            and "Your kernel does not support swap limit capabilities" not in error[0]
+        ):
+            logging.error("".join(error))
+            sys.exit()
+        elif output == []:
+            logging.error("No output from docker container")
+            sys.exit()
+
+    # Wait for containers to be succesfully deployed
+    for worker_ssh in config["edge_ssh"]:
+        cont_name = worker_ssh.split("@")[0]
+        deployed = False
+
+        while not deployed:
+            command = [
+                "docker",
+                "container",
+                "ls",
+                "-a",
+                "--format",
+                '"{{.ID}}: {{.Status}} {{.Names}}"',
+            ]
+            output, error = machines[0].process(
+                command, ssh=True, ssh_target=worker_ssh
+            )
+
+            if error != []:
+                logging.error("".join(error))
+                sys.exit()
+            elif output == []:
+                logging.error("No output from docker container")
+                sys.exit()
+
+            # Get status of docker container
+            status_line = None
+            for line in output:
+                if cont_name in line:
+                    status_line = line
+
+            if status_line == None:
+                logging.error(
+                    "ERROR: Could not find status of container %s running in VM %s: %s"
+                    % (cont_name, worker_ssh.split("@")[0], "".join(output))
+                )
+                sys.exit()
+
+            parsed = line.rstrip().split(" ")
+
+            # If not yet up, wait
+            if parsed[1] == "Up":
+                deployed = True
+            else:
+                time.sleep(5)
+
+    return container_names
+
+
 def start_endpoint(config, machines):
     """Start running the endpoint containers using Docker.
-    Wait for them to finish, and get their output.
 
     Args:
         config (dict): Parsed configuration
@@ -138,7 +263,10 @@ def start_endpoint(config, machines):
         config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
     )
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        workers -= 1
+        # If there is a control machine, dont count that one in
+        if config["benchmark"]["resource_manager"] != "mist":
+            workers -= 1
+
         end_per_work = int(config["infrastructure"]["endpoint_nodes"] / workers)
         worker_ips = config["cloud_ips"] + config["edge_ips"]
         off = 1
@@ -218,18 +346,19 @@ def start_endpoint(config, machines):
     return container_names
 
 
-def wait_endpoint_completion(config, machines, container_names):
+def wait_endpoint_completion(machines, sshs, container_names):
     """Wait for all containers to be finished running the benchmark on endpoints
+    OR for all mist containers, which also use docker so this function can be reused
 
     Args:
-        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        sshs (list(str)): SSH addresses to edge or endpoint VMs
         container_names (list(str)): Names of docker containers launched
     """
-    logging.info("Wait on all endpoint containers to finish")
+    logging.info("Wait on all endpoint or mist containers to finish")
     time.sleep(10)
 
-    for ssh, cont_name in zip(config["endpoint_ssh"], container_names):
+    for ssh, cont_name in zip(sshs, container_names):
         logging.info(
             "Wait for container to finish: %s on VM %s" % (cont_name, ssh.split("@")[0])
         )
@@ -281,7 +410,7 @@ def wait_endpoint_completion(config, machines, container_names):
                 )
                 sys.exit()
 
-    logging.info("All endpoint containers have finished")
+    logging.info("All endpoint or mist containers have finished")
 
 
 def wait_worker_completion(config, machines):
@@ -353,14 +482,20 @@ def start(config, machines):
         list(str): Raw output from the benchmark
     """
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        start_worker(config, machines)
+        if config["benchmark"]["resource_manager"] != "mist":
+            start_worker(config, machines)
+        else:
+            container_names_mist = start_worker_mist(config, machines)
 
     container_names = start_endpoint(config, machines)
 
     # Wait for benchmark to finish
-    wait_endpoint_completion(config, machines, container_names)
+    wait_endpoint_completion(machines, config["endpoint_ssh"], container_names)
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        wait_worker_completion(config, machines)
+        if config["benchmark"]["resource_manager"] != "mist":
+            wait_worker_completion(config, machines)
+        else:
+            wait_endpoint_completion(machines, config["edge_ssh"], container_names_mist)
 
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
@@ -368,7 +503,12 @@ def start(config, machines):
 
     worker_output = []
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        worker_output = output.get_worker_output(config, machines)
+        if config["benchmark"]["resource_manager"] != "mist":
+            worker_output = output.get_worker_output(config, machines)
+        else:
+            worker_output = output.get_worker_output_mist(
+                config, machines, container_names_mist
+            )
 
     # Parse output into dicts, and print result
     worker_metrics, endpoint_metrics = output.gather_metrics(

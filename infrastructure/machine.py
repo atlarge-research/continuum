@@ -364,6 +364,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine == machines[0]
             and not config["infrastructure"]["infra_only"]
             and not config["mode"] == "endpoint"
+            and not config["benchmark"]["resource_manager"] == "mist"
         ):
             machine.cloud_controller = int(nodes["cloud"] > 0)
             machine.clouds = nodes["cloud"] - int(nodes["cloud"] > 0)
@@ -419,15 +420,18 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.base_names.append("base" + str(i))
             base_index += 1
         else:
+            # Use Kubeedge setup code for mist computing
+            rm = config["benchmark"]["resource_manager"]
+            if config["benchmark"]["resource_manager"] == "mist":
+                rm = "kubeedge"
+
             if machine.cloud_controller + machine.clouds > 0:
                 machine.base_ips.append(
                     config["prefixIP"]
                     + "."
                     + str(config["postfixIP"] + config["postfixIP_base"] + base_index)
                 )
-                machine.base_names.append(
-                    "base_cloud_%s%i" % (config["benchmark"]["resource_manager"], i)
-                )
+                machine.base_names.append("base_cloud_%s%i" % (rm, i))
                 base_index += 1
 
             if machine.edges > 0:
@@ -436,9 +440,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                     + "."
                     + str(config["postfixIP"] + config["postfixIP_base"] + base_index)
                 )
-                machine.base_names.append(
-                    "base_edge_%s%i" % (config["benchmark"]["resource_manager"], i)
-                )
+                machine.base_names.append("base_edge_%s%i" % (rm, i))
                 base_index += 1
 
             if machine.endpoints > 0:

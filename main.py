@@ -426,7 +426,7 @@ def parse_config(parser, arg):
             sec,
             "resource_manager",
             str,
-            lambda x: x in ["kubernetes", "kubeedge"],
+            lambda x: x in ["kubernetes", "kubeedge", "mist"],
             mandatory=False,
         )
         option_check(
@@ -460,19 +460,13 @@ def parse_config(parser, arg):
             if mode == "cloud" and not (
                 new["benchmark"]["resource_manager"] in ["kubernetes"]
             ):
-                parser.error(
-                    "Config: Cloud-mode requires Kubernetes (#clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0)"
-                )
+                parser.error("Config: Cloud-mode requires Kubernetes")
             elif mode == "edge" and not (
-                new["benchmark"]["resource_manager"] in ["kubeedge"]
+                new["benchmark"]["resource_manager"] in ["kubeedge", "mist"]
             ):
-                parser.error(
-                    "Config: Edge-mode requires KubeEdge (#clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0)"
-                )
+                parser.error("Config: Edge-mode requires KubeEdge or Mist")
         elif mode != "endpoint":
-            parser.error(
-                "Config: Only endpoint-only mode (#clouds=0, #edges=0, and #endpoints>0) doesnt require resource managers"
-            )
+            parser.error("Config: Endpoint-only mode doesnt require resource managers")
 
         # Extended checks: Number of nodes should match deployment mode
         if mode == "cloud" and (
@@ -481,11 +475,21 @@ def parse_config(parser, arg):
             parser.error(
                 "Config: For cloud benchmark, #clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0"
             )
-        elif mode == "edge" and (
-            cloud != 1 or edge == 0 or endpoint == 0 or endpoint % edge != 0
+        elif (
+            mode == "edge"
+            and new["benchmark"]["resource_manager"] == "kubeedge"
+            and (cloud != 1 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
         ):
             parser.error(
-                "Config: For edge benchmark, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0"
+                "Config: For edge benchmark with KubeEdge, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0"
+            )
+        elif (
+            mode == "edge"
+            and new["benchmark"]["resource_manager"] == "mist"
+            and (cloud != 0 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
+        ):
+            parser.error(
+                "Config: For mist benchmarks, #clouds=0, #edges>0, #endpoints>0, and #edges % #endpoints=0"
             )
         elif mode == "endpoint" and (cloud != 0 or edge != 0 or endpoint == 0):
             parser.error(

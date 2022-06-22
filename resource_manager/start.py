@@ -13,7 +13,7 @@ def start(config, machines):
     from .endpoint import start as endpoint
 
     if "resource_manager" in config["benchmark"]:
-        if config["benchmark"]["resource_manager"] == "kubeedge":
+        if config["benchmark"]["resource_manager"] in ["kubeedge", "mist"]:
             from .kubeedge import start
         elif config["benchmark"]["resource_manager"] == "kubernetes":
             from .kubernetes import start

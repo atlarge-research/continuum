@@ -341,6 +341,110 @@ ENDPOINTS/WORKER        %s""" % (
                 i += 1
 
 
+class Deployments(Experiment):
+    """Experiment:
+    Run large scale cloud, edge, and endpoint deployments
+    """
+
+    def __init__(self, resume):
+        Experiment.__init__(self, resume)
+
+        self.config_path = "configuration/experiment_large_deployments/"
+        self.configs = [
+            "cloud.cfg",
+            "edge_large.cfg",
+            "edge_small.cfg",
+            "mist.cfg",
+            "endpoint_base.cfg",
+        ]
+        self.modes = ["cloud", "edge", "edge", "edge", "endpoint"]
+        self.cores = [4, 4, 2, 2, 1]
+        self.endpoints = [4, 4, 2, 1, 1]
+
+        self.y = None
+
+    def __repr__(self):
+        """Returns this string when called as print(object)"""
+        return """
+APP                     image-classification
+CONFIGS                 %s""" % (
+            ",".join([str(config) for config in self.configs]),
+        )
+
+    def generate(self):
+        """Generate commands to run the benchmark based on the current settings"""
+        for config, mode, core, endpoint in zip(
+            self.configs, self.modes, self.cores, self.endpoints
+        ):
+            command = ["python3", "main.py", "-v", self.config_path + config]
+            command = [str(c) for c in command]
+
+            run = {
+                "mode": mode,
+                "cores": core,
+                "endpoints": endpoint,
+                "config": config.split(".")[0],
+                "command": command,
+                "output": None,
+                "worker_time": None,
+            }
+            self.runs.append(run)
+
+    def parse_output(self):
+        """For all runs, get the worker runtime"""
+        for run in self.runs:
+            # Get the line containing the metrics
+            for i, line in enumerate(run["output"]):
+                if "Output in csv format" in line:
+                    break
+
+            # Get output based on type of run
+            if run["mode"] != "endpoint":
+                worker = run["output"][i + 1][1:-4]
+                endpoint = run["output"][i + 2][1:-4]
+            else:
+                worker = run["output"][i + 1][1:-4]
+                endpoint = run["output"][i + 1][1:-4]
+
+            # Get worker output, parse into dataframe
+            w1 = [x.split(",") for x in worker.split("\\n")]
+            w2 = [sub[1:] for sub in w1]
+            wdf = pd.DataFrame(w2[1:], columns=w2[0])
+            wdf["proc_time/data (ms)"] = pd.to_numeric(
+                wdf["proc_time/data (ms)"], downcast="float"
+            )
+
+            # Get endpoint output, parse into dataframe
+            e1 = [x.split(",") for x in endpoint.split("\\n")]
+            e2 = [sub[1:] for sub in e1]
+            edf = pd.DataFrame(e2[1:], columns=e2[0])
+            edf["latency_avg (ms)"] = pd.to_numeric(
+                edf["latency_avg (ms)"], downcast="float"
+            )
+
+            # For worker, get the number of images processed per second across all cores
+            processed_rate = wdf["proc_time/data (ms)"].mean()
+            processed_rate = 1000.0 / processed_rate
+            processed_rate *= run["cores"]
+
+            # Calculate the generated number of images per second by endpoints
+            frequency = 5
+            requested_rate = float(frequency * run["endpoints"])
+
+            # Calculate the utilization by comparing the generated workload to
+            # the time it took to process the workload
+            run["usage"] = int((requested_rate / processed_rate) * 100)
+
+            # For endpoint, report the average end-to-end latency
+            run["latency"] = int(edf["latency_avg (ms)"].mean())
+
+    def plot(self):
+        return
+
+    def print_result(self):
+        return
+
+
 def main(args):
     """Main function
 
@@ -353,7 +457,7 @@ def main(args):
     elif args.experiment == "Deployments":
         logging.info("Experiment: Change deployments between cloud, edge, and local")
         pass
-        # exp = Deployments(args.resume)
+        exp = Deployments(args.resume)
     else:
         logging.error("Invalid experiment: %s" % (args.experiment))
         sys.exit()

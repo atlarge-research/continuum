@@ -275,8 +275,10 @@ def copy_files(config, machines):
             out.append(machine.copy_files(config["base"] + "/.tmp/inventory", dest))
             out.append(machine.copy_files(config["base"] + "/.tmp/inventory_vms", dest))
 
-            if not config["infrastructure"]["infra_only"] and (
-                config["mode"] == "cloud" or config["mode"] == "edge"
+            if (
+                not config["infrastructure"]["infra_only"]
+                and (config["mode"] == "cloud" or config["mode"] == "edge")
+                and config["benchmark"]["resource_manager"] != "mist"
             ):
                 path = (
                     config["base"]
@@ -317,21 +319,16 @@ def copy_files(config, machines):
         # For cloud/edge/endpoint specific
         if not config["infrastructure"]["infra_only"]:
             if config["mode"] == "cloud" or config["mode"] == "edge":
-                path = (
-                    config["base"]
-                    + "/resource_manager/"
-                    + config["benchmark"]["resource_manager"]
-                    + "/cloud/"
-                )
+                # Use Kubeedge setup code for mist computing
+                rm = config["benchmark"]["resource_manager"]
+                if config["benchmark"]["resource_manager"] == "mist":
+                    rm = "kubeedge"
+
+                path = config["base"] + "/resource_manager/" + rm + "/cloud/"
                 out.append(machine.copy_files(path, dest, recursive=True))
 
                 if config["mode"] == "edge":
-                    path = (
-                        config["base"]
-                        + "/resource_manager/"
-                        + config["benchmark"]["resource_manager"]
-                        + "/edge/"
-                    )
+                    path = config["base"] + "/resource_manager/" + rm + "/edge/"
                     out.append(machine.copy_files(path, dest, recursive=True))
 
             path = config["base"] + "/resource_manager/endpoint/"

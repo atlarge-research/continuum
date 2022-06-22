@@ -93,6 +93,40 @@ def get_worker_output(config, machines):
     return worker_output
 
 
+def get_worker_output_mist(config, machines, container_names):
+    """Get the output of worker mist applications
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+
+    Returns:
+        list(list(str)): Output of each container ran as a worker in the mist
+    """
+    logging.info("Gather output from subscribers")
+
+    worker_output = []
+    for ssh, cont_name in zip(config["edge_ssh"], container_names):
+        logging.info("Get output from mist worker %s on VM %s" % (cont_name, ssh))
+
+        # Alternatively, use docker logs -t container_name for detailed timestamps
+        # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
+        command = ["docker", "logs", "-t", cont_name]
+        output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+
+        if error != []:
+            logging.error("".join(error))
+            sys.exit()
+        elif output == []:
+            logging.error("Container %s output empty" % (cont_name))
+            sys.exit()
+
+        output = [line.rstrip() for line in output]
+        worker_output.append(output)
+
+    return worker_output
+
+
 def to_datetime(s):
     """Parse a datetime string from docker logs to a Python datetime object
 

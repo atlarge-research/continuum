@@ -228,7 +228,10 @@ def base_image(config, machines):
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
 
-        if error != [] and not (process.args.split(' ')[0] == 'ssh' and any(['Connection to ' in e for e in error])):
+        if error != [] and not (
+            process.args.split(" ")[0] == "ssh"
+            and any(["Connection to " in e for e in error])
+        ):
             logging.error("".join(error))
             sys.exit()
         elif "Domain " not in output[0] or " is being shutdown" not in output[0]:
@@ -252,7 +255,7 @@ def launch_vms(config, machines, repeat=[]):
         list: Commands to execute again
     """
     # Launch the VMs concurrently
-    logging.info('Start VMs')
+    logging.info("Start VMs")
 
     processes = []
     if repeat == []:
@@ -360,7 +363,7 @@ def start(config, machines):
         if repeat == []:
             break
         elif i == 1:
-            logging.error("ERROR AFTER %i REPS: %s" % (i+1, " | ".join(repeat)))
+            logging.error("ERROR AFTER %i REPS: %s" % (i + 1, " | ".join(repeat)))
             sys.exit()
 
         i += 1

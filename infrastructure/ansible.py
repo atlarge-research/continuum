@@ -181,7 +181,9 @@ def create_inventory_vm(config, machines):
 
     if not config["infrastructure"]["infra_only"]:
         # Tier specific groups
-        if config["mode"] == "cloud" or config["mode"] == "edge":
+        if (config["mode"] == "cloud" or config["mode"] == "edge") and config[
+            "benchmark"
+        ]["resource_manager"] != "mist":
             f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips[0]))
 
             # Cloud controller (is always on machine 0)
