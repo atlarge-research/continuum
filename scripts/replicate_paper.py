@@ -272,13 +272,23 @@ ENDPOINTS/WORKER        %s""" % (
                 x = x[:-1]
 
             # Plot the bar
-            ax1.bar(
-                x,
-                y,
-                color=color,
-                width=barWidth * 0.9,
-                label="Endpoints: %s" % (endpoint),
-            )
+            if xs == []:
+                # Only label for the first bar
+                ax1.bar(
+                    x,
+                    y,
+                    color=color,
+                    width=barWidth * 0.9,
+                    label="System Load",
+                )
+            else:
+                ax1.bar(
+                    x,
+                    y,
+                    color=color,
+                    width=barWidth * 0.9,
+                )
+
             y_total_load += y
 
             # For the latency line plot
@@ -289,7 +299,25 @@ ENDPOINTS/WORKER        %s""" % (
         # Plot latency line
         ys = y_total_latency
         xs, ys = zip(*sorted(zip(xs, ys)))
-        ax2.plot(xs, ys, color="midnightblue", linewidth=3.0, marker="o", markersize=12)
+        ax2.plot(
+            xs[:4],
+            ys[:4],
+            color="midnightblue",
+            linewidth=3.0,
+            marker="o",
+            markersize=12,
+        )
+        ax2.plot(
+            xs[4:8],
+            ys[4:8],
+            color="midnightblue",
+            linewidth=3.0,
+            marker="o",
+            markersize=12,
+        )
+        ax2.plot(
+            xs[8], ys[8], color="midnightblue", linewidth=3.0, marker="o", markersize=12
+        )
 
         # Add horizontal lines every 100 percent
         ax1.axhline(y=100, color="k", linestyle="-", linewidth=3)
@@ -297,15 +325,21 @@ ENDPOINTS/WORKER        %s""" % (
         ax1.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
         ax1.axhline(y=400, color="k", linestyle="-", linewidth=1, alpha=0.5)
 
-        # Set x axis with xticks
-        plt.xlabel("Deployment Mode")
         label_ticks = [
-            r + (len(self.modes) / 2) * barWidth for r in range(len(self.modes))
+            i + j * barWidth
+            for i, j in [
+                (0, 0),
+                (0, 1),
+                (0, 2),
+                (0, 3),
+                (1, 0),
+                (1, 1),
+                (1, 2),
+                (1, 3),
+                (2, 0),
+            ]
         ]
-        label_ticks[-1] -= (
-            len([endpoint for endpoint in self.endpoints if endpoint > 1]) / 2
-        ) * barWidth
-        ax1.set_xticks(label_ticks, [mode.capitalize() for mode in self.modes])
+        ax1.set_xticks(label_ticks, ["1", "2", "4", "8", "1", "2", "4", "8", "1"])
 
         # Set y axis 1: load
         ax1.set_ylabel("System Load")
@@ -355,11 +389,10 @@ class Deployments(Experiment):
             "edge_large.cfg",
             "edge_small.cfg",
             "mist.cfg",
-            "endpoint_base.cfg",
         ]
-        self.modes = ["cloud", "edge", "edge", "edge", "endpoint"]
-        self.cores = [4, 4, 2, 2, 1]
-        self.endpoints = [4, 4, 2, 1, 1]
+        self.modes = ["cloud", "edge", "edge", "edge"]
+        self.cores = [4, 4, 2, 2]
+        self.endpoints = [4, 4, 2, 1]
 
         self.y = None
 
@@ -413,6 +446,9 @@ CONFIGS                 %s""" % (
             wdf["proc_time/data (ms)"] = pd.to_numeric(
                 wdf["proc_time/data (ms)"], downcast="float"
             )
+            wdf["delay_avg (ms)"] = pd.to_numeric(
+                wdf["delay_avg (ms)"], downcast="float"
+            )
 
             # Get endpoint output, parse into dataframe
             e1 = [x.split(",") for x in endpoint.split("\\n")]
@@ -421,9 +457,12 @@ CONFIGS                 %s""" % (
             edf["latency_avg (ms)"] = pd.to_numeric(
                 edf["latency_avg (ms)"], downcast="float"
             )
+            edf["preproc_time/data (ms)"] = pd.to_numeric(
+                edf["preproc_time/data (ms)"], downcast="float"
+            )
 
             # For worker, get the number of images processed per second across all cores
-            processed_rate = wdf["proc_time/data (ms)"].mean()
+            processed_rate = wdf["proc_time/data (ms)"].min()
             processed_rate = 1000.0 / processed_rate
             processed_rate *= run["cores"]
 
@@ -436,13 +475,114 @@ CONFIGS                 %s""" % (
             run["usage"] = int((requested_rate / processed_rate) * 100)
 
             # For endpoint, report the average end-to-end latency
-            run["latency"] = int(edf["latency_avg (ms)"].mean())
+            run["latency"] = int(edf["latency_avg (ms)"].min())
+
+            # Save breakdown of latency
+            run["latency_breakdown"] = [
+                int(wdf["proc_time/data (ms)"].min()),
+                int(
+                    edf["latency_avg (ms)"].min()
+                    - edf["preproc_time/data (ms)"].min()
+                    - wdf["proc_time/data (ms)"].min()
+                ),
+            ]
 
     def plot(self):
-        return
+        # set width of bar
+        plt.rcParams.update({"font.size": 22})
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+
+        barWidth = 0.2
+
+        y_total_load = []
+        y_total_latency = []
+        xs = []
+
+        y = [run["usage"] for run in self.runs]
+        x = [x * barWidth for x in range(len(self.configs))]
+
+        ax1.bar(
+            x,
+            y,
+            color="dimgray",
+            width=barWidth * 0.9,
+            label="System Load",
+        )
+
+        y_total_load += y
+
+        # For the latency line plot
+        y = [run["latency"] for run in self.runs]
+        y_total_latency += y
+        xs += x
+
+        # Add horizontal lines every 100 percent
+        ax1.axhline(y=100, color="k", linestyle="-", linewidth=3)
+        ax1.axhline(y=75, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=50, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=25, color="k", linestyle="-", linewidth=1, alpha=0.5)
+
+        ax1.set_xticks(x, ["Cloud", "Edge-Large", "Edge-Small", "Mist"])
+        ax1.set_xlabel("Deployment")
+
+        # Set y axis 1: load
+        ax1.set_ylabel("System Load")
+        ax1.yaxis.set_major_formatter(mtick.PercentFormatter())
+        ax1.set_ylim(0, 100)
+        ax1.set_yticks(np.arange(0, 125, 25))
+
+        # Save
+        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+        plt.savefig("./logs/LargeDeployments_load_%s.pdf" % (t), bbox_inches="tight")
+
+        self.y_load = y_total_load
+        self.y_latency = y_total_latency
+
+        self.plot2()
+
+    def plot2(self):
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        colors = ["dimgray", "lightgray"]
+        bars = ["Cloud", "Edge-Large", "Edge-Small", "Mist"]
+        stacks = ["Processing", "Communication"]
+
+        raw_vals = [run["latency_breakdown"] for run in self.runs]
+        ax.bar(
+            bars,
+            list(list(zip(*raw_vals))[0]),
+            color=colors[0],
+            label=stacks[0],
+        )
+        ax.bar(
+            bars,
+            list(list(zip(*raw_vals))[1]),
+            color=colors[1],
+            label=stacks[1],
+            bottom=list(list(zip(*raw_vals))[0]),
+        )
+
+        ax.set_ylabel("Time (ms)")
+        ax.set_ylim(0, 400)
+        ax.set_xlabel("Deployment")
+        ax.legend(loc="upper left", framealpha=1.0)
+        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+        plt.savefig(
+            "./logs/LargeDeployments_breakdown_%s.pdf" % (t), bbox_inches="tight"
+        )
 
     def print_result(self):
-        return
+        for i, config in enumerate(self.configs):
+            logging.info(
+                "Config: %15s | System Load: %4i%% | Latency: %10i ms | Comp: %10i ms | Comm: %10i ms"
+                % (
+                    config,
+                    self.y_load[i],
+                    self.y_latency[i],
+                    self.runs[i]["latency_breakdown"][0],
+                    self.runs[i]["latency_breakdown"][1],
+                )
+            )
 
 
 def main(args):
