@@ -414,7 +414,7 @@ def docker_registry(config, machines):
             "run",
             "-d",
             "-p",
-            "%s:%s" % (config["registry"], config["registry"]),
+            "%s:%s" % (port, port),
             "--restart=always",
             "--name",
             "registry",
