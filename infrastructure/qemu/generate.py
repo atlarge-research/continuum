@@ -14,14 +14,16 @@ DOMAIN = """\
 <domain type='kvm'>
     <name>%s</name>
     <memory>%i</memory>
-    <os>
-        <type>hvm</type>
+    <os %s>
+        <type %s>hvm</type>
         <boot dev="hd" />
+        %s
     </os>
     <features>
         <acpi/>
     </features>
     <vcpu placement="static">%i</vcpu>
+    %s
     <cputune>
         <period>%i</period>
         <quota>%i</quota>
@@ -79,7 +81,7 @@ write_files:
     network:
       version: 2
       ethernets:
-        ens2:
+        %s:
           dhcp4: false
           addresses: [%s/16]
           gateway4: %s
@@ -184,6 +186,21 @@ def start(config, machines):
         # Counter for pinning vcpu to physical cpu
         start_core = 0
 
+        efi = ""
+        machine_spec = ""
+        loader = ""
+        host_passthrough = ""
+
+        interface = "ens2"
+
+        if(machine.arch == "aarm64"):
+            efi = "firmware='efi'"
+            machine_spec = "arch='aarch64' machine='virt'"
+            loader = "<loader readonly='yes' secure='no'/>"
+            host_passthrough = "<cpu mode='host-passthrough' />"
+
+            interface = "enp2s1"
+
         # Clouds
         for ip, name in zip(
             machine.cloud_controller_ips + machine.cloud_ips,
@@ -204,7 +221,11 @@ def start(config, machines):
                 % (
                     name,
                     memory,
+                    efi,
+                    machine_spec,
+                    loader,
                     cc,
+                    host_passthrough,
                     period,
                     int(period * config["infrastructure"]["cloud_quota"]),
                     "\n".join(pinnings),
@@ -218,7 +239,7 @@ def start(config, machines):
             f = open(".tmp/user_data_%s.yml" % (name), "w")
             hostname = name.replace("_", "")
             f.write(
-                USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway)
+                USER_DATA % (hostname, hostname, name, name, ssh_key, name, interface, ip, gateway)
             )
             f.close()
 
@@ -239,7 +260,11 @@ def start(config, machines):
                 % (
                     name,
                     memory,
+                    efi,
+                    machine_spec,
+                    loader,
                     ec,
+                    host_passthrough,
                     period,
                     int(period * config["infrastructure"]["edge_quota"]),
                     "\n".join(pinnings),
@@ -251,7 +276,7 @@ def start(config, machines):
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            f.write(USER_DATA % (name, name, name, name, ssh_key, name, interface, ip, gateway))
             f.close()
 
         # Endpoints
@@ -271,7 +296,11 @@ def start(config, machines):
                 % (
                     name,
                     memory,
+                    efi,
+                    machine_spec,
+                    loader,
                     pc,
+                    host_passthrough,
                     period,
                     int(period * config["infrastructure"]["endpoint_quota"]),
                     "\n".join(pinnings),
@@ -283,16 +312,16 @@ def start(config, machines):
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            f.write(USER_DATA % (name, name, name, name, ssh_key, name, interface, ip, gateway))
             f.close()
 
         # Base image(s)
         for ip, name in zip(machine.base_ips, machine.base_names):
             f = open(".tmp/domain_%s.xml" % (name), "w")
 
-            f.write(DOMAIN % (name, 1048576, 1, 0, 0, "", bridge_name, name, name))
+            f.write(DOMAIN % (name, 1048576, efi, machine_spec, loader, 1, host_passthrough, 0, 0, "", bridge_name, name, name))
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            f.write(USER_DATA % (name, name, name, name, ssh_key, name, interface, ip, gateway))
             f.close()
