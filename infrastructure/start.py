@@ -463,7 +463,8 @@ def docker_registry(config, machines):
 
         dest = config["registry"] + "/" + image.split(":")[1]
         commands = [
-            ["docker", "pull", image],
+            ["docker", "pull", "--platform", "amd64", image],
+            ["docker", "pull", "--platform", "arm64", image],
             ["docker", "tag", image, dest],
             ["docker", "push", dest],
         ]
