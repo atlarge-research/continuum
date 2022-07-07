@@ -220,6 +220,11 @@ def parse_config(parser, arg):
         )
 
         option_check(
+            parser, config, new, sec, "custom_scheduling", bool, lambda x: x in [True, False]
+        )
+
+
+        option_check(
             parser,
             config,
             new,
@@ -414,6 +419,31 @@ def parse_config(parser, arg):
         parser.error(
             "Config: number of cloud+edge+endpoint nodes should be >= 1, not 0"
         )
+
+    if(new["infrastructure"]["custom_scheduling"]):
+        sec = "local"
+        new[sec] = dict()
+        if(not config.has_section(sec)):
+            parser.error(
+                "Config: custom scheduling specified but no specifications for machine: " + sec
+            )
+
+        option_check(parser, config, new, sec, "cloud_nodes", int, lambda x: x >= 0)
+        option_check(parser, config, new, sec, "edge_nodes", int, lambda x: x >= 0)
+        option_check(parser, config, new, sec, "endpoint_nodes", int, lambda x: x >= 0)
+
+        externals = config["infrastructure"]["external_physical_machines"].split(",")
+        for i in range(len(externals)):
+            sec = externals[i]
+            new[sec] = dict()
+            if(not config.has_section(sec)):
+                parser.error(
+                    "Config: custom scheduling specified but no specifications for machine: " + sec
+                )
+            option_check(parser, config, new, sec, "cloud_nodes", int, lambda x: x >= 0)
+            option_check(parser, config, new, sec, "edge_nodes", int, lambda x: x >= 0)
+            option_check(parser, config, new, sec, "endpoint_nodes", int, lambda x: x >= 0)
+
 
     # Check benchmark
     sec = "benchmark"

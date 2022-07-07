@@ -12,6 +12,22 @@ from . import machine as m
 from . import ansible
 from . import network
 
+def schedule_custom(config,machines):
+    logging.info("Schedule VMs on machine: As specified in the config file")
+    machines_per_node = [
+        {"cloud": 0, "edge": 0, "endpoint": 0} for _ in range(len(machines))
+    ]
+
+    machines_per_node[0]["cloud"] = config["local"]["cloud_nodes"]
+    machines_per_node[0]["endpoint"] = config["local"]["endpoint_nodes"]
+    machines_per_node[0]["edge"] = config["local"]["edge_nodes"]
+    for i in range(len(machines)-1):
+        sec = config["infrastructure"]["external_physical_machines"][i]
+        machines_per_node[i+1]["cloud"] = config[sec]["cloud_nodes"]
+        machines_per_node[i+1]["endpoint"] = config[sec]["endpoint_nodes"]
+        machines_per_node[i+1]["edge"] = config[sec]["edge_nodes"]
+
+    return machines_per_node
 
 def schedule_equal(config, machines):
     """Distribute the VMs equally over the available machines, based on utilization
@@ -572,6 +588,8 @@ def start(config):
 
     if config["infrastructure"]["cpu_pin"]:
         nodes_per_machine = schedule_pin(config, machines)
+    elif config["infrastructure"]["cpu_custom"]:
+        nodes_per_machine = schedule_custom(config, machines)
     else:
         nodes_per_machine = schedule_equal(config, machines)
 
