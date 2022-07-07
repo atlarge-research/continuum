@@ -21,6 +21,7 @@ class Machine:
         """
         self.name = name
         self.is_local = is_local
+        self.arch = None
 
         # Name with only alphanumeric characters
         self.name_sanitized = re.sub(r"\W+", "", name)
@@ -58,6 +59,7 @@ class Machine:
         """Returns this string when called as print(machine_object)"""
         return """
 [ MACHINE NAME: %20s ]
+ARCH                    %s
 IS_LOCAL                %s
 NAME_SANITIZED          %s
 USER                    %s
@@ -78,6 +80,7 @@ EDGE_NAMES              %s
 ENDPOINT_NAMES          %s
 BASE_NAMES              %s""" % (
             self.name,
+            self.arch,
             str(self.is_local),
             self.name_sanitized,
             self.user,
@@ -199,6 +202,26 @@ BASE_NAMES              %s""" % (
             )
 
             self.cores = int(threads / threads_per_core)
+
+        command = "uname"
+
+        if self.is_local:
+            command = [command, "-m"]
+        else:
+            command = ["ssh", self.name, command, "-m"]
+
+        output, error = self.process(command)
+
+        if output == []:
+            logging.error("".join(error))
+            sys.exit()
+        else:
+            output = output[0].strip("\n")
+            if(output != "x86_64" or output != "aarch64"):
+                print("Warning: architecture not recognized, assuming x86_64")
+                self.arch = "x86_64"
+            else:
+                self.arch = output
 
     def copy_files(self, source, dest, recursive=False):
         """Copy files from host machine to destination machine.
