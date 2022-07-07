@@ -217,7 +217,7 @@ BASE_NAMES              %s""" % (
             sys.exit()
         else:
             output = output[0].strip("\n")
-            if(output != "x86_64" or output != "aarch64"):
+            if(output != "x86_64" and output != "aarch64"):
                 print("Warning: architecture not recognized, assuming x86_64")
                 self.arch = "x86_64"
             else:
