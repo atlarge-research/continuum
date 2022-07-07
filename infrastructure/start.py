@@ -589,7 +589,7 @@ def start(config):
 
     if config["infrastructure"]["cpu_pin"]:
         nodes_per_machine = schedule_pin(config, machines)
-    elif config["infrastructure"]["cpu_custom"]:
+    elif config["infrastructure"]["custom_scheduling"]:
         nodes_per_machine = schedule_custom(config, machines)
     else:
         nodes_per_machine = schedule_equal(config, machines)
