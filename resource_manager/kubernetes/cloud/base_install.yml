@@ -2,6 +2,17 @@
 - hosts: base_cloud
   become: true
   tasks:
+  - name: stop unattended-upgrades
+    command: systemctl stop unattended-upgrades
+
+  - name: add ip route
+    command: ip route add default via 192.168.0.1 dev ens2
+    when: ansible_architecture == "x86_64"
+
+  - name: add ip route
+    command: ip route add default via 192.168.0.1 dev enp2s1
+    when: ansible_architecture == "aarch64"
+
   - name: Install packages that allow apt to be used over HTTPS
     apt:
       name: "{{ packages }}"

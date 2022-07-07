@@ -2,6 +2,17 @@
 - hosts: edges
   become: true
   tasks:
+  - name: stop unattended-upgrades
+    command: systemctl stop unattended-upgrades
+
+  - name: add ip route
+    command: ip route add default via 192.168.0.1 dev ens2
+    when: ansible_architecture == "x86_64"
+
+  - name: add ip route
+    command: ip route add default via 192.168.0.1 dev enp2s1
+    when: ansible_architecture == "aarch64"
+
   - name: Ensure docker service is running
     systemd:
       name: docker
@@ -17,7 +28,7 @@
 
   - name: Wait for join command to be finished on cloud controller
     local_action:
-      module: wait_for
+      module: wait_for timeout=500
       path: /tmp/join-command.txt
     become: false
 
