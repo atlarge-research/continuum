@@ -19,10 +19,17 @@
       ansible_python_interpreter: "/usr/bin/python"
     when: ansible_os_family == "RedHat"
 
-  - name: Get ubuntu source image
+  - name: Get ubuntu source image x86
+     get_url:
+       url: https://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-amd64.img
+       dest: "/home/{{ username }}/.continuum/ubuntu2004.img"
+    when: ansible_architecture == "x86_64"
+
+  - name: Get ubuntu source image arm64
     get_url:
-      url: https://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-amd64.img
+      url: https://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-arm64.img
       dest: "/home/{{ username }}/.continuum/ubuntu2004.img"
+    when: ansible_architecture == "aarch64"
 
   - name: Convert image to qcow2 format
     command: qemu-img convert -O qcow2 "/home/{{ username }}/.continuum/ubuntu2004.img" /var/lib/libvirt/images/ubuntu2004.qcow2

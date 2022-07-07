@@ -40,8 +40,10 @@
 
   - name: Install NetPerf
     shell: |
+      wget http://savannah.gnu.org/cgi-bin/viewcvs/*checkout*/config/config/config.guess -O ./config.guess
       ./configure --enable-spin
       make
       make install
     args:
       chdir: "/home/{{ username }}/netperf-netperf-2.7.0/"
+      warn: false
