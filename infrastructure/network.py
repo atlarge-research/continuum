@@ -194,7 +194,7 @@ def start(config, machines):
     for ssh in config["cloud_ssh"]:
         command = []
         disk = 1
-        arch = get_host_machine(ssh.split("@")[0],machines).arch
+        arch = get_node_host(ssh.split("@")[0],machines).arch
 
         # Between cloud and other cloud nodes
         targets = list(
@@ -222,7 +222,7 @@ def start(config, machines):
     for ssh in config["edge_ssh"]:
         command = []
         disk = 1
-        arch = get_host_machine(ssh.split("@")[0],machines).arch
+        arch = get_node_host(ssh.split("@")[0],machines).arch
 
         # Between edge and other edge nodes
         targets = list(set(config["edge_ips"]) - set([ssh.split("@")[1]]))
@@ -247,7 +247,7 @@ def start(config, machines):
     for ssh in config["endpoint_ssh"]:
         command = []
         disk = 1
-        arch = get_host_machine(ssh.split("@")[0],machines).arch
+        arch = get_node_host(ssh.split("@")[0],machines).arch
 
         # Between endpoint and cloud nodes
         targets = config["control_ips"] + config["cloud_ips"]
