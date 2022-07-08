@@ -464,9 +464,13 @@ def docker_registry(config, machines):
         dest = config["registry"] + "/" + image.split(":")[1]
         commands = [
             ["docker", "pull", "--platform", "amd64", image],
+            ["docker", "tag", image, dest + ":amd64"],
+            ["docker", "push", dest + ":amd64"],
             ["docker", "pull", "--platform", "arm64", image],
-            ["docker", "tag", image, dest],
-            ["docker", "push", dest],
+            ["docker", "tag", image, dest + ":arm64"],
+            ["docker", "push", dest + ":arm64"],
+            ["docker", "manifest", "create", "--insecure", "--amend", dest, dest + ":amd64", dest + ":arm64"],
+            ["docker", "manifest", "push", "--insecure", dest],
         ]
 
         for command in commands:
@@ -475,7 +479,6 @@ def docker_registry(config, machines):
             if error != []:
                 logging.error("".join(error))
                 sys.exit()
-
 
 def docker_pull(config, machines, base_names):
     """Pull the correct docker images into the base images.
@@ -531,6 +534,7 @@ def docker_pull(config, machines, base_names):
 
                 for image in images:
                     command = ["docker", "pull", image]
+
                     processes.append(
                         [
                             name,
@@ -542,6 +546,7 @@ def docker_pull(config, machines, base_names):
                             ),
                         ]
                     )
+
 
     # Checkout process output
     for name, process in processes:
