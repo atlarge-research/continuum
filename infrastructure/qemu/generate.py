@@ -193,7 +193,7 @@ def start(config, machines):
 
         interface = "ens2"
 
-        if(machine.arch == "aarm64"):
+        if(machine.arch == "aarch64"):
             efi = "firmware='efi'"
             machine_spec = "arch='aarch64' machine='virt'"
             loader = "<loader readonly='yes' secure='no'/>"
