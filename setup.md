@@ -72,7 +72,8 @@ On some distro's (not for Ubuntu) the following may also be required.
 For configuring ISCSI on the host I found this article about it on archlinux wiki to be quite helpful (https://wiki.archlinux.org/title/ISCSI/LIO).
 The article explains how to configure ISCSI to provide an image file for other systems.
 As an example, I will show my iscsi setup which is configured to work with three raspberry pi's.
-`/> ls
+```
+/> ls
 o- / ...................................................................................................... [...]
   o- backstores ........................................................................................... [...]
   | o- block ............................................................................... [Storage Objects: 0]
@@ -118,7 +119,8 @@ o- / ...........................................................................
   |       o- 0.0.0.0:3260 .................................................................................. [OK]
   o- loopback ...................................................................................... [Targets: 0]
   o- vhost ......................................................................................... [Targets: 0]
-  o- xen-pvscsi .................................................................................... [Targets: 0]`
+  o- xen-pvscsi .................................................................................... [Targets: 0]
+```
 
 ## Final changes on the raspberry pi
 
