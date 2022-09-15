@@ -518,9 +518,15 @@ def add_constants(config):
                 "redplanet00/kubeedge-applications:image_classification_combined",
             ]
 
-    config["prefixIP"] = "192.168.122"
-    config["postfixIP"] = 10
-    config["postfixIP_base"] = 200
+    # 100.100.100.100
+    # Prefix .Mid.Post
+    config["prefixIP"] = "192.168"
+    config["middleIP"] = 100
+    config["postfixIP_lower"] = 2
+    config["postfixIP_upper"] = 252
+
+    # Different IP range for base images
+    config["middleIP_base"] = 90
 
     # Get Docker registry IP
     try:
@@ -660,3 +666,4 @@ if __name__ == "__main__":
     set_logging(args)
 
     main(args)
+
