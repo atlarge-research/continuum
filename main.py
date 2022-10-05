@@ -153,9 +153,10 @@ def parse_config(parser, arg):
         option_check(parser, config, new, sec, "edge_nodes", int, lambda x: x >= 0)
         option_check(parser, config, new, sec, "endpoint_nodes", int, lambda x: x >= 0)
 
-        # If no cloud nodes are given, it doesn't matter what their specifications are
-        if new["infrastructure"]["cloud_nodes"] > 0:
+        if new[sec]["cloud_nodes"] > 0:
             option_check(parser, config, new, sec, "cloud_cores", int, lambda x: x >= 2)
+            new[sec]['cloud_memory'] = new[sec]['cloud_cores']
+            option_check(parser, config, new, sec, "cloud_memory", int, lambda x: x >= 1, mandatory=False)
             option_check(
                 parser,
                 config,
@@ -166,32 +167,26 @@ def parse_config(parser, arg):
                 lambda x: 0.1 <= x <= 1.0,
             )
         else:
-            option_check(parser, config, new, sec, "cloud_cores", int, lambda x: x >= 0)
-            option_check(
-                parser,
-                config,
-                new,
-                sec,
-                "cloud_quota",
-                float,
-                lambda x: 0.0 <= x <= 1.0,
-            )
+            new[sec]['cloud_cores'] = 0
+            new[sec]['cloud_memory'] = 0
+            new[sec]['cloud_quota'] = 0.0
 
-        if new["infrastructure"]["edge_nodes"] > 0:
+        if new[sec]["edge_nodes"] > 0:
             option_check(parser, config, new, sec, "edge_cores", int, lambda x: x >= 1)
+            new[sec]['edge_memory'] = new[sec]['edge_cores']
+            option_check(parser, config, new, sec, "edge_memory", int, lambda x: x >= 1, mandatory=False)
             option_check(
                 parser, config, new, sec, "edge_quota", float, lambda x: 0.1 <= x <= 1.0
             )
         else:
-            option_check(parser, config, new, sec, "edge_cores", int, lambda x: x >= 0)
-            option_check(
-                parser, config, new, sec, "edge_quota", float, lambda x: 0.0 <= x <= 1.0
-            )
+            new[sec]['edge_cores'] = 0
+            new[sec]['edge_memory'] = 0
+            new[sec]['edge_quota'] = 0.0
 
-        if new["infrastructure"]["endpoint_nodes"] > 0:
-            option_check(
-                parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 1
-            )
+        if new[sec]["endpoint_nodes"] > 0:
+            option_check(parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 1)
+            new[sec]['endpoint_memory'] = new[sec]['endpoint_cores']
+            option_check(parser, config, new, sec, "endpoint_memory", int, lambda x: x >= 1, mandatory=False)
             option_check(
                 parser,
                 config,
@@ -202,18 +197,9 @@ def parse_config(parser, arg):
                 lambda x: 0.1 <= x <= 1.0,
             )
         else:
-            option_check(
-                parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 0
-            )
-            option_check(
-                parser,
-                config,
-                new,
-                sec,
-                "endpoint_quota",
-                float,
-                lambda x: 0.0 <= x <= 1.0,
-            )
+            new[sec]['endpoint_cores'] = 0
+            new[sec]['endpoint_memory'] = 0
+            new[sec]['endpoint_quota'] = 0.0
 
         option_check(
             parser, config, new, sec, "cpu_pin", bool, lambda x: x in [True, False]
@@ -442,9 +428,28 @@ def parse_config(parser, arg):
             sec,
             "application",
             str,
-            lambda x: x in ["image_classification"],
+            lambda x: x in ["image_classification", "empty"],
         )
-        option_check(parser, config, new, sec, "frequency", int, lambda x: x >= 1)
+
+        # Set default values first
+        new["benchmark"]["application_worker_cpu"] = float(new["infrastructure"]["cloud_cores"] - 0.5)
+        new["benchmark"]["application_worker_memory"] = float(new["infrastructure"]["cloud_cores"] - 0.5)
+        option_check(parser, config, new, sec, "application_worker_cpu", float, lambda x: x >= 0.1, mandatory=False)
+        option_check(parser, config, new, sec, "application_worker_memory", float, lambda x: x >= 0.1, mandatory=False)
+
+        if new["infrastructure"]["endpoint_nodes"] > 0:
+            new["benchmark"]["application_endpoint_cpu"] = float(new["infrastructure"]["endpoint_cores"])
+            new["benchmark"]["application_endpoint_memory"] = float(new["infrastructure"]["endpoint_cores"])
+            option_check(parser, config, new, sec, "application_endpoint_cpu", float, lambda x: x >= 0.1, mandatory=False)
+            option_check(parser, config, new, sec, "application_endpoint_memory", float, lambda x: x >= 0.1, mandatory=False)
+    
+        new["benchmark"]["applications_per_worker"] = 1
+        option_check(parser, config, new, sec, "applications_per_worker", int, lambda x: x >= 1, mandatory=False)
+
+        if new["benchmark"]["application"] == "image_classification":
+            option_check(parser, config, new, sec, "frequency", int, lambda x: x >= 1)
+        elif new["benchmark"]["application"] == "empty":
+            option_check(parser, config, new, sec, "sleep_time", int, lambda x: x >= 1)
 
         # Set mode
         mode = "endpoint"
@@ -469,32 +474,43 @@ def parse_config(parser, arg):
             parser.error("Config: Endpoint-only mode doesnt require resource managers")
 
         # Extended checks: Number of nodes should match deployment mode
-        if mode == "cloud" and (
-            cloud < 2 or edge != 0 or endpoint == 0 or endpoint % (cloud - 1) != 0
-        ):
-            parser.error(
-                "Config: For cloud benchmark, #clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0"
-            )
-        elif (
-            mode == "edge"
-            and new["benchmark"]["resource_manager"] == "kubeedge"
-            and (cloud != 1 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
-        ):
-            parser.error(
-                "Config: For edge benchmark with KubeEdge, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0"
-            )
-        elif (
-            mode == "edge"
-            and new["benchmark"]["resource_manager"] == "mist"
-            and (cloud != 0 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
-        ):
-            parser.error(
-                "Config: For mist benchmarks, #clouds=0, #edges>0, #endpoints>0, and #edges % #endpoints=0"
-            )
-        elif mode == "endpoint" and (cloud != 0 or edge != 0 or endpoint == 0):
-            parser.error(
-                "Config: For endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0"
-            )
+        # For image_classification app
+        if new["benchmark"]["application"] == "image_classification":
+            if mode == "cloud" and (
+                cloud < 2 or edge != 0 or endpoint == 0 or endpoint % (cloud - 1) != 0
+            ):
+                parser.error(
+                    "Config: For image_classification + cloud benchmark, #clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0"
+                )
+            elif (
+                mode == "edge"
+                and new["benchmark"]["resource_manager"] == "kubeedge"
+                and (cloud != 1 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
+            ):
+                parser.error(
+                    "Config: For image_classification + edge benchmark with KubeEdge, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0"
+                )
+            elif (
+                mode == "edge"
+                and new["benchmark"]["resource_manager"] == "mist"
+                and (cloud != 0 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
+            ):
+                parser.error(
+                    "Config: For image_classification + mist benchmarks, #clouds=0, #edges>0, #endpoints>0, and #edges % #endpoints=0"
+                )
+            elif mode == "endpoint" and (cloud != 0 or edge != 0 or endpoint == 0):
+                parser.error(
+                    "Config: For image_classification + endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0"
+                )
+        elif new["benchmark"]["application"] == "empty":
+            if mode != "cloud":
+                parser.error(
+                    "Config: For empty application, only cloud mode is supproted, #clouds>2, #edges=0, #endpoints=0"
+                )
+            elif cloud < 2 or edge != 0 or endpoint != 0:
+                parser.error(
+                    "Config: For empty + cloud benchmark, #clouds>2, #edges=0, #endpoints=0"
+                )
     elif new["infrastructure"]["infra_only"] and config.has_section(sec):
         parser.error("Config: benchmark section is present but infra_only=True")
 
@@ -517,6 +533,8 @@ def add_constants(config):
                 "redplanet00/kubeedge-applications:image_classification_publisher",
                 "redplanet00/kubeedge-applications:image_classification_combined",
             ]
+        elif config["benchmark"]["application"] == "empty":
+            config["images"] = ["redplanet00/kubeedge-applications:empty"]
 
     # 100.100.100.100
     # Prefix .Mid.Post

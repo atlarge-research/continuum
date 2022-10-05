@@ -190,7 +190,7 @@ def start(config, machines):
             machine.cloud_controller_names + machine.cloud_names,
         ):
             f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = 1048576 * cc
+            memory = int(1048576 * config["infrastructure"]["cloud_memory"])
 
             if config["infrastructure"]["cpu_pin"]:
                 pinnings = [
@@ -225,7 +225,7 @@ def start(config, machines):
         # Edges
         for ip, name in zip(machine.edge_ips, machine.edge_names):
             f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = 1048576 * ec
+            memory = int(1048576 * config["infrastructure"]["edge_memory"])
 
             if config["infrastructure"]["cpu_pin"]:
                 pinnings = [
@@ -257,7 +257,7 @@ def start(config, machines):
         # Endpoints
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
             f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = 1048576 * pc
+            memory = int(1048576 * config["infrastructure"]["endpoint_memory"])
 
             if config["infrastructure"]["cpu_pin"]:
                 pinnings = [

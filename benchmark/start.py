@@ -29,26 +29,34 @@ def start_worker(config, machines):
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
-        workers = (
-            config["infrastructure"]["cloud_nodes"] - 1
-        )  # Includes cloud controller
-        cores = config["infrastructure"]["cloud_cores"]
+        workers = config["infrastructure"]["cloud_nodes"] - 1
     elif config["mode"] == "edge":
         workers = config["infrastructure"]["edge_nodes"]
-        cores = config["infrastructure"]["edge_cores"]
 
-    vars = {
+    # Global variables for each applications
+    global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
         "image": "%s/%s" % (config["registry"], config["images"][0].split(":")[1]),
-        "mqtt_logs": True,
-        "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / workers),
-        "memory_req": cores - 0.5,
-        "memory_lim": cores,
-        "cpu_req": cores - 0.5,
-        "cpu_lim": cores,
-        "replicas": workers - 1,  # In cloud mode, this includes controller
-        "cpu_threads": cores,
+        "memory_req": config['benchmark']['application_worker_memory'],
+        "cpu_req": config['benchmark']['application_worker_cpu'],
+        "replicas": workers * config["benchmark"]["applications_per_worker"],
     }
+
+    # Application-specific variables
+    if config["benchmark"]["application"] == 'image_classification':
+        app_vars = {
+            "container_port": 1883,
+            "mqtt_logs": True,
+            "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / workers),
+            "cpu_threads": max(1, int(config['benchmark']['application_cpu'])),
+        }
+    elif config["benchmark"]["application"] == 'empty':
+        app_vars = {
+            "sleep_time": config["benchmark"]["sleep_time"]
+        }
+
+    # Merge the two var dicts
+    vars = {**global_vars, **app_vars}
 
     vars_str = ""
     for k, v in vars.items():
@@ -161,8 +169,8 @@ def start_worker_mist(config, machines):
                 "container",
                 "run",
                 "--detach",
-                "--cpus=%i" % (config["infrastructure"]["edge_cores"]),
-                "--memory=%ig" % (config["infrastructure"]["edge_cores"]),
+                "--cpus=%i" % (config["benchmark"]["application_worker_cpu"]),
+                "--memory=%ig" % (config["benchmark"]["application_worker_memory"]),
                 "--network=host",
             ]
             + ["--env %s" % (e) for e in env]
@@ -304,8 +312,8 @@ def start_endpoint(config, machines):
                     "container",
                     "run",
                     "--detach",
-                    "--cpus=%i" % (config["infrastructure"]["endpoint_cores"]),
-                    "--memory=%ig" % (config["infrastructure"]["endpoint_cores"]),
+                    "--cpus=%i" % (config["benchmark"]["application_endpoint_cpu"]),
+                    "--memory=%ig" % (config["benchmark"]["application_endpoint_memory"]),
                     "--network=host",
                 ]
                 + ["--env %s" % (e) for e in env]

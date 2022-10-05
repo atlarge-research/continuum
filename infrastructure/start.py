@@ -282,9 +282,11 @@ def copy_files(config, machines):
             ):
                 path = (
                     config["base"]
-                    + "/resource_manager/"
+                    + "/application/"
+                    + config["benchmark"]["application"]
+                    + "/launch_benchmark_"
                     + config["benchmark"]["resource_manager"]
-                    + "/launch_benchmark.yml"
+                    + ".yml"
                 )
                 out.append(machine.copy_files(path, dest))
 
