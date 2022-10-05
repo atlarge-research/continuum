@@ -221,14 +221,15 @@ def create_inventory_vm(config, machines):
                         % (name, ip, name, name)
                     )
 
-        # Endpoitn VM group
-        f.write("\n[endpoints]\n")
-        for machine in machines:
-            for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
-                f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
-                    % (name, ip, name, name)
-                )
+        # Endpoint VM group
+        if config["infrastructure"]["endpoint_nodes"]:
+            f.write("\n[endpoints]\n")
+            for machine in machines:
+                for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
+                    f.write(
+                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
+                        % (name, ip, name, name)
+                    )
 
     # Make group with all base VMs for netperf installation
     f.write("\n[base]\n")
@@ -261,13 +262,14 @@ def create_inventory_vm(config, machines):
                             % (name, ip, name, name)
                         )
 
-        f.write("\n[base_endpoint]\n")
-        for machine in machines:
-            for name, ip in zip(machine.base_names, machine.base_ips):
-                if "base_endpoint" in name.rstrip(string.digits):
-                    f.write(
-                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
-                        % (name, ip, name, name)
-                    )
+        if config["infrastructure"]["endpoint_nodes"]:
+            f.write("\n[base_endpoint]\n")
+            for machine in machines:
+                for name, ip in zip(machine.base_names, machine.base_ips):
+                    if "base_endpoint" in name.rstrip(string.digits):
+                        f.write(
+                            "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
+                            % (name, ip, name, name)
+                        )
 
     f.close()

@@ -333,8 +333,9 @@ def copy_files(config, machines):
                     path = config["base"] + "/resource_manager/" + rm + "/edge/"
                     out.append(machine.copy_files(path, dest, recursive=True))
 
-            path = config["base"] + "/resource_manager/endpoint/"
-            out.append(machine.copy_files(path, dest, recursive=True))
+            if config["infrastructure"]["endpoint_nodes"]:
+                path = config["base"] + "/resource_manager/endpoint/"
+                out.append(machine.copy_files(path, dest, recursive=True))
 
         for output, error in out:
             if error != []:

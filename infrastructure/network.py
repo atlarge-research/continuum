@@ -282,7 +282,6 @@ def netperf_commands(target_ips):
 
     Args:
         target_ips (list(str)): List of ips to use netperf to
-        mode (str): Generate latency or throughput commands
 
     Returns:
         list(str): List of netperf commands

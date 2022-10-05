@@ -383,17 +383,24 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
 
             logging.debug("------------------------------------")
 
-    logging.debug("------------------------------------")
-    logging.debug("ENDPOINT OUTPUT")
-    logging.debug("------------------------------------")
-    for out in endpoint_output:
-        for line in out:
-            logging.debug(line)
-
+    if config["infrastructure"]["endpoint_nodes"]:
         logging.debug("------------------------------------")
+        logging.debug("ENDPOINT OUTPUT")
+        logging.debug("------------------------------------")
+        for out in endpoint_output:
+            for line in out:
+                logging.debug(line)
+
+            logging.debug("------------------------------------")
 
     worker_metrics = gather_worker_metrics(worker_output)
-    endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
+
+    endpoint_metrics = []
+    if config["infrastructure"]["endpoint_nodes"]:
+        endpoint_metrics = gather_endpoint_metrics(
+            config, endpoint_output, container_names
+        )
+
     return worker_metrics, endpoint_metrics
 
 
@@ -423,51 +430,54 @@ def format_output(config, worker_metrics, endpoint_metrics):
         df1_no_indices = df1.to_string(index=False)
         logging.info("\n" + df1_no_indices)
 
-    logging.info("------------------------------------")
-    logging.info("ENDPOINT OUTPUT")
-    logging.info("------------------------------------")
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        df2 = pd.DataFrame(endpoint_metrics)
-        df2.rename(
-            columns={
-                "worker_id": "connected_to",
-                "total_time": "total_time (s)",
-                "proc_avg": "preproc_time/data (ms)",
-                "data_avg": "data_size_avg (kb)",
-                "latency_avg": "latency_avg (ms)",
-                "latency_stdev": "latency_stdev (ms)",
-            },
-            inplace=True,
-        )
-    else:
-        df2 = pd.DataFrame(
-            endpoint_metrics,
-            columns=[
-                "worker_id",
-                "total_time",
-                "proc_avg",
-                "latency_avg",
-                "latency_stdev",
-            ],
-        )
-        df2.rename(
-            columns={
-                "worker_id": "endpoint_id",
-                "total_time": "total_time (s)",
-                "proc_avg": "proc_time/data (ms)",
-                "latency_avg": "latency_avg (ms)",
-                "latency_stdev": "latency_stdev (ms)",
-            },
-            inplace=True,
-        )
+    df2_output = ""
+    if config["infrastructure"]["endpoint_nodes"]:
+        logging.info("------------------------------------")
+        logging.info("ENDPOINT OUTPUT")
+        logging.info("------------------------------------")
+        if config["mode"] == "cloud" or config["mode"] == "edge":
+            df2 = pd.DataFrame(endpoint_metrics)
+            df2.rename(
+                columns={
+                    "worker_id": "connected_to",
+                    "total_time": "total_time (s)",
+                    "proc_avg": "preproc_time/data (ms)",
+                    "data_avg": "data_size_avg (kb)",
+                    "latency_avg": "latency_avg (ms)",
+                    "latency_stdev": "latency_stdev (ms)",
+                },
+                inplace=True,
+            )
+        else:
+            df2 = pd.DataFrame(
+                endpoint_metrics,
+                columns=[
+                    "worker_id",
+                    "total_time",
+                    "proc_avg",
+                    "latency_avg",
+                    "latency_stdev",
+                ],
+            )
+            df2.rename(
+                columns={
+                    "worker_id": "endpoint_id",
+                    "total_time": "total_time (s)",
+                    "proc_avg": "proc_time/data (ms)",
+                    "latency_avg": "latency_avg (ms)",
+                    "latency_stdev": "latency_stdev (ms)",
+                },
+                inplace=True,
+            )
 
-    df2_no_indices = df2.to_string(index=False)
-    logging.info("\n" + df2_no_indices)
+        df2_no_indices = df2.to_string(index=False)
+        logging.info("\n" + df2_no_indices)
+        df2_output = df2.to_csv()
 
     # Print ouput in csv format
     if config["mode"] == "cloud" or config["mode"] == "edge":
         logging.debug(
-            "Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2.to_csv()))
+            "Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2_output))
         )
     else:
-        logging.debug("Output in csv format\n%s" % (repr(df2.to_csv())))
+        logging.debug("Output in csv format\n%s" % (repr(df2_output)))

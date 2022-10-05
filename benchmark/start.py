@@ -499,10 +499,12 @@ def start(config, machines):
         else:
             container_names_mist = start_worker_mist(config, machines)
 
-    container_names = start_endpoint(config, machines)
+    container_names = []
+    if config["infrastructure"]["endpoint_nodes"]:
+        container_names = start_endpoint(config, machines)
+        wait_endpoint_completion(machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
-    wait_endpoint_completion(machines, config["endpoint_ssh"], container_names)
     if config["mode"] == "cloud" or config["mode"] == "edge":
         if config["benchmark"]["resource_manager"] != "mist":
             wait_worker_completion(config, machines)
@@ -510,8 +512,10 @@ def start(config, machines):
             wait_endpoint_completion(machines, config["edge_ssh"], container_names_mist)
 
     # Now get raw output
-    logging.info("Benchmark has been finished, prepare results")
-    endpoint_output = output.get_endpoint_output(config, machines, container_names)
+    endpoint_output = []
+    if config["infrastructure"]["endpoint_nodes"]:
+        logging.info("Benchmark has been finished, prepare results")
+        endpoint_output = output.get_endpoint_output(config, machines, container_names)
 
     worker_output = []
     if config["mode"] == "cloud" or config["mode"] == "edge":

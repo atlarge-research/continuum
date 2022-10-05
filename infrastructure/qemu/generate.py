@@ -180,7 +180,7 @@ def start(config, machines):
     period = 100000
     pinnings = []
 
-    for i, machine in enumerate(machines):
+    for machine in machines:
         # Counter for pinning vcpu to physical cpu
         start_core = 0
 
