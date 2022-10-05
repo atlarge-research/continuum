@@ -438,12 +438,12 @@ def docker_registry(config, machines):
         # Registry is already up, check if containers are present
         repos = json.loads(output[0])["repositories"]
 
-        for i, image in enumerate(config["images"]):
+        for i, image in enumerate(config["images"].values()):
             if image.split(":")[1] in repos:
                 need_pull[i] = False
 
     # Pull images which aren't present yet in the registry
-    for image, pull in zip(config["images"], need_pull):
+    for image, pull in zip(config["images"].values(), need_pull):
         if not pull:
             continue
 
@@ -485,33 +485,27 @@ def docker_pull(config, machines, base_names):
             if name_r in base_names:
                 images = []
 
-                # Pull
-                if config["mode"] == "cloud" or config["mode"] == "edge":
-                    if "_%s_" % (config["mode"]) in name:
-                        # Subscriber
-                        images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][0].split(":")[1])
-                        )
-                    elif "_endpoint" in name:
-                        # Publisher (+ combined)
-                        images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][1].split(":")[1])
-                        )
-                        images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][2].split(":")[1])
-                        )
-                elif config["mode"] == "endpoint" and "_endpoint" in name:
-                    # Combined (+ publisher)
+                # Load worker application
+                if "_cloud_" in name or "_edge_" in name:
                     images.append(
                         "%s/%s"
-                        % (config["registry"], config["images"][2].split(":")[1])
+                        % (config["registry"], config["images"]["worker"].split(":")[1])
+                    )
+                elif "_endpoint" in name:
+                    # Load endpoint and combined applications
+                    images.append(
+                        "%s/%s"
+                        % (
+                            config["registry"],
+                            config["images"]["endpoint"].split(":")[1],
+                        )
                     )
                     images.append(
                         "%s/%s"
-                        % (config["registry"], config["images"][1].split(":")[1])
+                        % (
+                            config["registry"],
+                            config["images"]["combined"].split(":")[1],
+                        )
                     )
 
                 for image in images:

@@ -155,8 +155,17 @@ def parse_config(parser, arg):
 
         if new[sec]["cloud_nodes"] > 0:
             option_check(parser, config, new, sec, "cloud_cores", int, lambda x: x >= 2)
-            new[sec]['cloud_memory'] = new[sec]['cloud_cores']
-            option_check(parser, config, new, sec, "cloud_memory", int, lambda x: x >= 1, mandatory=False)
+            new[sec]["cloud_memory"] = new[sec]["cloud_cores"]
+            option_check(
+                parser,
+                config,
+                new,
+                sec,
+                "cloud_memory",
+                int,
+                lambda x: x >= 1,
+                mandatory=False,
+            )
             option_check(
                 parser,
                 config,
@@ -167,26 +176,46 @@ def parse_config(parser, arg):
                 lambda x: 0.1 <= x <= 1.0,
             )
         else:
-            new[sec]['cloud_cores'] = 0
-            new[sec]['cloud_memory'] = 0
-            new[sec]['cloud_quota'] = 0.0
+            new[sec]["cloud_cores"] = 0
+            new[sec]["cloud_memory"] = 0
+            new[sec]["cloud_quota"] = 0.0
 
         if new[sec]["edge_nodes"] > 0:
             option_check(parser, config, new, sec, "edge_cores", int, lambda x: x >= 1)
-            new[sec]['edge_memory'] = new[sec]['edge_cores']
-            option_check(parser, config, new, sec, "edge_memory", int, lambda x: x >= 1, mandatory=False)
+            new[sec]["edge_memory"] = new[sec]["edge_cores"]
+            option_check(
+                parser,
+                config,
+                new,
+                sec,
+                "edge_memory",
+                int,
+                lambda x: x >= 1,
+                mandatory=False,
+            )
             option_check(
                 parser, config, new, sec, "edge_quota", float, lambda x: 0.1 <= x <= 1.0
             )
         else:
-            new[sec]['edge_cores'] = 0
-            new[sec]['edge_memory'] = 0
-            new[sec]['edge_quota'] = 0.0
+            new[sec]["edge_cores"] = 0
+            new[sec]["edge_memory"] = 0
+            new[sec]["edge_quota"] = 0.0
 
         if new[sec]["endpoint_nodes"] > 0:
-            option_check(parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 1)
-            new[sec]['endpoint_memory'] = new[sec]['endpoint_cores']
-            option_check(parser, config, new, sec, "endpoint_memory", int, lambda x: x >= 1, mandatory=False)
+            option_check(
+                parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 1
+            )
+            new[sec]["endpoint_memory"] = new[sec]["endpoint_cores"]
+            option_check(
+                parser,
+                config,
+                new,
+                sec,
+                "endpoint_memory",
+                int,
+                lambda x: x >= 1,
+                mandatory=False,
+            )
             option_check(
                 parser,
                 config,
@@ -197,9 +226,9 @@ def parse_config(parser, arg):
                 lambda x: 0.1 <= x <= 1.0,
             )
         else:
-            new[sec]['endpoint_cores'] = 0
-            new[sec]['endpoint_memory'] = 0
-            new[sec]['endpoint_quota'] = 0.0
+            new[sec]["endpoint_cores"] = 0
+            new[sec]["endpoint_memory"] = 0
+            new[sec]["endpoint_quota"] = 0.0
 
         option_check(
             parser, config, new, sec, "cpu_pin", bool, lambda x: x in [True, False]
@@ -432,19 +461,72 @@ def parse_config(parser, arg):
         )
 
         # Set default values first
-        new["benchmark"]["application_worker_cpu"] = float(new["infrastructure"]["cloud_cores"] - 0.5)
-        new["benchmark"]["application_worker_memory"] = float(new["infrastructure"]["cloud_cores"] - 0.5)
-        option_check(parser, config, new, sec, "application_worker_cpu", float, lambda x: x >= 0.1, mandatory=False)
-        option_check(parser, config, new, sec, "application_worker_memory", float, lambda x: x >= 0.1, mandatory=False)
+        new["benchmark"]["application_worker_cpu"] = float(
+            new["infrastructure"]["cloud_cores"] - 0.5
+        )
+        new["benchmark"]["application_worker_memory"] = float(
+            new["infrastructure"]["cloud_cores"] - 0.5
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "application_worker_cpu",
+            float,
+            lambda x: x >= 0.1,
+            mandatory=False,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "application_worker_memory",
+            float,
+            lambda x: x >= 0.1,
+            mandatory=False,
+        )
 
         if new["infrastructure"]["endpoint_nodes"] > 0:
-            new["benchmark"]["application_endpoint_cpu"] = float(new["infrastructure"]["endpoint_cores"])
-            new["benchmark"]["application_endpoint_memory"] = float(new["infrastructure"]["endpoint_cores"])
-            option_check(parser, config, new, sec, "application_endpoint_cpu", float, lambda x: x >= 0.1, mandatory=False)
-            option_check(parser, config, new, sec, "application_endpoint_memory", float, lambda x: x >= 0.1, mandatory=False)
-    
+            new["benchmark"]["application_endpoint_cpu"] = float(
+                new["infrastructure"]["endpoint_cores"]
+            )
+            new["benchmark"]["application_endpoint_memory"] = float(
+                new["infrastructure"]["endpoint_cores"]
+            )
+            option_check(
+                parser,
+                config,
+                new,
+                sec,
+                "application_endpoint_cpu",
+                float,
+                lambda x: x >= 0.1,
+                mandatory=False,
+            )
+            option_check(
+                parser,
+                config,
+                new,
+                sec,
+                "application_endpoint_memory",
+                float,
+                lambda x: x >= 0.1,
+                mandatory=False,
+            )
+
         new["benchmark"]["applications_per_worker"] = 1
-        option_check(parser, config, new, sec, "applications_per_worker", int, lambda x: x >= 1, mandatory=False)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "applications_per_worker",
+            int,
+            lambda x: x >= 1,
+            mandatory=False,
+        )
 
         if new["benchmark"]["application"] == "image_classification":
             option_check(parser, config, new, sec, "frequency", int, lambda x: x >= 1)
@@ -528,13 +610,13 @@ def add_constants(config):
 
     if not config["infrastructure"]["infra_only"]:
         if config["benchmark"]["application"] == "image_classification":
-            config["images"] = [
-                "redplanet00/kubeedge-applications:image_classification_subscriber",
-                "redplanet00/kubeedge-applications:image_classification_publisher",
-                "redplanet00/kubeedge-applications:image_classification_combined",
-            ]
+            config["images"] = {
+                "worker": "redplanet00/kubeedge-applications:image_classification_subscriber",
+                "endpoint": "redplanet00/kubeedge-applications:image_classification_publisher",
+                "combined": "redplanet00/kubeedge-applications:image_classification_combined",
+            }
         elif config["benchmark"]["application"] == "empty":
-            config["images"] = ["redplanet00/kubeedge-applications:empty"]
+            config["images"] = {"worker": "redplanet00/kubeedge-applications:empty"}
 
     # 100.100.100.100
     # Prefix .Mid.Post
@@ -684,4 +766,3 @@ if __name__ == "__main__":
     set_logging(args)
 
     main(args)
-

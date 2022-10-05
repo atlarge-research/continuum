@@ -36,24 +36,25 @@ def start_worker(config, machines):
     # Global variables for each applications
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s" % (config["registry"], config["images"][0].split(":")[1]),
-        "memory_req": config['benchmark']['application_worker_memory'],
-        "cpu_req": config['benchmark']['application_worker_cpu'],
+        "image": "%s/%s"
+        % (config["registry"], config["images"]["worker"].split(":")[1]),
+        "memory_req": config["benchmark"]["application_worker_memory"],
+        "cpu_req": config["benchmark"]["application_worker_cpu"],
         "replicas": workers * config["benchmark"]["applications_per_worker"],
     }
 
     # Application-specific variables
-    if config["benchmark"]["application"] == 'image_classification':
+    if config["benchmark"]["application"] == "image_classification":
         app_vars = {
             "container_port": 1883,
             "mqtt_logs": True,
-            "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / workers),
-            "cpu_threads": max(1, int(config['benchmark']['application_cpu'])),
+            "endpoint_connected": int(
+                config["infrastructure"]["endpoint_nodes"] / workers
+            ),
+            "cpu_threads": max(1, int(config["benchmark"]["application_cpu"])),
         }
-    elif config["benchmark"]["application"] == 'empty':
-        app_vars = {
-            "sleep_time": config["benchmark"]["sleep_time"]
-        }
+    elif config["benchmark"]["application"] == "empty":
+        app_vars = {"sleep_time": config["benchmark"]["sleep_time"]}
 
     # Merge the two var dicts
     vars = {**global_vars, **app_vars}
@@ -177,7 +178,8 @@ def start_worker_mist(config, machines):
             + [
                 "--name",
                 cont_name,
-                "%s/%s" % (config["registry"], config["images"][0].split(":")[1]),
+                "%s/%s"
+                % (config["registry"], config["images"]["worker"].split(":")[1]),
             ]
         )
 
@@ -306,6 +308,11 @@ def start_endpoint(config, machines):
 
             logging.info("Launch %s" % (cont_name))
 
+            # Decide wether to use the endpoint or combined image
+            image = "endpoint"
+            if config["mode"] == "endpoint":
+                image = "combined"
+
             command = (
                 [
                     "docker",
@@ -313,18 +320,15 @@ def start_endpoint(config, machines):
                     "run",
                     "--detach",
                     "--cpus=%i" % (config["benchmark"]["application_endpoint_cpu"]),
-                    "--memory=%ig" % (config["benchmark"]["application_endpoint_memory"]),
+                    "--memory=%ig"
+                    % (config["benchmark"]["application_endpoint_memory"]),
                     "--network=host",
                 ]
                 + ["--env %s" % (e) for e in env]
                 + [
                     "--name",
                     cont_name,
-                    config["registry"]
-                    + "/"
-                    + config["images"][1 + (int(config["mode"] == "endpoint"))].split(
-                        ":"
-                    )[1],
+                    config["registry"] + "/" + config["images"][image].split(":")[1],
                 ]
             )
 
