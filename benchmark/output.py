@@ -161,7 +161,8 @@ def to_datetime_empty(s):
     s = s[1:-1]
     s = s.replace("T", " ")
     s = s.replace("Z", "")
-    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    return datetime.timestamp(dt)
 
 
 def gather_worker_metrics_empty(worker_output):
@@ -184,12 +185,16 @@ def gather_worker_metrics_empty(worker_output):
         "total_time": None, # Total scheduling time
     }
 
+    lowest_start = -1
     for out in worker_output:
         worker_metrics.append(copy.deepcopy(worker_set))
 
         for line in out:
             if "creationTimestamp" in line:
-                worker_metrics[-1]["start_time"] = to_datetime_empty(line)
+                t = to_datetime_empty(line)
+                worker_metrics[-1]["start_time"] = t
+                if lowest_start == -1 or t < lowest_start:
+                    lowest_start = t
             elif "startTime" in line:
                 worker_metrics[-1]["end_time"] = to_datetime_empty(line)
             elif "generateName" in line:
@@ -197,6 +202,11 @@ def gather_worker_metrics_empty(worker_output):
                 worker_metrics[-1]["worker_id"] = id
         
         worker_metrics[-1]["total_time"] = worker_metrics[-1]["end_time"] - worker_metrics[-1]["start_time"]
+
+    # Subtract lowest start, so lowest start time starts at 0
+    for worker in worker_metrics:
+        worker["start_time"] -= lowest_start
+        worker["end_time"] -= lowest_start
 
     return sorted(worker_metrics, key=lambda x: x["worker_id"])
 
