@@ -288,7 +288,8 @@ def copy_files(config, machines):
                     + config["benchmark"]["resource_manager"]
                     + ".yml"
                 )
-                out.append(machine.copy_files(path, dest))
+                d = dest + 'launch_benchmark.yml'
+                out.append(machine.copy_files(path, d))
 
         # Copy VM creation files
         for name in (

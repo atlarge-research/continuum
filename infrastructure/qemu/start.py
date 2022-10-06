@@ -30,11 +30,11 @@ def os_image(config, machines):
         output, error = machine.process(command, ssh=True)
 
         if error != [] or output == []:
-            logging.info("Need to install os image")
             need_image = True
             break
 
     if need_image:
+        logging.info("Need to install OS image")
         command = [
             "ansible-playbook",
             "-i",
@@ -42,6 +42,8 @@ def os_image(config, machines):
             config["home"] + "/.continuum/infrastructure/os.yml",
         ]
         main.ansible_check_output(machines[0].process(command))
+    else:
+        logging.info("OS image is already there")
 
 
 def base_image(config, machines):
@@ -69,6 +71,7 @@ def base_image(config, machines):
     # Stop if no base images are required
     base_names = [name for name, need in zip(base_names, need_images) if need]
     if base_names == []:
+        logging.info("Base image(s) are all already present")
         return
 
     # Create base images

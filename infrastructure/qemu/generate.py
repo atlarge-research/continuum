@@ -16,7 +16,7 @@ DOMAIN = """\
     <memory>%i</memory>
     <os>
         <type>hvm</type>
-        <boot dev="hd" />
+        <boot dev="hd"/>
     </os>
     <features>
         <acpi/>
