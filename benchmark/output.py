@@ -78,7 +78,12 @@ def get_worker_output(config, machines):
     worker_output = []
     for line in output[1:]:
         container = line.split(" ")[0]
-        command = ["kubectl", "logs", "--timestamps=true", container]
+
+        if config['benchmark']['application'] == 'image_classification':
+            command = ["kubectl", "logs", "--timestamps=true", container]
+        elif config['benchmark']['application'] == 'empty':
+            command = ['kubectl', 'get', 'pod', container, '-o', 'yaml']
+
         output, error = machines[0].process(
             command, ssh=True, ssh_target=config["cloud_ssh"][0]
         )
@@ -127,7 +132,7 @@ def get_worker_output_mist(config, machines, container_names):
     return worker_output
 
 
-def to_datetime(s):
+def to_datetime_image(s):
     """Parse a datetime string from docker logs to a Python datetime object
 
     Args:
@@ -143,8 +148,61 @@ def to_datetime(s):
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 
 
-def gather_worker_metrics(worker_output):
-    """Gather metrics from cloud or edge workers
+def to_datetime_empty(s):
+    """Parse a datetime string from docker logs to a Python datetime object
+
+    Args:
+        s (str): Docker datetime string
+
+    Returns:
+        datetime: Python datetime object
+    """
+    s = s.split(' ')[-1]
+    s = s[1:-1]
+    s = s.replace("T", " ")
+    s = s.replace("Z", "")
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+
+def gather_worker_metrics_empty(worker_output):
+    """Gather metrics from cloud or edge workers for the empty app
+
+    Args:
+        worker_output (list(list(str))): Output of each container ran on the edge
+
+    Returns:
+        list(dict): List of parsed output for each cloud or edge worker
+    """
+    worker_metrics = []
+    if worker_output == []:
+        return worker_metrics
+
+    worker_set = {
+        "worker_id": None,  # ID of this worker
+        "start_time": None, # Request for pod scheduling arrives
+        "end_time": None,   # Pod is scheduled
+        "total_time": None, # Total scheduling time
+    }
+
+    for out in worker_output:
+        worker_metrics.append(copy.deepcopy(worker_set))
+
+        for line in out:
+            if "creationTimestamp" in line:
+                worker_metrics[-1]["start_time"] = to_datetime_empty(line)
+            elif "startTime" in line:
+                worker_metrics[-1]["end_time"] = to_datetime_empty(line)
+            elif "generateName" in line:
+                id = int(line.split('-')[1])
+                worker_metrics[-1]["worker_id"] = id
+        
+        worker_metrics[-1]["total_time"] = worker_metrics[-1]["end_time"] - worker_metrics[-1]["start_time"]
+
+    return sorted(worker_metrics, key=lambda x: x["worker_id"])
+
+
+def gather_worker_metrics_image(worker_output):
+    """Gather metrics from cloud or edge workers for the image_classification app
 
     Args:
         worker_output (list(list(str))): Output of each container ran on the edge
@@ -182,9 +240,9 @@ def gather_worker_metrics(worker_output):
         negatives = []
         for line in out:
             if start_time == 0 and "Read image and apply ML" in line:
-                start_time = to_datetime(line)
+                start_time = to_datetime_image(line)
             elif "Get item" in line:
-                end_time = to_datetime(line)
+                end_time = to_datetime_image(line)
             elif any(word in line for word in ["Latency", "Processing"]):
                 try:
                     unit = line[line.find("(") + 1 : line.find(")")]
@@ -272,8 +330,8 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         endpoint_metrics.append(copy.deepcopy(endpoint_set))
 
         # Get timestamp from first and last line
-        start_time = to_datetime(out[0])
-        end_time = to_datetime(out[-1])
+        start_time = to_datetime_image(out[0])
+        end_time = to_datetime_image(out[-1])
 
         endpoint_metrics[-1]["total_time"] = round(
             (end_time - start_time).total_seconds(), 2
@@ -393,7 +451,10 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
 
             logging.debug("------------------------------------")
 
-    worker_metrics = gather_worker_metrics(worker_output)
+    if config['benchmark']['application'] == 'image_classification':
+        worker_metrics = gather_worker_metrics_image(worker_output)
+    elif config['benchmark']['application'] == 'empty':
+        worker_metrics = gather_worker_metrics_empty(worker_output)
 
     endpoint_metrics = []
     if config["infrastructure"]["endpoint_nodes"]:
@@ -404,8 +465,36 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
     return worker_metrics, endpoint_metrics
 
 
-def format_output(config, worker_metrics, endpoint_metrics):
-    """Format processed output to provide useful insights
+def format_output_empty(config, worker_metrics):
+    """Format processed output to provide useful insights (empty)
+
+    Args:
+        config (dict): Parsed configuration
+        sub_metrics (list(dict)): Metrics per worker node
+    """
+    logging.info("------------------------------------")
+    logging.info("%s OUTPUT" % (config["mode"].upper()))
+    logging.info("------------------------------------")
+    df = pd.DataFrame(worker_metrics)
+    df.rename(
+        columns={
+            "start_time": "start_time (s)",
+            "end_time": "end_time (ms)",
+            "total_time": "total_time (ms)",
+        },
+        inplace=True,
+    )
+    df_no_indices = df.to_string(index=False)
+    logging.info("\n" + df_no_indices)
+
+    # Print ouput in csv format
+    logging.debug(
+        "Output in csv format\n%s" % (repr(df.to_csv()))
+    )
+
+
+def format_output_image(config, worker_metrics, endpoint_metrics):
+    """Format processed output to provide useful insights (image_classification)
 
     Args:
         config (dict): Parsed configuration
@@ -481,3 +570,17 @@ def format_output(config, worker_metrics, endpoint_metrics):
         )
     else:
         logging.debug("Output in csv format\n%s" % (repr(df2_output)))
+
+
+def format_output(config, worker_metrics, endpoint_metrics):
+    """Format processed output to provide useful insights
+
+    Args:
+        config (dict): Parsed configuration
+        sub_metrics (list(dict)): Metrics per worker node
+        endpoint_metrics (list(dict)): Metrics per endpoint
+    """
+    if config['benchmark']['application'] == 'image_classification':
+        format_output_image(config, worker_metrics, endpoint_metrics)
+    elif config['benchmark']['application'] == 'empty':
+        format_output_empty(config, worker_metrics)
