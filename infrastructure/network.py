@@ -30,7 +30,7 @@ def generate_tc_commands(values, overhead, ips, disk):
             ["sudo", "tc", "qdisc", "add", "dev", "ens2", "root", "handle", "1:", "htb"]
         )
 
-    # Set latency
+    # Set throughput
     commands.append(
         [
             "sudo",
@@ -75,27 +75,28 @@ def generate_tc_commands(values, overhead, ips, disk):
             ]
         )
 
-    # Set throughput
-    commands.append(
-        [
-            "sudo",
-            "tc",
-            "qdisc",
-            "add",
-            "dev",
-            "ens2",
-            "parent",
-            "1:%i" % (disk),
-            "handle",
-            "%i0:" % (disk),
-            "netem",
-            "delay",
-            "%sms" % (latency_avg),
-            "%sms" % (latency_var),
-            "distribution",
-            "normal",
-        ]
-    )
+    # Set latency
+    if float(latency_avg) > 0.0:
+        commands.append(
+            [
+                "sudo",
+                "tc",
+                "qdisc",
+                "add",
+                "dev",
+                "ens2",
+                "parent",
+                "1:%i" % (disk),
+                "handle",
+                "%i0:" % (disk),
+                "netem",
+                "delay",
+                "%sms" % (latency_avg),
+                "%sms" % (latency_var),
+                "distribution",
+                "normal",
+            ]
+        )
 
     return commands
 
@@ -110,20 +111,17 @@ def tc_values(config):
         5x list(int, int, int): TC network values to be used
     """
     # Default values
-    cloud = [2.5, 1, 1000]  # Between cloud nodes (wired)
+    cloud = [0, 0, 1000]  # Between cloud nodes (wired)
     edge = [7.5, 2.5, 1000]  # Between edge nodes (wired)
     cloud_edge = [7.5, 2.5, 1000]  # Between cloud and edge (wired)
 
-    # Set values based on 4g/5g preset
-    cloud_endpoint = [0, 0, 0]  # Between cloud and endpoint
-    edge_endpoint = [0, 0, 0]  # Between edge and endpoint
-    if "wireless_network_preset" in config["infrastructure"]:
-        if config["infrastructure"]["wireless_network_preset"] == "4g":
-            cloud_endpoint = [45, 5, 7.21]
-            edge_endpoint = [7.5, 2.5, 7.21]
-        elif config["infrastructure"]["wireless_network_preset"] == "5g":
-            cloud_endpoint = [45, 5, 29.66]
-            edge_endpoint = [7.5, 2.5, 29.66]
+    # Set values based on 4g/5g preset (if the user didn't set anything, 4g is default)
+    if config["infrastructure"]["wireless_network_preset"] == "4g":
+        cloud_endpoint = [45, 5, 7.21]
+        edge_endpoint = [7.5, 2.5, 7.21]
+    elif config["infrastructure"]["wireless_network_preset"] == "5g":
+        cloud_endpoint = [45, 5, 29.66]
+        edge_endpoint = [7.5, 2.5, 29.66]
 
     # Overwrite with custom values
     if "cloud_latency_avg" in config["infrastructure"]:

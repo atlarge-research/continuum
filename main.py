@@ -243,6 +243,8 @@ def parse_config(parser, arg):
             bool,
             lambda x: x in [True, False],
         )
+
+        new[sec]["wireless_network_preset"] = "4g"
         option_check(
             parser,
             config,
@@ -261,7 +263,7 @@ def parse_config(parser, arg):
             sec,
             "cloud_latency_avg",
             float,
-            lambda x: x >= 5.0,
+            lambda x: x >= 0.0,
             mandatory=False,
         )
         option_check(
@@ -291,7 +293,7 @@ def parse_config(parser, arg):
             sec,
             "edge_latency_avg",
             float,
-            lambda x: x >= 5.0,
+            lambda x: x >= 0.0,
             mandatory=False,
         )
         option_check(
@@ -321,7 +323,7 @@ def parse_config(parser, arg):
             sec,
             "cloud_edge_latency_avg",
             float,
-            lambda x: x >= 5.0,
+            lambda x: x >= 0.0,
             mandatory=False,
         )
         option_check(
@@ -351,7 +353,7 @@ def parse_config(parser, arg):
             sec,
             "cloud_endpoint_latency_avg",
             float,
-            lambda x: x >= 5.0,
+            lambda x: x >= 0.0,
             mandatory=False,
         )
         option_check(
@@ -381,7 +383,7 @@ def parse_config(parser, arg):
             sec,
             "edge_endpoint_latency_avg",
             float,
-            lambda x: x >= 5.0,
+            lambda x: x >= 0.0,
             mandatory=False,
         )
         option_check(
