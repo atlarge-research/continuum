@@ -40,7 +40,7 @@ def start_worker(config, machines):
         % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": config["benchmark"]["application_worker_memory"],
         "cpu_req": config["benchmark"]["application_worker_cpu"],
-        "replicas": (workers * config["benchmark"]["applications_per_worker"]) - 1,
+        "replicas": workers * config["benchmark"]["applications_per_worker"],
     }
 
     # Application-specific variables

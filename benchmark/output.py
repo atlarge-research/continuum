@@ -179,7 +179,6 @@ def gather_worker_metrics_empty(worker_output):
         return worker_metrics
 
     worker_set = {
-        "worker_id": None,  # ID of this worker
         "start_time": None, # Request for pod scheduling arrives
         "end_time": None,   # Pod is scheduled
         "total_time": None, # Total scheduling time
@@ -197,10 +196,7 @@ def gather_worker_metrics_empty(worker_output):
                     lowest_start = t
             elif "startTime" in line:
                 worker_metrics[-1]["end_time"] = to_datetime_empty(line)
-            elif "generateName" in line:
-                id = int(line.split('-')[1])
-                worker_metrics[-1]["worker_id"] = id
-        
+
         worker_metrics[-1]["total_time"] = worker_metrics[-1]["end_time"] - worker_metrics[-1]["start_time"]
 
     # Subtract lowest start, so lowest start time starts at 0
@@ -208,7 +204,7 @@ def gather_worker_metrics_empty(worker_output):
         worker["start_time"] -= lowest_start
         worker["end_time"] -= lowest_start
 
-    return sorted(worker_metrics, key=lambda x: x["worker_id"])
+    return sorted(worker_metrics, key=lambda x: x["start_time"])
 
 
 def gather_worker_metrics_image(worker_output):
