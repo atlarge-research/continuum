@@ -454,6 +454,8 @@ def docker_registry(config, machines):
             ["docker", "pull", image],
             ["docker", "tag", image, dest],
             ["docker", "push", dest],
+            ["docker", "image", "remove", image],
+            ["docker", "image", "remove", dest],
         ]
 
         for command in commands:
@@ -480,7 +482,6 @@ def docker_pull(config, machines, base_names):
     logging.info("Pull docker containers into base images")
 
     # Pull the images
-    processes = []
     for machine in machines:
         for name, ip in zip(machine.base_names, machine.base_ips):
             name_r = name.rstrip(string.digits)
@@ -489,65 +490,83 @@ def docker_pull(config, machines, base_names):
 
                 # Load worker application
                 if "_cloud_" in name or "_edge_" in name:
-                    images.append(
-                        "%s/%s"
-                        % (config["registry"], config["images"]["worker"].split(":")[1])
-                    )
+                    images.append(config["images"]["worker"].split(":")[1])
                 elif "_endpoint" in name:
                     # Load endpoint and combined applications
-                    images.append(
-                        "%s/%s"
-                        % (
-                            config["registry"],
-                            config["images"]["endpoint"].split(":")[1],
-                        )
-                    )
-                    images.append(
-                        "%s/%s"
-                        % (
-                            config["registry"],
-                            config["images"]["combined"].split(":")[1],
-                        )
-                    )
+                    images.append(config["images"]["endpoint"].split(":")[1])
+                    images.append(config["images"]["combined"].split(":")[1])
 
+                # Pull
                 for image in images:
-                    command = ["docker", "pull", image]
-                    processes.append(
-                        [
-                            name,
-                            machines[0].process(
-                                command,
-                                output=False,
-                                ssh=True,
-                                ssh_target=name + "@" + ip,
-                            ),
-                        ]
+                    output, error = machines[0].process(
+                        ["docker", "pull", "%s/%s" % (config["registry"], image)],
+                        ssh=True,
+                        ssh_target=name + "@" + ip,
                     )
 
-    # Checkout process output
-    for name, process in processes:
-        logging.debug("Check output of command [%s]" % (" ".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
-
-        if error != [] and any(
-            "server gave HTTP response to HTTPS client" in line for line in error
-        ):
-            logging.warn(
-                """\
+                    if error != [] and any(
+                        "server gave HTTP response to HTTPS client" in line for line in error
+                    ):
+                        logging.warn(
+                            """\
 File /etc/docker/daemon.json does not exist, or is empty on Machine %s. 
 This will most likely prevent the machine from pulling endpoint docker images 
 from the private Docker registry running on the main machine %s.
 Please create this file on machine %s with content: { "insecure-registries":["%s"] }
 Followed by a restart of Docker: systemctl restart docker"""
-                % (name, machines[0].name, name, config["registry"])
+                            % (name, machines[0].name, name, config["registry"])
+                        )
+                    if error != []:
+                        logging.error("".join(error))
+                        sys.exit()
+                    elif output == []:
+                        logging.error("No output from command docker pull")
+                        sys.exit()
+                    
+
+def docker_worker_registry(machines):
+    """Upload the application docker image, already stored in the cloud/edge, to the local
+    registries running inside each worker VM.
+
+    Args:
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    for machine in machines:
+        for name, ip in zip(machine.cloud_names, machine.edge_names, machine.cloud_ips + machine.edge_ips):
+            # Get the name of the image we want to push to the registry
+            output, error = machines[0].process(
+                ["docker", "images"],
+                ssh=True,
+                ssh_target=name + "@" + ip,
             )
-        if error != []:
-            logging.error("".join(error))
-            sys.exit()
-        elif output == []:
-            logging.error("No output from command docker pull")
-            sys.exit()
+
+            if output == [] or len(output) <= 1:
+                logging.error("No Docker images in the machines - shouldn't be the case")
+            elif error != []:
+                logging.error("".join(error))
+                sys.exit()
+
+            image = output.split('\n')[1].split(' ')[0]
+
+            # Now push the image to the registry
+            dest = "localhost:%i/%s" % (5000, image.split(":")[1])
+            commands = [
+                ["docker", "tag", image, dest],
+                ["docker", "push", dest],
+                ["docker", "image", "remove", image],
+                ["docker", "image", "remove", dest],
+            ]
+
+            for command in commands:
+                output, error = machines[0].process(
+                    command,
+                    ssh=True,
+                    ssh_target=name + "@" + ip,
+                )
+
+                if error != []:
+                    logging.error("".join(error))
+                    sys.exit()
 
 
 def start(config):

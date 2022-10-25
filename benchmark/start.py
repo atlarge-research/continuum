@@ -36,9 +36,8 @@ def start_worker(config, machines):
     # Global variables for each applications
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s"
-        % (config["registry"], config["images"]["worker"].split(":")[1]),
-        "memory_req": config["benchmark"]["application_worker_memory"],
+        "image": "localhost:5000/%s" % (config["images"]["worker"].split(":")[1]),
+        "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
         "replicas": workers * config["benchmark"]["applications_per_worker"],
     }

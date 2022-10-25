@@ -5,15 +5,21 @@
   - name: Create job file
     shell: |
       cat > "/home/{{ username }}/job-template.yaml" <<EOF
-      apiVersion: batch/v1
-      kind: Job
+      apiVersion: apps/v1
+      kind: Deployment
       metadata:
         name: {{ app_name }}
+        labels:
+          app: {{ app_name }}
       spec:
-        parallelism: {{ replicas }}
+        replicas: {{ replicas }}
+        selector:
+          matchLabels:
+            app: {{ app_name }}
         template:
           metadata:
-            name: {{ app_name }}
+            labels:
+              app: {{ app_name }}
           spec:
             containers:
             - name: {{ app_name }}
@@ -26,7 +32,6 @@
               env:
               - name: SLEEP_TIME
                 value: "{{ sleep_time }}"
-            restartPolicy: Never
       EOF
 
   - name: Launch jobs

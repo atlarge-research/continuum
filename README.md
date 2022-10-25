@@ -1,13 +1,11 @@
 # Continuum
-Continuum is a deployment and benchmarking framework for the edge continuum. It automates setting up and configuring emulated cloud, edge, and endpoint/IoT hardware and networks, manages installation of software inside the emulated environment, and can perform application- and system-level benchmarks.
-
-CONTINUUM IS UNDER ACTIVE DEVELOPMENT
+Continuum is a deployment and benchmarking framework for the edge continuum. Continuum automates setting up an edge continuum environment on virtual machines, emulates network latency and throughput between machines, manages software installations inside the emulated environment, and performs application- and system-level benchmarks.
 
 ## How it works
 Continuum has the following architecture:
 
 <div align="center">
-    <img src="./docs/images/architecture.png" width = "85%" align="center">
+    <img src="./docs/images/architecture.png" width = "50%" align="center">
 </div>
 <br>
 
