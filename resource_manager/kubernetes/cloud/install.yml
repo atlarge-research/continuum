@@ -11,6 +11,9 @@
     user:
       name: "{{ username }}"
       group: docker
+  
+  - name: Allow HTTP pulling from private docker registry
+    shell: echo '{ "insecure-registries":["localhost:5000"] }' > /etc/docker/daemon.json
 
   - name: Restart docker service
     command: systemctl restart docker

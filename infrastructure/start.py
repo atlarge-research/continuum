@@ -522,51 +522,6 @@ Followed by a restart of Docker: systemctl restart docker"""
                     elif output == []:
                         logging.error("No output from command docker pull")
                         sys.exit()
-                    
-
-def docker_worker_registry(machines):
-    """Upload the application docker image, already stored in the cloud/edge, to the local
-    registries running inside each worker VM.
-
-    Args:
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    for machine in machines:
-        for name, ip in zip(machine.cloud_names, machine.edge_names, machine.cloud_ips + machine.edge_ips):
-            # Get the name of the image we want to push to the registry
-            output, error = machines[0].process(
-                ["docker", "images"],
-                ssh=True,
-                ssh_target=name + "@" + ip,
-            )
-
-            if output == [] or len(output) <= 1:
-                logging.error("No Docker images in the machines - shouldn't be the case")
-            elif error != []:
-                logging.error("".join(error))
-                sys.exit()
-
-            image = output.split('\n')[1].split(' ')[0]
-
-            # Now push the image to the registry
-            dest = "localhost:%i/%s" % (5000, image.split(":")[1])
-            commands = [
-                ["docker", "tag", image, dest],
-                ["docker", "push", dest],
-                ["docker", "image", "remove", image],
-                ["docker", "image", "remove", dest],
-            ]
-
-            for command in commands:
-                output, error = machines[0].process(
-                    command,
-                    ssh=True,
-                    ssh_target=name + "@" + ip,
-                )
-
-                if error != []:
-                    logging.error("".join(error))
-                    sys.exit()
 
 
 def start(config):

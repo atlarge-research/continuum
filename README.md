@@ -9,17 +9,44 @@ Continuum has the following architecture:
 </div>
 <br>
 
-The execution flow consists of three phases, each having a configuration and execution step. The phases are **infrastructure deployment**, **software installation**, and **benchmarking**. Each phase can be skipped, i.e. the framework can be used for infrastructure deployment only if so desired.
+The execution flow consists of three phases, each having a configuration and execution step. These phases are **infrastructure deployment**, **software installation**, and **benchmarking**. Each phase is optional, i.e., the framework can be used for infrastructure deployment without any pre-installed software if so desired.
 
-1. **Infrastructure configuration:** Libvirt configuration files are created based on the user's preferences.
+1. **Infrastructure configuration:** Libvirt configuration files for QEMU/KVM are created based on the user's preferences.
 2. **Infrastructure execution:** The configuration files are executed, creating QEMU/KVM virtual machines connected through network bridges.
-3. **Software configuration:** Based on the configured infrastructure, Ansible is configured for software installation. 
-4. **Software execution:** Ansible playbooks are executed, installing operating services and resource management software on each machine. This includes setting up resource management clusters such as Kubernetes.
+3. **Software configuration:** Ansible is configured for software installation based on the configured infrastructure.
+4. **Software execution:** Ansible playbooks are executed, installing operating services and resource management software on each machine. This step includes setting up resource management clusters such as Kubernetes.
 5. **Benchmark configuration** The benchmark is configured and prepared based on the user's preferences.
-6. **Benchmark execution:** Applications in docker containers are executed on resource management software running on the emulated infrastructure (Kubernetes, KubeEdge, etc.). Meanwhile, application- and system-level metrics are captured and finally processed and presented to the user.
+6. **Benchmark execution:** Applications (encapsulated in containers) are executed using resource managers running on the emulated infrastructure (Kubernetes, KubeEdge, etc.). Meanwhile, application- and system-level metrics are captured, processed, and presented to the user.
+
+## Demo
+The framework supports execution on multiple physical machines through a network bridge.
+Continuum has been tested on Ubuntu 20.04. Recommended software versions are noted below.
+We present a demo of this framework in three steps:
+
+1. Prepare the environment
+2. Install the framework
+3. Use the framework
+
+For this demo, we will install the framework inside a QEMU/KVM virtual machine running Ubuntu 20.04.
+If you have access to a Ubuntu 20.04 machine yourself, you can skip part 1, prepare the environment, and start at part 2.
+
+### Part 1: Prepare the environment
+As the Continuum framework requires Ubuntu 20.04, we prepare a virtual machine with this operating system in this step.
+The only requirement for this part is QEMU/KVM and Libvirt.
+You can execute this part on any operating system that supports these software packages; our demo focuses on Ubuntu 20.04.
+This part can be executed on any 
+
+
+n this part we will explain how to install a Ubuntu 20.04 virtual machine that will be used to run the framework in. While this works perfectly fine to demonstrate the functionalities of the framework, running the framework inside a virtual machine will result in worse performance compared to running it directly on the host machine.
+
+For this tutorial, you only need a single machine. The framework does support execution across multiple machines, but this is outside of the scope of this tutorial. For more information, see the network readme for an explanation of how to set up a network bridge.
+
+
+
+
+
 
 ## Installation
-The framework supports execution on multiple physical machines through a network bridge. Continuum has been tested on Ubuntu 20.04. Recommended software versions are noted below.
 
 1. [Install](https://docs.docker.com/get-docker/) Docker on each physical machine (tested with v20.10.8)
 2. Install KVM, QEMU and LibVirt on each physical machine (QEMU v4.2.1 or v6.1.0).<br>
@@ -41,3 +68,7 @@ Please follow these steps to run the framework. The framework needs to be execut
 1. Clone this repository: `git clone ...`
 2. Change directories to the edge resource manager you want to benchmark (example: `cd KubeEdge`)
 3. Run the main python script to start the benchmark: `python3 main.py`. For more information on how to use the script, see `python3 main.py -h`.
+
+
+
+## Demo
