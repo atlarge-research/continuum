@@ -15,6 +15,132 @@ import main
 from . import output
 
 
+def cache_worker(config, machines):
+    """Start Kube applications for caching, so the real app doesn't need to load images
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Cache subscriber pods on %s" % (config["mode"]))
+
+    # Set parameters based on mode
+    if config["mode"] == "cloud":
+        worker_apps = config["infrastructure"]["cloud_nodes"] - 1
+        cores = config["infrastructure"]["cloud_cores"]
+    elif config["mode"] == "edge":
+        worker_apps = config["infrastructure"]["edge_nodes"]
+        cores = config["infrastructure"]["edge_cores"]
+
+    # Global variables for each applications
+    global_vars = {
+        "app_name": config["benchmark"]["application"].replace("_", "-"),
+        "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
+        "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
+        "cpu_req": cores - 0.4, # 0.4 for other Kubernetes services that take up CPU, but still guarantee 1 pod per machine
+        "replicas": worker_apps,
+        "pull_policy": "IfNotPresent",
+    }
+
+    # Application-specific variables
+    if config["benchmark"]["application"] == "image_classification":
+        app_vars = {
+            "container_port": 1883,
+            "mqtt_logs": True,
+            "endpoint_connected": int(
+                config["infrastructure"]["endpoint_nodes"] / worker_apps
+            ),
+            "cpu_threads": max(1, int(config["benchmark"]["application_cpu"])),
+        }
+    elif config["benchmark"]["application"] == "empty":
+        app_vars = {
+            "sleep_time": 30,
+        }
+
+    # Merge the two var dicts
+    vars = {**global_vars, **app_vars}
+
+    # Parse to string
+    vars_str = ""
+    for k, v in vars.items():
+        vars_str += str(k) + "=" + str(v) + " "
+
+    # Launch applications on cloud/edge
+    command = [
+        "ansible-playbook",
+        "-i",
+        config["home"] + "/.continuum/inventory_vms",
+        "--extra-vars",
+        vars_str[:-1],
+        config["home"] + "/.continuum/launch_benchmark.yml",
+    ]
+    main.ansible_check_output(machines[0].process(command))
+
+    # Waiting for the applications to fully initialize
+    time.sleep(10)
+    logging.info("Deployed %i %s applications" % (worker_apps, config["mode"]))
+
+    pending = True
+    i = 0
+
+    while i < worker_apps:
+        # Get the list of deployed pods
+        if pending:
+            command = [
+                "kubectl",
+                "get",
+                "pods",
+                "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
+                "--sort-by=.spec.nodeName",
+            ]
+            output, error = machines[0].process(
+                command, ssh=True, ssh_target=config["cloud_ssh"][0]
+            )
+
+            if error != [] and any(
+                "couldn't find any field with path" in line for line in error
+            ):
+                logging.debug("Retry getting list of kubernetes pods")
+                time.sleep(5)
+                pending = True
+                continue
+            elif error != [] or output == []:
+                logging.error("".join(error))
+                sys.exit()
+
+        line = output[i + 1].rstrip().split(" ")
+        app_name = line[0]
+        app_status = line[-1]
+
+        # Check status of app
+        if app_status == "Pending" or app_status == "Running":
+            time.sleep(5)
+            pending = True
+        elif app_status == "Succeeded":
+            i += 1
+            pending = False
+        else:
+            logging.error(
+                'Container on cloud/edge %s has status %s, expected "Pending", "Running", or "Succeeded"'
+                % (app_name, app_status)
+            )
+            sys.exit()
+
+    # All apps have succesfully been executed, now kill them
+    command = ["kubectl", "delete", "--kubeconfig=/home/cloud_controller/.kube/config", "-f", "/home/cloud_controller/job-template.yaml"]
+    output, error = machines[0].process(
+        command, ssh=True, ssh_target=config["cloud_ssh"][0]
+    )
+
+    if output == [] or not ('job.batch' in output[0] and 'deleted' in output[0]):
+        logging.error('Output does not container job.batch "empty" deleted: %s' % ("".join(output)))
+        sys.exit()
+    elif error != []:
+        logging.error("".join(error))
+
+    time.sleep(10)
+
+
 def start_worker(config, machines):
     """Start the MQTT subscriber application on cloud / edge workers.
     Submit the job request to the cloud controller, which will automatically start it on the cluster.
@@ -29,17 +155,18 @@ def start_worker(config, machines):
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
-        workers = config["infrastructure"]["cloud_nodes"] - 1
+        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"]["applications_per_worker"]
     elif config["mode"] == "edge":
-        workers = config["infrastructure"]["edge_nodes"]
+        worker_apps = config["infrastructure"]["edge_nodes"] * config["benchmark"]["applications_per_worker"]
 
     # Global variables for each applications
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "localhost:5000/%s" % (config["images"]["worker"].split(":")[1]),
+        "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
-        "replicas": workers * config["benchmark"]["applications_per_worker"],
+        "replicas": worker_apps,
+        "pull_policy": "Never",
     }
 
     # Application-specific variables
@@ -48,16 +175,19 @@ def start_worker(config, machines):
             "container_port": 1883,
             "mqtt_logs": True,
             "endpoint_connected": int(
-                config["infrastructure"]["endpoint_nodes"] / workers
+                config["infrastructure"]["endpoint_nodes"] / worker_apps
             ),
             "cpu_threads": max(1, int(config["benchmark"]["application_cpu"])),
         }
     elif config["benchmark"]["application"] == "empty":
-        app_vars = {"sleep_time": config["benchmark"]["sleep_time"]}
+        app_vars = {
+            "sleep_time": config["benchmark"]["sleep_time"],
+        }
 
     # Merge the two var dicts
     vars = {**global_vars, **app_vars}
 
+    # Parse to string
     vars_str = ""
     for k, v in vars.items():
         vars_str += str(k) + "=" + str(v) + " "
@@ -75,13 +205,13 @@ def start_worker(config, machines):
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
-    logging.info("Deployed %i %s applications" % (workers, config["mode"]))
+    logging.info("Deployed %i %s applications" % (worker_apps, config["mode"]))
     logging.info("Wait for subscriber applications to be scheduled and running")
 
     pending = True
     i = 0
 
-    while i < workers:
+    while i < worker_apps:
         # Get the list of deployed pods
         if pending:
             command = [
@@ -494,6 +624,7 @@ def start(config, machines):
     """
     if config["mode"] == "cloud" or config["mode"] == "edge":
         if config["benchmark"]["resource_manager"] != "mist":
+            cache_worker(config, machines)
             start_worker(config, machines)
         else:
             container_names_mist = start_worker_mist(config, machines)

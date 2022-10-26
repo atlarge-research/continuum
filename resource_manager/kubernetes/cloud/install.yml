@@ -11,15 +11,9 @@
     user:
       name: "{{ username }}"
       group: docker
-  
-  - name: Allow HTTP pulling from private docker registry
-    shell: echo '{ "insecure-registries":["localhost:5000"] }' > /etc/docker/daemon.json
 
   - name: Restart docker service
     command: systemctl restart docker
-
-  - name: Install and run local Docker registry
-    command: docker run -d -p 5000:5000 --restart=always --name registry registry:2
 
   - name: Run Mosquitto
     command: mosquitto -d -p 1883

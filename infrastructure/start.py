@@ -326,6 +326,12 @@ def copy_files(config, machines):
                 rm = config["benchmark"]["resource_manager"]
                 if config["benchmark"]["resource_manager"] == "mist":
                     rm = "kubeedge"
+                
+                
+                if config["benchmark"]["resource_manager"] == "kubernetes" or \
+                    config["benchmark"]["resource_manager"] == "kubeedge":
+                    path = config["base"] + "/resource_manager/kubernetes/config.toml"
+                    out.append(machine.copy_files(path, dest))
 
                 path = config["base"] + "/resource_manager/" + rm + "/cloud/"
                 out.append(machine.copy_files(path, dest, recursive=True))
@@ -468,6 +474,7 @@ def docker_registry(config, machines):
 
 def docker_pull(config, machines, base_names):
     """Pull the correct docker images into the base images.
+    Not for Kubernetes/KubeEdge deployments, as those use the registries
     For endpoint, pull both the publisher and combined images, as it can be used in
     either cloud/edge mode, or in endpoint mode for publisher and subscriber are combined.
 
@@ -490,6 +497,11 @@ def docker_pull(config, machines, base_names):
 
                 # Load worker application
                 if "_cloud_" in name or "_edge_" in name:
+                    # Kubernetes or KubeEdge use registries for cloud/edge
+                    if config["benchmark"]["resource_manager"] == "kubernetes" or \
+                        config["benchmark"]["resource_manager"] == "kubernetes":
+                        continue
+
                     images.append(config["images"]["worker"].split(":")[1])
                 elif "_endpoint" in name:
                     # Load endpoint and combined applications

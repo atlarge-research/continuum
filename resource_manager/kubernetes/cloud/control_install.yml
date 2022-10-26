@@ -34,7 +34,7 @@
     file:
       path: "/home/{{ username }}/.kube"
       state: directory
-  
+
   - name: Copy Kubernetes files to user
     copy:
       src: /etc/kubernetes/admin.conf

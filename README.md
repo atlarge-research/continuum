@@ -19,16 +19,27 @@ The execution flow consists of three phases, each having a configuration and exe
 6. **Benchmark execution:** Applications (encapsulated in containers) are executed using resource managers running on the emulated infrastructure (Kubernetes, KubeEdge, etc.). Meanwhile, application- and system-level metrics are captured, processed, and presented to the user.
 
 ## Demo
-The framework supports execution on multiple physical machines through a network bridge.
-Continuum has been tested on Ubuntu 20.04. Recommended software versions are noted below.
-We present a demo of this framework in three steps:
+This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
+The demo contains three parts:
 
 1. Prepare the environment
 2. Install the framework
 3. Use the framework
 
+In the first part, we will prepare an Ubuntu 20.04 virtual machine using QEMU/KVM in which we install the Continuum framework in part 2.
+Continuum has been tested on Ubuntu 20.04.
+If you have access to a Ubuntu 20.04 machine yourself, you can skip part 1, prepare the environment, and start at part 2.
+
+
+
+Recommended software versions are noted below.
+
+
 For this demo, we will install the framework inside a QEMU/KVM virtual machine running Ubuntu 20.04.
 If you have access to a Ubuntu 20.04 machine yourself, you can skip part 1, prepare the environment, and start at part 2.
+
+The framework does support execution on multiple physical machines through a network bridge, but we will not 
+
 
 ### Part 1: Prepare the environment
 As the Continuum framework requires Ubuntu 20.04, we prepare a virtual machine with this operating system in this step.

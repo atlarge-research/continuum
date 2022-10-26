@@ -18,7 +18,7 @@
             containers:
             - name: {{ app_name }}
               image: {{ image }}
-              imagePullPolicy: Never
+              imagePullPolicy: {{ pull_policy }}
               resources:
                 requests:
                   memory: "{{ memory_req }}Mi"
@@ -30,4 +30,4 @@
       EOF
 
   - name: Launch jobs
-    command: kubectl apply --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/job-template.yaml"
+    shell: kubectl apply --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/job-template.yaml"
