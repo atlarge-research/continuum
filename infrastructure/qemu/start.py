@@ -192,6 +192,36 @@ def base_image(config, machines):
     if not config["infrastructure"]["infra_only"]:
         infrastructure.docker_pull(config, machines, base_names)
 
+    # Get host timezone
+    command = ['ls', '-alh', '/etc/localtime']
+    output, error = machines[0].process(command)
+
+    if output == [] or '/etc/localtime' not in output[0]:
+        logging.error('Could not get host timezone: %s' % (''.join(output)))
+        sys.exit()
+    elif error != []:
+        logging.error('Could not get host timezone: %s' % (''.join(error)))
+        sys.exit()
+
+    timezone = output[0].split('-> ')[1].strip()
+
+    # Fix timezone on every base vm
+    command = ['sudo', 'ln', '-sf', timezone, '/etc/localtime']
+    for machine in machines:
+        for ip, name in zip(machine.base_ips, machine.base_names):
+            ssh = '%s@%s' % (name, ip)
+
+            output, error = machines[0].process(
+                command, ssh=True, ssh_target=ssh
+            )
+
+            if output != []:
+                logging.error('Could not set VM timezone: %s' % (''.join(output)))
+                sys.exit()
+            elif error != []:
+                logging.error('Could not set VM timezone: %s' % (''.join(error)))
+                sys.exit() 
+
     # Clean the VM
     processes = []
     for machine in machines:

@@ -8,7 +8,7 @@ import copy
 import numpy as np
 import pandas as pd
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def get_endpoint_output(config, machines, container_names):
@@ -162,49 +162,92 @@ def to_datetime_empty(s):
     s = s.replace("T", " ")
     s = s.replace("Z", "")
     dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    dt = dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
     return datetime.timestamp(dt)
 
 
-def gather_worker_metrics_empty(worker_output):
+def gather_worker_metrics_empty(machines, worker_output, starttime):
     """Gather metrics from cloud or edge workers for the empty app
 
     Args:
         worker_output (list(list(str))): Output of each container ran on the edge
+        starttime (datetime): Invocation time of the kubectl apply command that launches the benchmark
 
     Returns:
         list(dict): List of parsed output for each cloud or edge worker
     """
+    logging.info("Gather metrics with start time: %s" % (str(starttime)))
     worker_metrics = []
     if worker_output == []:
         return worker_metrics
 
     worker_set = {
-        "start_time": None, # Request for pod scheduling arrives
-        "end_time": None,   # Pod is scheduled
         "total_time": None, # Total scheduling time
     }
 
-    lowest_start = -1
     for out in worker_output:
         worker_metrics.append(copy.deepcopy(worker_set))
+        containerID = 0
+        nodename = 0
 
         for line in out:
-            if "creationTimestamp" in line:
-                t = to_datetime_empty(line)
-                worker_metrics[-1]["start_time"] = t
-                if lowest_start == -1 or t < lowest_start:
-                    lowest_start = t
-            elif "startTime" in line:
-                worker_metrics[-1]["end_time"] = to_datetime_empty(line)
+            if 'nodeName' in line:
+                nodename = line.split('nodeName: ')[1]
+            elif 'containerID' in line:
+                containerID = line.split('://')[1]
+                break
 
-        worker_metrics[-1]["total_time"] = worker_metrics[-1]["end_time"] - worker_metrics[-1]["start_time"]
+        print(nodename)
+        print(containerID)
 
-    # Subtract lowest start, so lowest start time starts at 0
-    for worker in worker_metrics:
-        worker["start_time"] -= lowest_start
-        worker["end_time"] -= lowest_start
+        if containerID == 0 or nodename == 0:
+            logging.error('Could not find containerID for pod or scheduled node')
+            sys.exit()
 
-    return sorted(worker_metrics, key=lambda x: x["start_time"])
+        # Get output from the worker node using journalctl, to get millisecond timing
+        grep = '\'msg="StartContainer for \\\"' + containerID + '\\\" returns successfully\''
+        command = "sudo journalctl -u containerd -o short-precise | grep '%s'" % (grep)
+        for machine in machines:
+            if nodename in machine.cloud_names + machine.edge_names:
+                if nodename in machine.cloud_names:
+                    i = machine.cloud_names.index(nodename)
+                    ip = machine.cloud_ips[i]
+                elif nodename in machine.edge_names:
+                    i = machine.edge_names.index(nodename)
+                    ip = machine.edge_ips[i]
+
+                ssh = '%s@%s' % (nodename, ip)
+                output, error = machine.process(
+                    command, shell=True, ssh=True, ssh_target=ssh
+                )
+
+                if output == [] or len(output) > 1:
+                    logging.error('Could not get journalctl output for pod %s' % (''.join(output)))
+                    sys.exit()
+                elif error != []:
+                    logging.error('Could not get journalctl output for pod %s' % (''.join(error)))
+                    sys.exit()
+
+                print(output)
+                print(output[0])
+
+                # Now parse the line to datetime with milliseconds
+                dt = output[0].split('time="')[1].split('+')[0]
+                print(dt)
+                dt = dt.replace("T", " ")
+                print(dt)
+                dt = dt[-3]
+                print(dt)
+                dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
+                print(dt)
+                end_time = datetime.timestamp(dt)
+                print(end_time)
+
+                break
+
+        worker_metrics[-1]["total_time"] = end_time - starttime
+
+    return sorted(worker_metrics, key=lambda x: x["total_time"])
 
 
 def gather_worker_metrics_image(worker_output):
@@ -424,7 +467,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def gather_metrics(config, worker_output, endpoint_output, container_names):
+def gather_metrics(machines, config, worker_output, endpoint_output, container_names, starttime):
     """Process the raw output to lists of dicts
 
     Args:
@@ -432,6 +475,7 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
         worker_output (list(list(str))): Output of each container ran on the edge
         endpoint_output (list(list(str))): Output of each endpoint container
         container_names (list(str)): Names of docker containers launched
+        starttime (datetime): Invocation time of the kubectl apply command that launches the benchmark
 
     Returns:
         2x list(dict): Metrics of worker nodes and endpoints
@@ -460,7 +504,7 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
     if config['benchmark']['application'] == 'image_classification':
         worker_metrics = gather_worker_metrics_image(worker_output)
     elif config['benchmark']['application'] == 'empty':
-        worker_metrics = gather_worker_metrics_empty(worker_output)
+        worker_metrics = gather_worker_metrics_empty(machines, worker_output, starttime)
 
     endpoint_metrics = []
     if config["infrastructure"]["endpoint_nodes"]:
@@ -484,8 +528,6 @@ def format_output_empty(config, worker_metrics):
     df = pd.DataFrame(worker_metrics)
     df.rename(
         columns={
-            "start_time": "start_time (s)",
-            "end_time": "end_time (ms)",
             "total_time": "total_time (ms)",
         },
         inplace=True,

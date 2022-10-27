@@ -28,6 +28,3 @@
                 value: "{{ sleep_time }}"
             restartPolicy: Never
       EOF
-
-  - name: Launch jobs
-    shell: kubectl apply --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/job-template.yaml"

@@ -76,6 +76,19 @@ def cache_worker(config, machines):
     ]
     main.ansible_check_output(machines[0].process(command))
 
+    # This only creates the file we need, now launch the benchmark
+    command = "kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml"
+    output, error = machines[0].process(
+        command, shell=True, ssh=True, ssh_target=config["cloud_ssh"][0]
+    )
+
+    if output == [] or 'job.batch/empty created' not in output[0]:
+        logging.error('Could not deploy pods: %s' % (''.join(output)))
+        sys.exit()
+    if error != []:
+        logging.error('Could not deploy pods: %s' % (''.join(error)))
+        sys.exit()
+
     # Waiting for the applications to fully initialize
     time.sleep(10)
     logging.info("Deployed %i %s applications" % (worker_apps, config["mode"]))
@@ -150,6 +163,9 @@ def start_worker(config, machines):
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+
+    Returns:
+        (datetime): Invocation time of the kubectl apply command that launches the benchmark
     """
     logging.info("Start subscriber pods on %s" % (config["mode"]))
 
@@ -203,6 +219,21 @@ def start_worker(config, machines):
     ]
     main.ansible_check_output(machines[0].process(command))
 
+    # This only creates the file we need, now launch the benchmark
+    command = "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml\""
+    output, error = machines[0].process(
+        command, shell=True, ssh=True, ssh_target=config["cloud_ssh"][0]
+    )
+
+    if len(output) < 2 or 'job.batch/empty created' not in output[1]:
+        logging.error('Could not deploy pods: %s' % (''.join(output)))
+        sys.exit()
+    if error != []:
+        logging.error('Could not deploy pods: %s' % (''.join(error)))
+        sys.exit()
+
+    starttime = float(output[0])
+
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
     logging.info("Deployed %i %s applications" % (worker_apps, config["mode"]))
@@ -253,6 +284,8 @@ def start_worker(config, machines):
                 % (app_name, app_status)
             )
             sys.exit()
+
+    return starttime
 
 
 def start_worker_mist(config, machines):
@@ -625,7 +658,7 @@ def start(config, machines):
     if config["mode"] == "cloud" or config["mode"] == "edge":
         if config["benchmark"]["resource_manager"] != "mist":
             cache_worker(config, machines)
-            start_worker(config, machines)
+            starttime = start_worker(config, machines)
         else:
             container_names_mist = start_worker_mist(config, machines)
 
@@ -658,6 +691,6 @@ def start(config, machines):
 
     # Parse output into dicts, and print result
     worker_metrics, endpoint_metrics = output.gather_metrics(
-        config, worker_output, endpoint_output, container_names
+        machines, config, worker_output, endpoint_output, container_names, starttime
     )
     output.format_output(config, worker_metrics, endpoint_metrics)
