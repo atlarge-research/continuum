@@ -35,9 +35,11 @@ def cache_worker(config, machines):
     # Global variables for each applications
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
+        "image": "%s/%s"
+        % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
-        "cpu_req": cores - 0.4, # 0.4 for other Kubernetes services that take up CPU, but still guarantee 1 pod per machine
+        "cpu_req": cores
+        - 0.4,  # 0.4 for other Kubernetes services that take up CPU, but still guarantee 1 pod per machine
         "replicas": worker_apps,
         "pull_policy": "IfNotPresent",
     }
@@ -82,11 +84,11 @@ def cache_worker(config, machines):
         command, shell=True, ssh=True, ssh_target=config["cloud_ssh"][0]
     )
 
-    if output == [] or 'job.batch/empty created' not in output[0]:
-        logging.error('Could not deploy pods: %s' % (''.join(output)))
+    if output == [] or "job.batch/empty created" not in output[0]:
+        logging.error("Could not deploy pods: %s" % ("".join(output)))
         sys.exit()
     if error != []:
-        logging.error('Could not deploy pods: %s' % (''.join(error)))
+        logging.error("Could not deploy pods: %s" % ("".join(error)))
         sys.exit()
 
     # Waiting for the applications to fully initialize
@@ -140,13 +142,22 @@ def cache_worker(config, machines):
             sys.exit()
 
     # All apps have succesfully been executed, now kill them
-    command = ["kubectl", "delete", "--kubeconfig=/home/cloud_controller/.kube/config", "-f", "/home/cloud_controller/job-template.yaml"]
+    command = [
+        "kubectl",
+        "delete",
+        "--kubeconfig=/home/cloud_controller/.kube/config",
+        "-f",
+        "/home/cloud_controller/job-template.yaml",
+    ]
     output, error = machines[0].process(
         command, ssh=True, ssh_target=config["cloud_ssh"][0]
     )
 
-    if output == [] or not ('job.batch' in output[0] and 'deleted' in output[0]):
-        logging.error('Output does not container job.batch "empty" deleted: %s' % ("".join(output)))
+    if output == [] or not ("job.batch" in output[0] and "deleted" in output[0]):
+        logging.error(
+            'Output does not container job.batch "empty" deleted: %s'
+            % ("".join(output))
+        )
         sys.exit()
     elif error != []:
         logging.error("".join(error))
@@ -171,14 +182,20 @@ def start_worker(config, machines):
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
-        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"]["applications_per_worker"]
+        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config[
+            "benchmark"
+        ]["applications_per_worker"]
     elif config["mode"] == "edge":
-        worker_apps = config["infrastructure"]["edge_nodes"] * config["benchmark"]["applications_per_worker"]
+        worker_apps = (
+            config["infrastructure"]["edge_nodes"]
+            * config["benchmark"]["applications_per_worker"]
+        )
 
     # Global variables for each applications
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
+        "image": "%s/%s"
+        % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
         "replicas": worker_apps,
@@ -225,11 +242,11 @@ def start_worker(config, machines):
         command, shell=True, ssh=True, ssh_target=config["cloud_ssh"][0]
     )
 
-    if len(output) < 2 or 'job.batch/empty created' not in output[1]:
-        logging.error('Could not deploy pods: %s' % (''.join(output)))
+    if len(output) < 2 or "job.batch/empty created" not in output[1]:
+        logging.error("Could not deploy pods: %s" % ("".join(output)))
         sys.exit()
     if error != []:
-        logging.error('Could not deploy pods: %s' % (''.join(error)))
+        logging.error("Could not deploy pods: %s" % ("".join(error)))
         sys.exit()
 
     starttime = float(output[0])

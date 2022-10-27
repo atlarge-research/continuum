@@ -288,7 +288,7 @@ def copy_files(config, machines):
                     + config["benchmark"]["resource_manager"]
                     + ".yml"
                 )
-                d = dest + 'launch_benchmark.yml'
+                d = dest + "launch_benchmark.yml"
                 out.append(machine.copy_files(path, d))
 
         # Copy VM creation files
@@ -326,10 +326,11 @@ def copy_files(config, machines):
                 rm = config["benchmark"]["resource_manager"]
                 if config["benchmark"]["resource_manager"] == "mist":
                     rm = "kubeedge"
-                
-                
-                if config["benchmark"]["resource_manager"] == "kubernetes" or \
-                    config["benchmark"]["resource_manager"] == "kubeedge":
+
+                if (
+                    config["benchmark"]["resource_manager"] == "kubernetes"
+                    or config["benchmark"]["resource_manager"] == "kubeedge"
+                ):
                     path = config["base"] + "/resource_manager/kubernetes/config.toml"
                     out.append(machine.copy_files(path, dest))
 
@@ -498,8 +499,10 @@ def docker_pull(config, machines, base_names):
                 # Load worker application
                 if "_cloud_" in name or "_edge_" in name:
                     # Kubernetes or KubeEdge use registries for cloud/edge
-                    if config["benchmark"]["resource_manager"] == "kubernetes" or \
-                        config["benchmark"]["resource_manager"] == "kubernetes":
+                    if (
+                        config["benchmark"]["resource_manager"] == "kubernetes"
+                        or config["benchmark"]["resource_manager"] == "kubernetes"
+                    ):
                         continue
 
                     images.append(config["images"]["worker"].split(":")[1])
@@ -517,7 +520,8 @@ def docker_pull(config, machines, base_names):
                     )
 
                     if error != [] and any(
-                        "server gave HTTP response to HTTPS client" in line for line in error
+                        "server gave HTTP response to HTTPS client" in line
+                        for line in error
                     ):
                         logging.warn(
                             """\

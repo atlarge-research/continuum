@@ -79,10 +79,10 @@ def get_worker_output(config, machines):
     for line in output[1:]:
         container = line.split(" ")[0]
 
-        if config['benchmark']['application'] == 'image_classification':
+        if config["benchmark"]["application"] == "image_classification":
             command = ["kubectl", "logs", "--timestamps=true", container]
-        elif config['benchmark']['application'] == 'empty':
-            command = ['kubectl', 'get', 'pod', container, '-o', 'yaml']
+        elif config["benchmark"]["application"] == "empty":
+            command = ["kubectl", "get", "pod", container, "-o", "yaml"]
 
         output, error = machines[0].process(
             command, ssh=True, ssh_target=config["cloud_ssh"][0]
@@ -148,24 +148,6 @@ def to_datetime_image(s):
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 
 
-def to_datetime_empty(s):
-    """Parse a datetime string from docker logs to a Python datetime object
-
-    Args:
-        s (str): Docker datetime string
-
-    Returns:
-        datetime: Python datetime object
-    """
-    s = s.split(' ')[-1]
-    s = s[1:-1]
-    s = s.replace("T", " ")
-    s = s.replace("Z", "")
-    dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
-    dt = dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
-    return datetime.timestamp(dt)
-
-
 def gather_worker_metrics_empty(machines, worker_output, starttime):
     """Gather metrics from cloud or edge workers for the empty app
 
@@ -182,7 +164,7 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
         return worker_metrics
 
     worker_set = {
-        "total_time": None, # Total scheduling time
+        "total_time": None,  # Total scheduling time
     }
 
     for out in worker_output:
@@ -191,22 +173,21 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
         nodename = 0
 
         for line in out:
-            if 'nodeName' in line:
-                nodename = line.split('nodeName: ')[1]
-            elif 'containerID' in line:
-                containerID = line.split('://')[1]
+            if "nodeName" in line:
+                nodename = line.split("nodeName: ")[1]
+            elif "containerID" in line:
+                containerID = line.split("://")[1]
                 break
 
-        print(nodename)
-        print(containerID)
-
         if containerID == 0 or nodename == 0:
-            logging.error('Could not find containerID for pod or scheduled node')
+            logging.error("Could not find containerID for pod or scheduled node")
             sys.exit()
 
         # Get output from the worker node using journalctl, to get millisecond timing
-        grep = '\'msg="StartContainer for \\\"' + containerID + '\\\" returns successfully\''
-        command = "sudo journalctl -u containerd -o short-precise | grep '%s'" % (grep)
+        command = (
+            """sudo journalctl -u containerd -o short-precise | grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'"""
+            % (containerID)
+        )
         for machine in machines:
             if nodename in machine.cloud_names + machine.edge_names:
                 if nodename in machine.cloud_names:
@@ -216,32 +197,28 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
                     i = machine.edge_names.index(nodename)
                     ip = machine.edge_ips[i]
 
-                ssh = '%s@%s' % (nodename, ip)
+                ssh = "%s@%s" % (nodename, ip)
                 output, error = machine.process(
                     command, shell=True, ssh=True, ssh_target=ssh
                 )
 
                 if output == [] or len(output) > 1:
-                    logging.error('Could not get journalctl output for pod %s' % (''.join(output)))
+                    logging.error(
+                        "Could not get journalctl output for pod %s" % ("".join(output))
+                    )
                     sys.exit()
                 elif error != []:
-                    logging.error('Could not get journalctl output for pod %s' % (''.join(error)))
+                    logging.error(
+                        "Could not get journalctl output for pod %s" % ("".join(error))
+                    )
                     sys.exit()
 
-                print(output)
-                print(output[0])
-
                 # Now parse the line to datetime with milliseconds
-                dt = output[0].split('time="')[1].split('+')[0]
-                print(dt)
+                dt = output[0].split('time="')[1].split("+")[0]
                 dt = dt.replace("T", " ")
-                print(dt)
-                dt = dt[-3]
-                print(dt)
+                dt = dt[:-3]
                 dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
-                print(dt)
                 end_time = datetime.timestamp(dt)
-                print(end_time)
 
                 break
 
@@ -467,7 +444,9 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def gather_metrics(machines, config, worker_output, endpoint_output, container_names, starttime):
+def gather_metrics(
+    machines, config, worker_output, endpoint_output, container_names, starttime
+):
     """Process the raw output to lists of dicts
 
     Args:
@@ -501,9 +480,9 @@ def gather_metrics(machines, config, worker_output, endpoint_output, container_n
 
             logging.debug("------------------------------------")
 
-    if config['benchmark']['application'] == 'image_classification':
+    if config["benchmark"]["application"] == "image_classification":
         worker_metrics = gather_worker_metrics_image(worker_output)
-    elif config['benchmark']['application'] == 'empty':
+    elif config["benchmark"]["application"] == "empty":
         worker_metrics = gather_worker_metrics_empty(machines, worker_output, starttime)
 
     endpoint_metrics = []
@@ -536,9 +515,7 @@ def format_output_empty(config, worker_metrics):
     logging.info("\n" + df_no_indices)
 
     # Print ouput in csv format
-    logging.debug(
-        "Output in csv format\n%s" % (repr(df.to_csv()))
-    )
+    logging.debug("Output in csv format\n%s" % (repr(df.to_csv())))
 
 
 def format_output_image(config, worker_metrics, endpoint_metrics):
@@ -628,7 +605,7 @@ def format_output(config, worker_metrics, endpoint_metrics):
         sub_metrics (list(dict)): Metrics per worker node
         endpoint_metrics (list(dict)): Metrics per endpoint
     """
-    if config['benchmark']['application'] == 'image_classification':
+    if config["benchmark"]["application"] == "image_classification":
         format_output_image(config, worker_metrics, endpoint_metrics)
-    elif config['benchmark']['application'] == 'empty':
+    elif config["benchmark"]["application"] == "empty":
         format_output_empty(config, worker_metrics)

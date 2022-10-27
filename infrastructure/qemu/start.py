@@ -193,34 +193,32 @@ def base_image(config, machines):
         infrastructure.docker_pull(config, machines, base_names)
 
     # Get host timezone
-    command = ['ls', '-alh', '/etc/localtime']
+    command = ["ls", "-alh", "/etc/localtime"]
     output, error = machines[0].process(command)
 
-    if output == [] or '/etc/localtime' not in output[0]:
-        logging.error('Could not get host timezone: %s' % (''.join(output)))
+    if output == [] or "/etc/localtime" not in output[0]:
+        logging.error("Could not get host timezone: %s" % ("".join(output)))
         sys.exit()
     elif error != []:
-        logging.error('Could not get host timezone: %s' % (''.join(error)))
+        logging.error("Could not get host timezone: %s" % ("".join(error)))
         sys.exit()
 
-    timezone = output[0].split('-> ')[1].strip()
+    timezone = output[0].split("-> ")[1].strip()
 
     # Fix timezone on every base vm
-    command = ['sudo', 'ln', '-sf', timezone, '/etc/localtime']
+    command = ["sudo", "ln", "-sf", timezone, "/etc/localtime"]
     for machine in machines:
         for ip, name in zip(machine.base_ips, machine.base_names):
-            ssh = '%s@%s' % (name, ip)
+            ssh = "%s@%s" % (name, ip)
 
-            output, error = machines[0].process(
-                command, ssh=True, ssh_target=ssh
-            )
+            output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
 
             if output != []:
-                logging.error('Could not set VM timezone: %s' % (''.join(output)))
+                logging.error("Could not set VM timezone: %s" % ("".join(output)))
                 sys.exit()
             elif error != []:
-                logging.error('Could not set VM timezone: %s' % (''.join(error)))
-                sys.exit() 
+                logging.error("Could not set VM timezone: %s" % ("".join(error)))
+                sys.exit()
 
     # Clean the VM
     processes = []
@@ -291,7 +289,7 @@ def launch_vms(config, machines, repeat=[]):
     logging.info("Start VMs")
 
     # Sometimes previous QEMU commands aren't finished yet, so it's safer to wait a bit to prevent lock errors
-    time.sleep(5) 
+    time.sleep(5)
 
     processes = []
     if repeat == []:
