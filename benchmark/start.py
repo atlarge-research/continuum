@@ -68,21 +68,18 @@ def cache_worker(config, machines):
         vars_str += str(k) + "=" + str(v) + " "
 
     # Launch applications on cloud/edge
-    command = [
-        "ansible-playbook",
-        "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        "--extra-vars",
-        vars_str[:-1],
-        config["home"] + "/.continuum/launch_benchmark.yml",
-    ]
-    main.ansible_check_output(machines[0].process(command))
+    command = (
+        'ansible-playbook -i %s/.continuum/inventory_vms --extra-vars "%s" %s/.continuum/launch_benchmark.yml'
+        % (config["home"], vars_str[:-1], config["home"])
+    )
+
+    main.ansible_check_output(machines[0].process(command, shell=True)[0])
 
     # This only creates the file we need, now launch the benchmark
     command = "kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml"
     output, error = machines[0].process(
-        command, shell=True, ssh=True, ssh_target=config["cloud_ssh"][0]
-    )
+        command, shell=True, ssh=config["cloud_ssh"][0]
+    )[0]
 
     if output == [] or "job.batch/empty created" not in output[0]:
         logging.error("Could not deploy pods: %s" % ("".join(output)))
@@ -108,9 +105,7 @@ def cache_worker(config, machines):
                 "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
                 "--sort-by=.spec.nodeName",
             ]
-            output, error = machines[0].process(
-                command, ssh=True, ssh_target=config["cloud_ssh"][0]
-            )
+            output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
             if error != [] and any(
                 "couldn't find any field with path" in line for line in error
@@ -149,9 +144,7 @@ def cache_worker(config, machines):
         "-f",
         "/home/cloud_controller/job-template.yaml",
     ]
-    output, error = machines[0].process(
-        command, ssh=True, ssh_target=config["cloud_ssh"][0]
-    )
+    output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
     if output == [] or not ("job.batch" in output[0] and "deleted" in output[0]):
         logging.error(
@@ -226,21 +219,18 @@ def start_worker(config, machines):
         vars_str += str(k) + "=" + str(v) + " "
 
     # Launch applications on cloud/edge
-    command = [
-        "ansible-playbook",
-        "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        "--extra-vars",
-        vars_str[:-1],
-        config["home"] + "/.continuum/launch_benchmark.yml",
-    ]
-    main.ansible_check_output(machines[0].process(command))
+    command = (
+        'ansible-playbook -i %s/.continuum/inventory_vms --extra-vars "%s" %s/.continuum/launch_benchmark.yml'
+        % (config["home"], vars_str[:-1], config["home"])
+    )
+
+    main.ansible_check_output(machines[0].process(command, shell=True)[0])
 
     # This only creates the file we need, now launch the benchmark
     command = "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml\""
     output, error = machines[0].process(
-        command, shell=True, ssh=True, ssh_target=config["cloud_ssh"][0]
-    )
+        command, shell=True, ssh=config["cloud_ssh"][0]
+    )[0]
 
     if len(output) < 2 or "job.batch/empty created" not in output[1]:
         logging.error("Could not deploy pods: %s" % ("".join(output)))
@@ -269,9 +259,7 @@ def start_worker(config, machines):
                 "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
                 "--sort-by=.spec.nodeName",
             ]
-            output, error = machines[0].process(
-                command, ssh=True, ssh_target=config["cloud_ssh"][0]
-            )
+            output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
             if error != [] and any(
                 "couldn't find any field with path" in line for line in error
@@ -320,7 +308,8 @@ def start_worker_mist(config, machines):
     """
     logging.info("Deploy Docker containers on endpoints with publisher application")
 
-    processes = []
+    commands = []
+    sshs = []
     container_names = []
 
     for worker_ssh in config["edge_ssh"]:
@@ -341,8 +330,6 @@ def start_worker_mist(config, machines):
             ),
         ]
 
-        logging.info("Launch %s" % (cont_name))
-
         command = (
             [
                 "docker",
@@ -362,16 +349,15 @@ def start_worker_mist(config, machines):
             ]
         )
 
-        processes.append(
-            machines[0].process(command, output=False, ssh=True, ssh_target=worker_ssh)
-        )
+        commands.append(command)
+        sshs.append(worker_ssh)
         container_names.append(cont_name)
 
+    results = machines[0].process(commands, ssh=sshs)
+
     # Checkout process output
-    for process in processes:
-        logging.debug("Check output of command [%s]" % (" ".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+    for ssh, (output, error) in zip(sshs, results):
+        logging.debug("Check output of mist endpoint start in ssh [%s]" % (ssh))
 
         if (
             error != []
@@ -397,9 +383,7 @@ def start_worker_mist(config, machines):
                 "--format",
                 '"{{.ID}}: {{.Status}} {{.Names}}"',
             ]
-            output, error = machines[0].process(
-                command, ssh=True, ssh_target=worker_ssh
-            )
+            output, error = machines[0].process(command, ssh=worker_ssh)[0]
 
             if error != []:
                 logging.error("".join(error))
@@ -444,7 +428,8 @@ def start_endpoint(config, machines):
     """
     logging.info("Deploy Docker containers on endpoints with publisher application")
 
-    processes = []
+    commands = []
+    sshs = []
     container_names = []
 
     # Calc endpoints per worker
@@ -511,18 +496,15 @@ def start_endpoint(config, machines):
                 ]
             )
 
-            processes.append(
-                machines[0].process(
-                    command, output=False, ssh=True, ssh_target=endpoint_ssh
-                )
-            )
+            commands.append(command)
+            sshs.append(endpoint_ssh)
             container_names.append(cont_name)
 
+    results = machines[0].process(commands, ssh=sshs)
+
     # Checkout process output
-    for process in processes:
-        logging.debug("Check output of command [%s]" % (" ".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+    for ssh, (output, error) in zip(sshs, results):
+        logging.debug("Check output of endpoint start in ssh [%s]" % (ssh))
 
         if (
             error != []
@@ -565,7 +547,7 @@ def wait_endpoint_completion(machines, sshs, container_names):
                 "--format",
                 '"{{.ID}}: {{.Status}} {{.Names}}"',
             ]
-            output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+            output, error = machines[0].process(command, ssh=ssh)[0]
 
             if error != []:
                 logging.error("".join(error))
@@ -632,9 +614,7 @@ def wait_worker_completion(config, machines):
                 "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
                 "--sort-by=.spec.nodeName",
             ]
-            output, error = machines[0].process(
-                command, ssh=True, ssh_target=config["cloud_ssh"][0]
-            )
+            output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
             if error != [] or output == []:
                 logging.error("".join(error))

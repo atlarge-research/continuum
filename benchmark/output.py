@@ -8,7 +8,7 @@ import copy
 import numpy as np
 import pandas as pd
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 def get_endpoint_output(config, machines, container_names):
@@ -24,20 +24,23 @@ def get_endpoint_output(config, machines, container_names):
     """
     logging.info("Extract output from endpoint publishers")
 
-    endpoint_output = []
-    for ssh, cont_name in zip(config["endpoint_ssh"], container_names):
-        logging.info("Get output from endpoint %s on VM %s" % (cont_name, ssh))
+    # Alternatively, use docker logs -t container_name for detailed timestamps
+    # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
+    commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-        # Alternatively, use docker logs -t container_name for detailed timestamps
-        # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
-        command = ["docker", "logs", "-t", cont_name]
-        output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+    results = machines[0].process(commands, ssh=config["endpoint_ssh"])
+
+    endpoint_output = []
+    for container, ssh, (output, error) in zip(
+        container_names, config["endpoint_ssh"], results
+    ):
+        logging.info("Get output from endpoint %s on VM %s" % (container, ssh))
 
         if error != []:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
-            logging.error("Container %s output empty" % (cont_name))
+            logging.error("Container %s output empty" % (container))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -66,16 +69,14 @@ def get_worker_output(config, machines):
         "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
         "--sort-by=.spec.nodeName",
     ]
-    output, error = machines[0].process(
-        command, ssh=True, ssh_target=config["cloud_ssh"][0]
-    )
+    output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
     if error != [] or output == []:
         logging.error("".join(error))
         sys.exit()
 
-    # Get output from pods
-    worker_output = []
+    # Gather commands to get logs
+    commands = []
     for line in output[1:]:
         container = line.split(" ")[0]
 
@@ -84,12 +85,16 @@ def get_worker_output(config, machines):
         elif config["benchmark"]["application"] == "empty":
             command = ["kubectl", "get", "pod", container, "-o", "yaml"]
 
-        output, error = machines[0].process(
-            command, ssh=True, ssh_target=config["cloud_ssh"][0]
-        )
+        commands.append(command)
 
+    # Get the logs
+    results = machines[0].process(commands, ssh=config["cloud_ssh"][0])
+
+    # Get the output
+    worker_output = []
+    for i, (output, error) in enumerate(results):
         if error != [] or output == []:
-            logging.error("".join(error))
+            logging.error("Container %i: %s" % (i, "".join(error)))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -110,20 +115,23 @@ def get_worker_output_mist(config, machines, container_names):
     """
     logging.info("Gather output from subscribers")
 
-    worker_output = []
-    for ssh, cont_name in zip(config["edge_ssh"], container_names):
-        logging.info("Get output from mist worker %s on VM %s" % (cont_name, ssh))
+    # Alternatively, use docker logs -t container_name for detailed timestamps
+    # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
+    commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-        # Alternatively, use docker logs -t container_name for detailed timestamps
-        # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
-        command = ["docker", "logs", "-t", cont_name]
-        output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+    results = machines[0].process(commands, ssh=config["edge_ssh"])
+
+    worker_output = []
+    for container, ssh, (output, error) in zip(
+        container_names, config["endpoint_ssh"], results
+    ):
+        logging.info("Get output from mist worker %s on VM %s" % (container, ssh))
 
         if error != []:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
-            logging.error("Container %s output empty" % (cont_name))
+            logging.error("Container %s output empty" % (container))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -159,16 +167,20 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
         list(dict): List of parsed output for each cloud or edge worker
     """
     logging.info("Gather metrics with start time: %s" % (str(starttime)))
-    worker_metrics = []
-    if worker_output == []:
-        return worker_metrics
 
     worker_set = {
         "total_time": None,  # Total scheduling time
     }
 
-    for out in worker_output:
+    worker_metrics = []
+    for _ in range(len(worker_output)):
         worker_metrics.append(copy.deepcopy(worker_set))
+
+    commands = []
+    sshs = []
+
+    # Parse output and build new commands to get final data with
+    for i, out in enumerate(worker_output):
         containerID = 0
         nodename = 0
 
@@ -188,6 +200,8 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
             """sudo journalctl -u containerd -o short-precise | grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'"""
             % (containerID)
         )
+        commands.append(command)
+
         for machine in machines:
             if nodename in machine.cloud_names + machine.edge_names:
                 if nodename in machine.cloud_names:
@@ -198,31 +212,33 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
                     ip = machine.edge_ips[i]
 
                 ssh = "%s@%s" % (nodename, ip)
-                output, error = machine.process(
-                    command, shell=True, ssh=True, ssh_target=ssh
-                )
-
-                if output == [] or len(output) > 1:
-                    logging.error(
-                        "Could not get journalctl output for pod %s" % ("".join(output))
-                    )
-                    sys.exit()
-                elif error != []:
-                    logging.error(
-                        "Could not get journalctl output for pod %s" % ("".join(error))
-                    )
-                    sys.exit()
-
-                # Now parse the line to datetime with milliseconds
-                dt = output[0].split('time="')[1].split("+")[0]
-                dt = dt.replace("T", " ")
-                dt = dt[:-3]
-                dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
-                end_time = datetime.timestamp(dt)
-
+                sshs.append(ssh)
                 break
 
-        worker_metrics[-1]["total_time"] = end_time - starttime
+    # Given the commands and the ssh address to execute it at, execute all commands
+    results = machine.process(commands, shell=True, ssh=sshs)
+
+    # Parse the final output to get the total execution time
+    for i, (output, error) in enumerate(results):
+        if output == [] or len(output) > 1:
+            logging.error(
+                "Could not get journalctl output for pod %s" % ("".join(output))
+            )
+            sys.exit()
+        elif error != []:
+            logging.error(
+                "Could not get journalctl output for pod %s" % ("".join(error))
+            )
+            sys.exit()
+
+        # Now parse the line to datetime with milliseconds
+        dt = output[0].split('time="')[1].split("+")[0]
+        dt = dt.replace("T", " ")
+        dt = dt[:-3]
+        dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
+        end_time = datetime.timestamp(dt)
+
+        worker_metrics[i]["total_time"] = end_time - starttime
 
     return sorted(worker_metrics, key=lambda x: x["total_time"])
 

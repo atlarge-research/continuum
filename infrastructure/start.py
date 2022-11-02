@@ -156,7 +156,9 @@ def delete_vms(machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Start deleting VMs after benchmark has completed")
-    processes = []
+
+    commands = []
+    sshs = []
     for machine in machines:
         if machine.is_local:
             command = 'virsh list --all | grep -o -E "(cloud\w*|edge\w*|endpoint\w*|base\w*)" | xargs -I % sh -c "virsh destroy %"'
@@ -164,20 +166,18 @@ def delete_vms(machines):
             comm = 'virsh list --all | grep -o -E \\"(cloud\w*|edge\w*|endpoint\w*|base\w*)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
 
-        processes.append(machine.process(command, shell=True, output=False))
+        commands.append(command)
+        sshs.append(None)
 
-        command = ["rm", "-f", "/tmp/join-command.txt"]
-        processes.append(machine.process(command, ssh=True, output=False))
+        command = "rm -f /tmp/join-command.txt"
+        commands.append(command)
+        sshs.append(machine.name)
+
+    results = machines[0].process(commands, shell=True, ssh=sshs, ssh_key=False)
 
     # Wait for process to finish. Outcome of destroy command does not matter
-    for process in processes:
-        args = process.args
-        if isinstance(args, list):
-            args = " ".join(args)
-
-        logging.debug("Check output for command [%s]" % (args))
-        _ = [line.decode("utf-8") for line in process.stdout.readlines()]
-        _ = [line.decode("utf-8") for line in process.stderr.readlines()]
+    for command, (_, _) in zip(commands, results):
+        logging.debug("Check output for command [%s]" % (command))
 
 
 def create_keypair(config, machines):
@@ -197,7 +197,7 @@ cd %s/.ssh && \
 ssh-keygen -t rsa -b 4096 -f id_rsa_benchmark -C KubeEdge -N '' -q"
                 % (config["home"], config["home"])
             ]
-            output, error = machine.process(command, shell=True)
+            output, error = machine.process(command, shell=True)[0]
         else:
             source = "%s/.ssh/id_rsa_benchmark*" % (config["home"])
             dest = machine.name + ":./.ssh/"
@@ -224,7 +224,7 @@ def create_dir(config, machines):
     """
     logging.info("Create a temporary directory for generated files")
     command = "rm -rf %s/.tmp && mkdir %s/.tmp" % (config["base"], config["base"])
-    output, error = machines[0].process(command, shell=True)
+    output, error = machines[0].process(command, shell=True)[0]
 
     if error != []:
         logging.error("".join(error))
@@ -243,30 +243,37 @@ def copy_files(config, machines):
     """
     logging.info("Start copying files to all nodes")
 
+    # Create a source directory on each machiine
+    commands = []
     for machine in machines:
-        # Create a source directory on each machiine
         if machine.is_local:
             command = "rm -rf %s/.continuum && mkdir %s/.continuum" % (
                 config["home"],
                 config["home"],
             )
-            output, error = machine.process(command, shell=True)
-
-            dest = config["home"] + "/.continuum/"
         else:
             command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (
                 machine.name
             )
-            output, error = machine.process(command, shell=True)
 
-            dest = machine.name + ":./.continuum/"
+        commands.append(command)
 
+    results = machines[0].process(commands, shell=True)
+
+    for output, error in results:
         if error != []:
             logging.error("".join(error))
             sys.exit()
         elif output != []:
             logging.error("".join(output))
             sys.exit()
+
+    # For the local machine, copy the ansible inventory file and benchmark launch
+    for machine in machines:
+        if machine.is_local:
+            dest = config["home"] + "/.continuum/"
+        else:
+            dest = machine.name + ":./.continuum/"
 
         out = []
 
@@ -383,7 +390,7 @@ def add_ssh(config, machines, base=[]):
     # Check if old keys are still in the known hosts file
     for ip in ips:
         command = ["ssh-keygen", "-f", config["home"] + "/.ssh/known_hosts", "-R", ip]
-        _, error = machines[0].process(command)
+        _, error = machines[0].process(command)[0]
 
         if error != [] and not any("not found in" in err for err in error):
             logging.error("".join(error))
@@ -394,7 +401,7 @@ def add_ssh(config, machines, base=[]):
         logging.info("Wait for VM to have started up")
         while True:
             command = "ssh-keyscan %s >> %s/.ssh/known_hosts" % (ip, config["home"])
-            _, error = machines[0].process(command, shell=True)
+            _, error = machines[0].process(command, shell=True)[0]
 
             if any("# " + str(ip) + ":" in err for err in error):
                 break
@@ -415,7 +422,7 @@ def docker_registry(config, machines):
 
     # Check if registry is up
     command = ["curl", "%s/v2/_catalog" % (config["registry"])]
-    output, error = machines[0].process(command)
+    output, error = machines[0].process(command)[0]
 
     if error != [] and any("Failed to connect to" in line for line in error):
         # Not yet up, so launch
@@ -431,7 +438,7 @@ def docker_registry(config, machines):
             "registry",
             "registry:2",
         ]
-        output, error = machines[0].process(command)
+        output, error = machines[0].process(command)[0]
 
         if error != [] and not (
             any("Unable to find image" in line for line in error)
@@ -466,7 +473,7 @@ def docker_registry(config, machines):
         ]
 
         for command in commands:
-            output, error = machines[0].process(command)
+            output, error = machines[0].process(command)[0]
 
             if error != []:
                 logging.error("".join(error))
@@ -490,6 +497,8 @@ def docker_pull(config, machines, base_names):
     logging.info("Pull docker containers into base images")
 
     # Pull the images
+    commands = []
+    sshs = []
     for machine in machines:
         for name, ip in zip(machine.base_names, machine.base_ips):
             name_r = name.rstrip(string.digits)
@@ -501,7 +510,7 @@ def docker_pull(config, machines, base_names):
                     # Kubernetes or KubeEdge use registries for cloud/edge
                     if (
                         config["benchmark"]["resource_manager"] == "kubernetes"
-                        or config["benchmark"]["resource_manager"] == "kubernetes"
+                        or config["benchmark"]["resource_manager"] == "kubeedge"
                     ):
                         continue
 
@@ -513,31 +522,34 @@ def docker_pull(config, machines, base_names):
 
                 # Pull
                 for image in images:
-                    output, error = machines[0].process(
-                        ["docker", "pull", "%s/%s" % (config["registry"], image)],
-                        ssh=True,
-                        ssh_target=name + "@" + ip,
-                    )
+                    command = ["docker", "pull", "%s/%s" % (config["registry"], image)]
+                    commands.append(command)
+                    sshs.append(name + "@" + ip)
 
-                    if error != [] and any(
-                        "server gave HTTP response to HTTPS client" in line
-                        for line in error
-                    ):
-                        logging.warn(
-                            """\
-File /etc/docker/daemon.json does not exist, or is empty on Machine %s. 
-This will most likely prevent the machine from pulling endpoint docker images 
-from the private Docker registry running on the main machine %s.
-Please create this file on machine %s with content: { "insecure-registries":["%s"] }
-Followed by a restart of Docker: systemctl restart docker"""
-                            % (name, machines[0].name, name, config["registry"])
-                        )
-                    if error != []:
-                        logging.error("".join(error))
-                        sys.exit()
-                    elif output == []:
-                        logging.error("No output from command docker pull")
-                        sys.exit()
+    if commands != []:
+        results = machines[0].process(commands, ssh=sshs)
+
+        for ssh, (output, error) in zip(sshs, results):
+            logging.info("Execute docker pull command on address [%s]" % (ssh))
+
+            if error != [] and any(
+                "server gave HTTP response to HTTPS client" in line for line in error
+            ):
+                logging.warn(
+                    """\
+    File /etc/docker/daemon.json does not exist, or is empty on machine %s. 
+    This will most likely prevent the machine from pulling endpoint docker images 
+    from the private Docker registry running on the main machine %s.
+    Please create this file on machine %s with content: { "insecure-registries":["%s"] }
+    Followed by a restart of Docker: systemctl restart docker"""
+                    % (ssh, machines[0].name, ssh, config["registry"])
+                )
+            if error != []:
+                logging.error("".join(error))
+                sys.exit()
+            elif output == []:
+                logging.error("No output from command docker pull")
+                sys.exit()
 
 
 def start(config):

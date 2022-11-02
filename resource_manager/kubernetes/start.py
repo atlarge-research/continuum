@@ -19,7 +19,7 @@ def start(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Start Kubernetes cluster on VMs")
-    processes = []
+    commands = []
 
     # Setup cloud controller
     command = [
@@ -28,7 +28,7 @@ def start(config, machines):
         config["home"] + "/.continuum/inventory_vms",
         config["home"] + "/.continuum/cloud/control_install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    commands.append(command)
 
     # Setup cloud worker
     command = [
@@ -37,13 +37,11 @@ def start(config, machines):
         config["home"] + "/.continuum/inventory_vms",
         config["home"] + "/.continuum/cloud/install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    commands.append(command)
+
+    results = machines[0].process(commands)
 
     # Check playbooks
-    for process in processes:
-        logging.debug(
-            "Check output for Ansible command [%s]" % (" ".join(process.args))
-        )
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+    for command, (output, error) in zip(commands, results):
+        logging.debug("Check output for Ansible command [%s]" % (" ".join(command)))
         main.ansible_check_output((output, error))

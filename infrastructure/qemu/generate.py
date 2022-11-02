@@ -107,7 +107,7 @@ def find_bridge(machine, bridge):
     """
     output, error = machine.process(
         "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
-    )
+    )[0]
     if error != [] or output == []:
         logging.error("ERROR: Could not find a network bridge")
         sys.exit()
@@ -150,7 +150,7 @@ def start(config, machines):
     # Get gateway address
     output, error = machines[0].process(
         "ip route | grep ' %s '" % (bridge_name), shell=True
-    )
+    )[0]
     if error != [] or output == []:
         logging.error("ERROR: Could not find gateway address")
         sys.exit()
