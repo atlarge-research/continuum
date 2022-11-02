@@ -216,18 +216,22 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
                 break
 
     # Given the commands and the ssh address to execute it at, execute all commands
-    results = machine.process(commands, shell=True, ssh=sshs)
+    results = machine.process(commands, shell=True, ssh=sshs, retryonoutput=True)
 
     # Parse the final output to get the total execution time
-    for i, (output, error) in enumerate(results):
-        if output == [] or len(output) > 1:
+    for i, (command, (output, error)) in enumerate(zip(commands, results)):
+        if output == []:
+            logging.error("No output for pod %i and command [%s]" % (i, command))
+            sys.exit()
+        if len(output) > 1:
             logging.error(
-                "Could not get journalctl output for pod %s" % ("".join(output))
+                "Incorrect output for pod %i and command [%s]: %s"
+                % (i, command, "".join(output))
             )
             sys.exit()
         elif error != []:
             logging.error(
-                "Could not get journalctl output for pod %s" % ("".join(error))
+                "Error for pod %i and command [%s]: %s" % (i, command, "".join(error))
             )
             sys.exit()
 

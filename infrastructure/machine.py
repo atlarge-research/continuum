@@ -9,6 +9,7 @@ import os
 import subprocess
 import re
 import getpass
+import math
 
 
 class Machine:
@@ -105,7 +106,15 @@ BASE_NAMES              %s""" % (
             ", ".join(self.base_names),
         )
 
-    def process(self, command, shell=False, env=None, ssh=None, ssh_key=True):
+    def process(
+        self,
+        command,
+        shell=False,
+        env=None,
+        ssh=None,
+        ssh_key=True,
+        retryonoutput=False,
+    ):
         """Execute a process using the subprocess library, and return the output/error or the process
 
         Args:
@@ -115,6 +124,7 @@ BASE_NAMES              %s""" % (
             env (dict, optional): Environment variables. Defaults to None.
             ssh (str, optional): VM to SSH into (instead of physical machine). Default to None
             ssh_key (bool, optional): Use the custom SSH key for VMs. Default to True
+            retryonoutput (bool, optional): Retry command on empty output. Default to False
 
         Returns:
             list(list(str), list(str)): Return a list of [output, error] lists, one per command.
@@ -165,27 +175,69 @@ BASE_NAMES              %s""" % (
                     # Don't use a shell, so a list
                     command[i] = add + c
 
-        # Execute all commands
-        processes = []
-        for c in command:
-            logging.debug("Start subprocess: %s" % (c))
-            processes.append(
-                subprocess.Popen(
-                    c,
-                    shell=shell,
-                    executable=executable,
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-            )
-
-        # Get all outputs
+        # Execute all commands, max 100 at a time
+        batchsize = 100
         outputs = []
-        for process in processes:
-            output = [line.decode("utf-8") for line in process.stdout.readlines()]
-            error = [line.decode("utf-8") for line in process.stderr.readlines()]
-            outputs.append([output, error])
+
+        new_retries = []
+
+        for i in range(math.ceil(len(command) / batchsize)):
+            processes = []
+            for j, c in enumerate(command[i * batchsize : (i + 1) * batchsize]):
+                logging.debug("Start subprocess: %s" % (c))
+                processes.append(
+                    subprocess.Popen(
+                        c,
+                        shell=shell,
+                        executable=executable,
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                )
+
+            # Get outputs for this batch of commmands (blocking)
+            for j, process in enumerate(processes):
+                output = [line.decode("utf-8") for line in process.stdout.readlines()]
+                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                outputs.append([output, error])
+
+                if retryonoutput and output == []:
+                    new_retries.append(i * batchsize + j)
+
+        # Retry commands with empty output
+        max_tries = 5
+        for t in range(max_tries):
+            if new_retries == []:
+                break
+
+            retries = new_retries
+            new_retries = []
+
+            retries.sort()
+            processes = []
+
+            for i in retries:
+                logging.debug("Retry %i, subprocess %i: %s" % (t, i, command[i]))
+                processes.append(
+                    subprocess.Popen(
+                        command[i],
+                        shell=shell,
+                        executable=executable,
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                )
+
+            # Get outputs for this batch of commmands (blocking)
+            for i, process in zip(retries, processes):
+                output = [line.decode("utf-8") for line in process.stdout.readlines()]
+                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                outputs[i] = [output, error]
+
+                if output == []:
+                    new_retries.append(i)
 
         return outputs
 
