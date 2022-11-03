@@ -408,6 +408,8 @@ def add_ssh(config, machines, base=[]):
 
             time.sleep(5)
 
+    logging.info("SSH keys have been added")
+
 
 def docker_registry(config, machines):
     """Create and fill a local, private docker registry without the images needed for the benchmark.

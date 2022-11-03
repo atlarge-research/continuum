@@ -185,11 +185,12 @@ def base_image(config, machines):
         if command != []:
             commands.append(command)
 
-    results = machines[0].process(commands)
+    if commands != []:
+        results = machines[0].process(commands)
 
-    for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for command [%s]" % (" ".join(command)))
-        main.ansible_check_output((output, error))
+        for command, (output, error) in zip(commands, results):
+            logging.debug("Check output for command [%s]" % (" ".join(command)))
+            main.ansible_check_output((output, error))
 
     # Install netperf (always, because base images aren't updated)
     command = [
