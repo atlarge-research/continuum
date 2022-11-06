@@ -1,0 +1,34 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Install OpenFaaS
+  roles:
+    - kwoodson.yedit
+  hosts: cloudcontroller
+          
+  tasks:
+    - name: Install Arkade
+      become: true
+      shell: curl -SLsf https://get.arkade.dev/ | sudo sh
+    
+    - name: Install OpenFaaS through Arkade
+      become: yes
+      become_user: cloud_controller
+      shell: arkade install openfaas --set openfaasPRO=False
+
+    - name: Install OpenFaaS CLI
+      become: true
+      shell: curl -SLsf https://cli.openfaas.com | sudo sh
+
+    - name: kubectl - gateway
+      become: yes
+      become_user: cloud_controller
+      shell: kubectl rollout status -n openfaas deploy/gateway
+    
+    # - name: kubectl - portforward
+    #   become: yes
+    #   become_user: cloud_controller
+    #   shell: | 
+    #     kubectl port-forward -n openfaas svc/gateway 8080:8080 &
+    #     PASSWORD=$(kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | base64 --decode; echo)
+    #     echo -n $PASSWORD | faas-cli login --username admin --password-stdin
+

@@ -176,6 +176,13 @@ Inside the continuum framework:
 3. Run one of these configurations, such as a simple edge computing benchmark: `python3 main.py -v configuration/bench_edge.cfg`
 4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
 
+### Part 4: Install OpenFaaS
+For the moment, we only allow OpenFaaS to be installed outside of the framework. In the future, we will integrate it in the framework.
+
+1. From your host-system execute the Ansible playbook to install OpenFaaS. Make sure that you are in the project root and that you have a cluster running with Kubernetes installed.
+   ```bash
+    ansible-playbook -i ~/.continuum/inventory_vms execution_models/openFaas.yml
+   ```
 ---
 Please read the documentation in /docs when encountering issues during the installation or usage of the framework.
 
