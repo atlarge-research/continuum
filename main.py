@@ -446,18 +446,6 @@ def parse_config(parser, arg):
             lambda x: x in ["kubernetes", "kubeedge", "mist"],
             mandatory=False,
         )
-
-        option_check(
-            parser,
-            config,
-            new,
-            sec,
-            "resource_manager_only",
-            bool,
-            lambda x: x in [True, False],
-            mandatory=False # temporary due to compatibility
-        )
-
         option_check(
             parser, config, new, sec, "docker_pull", bool, lambda x: x in [True, False]
         )
@@ -742,8 +730,7 @@ def main(args):
 
     if not args.config["infrastructure"]["infra_only"]:
         resource_manager.start(args.config, machines)
-        if "resource_manager_only" not in args.config["benchmark"] or not args.config["benchmark"]["resource_manager_only"]: # temporary due to compatiblity
-            benchmark.start(args.config, machines)
+        benchmark.start(args.config, machines)
 
         if args.config["benchmark"]["delete"]:
             infrastructure.delete_vms(machines)
