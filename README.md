@@ -177,12 +177,50 @@ Inside the continuum framework:
 4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
 
 ### Part 4: Install OpenFaaS
+In this part, you will setup [OpenFaaS](https://docs.openfaas.com/), a serverless framework, in the Kubernetes cluster that `Continuum` created for you.  
 For the moment, we only allow OpenFaaS to be installed outside of the framework. In the future, we will integrate it in the framework.
 
 1. From your host-system execute the Ansible playbook to install OpenFaaS. Make sure that you are in the project root and that you have a cluster running with Kubernetes installed.
    ```bash
     ansible-playbook -i ~/.continuum/inventory_vms execution_models/openFaas.yml
    ```
+
+2. From your host-system ssh onto the `cloudcontroller` node:
+   ```bash
+   ssh cloud_controller@192.168.122.10 -i ~/.ssh/id_rsa_benchmark 
+   ```
+
+3. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:
+   ```bash
+   nohup kubectl port-forward -n openfaas svc/gateway 8080:8080 &
+   ```
+   After execution, hit `Strg+C` to exit the dialog.
+
+4. Give the `fass-cli` access to the OpenFaas deployment:
+   ```bash
+   PASSWORD=$(kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | base64 --decode; echo)
+   echo -n $PASSWORD | faas-cli login --username admin --password-stdin
+   ```
+
+Congratulations! As long as you don't reset the cluster, you can now access the OpenFaas deployment through the `cloudcontroller` node and `faas-cli`.  
+
+You can test your installation by deploying and running a simple function, [figlet](https://github.com/jmkhael/faas-figlet). Figlet echos its input back to the user as an ASCII-banner.  
+For now, we will use the command line to deploy the function. For a real-world scenario, this might not be desireable and you should use a yaml file to do your deployments like Johnny does in [his tutorial](https://jmkhael.io/create-a-serverless-ascii-banner-with-faas/). Why is that?
+
+Deploy figlet to OpenFaaS
+```bash
+faas-cli store deploy figlet
+```
+If everthing went well, you should now see it in the list of functions:
+```bash
+faas-cli list
+```
+
+Now it's time to execute your first serverless function:
+```bash
+curl http://localhost:8080/function/func_figlet -d 'Hello world!'
+```
+
 ---
 Please read the documentation in /docs when encountering issues during the installation or usage of the framework.
 

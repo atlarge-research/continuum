@@ -23,12 +23,3 @@
       become: yes
       become_user: cloud_controller
       shell: kubectl rollout status -n openfaas deploy/gateway
-    
-    # - name: kubectl - portforward
-    #   become: yes
-    #   become_user: cloud_controller
-    #   shell: | 
-    #     kubectl port-forward -n openfaas svc/gateway 8080:8080 &
-    #     PASSWORD=$(kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | base64 --decode; echo)
-    #     echo -n $PASSWORD | faas-cli login --username admin --password-stdin
-
