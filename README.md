@@ -218,7 +218,7 @@ faas-cli list
 
 Now it's time to execute your first serverless function:
 ```bash
-curl http://localhost:8080/function/func_figlet -d 'Hello world!'
+curl http://localhost:8080/function/figlet -d 'Hello world!'
 ```
 
 ---
