@@ -180,7 +180,11 @@ Inside the continuum framework:
 In this part, you will setup [OpenFaaS](https://docs.openfaas.com/), a serverless framework, in the Kubernetes cluster that `Continuum` created for you.  
 For the moment, we only allow OpenFaaS to be installed outside of the framework. In the future, we will integrate it in the framework.
 
-0. Uncomment [line 733 in main.py](https://github.com/linuswagner/continuum/blob/e1bcb441b2fa6106ef3444766be6f194019f9f5d/main.py#L733) to avoid that the default benchmark is run.
+0. Run Continuum with a configuration of your choice. Include the line
+```bash
+resource_manager_only = False
+```
+in the `[benchmark]` section to avoid that the benchmark is executed.
 
 1. From your host-system execute the Ansible playbook to install OpenFaaS. Make sure that you are in the project root and that you have a cluster running with Kubernetes installed.
    ```bash
