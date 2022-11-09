@@ -116,6 +116,7 @@ We assume the operating system is Ubuntu 20.04, either natively or via a VM.
     2. Edit the ansible configuration: `sudo vim /etc/ansible/ansible.cfg`
         1. Under `[ssh_connection]`, add `retries = 5`
         2. Under `[defaults]`, add `callback_whitelist = profile_tasks`
+        3. Under `[defaults]`, add `command_warnings=False`
 5. Install the Continuum repository
     1. `git clone https://github.com/atlarge-research/continuum.git`
     2. Get python requirements: `cd continuum && pip3 install -r requirements.txt`

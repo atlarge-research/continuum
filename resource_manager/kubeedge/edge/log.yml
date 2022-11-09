@@ -2,24 +2,24 @@
 - hosts: edges
   become: true
   tasks:
-  - name: Enable edgestream
-    shell: "sed -z 's/enable: false/enable: true/3' /etc/kubeedge/config/edgecore.yaml > edgecore.yaml" 
-    args:
-      warn: false
+    - name: Enable edgestream
+      shell: "sed -z 's/enable: false/enable: true/3' /etc/kubeedge/config/edgecore.yaml > edgecore.yaml"
+      args:
+        warn: false
 
-  - name: Move the newly created edgecore to KubeEdge directory
-    command: mv -f "/home/{{ username }}/edgecore.yaml" /etc/kubeedge/config/edgecore.yaml
+    - name: Move the newly created edgecore to KubeEdge directory
+      command: mv -f "/home/{{ username }}/edgecore.yaml" /etc/kubeedge/config/edgecore.yaml
 
-  - name: Disable KubeProxy restart
-    shell: "sed '/^ExecStart=.*/a Environment=\"CHECK_EDGECORE_ENVIRONMENT=false\"' /etc/kubeedge/edgecore.service > edgecore.service" 
-    args:
-      warn: false
+    - name: Disable KubeProxy restart
+      shell: 'sed ''/^ExecStart=.*/a Environment="CHECK_EDGECORE_ENVIRONMENT=false"'' /etc/kubeedge/edgecore.service > edgecore.service'
+      args:
+        warn: false
 
-  - name: Move the newly created edgecore service to KubeEdge directory
-    command: mv -f "/home/{{ username }}/edgecore.service" /etc/kubeedge/edgecore.service
+    - name: Move the newly created edgecore service to KubeEdge directory
+      command: mv -f "/home/{{ username }}/edgecore.service" /etc/kubeedge/edgecore.service
 
-  - name: Kill kube-proxy
-    shell: pkill kube-proxy || true
+    - name: Kill kube-proxy
+      shell: pkill kube-proxy || true
 
-  - name: Restart edgecore
-    command: systemctl restart edgecore.service
+    - name: Restart edgecore
+      command: systemctl restart edgecore.service
