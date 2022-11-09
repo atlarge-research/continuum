@@ -116,6 +116,7 @@ We assume the operating system is Ubuntu 20.04, either natively or via a VM.
     2. Edit the ansible configuration: `sudo vim /etc/ansible/ansible.cfg`
         1. Under `[ssh_connection]`, add `retries = 5`
         2. Under `[defaults]`, add `callback_whitelist = profile_tasks`
+        3. Under `[defaults]`, add `command_warnings=False`
 5. Install the Continuum repository
     1. `git clone https://github.com/atlarge-research/continuum.git`
     2. Get python requirements: `cd continuum && pip3 install -r requirements.txt`
@@ -180,29 +181,28 @@ Inside the continuum framework:
 In this part, you will setup [OpenFaaS](https://docs.openfaas.com/), a serverless framework, in the Kubernetes cluster that `Continuum` created for you.  
 For the moment, we only allow OpenFaaS to be installed outside of the framework. In the future, we will integrate it in the framework.
 
-0. Run Continuum with a configuration of your choice. Include the line
-```bash
-resource_manager_only = False
-```
-in the `[benchmark]` section to avoid that the benchmark is executed.
+1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag is critical here.
+    ```bash
+    python3 main.py configuration/bench_openfaas.cfg
+    ```
 
-1. From your host-system execute the Ansible playbook to install OpenFaaS. Make sure that you are in the project root and that you have a cluster running with Kubernetes installed.
+2. From your host-system execute the Ansible playbook to install OpenFaaS. Make sure that you are in the project root and that you have a cluster running with Kubernetes installed.
    ```bash
-    ansible-playbook -i ~/.continuum/inventory_vms execution_models/openFaas.yml
+    ansible-playbook -i ~/.continuum/inventory_vms execution_model/openFaas.yml
    ```
 
-2. From your host-system ssh onto the `cloudcontroller` node:
+3. From your host-system ssh onto the `cloud_controller` node, for example:
    ```bash
-   ssh cloud_controller@192.168.122.10 -i ~/.ssh/id_rsa_benchmark 
+   ssh cloud_controller@192.168.100.2 -i ~/.ssh/id_rsa_benchmark
    ```
 
-3. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:
+4. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:
    ```bash
    nohup kubectl port-forward -n openfaas svc/gateway 8080:8080 &
    ```
    After execution, hit `Strg+C` to exit the dialog.
 
-4. Give the `fass-cli` access to the OpenFaas deployment:
+5. Give the `fass-cli` access to the OpenFaas deployment:
    ```bash
    PASSWORD=$(kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | base64 --decode; echo)
    echo -n $PASSWORD | faas-cli login --username admin --password-stdin
