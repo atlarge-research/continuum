@@ -32,7 +32,7 @@ def install_openfaas(config : dict, machines : Machine):
         logging.error(f"FAILED! OpenFaaS only runs with Kubernetes, but {config['benchmark']['resource_manager']} was installed")
         sys.exit()
 
-    logging.log("Installing OpenFaaS")
+    logging.info("Installing OpenFaaS")
 
     command = [
         "ansible-playbook",
