@@ -38,7 +38,7 @@ def install_openfaas(config : dict, machines : Machine):
         "ansible-playbook",
         "-i",
         os.path.join(config["home"], ".continuum/inventory_vms"),
-        os.path.join(config["home"], ".continuum/cloud/control_install.yml"),
+        os.path.join(config["home"], ".continuum/execution_model/openFaas.yml"),
     ]
 
     run_playbook(command, machines[0])  # we assume that cloud_controller is on first machine (localhost)
