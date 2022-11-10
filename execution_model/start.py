@@ -21,20 +21,24 @@ def run_playbook(command : List[str], machine : Machine):
 
     main.ansible_check_output((output, error))
 
-def install_openfaas(home_path : str, machines : Machine):
+def install_openfaas(config : dict, machines : Machine):
     """Install OpenFaaS by executing the playbook.
 
     Args:
-        home_path (str): path to home directory of user
+        home_path (dict): parsed configuration of continuum
         machines (Machine): pysical machine to run Ansible command on
     """
+    if config["benchmark"]["resource_manager"] != "kubernetes":
+        logging.error(f"FAILED! OpenFaaS only runs with Kubernetes, but {config['benchmark']['resource_manager']} was installed")
+        sys.exit()
+
     logging.log("Installing OpenFaaS")
-    
+
     command = [
         "ansible-playbook",
         "-i",
-        os.path.join(home_path, ".continuum/inventory_vms"),
-        os.path.join(home_path, ".continuum/cloud/control_install.yml"),
+        os.path.join(config["home"], ".continuum/inventory_vms"),
+        os.path.join(config["home"], ".continuum/cloud/control_install.yml"),
     ]
 
     run_playbook(command, machines[0])  # we assume that cloud_controller is on first machine (localhost)
@@ -53,4 +57,4 @@ def start(config : dict, machines : List[Machine]):
 
     model = config["execution_model"]["model"]
     if model == "openFaas":
-        install_openfaas(config["home"], machines)
+        install_openfaas(config, machines)
