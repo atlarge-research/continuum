@@ -17,6 +17,7 @@ import socket
 import infrastructure.start as infrastructure
 import resource_manager.start as resource_manager
 import benchmark.start as benchmark
+import execution_model.start as execution_model
 
 
 def ansible_check_output(out):
@@ -632,6 +633,9 @@ def main(args):
 
     if not args.config["infrastructure"]["infra_only"]:
         resource_manager.start(args.config, machines)
+        if "execution_model" in args.config:
+            execution_model.start(args.config, machines)
+
         if not args.config["benchmark"]["resource_manager_only"]:
             benchmark.start(args.config, machines)
 
