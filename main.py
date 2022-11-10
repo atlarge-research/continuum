@@ -503,6 +503,11 @@ def parse_config(parser, arg):
     elif new["infrastructure"]["infra_only"] and config.has_section(sec):
         parser.error("Config: benchmark section is present but infra_only=True")
 
+    sec = "execution_model"
+    if config.has_section(sec):
+        new[sec] = dict()
+        option_check(parser, config, new, sec, "model", str, lambda x: x in ["openFaas"])
+
     return new
 
 
