@@ -26,7 +26,18 @@ def generate_tc_commands(values, ips, disk):
     if disk == 1:
         # Root disk
         commands.append(
-            ["sudo", "tc", "qdisc", "add", "dev", "ens2", "root", "handle", "1:", "htb"]
+            [
+                "sudo",
+                "tc",
+                "qdisc",
+                "add",
+                "dev",
+                "ens2",
+                "root",
+                "handle",
+                "1:",
+                "htb",
+            ]
         )
 
     # Set throughput

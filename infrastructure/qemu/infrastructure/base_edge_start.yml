@@ -22,7 +22,7 @@
         name: cloud-utils
         state: present
       vars:
-        ansible_python_interpreter: "/usr/bin/python"
+        ansible_python_interpreter: /usr/bin/python
       when: ansible_os_family == "RedHat"
 
     - name: Add cloudinit disk for base

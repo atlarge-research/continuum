@@ -2,53 +2,53 @@
 - hosts: cloudcontroller
   become: true
   tasks:
-  - name: Create job file
-    shell: |
-      cat > "/home/{{ username }}/job-template.yaml" <<EOF
-      apiVersion: batch/v1
-      kind: Job
-      metadata:
-        name: {{ app_name }}-%ITEM
-      spec:
-        template:
-          metadata:
-            name: {{ app_name }}
-          spec:
-            containers:
-            - name: {{ app_name }}
-              image: {{ image }}
-              ports:
-              - containerPort: 1883
-              imagePullPolicy: Always
-              resources:
-                requests:
-                  memory: "{{ memory_req }}Gi"
-                  cpu: {{ cpu_req }}
-              env:
-              - name: MQTT_LOCAL_IP
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.hostIP
-              - name: MQTT_LOGS
-                value: "{{ mqtt_logs }}"
-              - name: CPU_THREADS
-                value: "{{ cpu_threads }}"
-              - name: ENDPOINT_CONNECTED
-                value: "{{ endpoint_connected }}"
-            restartPolicy: Never
-      EOF
+    - name: Create job file
+      shell: |
+        cat > "/home/{{ username }}/job-template.yaml" <<EOF
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: {{ app_name }}-%ITEM
+        spec:
+          template:
+            metadata:
+              name: {{ app_name }}
+            spec:
+              containers:
+              - name: {{ app_name }}
+                image: {{ image }}
+                ports:
+                - containerPort: 1883
+                imagePullPolicy: Always
+                resources:
+                  requests:
+                    memory: "{{ memory_req }}Gi"
+                    cpu: {{ cpu_req }}
+                env:
+                - name: MQTT_LOCAL_IP
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.hostIP
+                - name: MQTT_LOGS
+                  value: "{{ mqtt_logs }}"
+                - name: CPU_THREADS
+                  value: "{{ cpu_threads }}"
+                - name: ENDPOINT_CONNECTED
+                  value: "{{ endpoint_connected }}"
+              restartPolicy: Never
+        EOF
 
-  - name: Create job directory
-    file:
-      path: "/home/{{ username }}/jobs"
-      state: directory
-  
-  - name: Create job multiple times
-    shell: |
-      for i in `seq 0 {{ replicas }}`
-      do
-        cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" > "/home/{{ username }}/jobs/job-$i.yaml"
-      done
+    - name: Create job directory
+      file:
+        path: /home/{{ username }}/jobs
+        state: directory
 
-  - name: Launch jobs
-    command: kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/jobs"
+    - name: Create job multiple times
+      shell: |
+        for i in `seq 0 {{ replicas }}`
+        do
+          cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" > "/home/{{ username }}/jobs/job-$i.yaml"
+        done
+
+    - name: Launch jobs
+      command: kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/jobs"

@@ -65,12 +65,12 @@
     - name: Get KubeEdge and unarchive it
       unarchive:
         src: https://github.com/kubeedge/kubeedge/releases/download/v1.8.1/keadm-v1.8.1-linux-amd64.tar.gz
-        dest: "/tmp"
+        dest: /tmp
         remote_src: true
 
     - name: Make KubeEdge executable
       file:
-        dest: "/tmp/keadm-v1.8.1-linux-amd64/keadm/keadm"
+        dest: /tmp/keadm-v1.8.1-linux-amd64/keadm/keadm
         mode: +x
 
     - name: Move KubeEdge executable
@@ -81,5 +81,5 @@
         path: "{{ item }}"
         state: absent
       with_items:
-        - "/tmp/keadm-v1.8.1-linux-amd64"
-        - "/tmp/keadm-v1.8.1-linux-amd64.tar.gz"
+        - /tmp/keadm-v1.8.1-linux-amd64
+        - /tmp/keadm-v1.8.1-linux-amd64.tar.gz

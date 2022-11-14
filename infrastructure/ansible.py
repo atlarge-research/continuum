@@ -39,7 +39,13 @@ def create_inventory_machine(config, machines):
         else:
             f.write(
                 "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n"
-                % (machine.name_sanitized, machine.ip, machine.user, machine.user, base)
+                % (
+                    machine.name_sanitized,
+                    machine.ip,
+                    machine.user,
+                    machine.user,
+                    base,
+                )
             )
 
     # Specific cloud/edge/endpoint groups for installing RM software
@@ -133,7 +139,12 @@ def create_inventory_machine(config, machines):
             if machine.is_local:
                 f.write(
                     "localhost ansible_connection=local username=%s endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
-                    % (machine.user, endpoints, endpoints + machine.endpoints - 1, base)
+                    % (
+                        machine.user,
+                        endpoints,
+                        endpoints + machine.endpoints - 1,
+                        base,
+                    )
                 )
             else:
                 f.write(

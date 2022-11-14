@@ -89,7 +89,7 @@
     - name: Get Calico
       get_url:
         url: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
-        dest: "/"
+        dest: /
         mode: "0755"
 
     - name: Install Mosquitto

@@ -389,7 +389,13 @@ def add_ssh(config, machines, base=[]):
 
     # Check if old keys are still in the known hosts file
     for ip in ips:
-        command = ["ssh-keygen", "-f", config["home"] + "/.ssh/known_hosts", "-R", ip]
+        command = [
+            "ssh-keygen",
+            "-f",
+            config["home"] + "/.ssh/known_hosts",
+            "-R",
+            ip,
+        ]
         _, error = machines[0].process(command)[0]
 
         if error != [] and not any("not found in" in err for err in error):
@@ -524,7 +530,11 @@ def docker_pull(config, machines, base_names):
 
                 # Pull
                 for image in images:
-                    command = ["docker", "pull", "%s/%s" % (config["registry"], image)]
+                    command = [
+                        "docker",
+                        "pull",
+                        "%s/%s" % (config["registry"], image),
+                    ]
                     commands.append(command)
                     sshs.append(name + "@" + ip)
 

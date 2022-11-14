@@ -2,37 +2,37 @@
 - hosts: cloudcontroller
   become: true
   tasks:
-  - name: Create job file
-    shell: |
-      cat > "/home/{{ username }}/job-template.yaml" <<EOF
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: {{ app_name }}
-        labels:
-          app: {{ app_name }}
-      spec:
-        replicas: {{ replicas }}
-        selector:
-          matchLabels:
+    - name: Create job file
+      shell: |
+        cat > "/home/{{ username }}/job-template.yaml" <<EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: {{ app_name }}
+          labels:
             app: {{ app_name }}
-        template:
-          metadata:
-            labels:
+        spec:
+          replicas: {{ replicas }}
+          selector:
+            matchLabels:
               app: {{ app_name }}
-          spec:
-            containers:
-            - name: {{ app_name }}
-              image: {{ image }}
-              imagePullPolicy: Never
-              resources:
-                requests:
-                  memory: "{{ memory_req }}Mi"
-                  cpu: {{ cpu_req }}
-              env:
-              - name: SLEEP_TIME
-                value: "{{ sleep_time }}"
-      EOF
+          template:
+            metadata:
+              labels:
+                app: {{ app_name }}
+            spec:
+              containers:
+              - name: {{ app_name }}
+                image: {{ image }}
+                imagePullPolicy: Never
+                resources:
+                  requests:
+                    memory: "{{ memory_req }}Mi"
+                    cpu: {{ cpu_req }}
+                env:
+                - name: SLEEP_TIME
+                  value: "{{ sleep_time }}"
+        EOF
 
-  - name: Launch jobs
-    command: kubectl apply --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/job-template.yaml"
+    - name: Launch jobs
+      command: kubectl apply --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/job-template.yaml"

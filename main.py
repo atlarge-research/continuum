@@ -147,7 +147,13 @@ def parse_config(parser, arg):
         new[sec] = dict()
         option_check(parser, config, new, sec, "provider", str, lambda x: x in ["qemu"])
         option_check(
-            parser, config, new, sec, "infra_only", bool, lambda x: x in [True, False]
+            parser,
+            config,
+            new,
+            sec,
+            "infra_only",
+            bool,
+            lambda x: x in [True, False],
         )
         option_check(parser, config, new, sec, "cloud_nodes", int, lambda x: x >= 0)
         option_check(parser, config, new, sec, "edge_nodes", int, lambda x: x >= 0)
@@ -194,7 +200,13 @@ def parse_config(parser, arg):
                 mandatory=False,
             )
             option_check(
-                parser, config, new, sec, "edge_quota", float, lambda x: 0.1 <= x <= 1.0
+                parser,
+                config,
+                new,
+                sec,
+                "edge_quota",
+                float,
+                lambda x: 0.1 <= x <= 1.0,
             )
         else:
             new[sec]["edge_cores"] = 0
@@ -447,7 +459,13 @@ def parse_config(parser, arg):
             mandatory=False,
         )
         option_check(
-            parser, config, new, sec, "docker_pull", bool, lambda x: x in [True, False]
+            parser,
+            config,
+            new,
+            sec,
+            "docker_pull",
+            bool,
+            lambda x: x in [True, False],
         )
         option_check(
             parser, config, new, sec, "delete", bool, lambda x: x in [True, False]
@@ -755,7 +773,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "config", type=lambda x: parse_config(parser, x), help="benchmark config file"
+        "config",
+        type=lambda x: parse_config(parser, x),
+        help="benchmark config file",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="increase verbosity level"

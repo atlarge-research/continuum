@@ -316,7 +316,12 @@ ENDPOINTS/WORKER        %s""" % (
             markersize=12,
         )
         ax2.plot(
-            xs[8], ys[8], color="midnightblue", linewidth=3.0, marker="o", markersize=12
+            xs[8],
+            ys[8],
+            color="midnightblue",
+            linewidth=3.0,
+            marker="o",
+            markersize=12,
         )
 
         # Add horizontal lines every 100 percent
