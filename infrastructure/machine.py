@@ -389,7 +389,7 @@ def set_ip_names(config, machines, nodes_per_machine):
 
             ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.cloud_controller_ips.append(ip)
-            machine.cloud_controller_names.append("cloud_controller")
+            machine.cloud_controller_names.append("cloud_controller_%s" % (ip))
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
         else:
             machine.cloud_controller = 0
@@ -405,7 +405,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
             name = "cloud" + str(cloud_index)
-            machine.cloud_names.append(name)
+            machine.cloud_names.append("%s_%s" % (name, ip))
             cloud_index += 1
 
         # Set IP / name for edge
@@ -415,7 +415,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
             name = "edge" + str(edge_index)
-            machine.edge_names.append(name)
+            machine.edge_names.append("%s_%s" % (name, ip))
             edge_index += 1
 
         # Set IP / name for endpoint
@@ -425,7 +425,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
             name = "endpoint" + str(endpoint_index)
-            machine.endpoint_names.append(name)
+            machine.endpoint_names.append("%s_%s" % (name, ip))
             endpoint_index += 1
 
         # Set IP / name for base image(s)
@@ -433,7 +433,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.base_ips.append(
                 "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
             )
-            machine.base_names.append("base" + str(i))
+            machine.base_names.append("%s_%s" % ("base" + str(i), ip))
             middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
         else:
             # Use Kubeedge setup code for mist computing
@@ -446,7 +446,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                     "%s.%s.%s"
                     % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
                 )
-                machine.base_names.append("base_cloud_%s%i" % (rm, i))
+                machine.base_names.append("%s_%s" % ("base_cloud_" + str(rm) + str(i), ip))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.edges > 0:
@@ -454,7 +454,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                     "%s.%s.%s"
                     % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
                 )
-                machine.base_names.append("base_edge_%s%i" % (rm, i))
+                machine.base_names.append("%s_%s" % ("base_edge_" + str(rm) + str(i), ip))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.endpoints > 0:
@@ -462,7 +462,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                     "%s.%s.%s"
                     % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
                 )
-                machine.base_names.append("base_endpoint%i" % (i))
+                machine.base_names.append("%s_%s" % ("base_endpoint" + str(i), ip))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
 

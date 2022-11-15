@@ -155,9 +155,25 @@ def delete_vms(config, machines):
     processes = []
     for machine in machines:
         if machine.is_local:
-            command = 'virsh list --all | grep -o -E "(cloud\w*|edge\w*|endpoint\w*|base\w*)" | xargs -I % sh -c "virsh destroy %"'
+            command = (
+                'virsh list --all | grep -o -E "(\w*_%s.%s|\w*_%s.%s)" | xargs -I % sh -c "virsh destroy %"'
+                % (
+                    config["infrastructure"]["prefixIP"],
+                    config["infrastructure"]["middleIP"],
+                    config["infrastructure"]["prefixIP"],
+                    config["infrastructure"]["middleIP_base"],
+                )
+            )
         else:
-            comm = 'virsh list --all | grep -o -E \\"(cloud\w*|edge\w*|endpoint\w*|base\w*)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
+            comm = (
+                'virsh list --all | grep -o -E \\"(\w*_%s.%s|\w*_%s.%s)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
+                % (
+                    config["infrastructure"]["prefixIP"],
+                    config["infrastructure"]["middleIP"],
+                    config["infrastructure"]["prefixIP"],
+                    config["infrastructure"]["middleIP_base"],
+                )
+            )
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
 
         processes.append(machine.process(command, shell=True, output=False))

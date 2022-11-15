@@ -409,10 +409,10 @@ def parse_config(parser, arg):
             and int(x.split(".")[1]) < 255,
         )
 
-        new["infrastructure"]["prefixIP"] = "100"
+        new["infrastructure"]["middleIP"] = "100"
         option_check(parser, config, new, sec, "middleIP", int, lambda x: x > 0 and x < 255)
 
-        new["infrastructure"]["prefixIP"] = "90"
+        new["infrastructure"]["middleIP_base"] = "90"
         option_check(parser, config, new, sec, "middleIP_base", int, lambda x: x > 0 and x < 255)
 
         if new["infrastructure"]["middleIP"] == new["infrastructure"]["middleIP_base"]:
