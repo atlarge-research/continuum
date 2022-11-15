@@ -66,9 +66,7 @@ def get_worker_output(config, machines):
         "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
         "--sort-by=.spec.nodeName",
     ]
-    output, error = machines[0].process(
-        command, ssh=True, ssh_target=config["cloud_ssh"][0]
-    )
+    output, error = machines[0].process(command, ssh=True, ssh_target=config["cloud_ssh"][0])
 
     if error != [] or output == []:
         logging.error("".join(error))
@@ -79,9 +77,7 @@ def get_worker_output(config, machines):
     for line in output[1:]:
         container = line.split(" ")[0]
         command = ["kubectl", "logs", "--timestamps=true", container]
-        output, error = machines[0].process(
-            command, ssh=True, ssh_target=config["cloud_ssh"][0]
-        )
+        output, error = machines[0].process(command, ssh=True, ssh_target=config["cloud_ssh"][0])
 
         if error != [] or output == []:
             logging.error("".join(error))
@@ -190,9 +186,7 @@ def gather_worker_metrics(worker_output):
                     unit = line[line.find("(") + 1 : line.find(")")]
                     time = int(line.rstrip().split(":")[-1])
                 except Exception as e:
-                    logging.warn(
-                        "Got an error while parsing line: %s. Exception: %s" % (line, e)
-                    )
+                    logging.warn("Got an error while parsing line: %s. Exception: %s" % (line, e))
                     continue
 
                 units = ["ns"]
@@ -200,9 +194,7 @@ def gather_worker_metrics(worker_output):
                     negatives.append(time)
                     continue
                 elif unit not in units:
-                    logging.warn(
-                        "Unit should be [%s], got %s" % (",".join(units), unit)
-                    )
+                    logging.warn("Unit should be [%s], got %s" % (",".join(units), unit))
                     continue
 
                 if unit == "ns":
@@ -211,9 +203,7 @@ def gather_worker_metrics(worker_output):
                     elif "Processing" in line:
                         processing.append(round(time / 10**6, 4))
 
-        worker_metrics[-1]["total_time"] = round(
-            (end_time - start_time).total_seconds(), 2
-        )
+        worker_metrics[-1]["total_time"] = round((end_time - start_time).total_seconds(), 2)
 
         if len(negatives) > 0:
             logging.warn("Got %i negative time values" % (len(negatives)))
@@ -230,9 +220,7 @@ def gather_worker_metrics(worker_output):
             int(len(delays) * lower_percentile) : int(len(delays) * upper_percentile)
         ]
         processing_perc = processing[
-            int(len(processing) * lower_percentile) : int(
-                len(processing) * upper_percentile
-            )
+            int(len(processing) * lower_percentile) : int(len(processing) * upper_percentile)
         ]
 
         worker_metrics[-1]["comm_delay_avg"] = round(np.mean(delays_perc), 2)
@@ -275,9 +263,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         start_time = to_datetime(out[0])
         end_time = to_datetime(out[-1])
 
-        endpoint_metrics[-1]["total_time"] = round(
-            (end_time - start_time).total_seconds(), 2
-        )
+        endpoint_metrics[-1]["total_time"] = round((end_time - start_time).total_seconds(), 2)
         endpoint_metrics[-1]["data_avg"] = 0.0
 
         if config["mode"] == "cloud":
@@ -307,9 +293,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     unit = line[line.find("(") + 1 : line.find(")")]
                     number = int(line.rstrip().split(":")[-1])
                 except Exception as e:
-                    logging.warn(
-                        "Got an error while parsing line: %s. Exception: %s" % (line, e)
-                    )
+                    logging.warn("Got an error while parsing line: %s. Exception: %s" % (line, e))
                     continue
 
                 units = ["ns", "bytes"]
@@ -317,9 +301,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     logging.warn("Time/Size < 0 should not be possible: %i" % (number))
                     continue
                 elif unit not in units:
-                    logging.warn(
-                        "Unit should be one of [%s], got %s" % (",".join(units), unit)
-                    )
+                    logging.warn("Unit should be one of [%s], got %s" % (",".join(units), unit))
                     continue
 
                 if "Preparation, preprocessing and processing" in line:
@@ -340,9 +322,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         )
 
         processing_perc = processing[
-            int(len(processing) * lower_percentile) : int(
-                len(processing) * upper_percentile
-            )
+            int(len(processing) * lower_percentile) : int(len(processing) * upper_percentile)
         ]
         latency_perc = latency[
             int(len(latency) * lower_percentile) : int(len(latency) * upper_percentile)
@@ -466,8 +446,6 @@ def format_output(config, worker_metrics, endpoint_metrics):
 
     # Print ouput in csv format
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        logging.debug(
-            "Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2.to_csv()))
-        )
+        logging.debug("Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2.to_csv())))
     else:
         logging.debug("Output in csv format\n%s" % (repr(df2.to_csv())))

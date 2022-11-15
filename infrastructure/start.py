@@ -22,9 +22,7 @@ def schedule_equal(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Schedule VMs on machine: Based on utilization")
-    machines_per_node = [
-        {"cloud": 0, "edge": 0, "endpoint": 0} for _ in range(len(machines))
-    ]
+    machines_per_node = [{"cloud": 0, "edge": 0, "endpoint": 0} for _ in range(len(machines))]
     machines_cores_used = [0 for _ in range(len(machines))]
 
     types_to_go = {
@@ -50,10 +48,7 @@ def schedule_equal(config, machines):
 
         # Get machine with least cores used compared to total cores
         i = np.argmin(
-            [
-                cores_used / m.cores
-                for cores_used, m in zip(machines_cores_used, machines)
-            ]
+            [cores_used / m.cores for cores_used, m in zip(machines_cores_used, machines)]
         )
 
         # Place VM on that machine
@@ -255,9 +250,7 @@ def copy_files(config, machines):
 
             dest = config["home"] + "/.continuum/"
         else:
-            command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (
-                machine.name
-            )
+            command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (machine.name)
             output, error = machine.process(command, shell=True)
 
             dest = machine.name + ":./.continuum/"
@@ -297,15 +290,9 @@ def copy_files(config, machines):
             + machine.endpoint_names
             + machine.base_names
         ):
+            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name + ".xml", dest))
             out.append(
-                machine.copy_files(
-                    config["base"] + "/.tmp/domain_" + name + ".xml", dest
-                )
-            )
-            out.append(
-                machine.copy_files(
-                    config["base"] + "/.tmp/user_data_" + name + ".yml", dest
-                )
+                machine.copy_files(config["base"] + "/.tmp/user_data_" + name + ".yml", dest)
             )
 
         # Copy Ansible files for infrastructure
@@ -358,8 +345,7 @@ def add_ssh(config, machines, base=[]):
         base (list, optional): Base image ips to check. Defaults to []
     """
     logging.info(
-        "Start adding ssh keys to the known_hosts file for each VM (base=%s)"
-        % (base == [])
+        "Start adding ssh keys to the known_hosts file for each VM (base=%s)" % (base == [])
     )
 
     # Get IPs of all (base) machines
@@ -492,29 +478,20 @@ def docker_pull(config, machines, base_names):
                     if "_%s_" % (config["mode"]) in name:
                         # Subscriber
                         images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][0].split(":")[1])
+                            "%s/%s" % (config["registry"], config["images"][0].split(":")[1])
                         )
                     elif "_endpoint" in name:
                         # Publisher (+ combined)
                         images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][1].split(":")[1])
+                            "%s/%s" % (config["registry"], config["images"][1].split(":")[1])
                         )
                         images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][2].split(":")[1])
+                            "%s/%s" % (config["registry"], config["images"][2].split(":")[1])
                         )
                 elif config["mode"] == "endpoint" and "_endpoint" in name:
                     # Combined (+ publisher)
-                    images.append(
-                        "%s/%s"
-                        % (config["registry"], config["images"][2].split(":")[1])
-                    )
-                    images.append(
-                        "%s/%s"
-                        % (config["registry"], config["images"][1].split(":")[1])
-                    )
+                    images.append("%s/%s" % (config["registry"], config["images"][2].split(":")[1]))
+                    images.append("%s/%s" % (config["registry"], config["images"][1].split(":")[1]))
 
                 for image in images:
                     command = ["docker", "pull", image]

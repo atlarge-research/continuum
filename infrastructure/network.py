@@ -179,9 +179,7 @@ def start(config, machines):
         disk = 1
 
         # Between cloud and other cloud nodes
-        targets = list(
-            set(config["control_ips"] + config["cloud_ips"]) - set([ssh.split("@")[1]])
-        )
+        targets = list(set(config["control_ips"] + config["cloud_ips"]) - set([ssh.split("@")[1]]))
         if targets != []:
             command += generate_tc_commands(cloud, overhead, targets, disk)
             disk += 1
@@ -256,9 +254,7 @@ def start(config, machines):
         c = ";".join(c)
         c = '"' + c + '"'
 
-        processes.append(
-            machines[0].process(c, shell=True, output=False, ssh=True, ssh_target=ssh)
-        )
+        processes.append(machines[0].process(c, shell=True, output=False, ssh=True, ssh_target=ssh))
 
     # Check output of TC commands
     logging.info("Check output from TC operations")
@@ -308,9 +304,7 @@ def netperf_commands(target_ips):
     return lat_commands, tp_commands
 
 
-def benchmark_output(
-    machine, targets, lat_commands, tp_commands, ssh, source_name, target_name
-):
+def benchmark_output(machine, targets, lat_commands, tp_commands, ssh, source_name, target_name):
     """Execute the netperf commands and log output
 
     Args:
@@ -325,8 +319,7 @@ def benchmark_output(
     for target_ip, command in zip(targets + targets, lat_commands + tp_commands):
         output, error = machine.process(command, ssh=True, ssh_target=ssh)
         logging.info(
-            "From %s %s to %s %s: %s"
-            % (source_name, ssh, target_name, target_ip, command)
+            "From %s %s to %s %s: %s" % (source_name, ssh, target_name, target_ip, command)
         )
         logging.info("\n" + "".join(output))
         logging.info("\n" + "".join(error))
@@ -347,66 +340,48 @@ def benchmark(config, machines):
 
     # Between cloud nodes
     for ssh in config["cloud_ssh"]:
-        targets = list(
-            set(config["control_ips"] + config["cloud_ips"]) - set([ssh.split("@")[1]])
-        )
+        targets = list(set(config["control_ips"] + config["cloud_ips"]) - set([ssh.split("@")[1]]))
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "cloud"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "cloud")
 
     # From cloud to edge
     for ssh in config["cloud_ssh"]:
         targets = config["edge_ips"]
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "edge"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "edge")
 
     # From cloud to endpoint
     for ssh in config["cloud_ssh"]:
         targets = config["endpoint_ips"]
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "endpoint"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "endpoint")
 
     # Between edge nodes
     for ssh in config["edge_ssh"]:
         targets = list(set(config["edge_ips"]) - set([ssh.split("@")[1]]))
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "edge", "edge"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "edge", "edge")
 
     # From edge to cloud
     for ssh in config["edge_ssh"]:
         targets = config["control_ips"] + config["cloud_ips"]
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "edge", "cloud"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "edge", "cloud")
 
     # From edge to endpoint
     for ssh in config["edge_ssh"]:
         targets = config["endpoint_ips"]
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "edge", "endpoint"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "edge", "endpoint")
 
     # From endpoint to cloud
     for ssh in config["endpoint_ssh"]:
         targets = config["control_ips"] + config["cloud_ips"]
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "cloud"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "cloud")
 
     # From endpoint to edge
     for ssh in config["endpoint_ssh"]:
         targets = config["edge_ips"]
         lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "edge"
-        )
+        benchmark_output(machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "edge")

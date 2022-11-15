@@ -99,9 +99,7 @@ BASE_NAMES              %s""" % (
             ", ".join(self.base_names),
         )
 
-    def process(
-        self, command, shell=False, env=None, output=True, ssh=False, ssh_target=None
-    ):
+    def process(self, command, shell=False, env=None, output=True, ssh=False, ssh_target=None):
         """Execute a process using the subprocess library, and return the output/error or the process
 
         Args:
@@ -188,15 +186,10 @@ BASE_NAMES              %s""" % (
                     threads_per_core = int(line.split(":")[-1])
 
             if threads == -1 or threads_per_core == -1:
-                logging.error(
-                    "Command did not produce the expected output: %s"
-                    % ("".join(output))
-                )
+                logging.error("Command did not produce the expected output: %s" % ("".join(output)))
                 sys.exit()
 
-            logging.debug(
-                "Threads: %s | Threads_per_core: %s" % (threads, threads_per_core)
-            )
+            logging.debug("Threads: %s | Threads_per_core: %s" % (threads, threads_per_core))
 
             self.cores = int(threads / threads_per_core)
 
@@ -437,7 +430,9 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for base image(s)
         if config["infrastructure"]["infra_only"]:
-            machine.base_ips.append("%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base))
+            machine.base_ips.append(
+                "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+            )
             machine.base_names.append("base" + str(i))
             middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
         else:
@@ -447,17 +442,23 @@ def set_ip_names(config, machines, nodes_per_machine):
                 rm = "kubeedge"
 
             if machine.cloud_controller + machine.clouds > 0:
-                machine.base_ips.append("%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base))
+                machine.base_ips.append(
+                    "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+                )
                 machine.base_names.append("base_cloud_%s%i" % (rm, i))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.edges > 0:
-                machine.base_ips.append("%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base))
+                machine.base_ips.append(
+                    "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+                )
                 machine.base_names.append("base_edge_%s%i" % (rm, i))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.endpoints > 0:
-                machine.base_ips.append("%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base))
+                machine.base_ips.append(
+                    "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+                )
                 machine.base_names.append("base_endpoint%i" % (i))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
@@ -472,10 +473,7 @@ def print_schedule(machines):
     logging.info("Schedule of VMs and containers on physical machines")
     logging.info("-" * 78)
 
-    logging.info(
-        "%-30s %-15s %-15s %-15s"
-        % ("Machine", "Cloud nodes", "Edge nodes", "Endpoints")
-    )
+    logging.info("%-30s %-15s %-15s %-15s" % ("Machine", "Cloud nodes", "Edge nodes", "Endpoints"))
 
     for machine in machines:
         logging.info(
@@ -489,4 +487,3 @@ def print_schedule(machines):
         )
 
     logging.info("-" * 78)
-

@@ -33,9 +33,7 @@ def start(config, machines):
         processes.append(machines[0].process(command, output=False))
 
         for process in processes:
-            logging.debug(
-                "Check output for Ansible command [%s]" % (" ".join(process.args))
-            )
+            logging.debug("Check output for Ansible command [%s]" % (" ".join(process.args)))
             output = [line.decode("utf-8") for line in process.stdout.readlines()]
             error = [line.decode("utf-8") for line in process.stderr.readlines()]
             main.ansible_check_output((output, error))
@@ -62,9 +60,7 @@ def start(config, machines):
 
     # Check playbooks
     for process in processes:
-        logging.debug(
-            "Check output for Ansible command [%s]" % (" ".join(process.args))
-        )
+        logging.debug("Check output for Ansible command [%s]" % (" ".join(process.args)))
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
         main.ansible_check_output((output, error))

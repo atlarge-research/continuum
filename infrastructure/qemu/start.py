@@ -195,9 +195,10 @@ def base_image(config, machines):
         for base_name, ip in zip(machine.base_names, machine.base_ips):
             base_name_r = base_name.rstrip(string.digits)
             if base_name_r in base_names:
-                command = (
-                    "ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean"
-                    % (base_name, ip, config["home"])
+                command = "ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean" % (
+                    base_name,
+                    ip,
+                    config["home"],
                 )
                 processes.append(machines[0].process(command, shell=True, output=False))
 
@@ -229,8 +230,7 @@ def base_image(config, machines):
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
 
         if error != [] and not (
-            process.args.split(" ")[0] == "ssh"
-            and any(["Connection to " in e for e in error])
+            process.args.split(" ")[0] == "ssh" and any(["Connection to " in e for e in error])
         ):
             logging.error("".join(error))
             sys.exit()

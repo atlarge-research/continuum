@@ -79,9 +79,7 @@ class Model:
             command (list(str)): Command to be executed
         """
         logging.info(" ".join(command))
-        process = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
         return output, error
@@ -306,9 +304,7 @@ T_pre       norm. preproc time      %.2f sec
         df_worker = self.str_to_df(output[-7][1:-2])
         logging.debug("\n" + df_worker.to_string(index=False))
 
-        df_worker["proc/data (ms)"] = pd.to_numeric(
-            df_worker["proc/data (ms)"], downcast="float"
-        )
+        df_worker["proc/data (ms)"] = pd.to_numeric(df_worker["proc/data (ms)"], downcast="float")
         self.T_proc = df_worker["proc/data (ms)"].mean() / 1000.0
 
         # Parse output of endpoint to dataframe, and extract required data
@@ -533,9 +529,7 @@ if __name__ == "__main__":
     """Get input arguments, and validate those arguments"""
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="increase verbosity level"
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
     parser.add_argument(
         "-r",
         "--resume",

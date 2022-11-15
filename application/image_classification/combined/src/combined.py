@@ -44,10 +44,7 @@ def generate(queue):
                 time.sleep(frame)
                 sec_frame = float(time.time_ns() - start_time) / 10**9
         else:
-            print(
-                "Can't keep up with %f seconds per frame: Took %f"
-                % (SEC_PER_FRAME, sec_frame)
-            )
+            print("Can't keep up with %f seconds per frame: Took %f" % (SEC_PER_FRAME, sec_frame))
 
 
 def process(queue):
@@ -99,10 +96,7 @@ def process(queue):
 
         # Time it took
         now = time.time_ns()
-        print(
-            "Preparation, preprocessing and processing (ns): %i"
-            % (now - start_process_time)
-        )
+        print("Preparation, preprocessing and processing (ns): %i" % (now - start_process_time))
         print("Latency (ns): %i" % (now - start_time))
 
 

@@ -105,9 +105,7 @@ def find_bridge(machine, bridge):
     Returns:
         int: Bool representing if we found the bridge on this machine
     """
-    output, error = machine.process(
-        "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
-    )
+    output, error = machine.process("brctl show | grep '^%s' | wc -l" % (bridge), shell=True)
     if error != [] or output == []:
         logging.error("ERROR: Could not find a network bridge")
         sys.exit()
@@ -148,9 +146,7 @@ def start(config, machines):
             sys.exit()
 
     # Get gateway address
-    output, error = machines[0].process(
-        "ip route | grep ' %s '" % (bridge_name), shell=True
-    )
+    output, error = machines[0].process("ip route | grep ' %s '" % (bridge_name), shell=True)
     if error != [] or output == []:
         logging.error("ERROR: Could not find gateway address")
         sys.exit()
@@ -217,9 +213,7 @@ def start(config, machines):
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
             hostname = name.replace("_", "")
-            f.write(
-                USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway)
-            )
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Edges

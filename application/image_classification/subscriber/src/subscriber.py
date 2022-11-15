@@ -102,8 +102,7 @@ def do_tflite(queue):
                     counter = endpoints_connected.value
 
                 print(
-                    "[%s] A client disconnected, %i clients left\n"
-                    % (current.name, counter),
+                    "[%s] A client disconnected, %i clients left\n" % (current.name, counter),
                     end="",
                 )
                 continue

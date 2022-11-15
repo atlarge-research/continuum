@@ -6,7 +6,8 @@ from typing import List
 from infrastructure.machine import Machine
 import main
 
-def run_playbook(command : List[str], machine : Machine):
+
+def run_playbook(command: List[str], machine: Machine):
     """Run an Ansible command on a machine and check output.
 
     Args:
@@ -21,7 +22,8 @@ def run_playbook(command : List[str], machine : Machine):
 
     main.ansible_check_output((output, error))
 
-def install_openfaas(config : dict, machines : Machine):
+
+def install_openfaas(config: dict, machines: Machine):
     """Install OpenFaaS by executing the playbook.
 
     Args:
@@ -29,7 +31,9 @@ def install_openfaas(config : dict, machines : Machine):
         machines (Machine): pysical machine to run Ansible command on
     """
     if config["benchmark"]["resource_manager"] != "kubernetes":
-        logging.error(f"FAILED! OpenFaaS only runs with Kubernetes, but {config['benchmark']['resource_manager']} was installed")
+        logging.error(
+            f"FAILED! OpenFaaS only runs with Kubernetes, but {config['benchmark']['resource_manager']} was installed"
+        )
         sys.exit()
 
     logging.info("Installing OpenFaaS")
@@ -41,9 +45,12 @@ def install_openfaas(config : dict, machines : Machine):
         os.path.join(config["home"], ".continuum/execution_model/openFaas.yml"),
     ]
 
-    run_playbook(command, machines[0])  # we assume that cloud_controller is on first machine (localhost)
+    run_playbook(
+        command, machines[0]
+    )  # we assume that cloud_controller is on first machine (localhost)
 
-def start(config : dict, machines : List[Machine]):
+
+def start(config: dict, machines: List[Machine]):
     """Install execution model.
     Method selects a handler for every execution model there is.
 
@@ -52,7 +59,9 @@ def start(config : dict, machines : List[Machine]):
         machines (List[Machine]): all physical machines available
     """
     if "execution_model" not in config:
-        logging.error("FAILED! Key execution_model is missing in config, but it was tried to install an execution model anyway")
+        logging.error(
+            "FAILED! Key execution_model is missing in config, but it was tried to install an execution model anyway"
+        )
         sys.exit()
 
     model = config["execution_model"]["model"]
