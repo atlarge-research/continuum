@@ -34,11 +34,11 @@ DOMAIN = """\
         </interface>
         <disk type='file' device='disk'>
             <driver type='qcow2' cache='none'/>
-            <source file='%s/images/%s.qcow2'/>
+            <source file='%s/.continuum/images/%s.qcow2'/>
             <target dev='vda' bus='virtio'/>
         </disk>
         <disk type='file' device='disk'>
-            <source file='%s/images/user_data_%s.img'/>
+            <source file='%s/.continuum/images/user_data_%s.img'/>
             <target dev='vdb' bus='virtio'/>
         </disk>
         <console type="pty">
@@ -239,7 +239,9 @@ def start(config, machines):
                     int(period * config["infrastructure"]["edge_quota"]),
                     "\n".join(pinnings),
                     bridge_name,
+                    config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["base_path"],
                     name,
                 )
             )
@@ -271,7 +273,9 @@ def start(config, machines):
                     int(period * config["infrastructure"]["endpoint_quota"]),
                     "\n".join(pinnings),
                     bridge_name,
+                    config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["base_path"],
                     name,
                 )
             )
@@ -285,7 +289,22 @@ def start(config, machines):
         for ip, name in zip(machine.base_ips, machine.base_names):
             f = open(".tmp/domain_%s.xml" % (name), "w")
 
-            f.write(DOMAIN % (name, 1048576, 1, 0, 0, "", bridge_name, name, name))
+            f.write(
+                DOMAIN
+                % (
+                    name,
+                    1048576,
+                    1,
+                    0,
+                    0,
+                    "",
+                    bridge_name,
+                    config["infrastructure"]["base_path"],
+                    name,
+                    config["infrastructure"]["base_path"],
+                    name,
+                )
+            )
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")

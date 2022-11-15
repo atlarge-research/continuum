@@ -148,6 +148,16 @@ using the --file option"""
 def delete_vms(config, machines):
     """The benchmark has been completed succesfully, now delete the VMs.
 
+    TODO This deletes VMs using your current IP range, which might not be the same as your previous run
+    TODO This only deletes images from one /8 range, so 100.100.100.*. If you used more than 255 VMs
+         in your previous runs, you moved to 100.100.101.*, and those won't be removed since
+         this script doesn't know anymore which IP ranges belonged to the previous user
+
+    TODO The easiest fix is to append the hostname to the VM, this is unique and persists over runs
+         However, this doesn't work for multiple users on the same account, which is part of a demo
+         After the demo, the multiple-users-on-same-account setting won't be supported anymore,
+         so switch to hostnames in VM names instead of IPs
+
     Args:
         machines (list(Machine object)): List of machine objects representing physical machines
     """
@@ -156,7 +166,7 @@ def delete_vms(config, machines):
     for machine in machines:
         if machine.is_local:
             command = (
-                'virsh list --all | grep -o -E "(\w*_%s.%s|\w*_%s.%s)" | xargs -I %% sh -c "virsh destroy %%"'
+                'virsh list --all | grep -o -E "(\w*_%s.%s.\w*|\w*_%s.%s.\w*)" | xargs -I %% sh -c "virsh destroy %%"'
                 % (
                     config["infrastructure"]["prefixIP"],
                     config["infrastructure"]["middleIP"],
@@ -166,7 +176,7 @@ def delete_vms(config, machines):
             )
         else:
             comm = (
-                'virsh list --all | grep -o -E \\"(\w*_%s.%s|\w*_%s.%s)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
+                'virsh list --all | grep -o -E \\"(\w*_%s.%s.\w*|\w*_%s.%s.\w*)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
                 % (
                     config["infrastructure"]["prefixIP"],
                     config["infrastructure"]["middleIP"],
@@ -177,13 +187,6 @@ def delete_vms(config, machines):
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
 
         processes.append(machine.process(command, shell=True, output=False))
-
-        command = [
-            "rm",
-            "-f",
-            "%s/.continuum/join-command.txt" % (config["infrastructure"]["base_path"]),
-        ]
-        processes.append(machine.process(command, ssh=True, output=False))
 
     # Wait for process to finish. Outcome of destroy command does not matter
     for process in processes:

@@ -430,9 +430,13 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for base image(s)
         if config["infrastructure"]["infra_only"]:
-            machine.base_ips.append(
-                "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip_base,
+                postfix_ip_base,
             )
+            machine.base_ips.append(ip)
+
             machine.base_names.append("%s_%s" % ("base" + str(i), ip))
             middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
         else:
@@ -442,26 +446,35 @@ def set_ip_names(config, machines, nodes_per_machine):
                 rm = "kubeedge"
 
             if machine.cloud_controller + machine.clouds > 0:
-                machine.base_ips.append(
-                    "%s.%s.%s"
-                    % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
                 )
+                machine.base_ips.append(ip)
+
                 machine.base_names.append("%s_%s" % ("base_cloud_" + str(rm) + str(i), ip))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.edges > 0:
-                machine.base_ips.append(
-                    "%s.%s.%s"
-                    % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
                 )
+                machine.base_ips.append(ip)
+
                 machine.base_names.append("%s_%s" % ("base_edge_" + str(rm) + str(i), ip))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.endpoints > 0:
-                machine.base_ips.append(
-                    "%s.%s.%s"
-                    % (config["infrastructure"]["prefixIP"], middle_ip_base, postfix_ip_base)
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
                 )
+                machine.base_ips.append(ip)
+
                 machine.base_names.append("%s_%s" % ("base_endpoint" + str(i), ip))
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
