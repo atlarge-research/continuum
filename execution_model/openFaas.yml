@@ -2,22 +2,16 @@
 ---
 - name: Install OpenFaaS
   hosts: cloudcontroller
-          
+  become: true
   tasks:
     - name: Install Arkade
-      become: true
       shell: curl -SLsf https://get.arkade.dev/ | sudo sh
-    
+
     - name: Install OpenFaaS through Arkade
-      become: yes
-      become_user: cloud_controller
       shell: arkade install openfaas --set openfaasPRO=False
 
     - name: Install OpenFaaS CLI
-      become: true
       shell: curl -SLsf https://cli.openfaas.com | sudo sh
 
     - name: kubectl - gateway
-      become: yes
-      become_user: cloud_controller
       shell: kubectl rollout status -n openfaas deploy/gateway

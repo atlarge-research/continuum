@@ -56,10 +56,10 @@ def start_worker(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["file_path"] + "/.continuum/inventory_vms",
         "--extra-vars",
         vars_str[:-1],
-        config["home"] + "/.continuum/launch_benchmark.yml",
+        config["infrastructure"]["file_path"] + "/.continuum/launch_benchmark.yml",
     ]
     main.ansible_check_output(machines[0].process(command))
 

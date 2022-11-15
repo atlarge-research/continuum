@@ -1,6 +1,5 @@
 import logging
 import os
-import subprocess
 import sys
 from typing import List
 from infrastructure.machine import Machine
@@ -41,13 +40,14 @@ def install_openfaas(config: dict, machines: Machine):
     command = [
         "ansible-playbook",
         "-i",
-        os.path.join(config["home"], ".continuum/inventory_vms"),
-        os.path.join(config["home"], ".continuum/execution_model/openFaas.yml"),
+        os.path.join(config["infrastructure"]["file_path"], ".continuum/inventory_vms"),
+        os.path.join(
+            config["infrastructure"]["file_path"], ".continuum/execution_model/openFaas.yml"
+        ),
     ]
 
-    run_playbook(
-        command, machines[0]
-    )  # we assume that cloud_controller is on first machine (localhost)
+    # we assume that cloud_controller is on first machine (localhost)
+    run_playbook(command, machines[0])
 
 
 def start(config: dict, machines: List[Machine]):

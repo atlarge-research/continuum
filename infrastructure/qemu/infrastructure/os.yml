@@ -22,17 +22,17 @@
     - name: Get ubuntu source image
       get_url:
         url: https://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-amd64.img
-        dest: "/home/{{ username }}/.continuum/ubuntu2004.img"
+        dest: "{{ base_path }}/.continuum/images/ubuntu2004.img"
 
     - name: Convert image to qcow2 format
-      command: qemu-img convert -O qcow2 "/home/{{ username }}/.continuum/ubuntu2004.img" /var/lib/libvirt/images/ubuntu2004.qcow2
+      command: qemu-img convert -O qcow2 "{{ base_path }}/.continuum/images/ubuntu2004.img" "{{ base_path }}/.continuum/images/ubuntu2004.qcow2"
 
     - name: Remove original image
       file:
         path: "{{ item }}"
         state: absent
       with_items:
-        - "/home/{{ username }}/.continuum/ubuntu2004.img"
+        - "{{ base_path }}/.continuum/images/ubuntu2004.img"
 
     - name: Resize image to full format
-      command: qemu-img resize /var/lib/libvirt/images/ubuntu2004.qcow2 +8G
+      command: qemu-img resize "{{ base_path }}/.continuum/images/ubuntu2004.qcow2" +8G

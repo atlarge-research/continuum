@@ -25,8 +25,8 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/cloud/control_install.yml",
+        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["base_path"] + "/.continuum/cloud/control_install.yml",
     ]
     processes.append(machines[0].process(command, output=False))
 
@@ -34,8 +34,8 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/cloud/install.yml",
+        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["base_path"] + "/.continuum/cloud/install.yml",
     ]
     processes.append(machines[0].process(command, output=False))
 

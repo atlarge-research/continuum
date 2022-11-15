@@ -22,6 +22,7 @@ def create_inventory_machine(config, machines):
     f.write("[all:vars]\n")
     f.write("ansible_python_interpreter=/usr/bin/python3\n")
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
+    f.write("base_path=%s" % (config["infrastructure"]["base_path"]))
 
     # All hosts group
     f.write("\n[all_hosts]\n")
@@ -32,11 +33,11 @@ def create_inventory_machine(config, machines):
             base = "base=%s" % (machine.base_names[0])
 
         if machine.is_local:
-            f.write("localhost ansible_connection=local username=%s %s\n" % (machine.user, base))
+            f.write("localhost ansible_connection=local %s\n" % (base))
         else:
             f.write(
-                "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n"
-                % (machine.name_sanitized, machine.ip, machine.user, machine.user, base)
+                "%s ansible_connection=ssh ansible_host=%s ansible_user=%s %s\n"
+                % (machine.name_sanitized, machine.ip, machine.user, base)
             )
 
     # Specific cloud/edge/endpoint groups for installing RM software
@@ -55,9 +56,8 @@ def create_inventory_machine(config, machines):
 
             if machine.is_local:
                 f.write(
-                    "localhost ansible_connection=local username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n"
+                    "localhost ansible_connection=local cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n"
                     % (
-                        machine.user,
                         machine.cloud_controller,
                         clouds,
                         clouds + machine.clouds - 1,
@@ -66,11 +66,10 @@ def create_inventory_machine(config, machines):
                 )
             else:
                 f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n"
+                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n"
                     % (
                         machine.name_sanitized,
                         machine.ip,
-                        machine.user,
                         machine.user,
                         machine.cloud_controller,
                         clouds,
@@ -96,16 +95,15 @@ def create_inventory_machine(config, machines):
 
             if machine.is_local:
                 f.write(
-                    "localhost ansible_connection=local username=%s edge_start=%i edge_end=%i base_edge=%s\n"
-                    % (machine.user, edges, edges + machine.edges - 1, base)
+                    "localhost ansible_connection=local edge_start=%i edge_end=%i base_edge=%s\n"
+                    % (edges, edges + machine.edges - 1, base)
                 )
             else:
                 f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s edge_start=%i edge_end=%i base_edge=%s\n"
+                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s edge_start=%i edge_end=%i base_edge=%s\n"
                     % (
                         machine.name_sanitized,
                         machine.ip,
-                        machine.user,
                         machine.user,
                         edges,
                         edges + machine.edges - 1,
@@ -129,16 +127,15 @@ def create_inventory_machine(config, machines):
 
             if machine.is_local:
                 f.write(
-                    "localhost ansible_connection=local username=%s endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
-                    % (machine.user, endpoints, endpoints + machine.endpoints - 1, base)
+                    "localhost ansible_connection=local endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
+                    % (endpoints, endpoints + machine.endpoints - 1, base)
                 )
             else:
                 f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
+                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
                     % (
                         machine.name_sanitized,
                         machine.ip,
-                        machine.user,
                         machine.user,
                         endpoints,
                         endpoints + machine.endpoints - 1,
@@ -175,6 +172,7 @@ def create_inventory_vm(config, machines):
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
     f.write("ansible_ssh_private_key_file=~/.ssh/id_rsa_benchmark\n")
     f.write("registry_ip=%s:%i\n" % (host_ip, 5000))
+    f.write("base_path=%s" % (config["infrastructure"]["base_path"]))
 
     if not config["infrastructure"]["infra_only"]:
         # Tier specific groups

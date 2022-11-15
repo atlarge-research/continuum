@@ -145,7 +145,7 @@ using the --file option"""
     return machines_per_node
 
 
-def delete_vms(machines):
+def delete_vms(config, machines):
     """The benchmark has been completed succesfully, now delete the VMs.
 
     Args:
@@ -162,7 +162,11 @@ def delete_vms(machines):
 
         processes.append(machine.process(command, shell=True, output=False))
 
-        command = ["rm", "-f", "/tmp/join-command.txt"]
+        command = [
+            "rm",
+            "-f",
+            "%s/.continuum/join-command.txt" % (config["infrastructure"]["base_path"]),
+        ]
         processes.append(machine.process(command, ssh=True, output=False))
 
     # Wait for process to finish. Outcome of destroy command does not matter
@@ -212,7 +216,8 @@ ssh-keygen -t rsa -b 4096 -f id_rsa_benchmark -C KubeEdge -N '' -q"
 def create_dir(config, machines):
     """Generate a temporary directory for generated files.
     This directory is located inside the benchmark git repository.
-    Later, that data will be sent to each physical machine's ${HOME}/.continuum directory
+    Later, that data will be sent to each physical machine's
+    config["infrastructure"]["file_path"]/.continuum directory
 
     Args:
         config (dict): Parsed configuration
@@ -231,7 +236,8 @@ def create_dir(config, machines):
 
 
 def copy_files(config, machines):
-    """Copy Infrastructure and Ansible files to all machines with directory ${HOME}/.continuum
+    """Copy Infrastructure and Ansible files to all machines with
+    directory config["infrastructure"]["file_path"]/.continuum
 
     Args:
         config (dict): Parsed configuration
@@ -242,18 +248,30 @@ def copy_files(config, machines):
     for machine in machines:
         # Create a source directory on each machiine
         if machine.is_local:
-            command = "rm -rf %s/.continuum && mkdir %s/.continuum" % (
-                config["home"],
-                config["home"],
+            command = (
+                "rm -rf %s/.continuum && mkdir %s/.continuum && mkdir %s/.continuum/images"
+                % (
+                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["file_path"],
+                )
             )
             output, error = machine.process(command, shell=True)
 
-            dest = config["home"] + "/.continuum/"
+            dest = config["infrastructure"]["file_path"] + "/.continuum/"
         else:
-            command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (machine.name)
+            command = (
+                'ssh %s "rm -rf %s/.continuum && mkdir %s/.continuum && mkdir %s/.continuum/images"'
+                % (
+                    machine.name,
+                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["file_path"],
+                )
+            )
             output, error = machine.process(command, shell=True)
 
-            dest = machine.name + ":./.continuum/"
+            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["file_path"])
 
         if error != []:
             logging.error("".join(error))
@@ -562,7 +580,7 @@ def start(config):
     m.gather_ips(config, machines)
     m.gather_ssh(config, machines)
 
-    delete_vms(machines)
+    delete_vms(config, machines)
     m.print_schedule(machines)
 
     for machine in machines:

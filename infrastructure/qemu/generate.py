@@ -34,11 +34,11 @@ DOMAIN = """\
         </interface>
         <disk type='file' device='disk'>
             <driver type='qcow2' cache='none'/>
-            <source file='/var/lib/libvirt/images/%s.qcow2'/>
+            <source file='%s/images/%s.qcow2'/>
             <target dev='vda' bus='virtio'/>
         </disk>
         <disk type='file' device='disk'>
-            <source file='/var/lib/libvirt/images/user_data_%s.img'/>
+            <source file='%s/images/user_data_%s.img'/>
             <target dev='vdb' bus='virtio'/>
         </disk>
         <console type="pty">
@@ -123,8 +123,7 @@ def start(config, machines):
     logging.info("Start writing QEMU config files for cloud / edge")
 
     # Get the SSH public key
-    home = str(Path.home())
-    f = open(home + "/.ssh/id_rsa_benchmark.pub", "r")
+    f = open(config["home"] + "/.ssh/id_rsa_benchmark.pub", "r")
     ssh_key = f.read().rstrip()
     f.close()
 
@@ -205,7 +204,9 @@ def start(config, machines):
                     int(period * config["infrastructure"]["cloud_quota"]),
                     "\n".join(pinnings),
                     bridge_name,
+                    config["infrastructure"]["file_path"],
                     name,
+                    config["infrastructure"]["file_path"],
                     name,
                 )
             )

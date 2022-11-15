@@ -387,6 +387,11 @@ def parse_config(parser, arg):
             mandatory=False,
         )
         option_check(parser, config, new, sec, "netperf", bool, lambda x: x in [True, False])
+
+        option_check(parser, config, new, sec, "file_path", str, lambda x: os.path.expanduser(x))
+        new["infrastructure"]["file_path"] = os.path.expanduser(new["infrastructure"]["file_path"])
+        if new["infrastructure"]["file_path"][-1] == "/":
+            new["infrastructure"]["file_path"] = config["infrastructure"]["file_path"][:-1]
     else:
         parser.error("Config: infrastructure section missing")
 
@@ -626,7 +631,7 @@ def main(args):
             benchmark.start(args.config, machines)
 
         if args.config["benchmark"]["delete"]:
-            infrastructure.delete_vms(machines)
+            infrastructure.delete_vms(args.config, machines)
             print_ssh = False
 
     if print_ssh:
