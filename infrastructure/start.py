@@ -268,25 +268,29 @@ def copy_files(config, machines):
         # Create a source directory on each machiine
         if machine.is_local:
             command = (
-                "rm -rf %s/.continuum && mkdir %s/.continuum && mkdir %s/.continuum/images"
-                % (
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                )
+                "rm -rf %s/.continuum/cloud && \
+                 rm -rf %s/.continuum/edge && \
+                 rm -rf %s/.continuum/endpoint && \
+                 rm -rf %s/.continuum/execution_model && \
+                 rm -rf %s/.continuum/infrastructure && \
+                 mkdir -p %s/.continuum && \
+                 mkdir -p %s/.continuum/images"
+                % ((config["infrastructure"]["base_path"],) * 7)
             )
             output, error = machine.process(command, shell=True)
 
             dest = config["infrastructure"]["base_path"] + "/.continuum/"
         else:
             command = (
-                'ssh %s "rm -rf %s/.continuum && mkdir %s/.continuum && mkdir %s/.continuum/images"'
-                % (
-                    machine.name,
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                )
+                'ssh %s "\
+                 rm -rf %s/.continuum/cloud && \
+                 rm -rf %s/.continuum/edge && \
+                 rm -rf %s/.continuum/endpoint && \
+                 rm -rf %s/.continuum/execution_model && \
+                 rm -rf %s/.continuum/infrastructure && \
+                 mkdir -p %s/.continuum && \
+                 mkdir -p %s/.continuum/images"'
+                % ((config["infrastructure"]["base_path"],) * 7)
             )
             output, error = machine.process(command, shell=True)
 

@@ -57,7 +57,13 @@ def base_image(config, machines):
     logging.info("Check if new base image(s) needs to be created")
     base_names = [machine.base_names for machine in machines]
     base_names = list(
-        set([item.rstrip(string.digits) for sublist in base_names for item in sublist])
+        set(
+            [
+                item.rsplit("_", 1)[0].rstrip(string.digits)
+                for sublist in base_names
+                for item in sublist
+            ]
+        )
     )
     need_images = [False for _ in range(len(base_names))]
     for machine in machines:
@@ -70,7 +76,7 @@ def base_image(config, machines):
             output, error = machine.process(command, ssh=True)
 
             if error != [] or output == []:
-                base_name = base_name.rstrip(string.digits)
+                base_name = base_name.rsplit("_", 1)[0].rstrip(string.digits)
                 need_images[base_names.index(base_name)] = True
 
     # Stop if no base images are required
@@ -120,7 +126,7 @@ def base_image(config, machines):
     base_ips = []
     for machine in machines:
         for base_name, base_ip in zip(machine.base_names, machine.base_ips):
-            base_name_r = base_name.rstrip(string.digits)
+            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
                 if machine.is_local:
                     command = (
@@ -203,7 +209,7 @@ def base_image(config, machines):
     processes = []
     for machine in machines:
         for base_name, ip in zip(machine.base_names, machine.base_ips):
-            base_name_r = base_name.rstrip(string.digits)
+            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
                 command = "ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean" % (
                     base_name,
@@ -222,7 +228,7 @@ def base_image(config, machines):
     processes = []
     for machine in machines:
         for base_name in machine.base_names:
-            base_name_r = base_name.rstrip(string.digits)
+            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
                 if machine.is_local:
                     command = "virsh --connect qemu:///system shutdown %s" % (base_name)
