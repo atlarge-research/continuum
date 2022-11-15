@@ -181,28 +181,23 @@ Inside the continuum framework:
 In this part, you will setup [OpenFaaS](https://docs.openfaas.com/), a serverless framework, in the Kubernetes cluster that `Continuum` created for you.  
 For the moment, we only allow OpenFaaS to be installed outside of the framework. In the future, we will integrate it in the framework.
 
-1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag is critical here.
+1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag and `model = openFaas` in section `execution_model` is critical here.
     ```bash
     python3 main.py configuration/bench_openfaas.cfg
     ```
 
-2. From your host-system execute the Ansible playbook to install OpenFaaS. Make sure that you are in the project root and that you have a cluster running with Kubernetes installed.
-   ```bash
-    ansible-playbook -i ~/.continuum/inventory_vms execution_model/openFaas.yml
-   ```
-
-3. From your host-system ssh onto the `cloud_controller` node, for example:
+2. From your host-system ssh onto the `cloud_controller` node, for example:
    ```bash
    ssh cloud_controller@192.168.100.2 -i ~/.ssh/id_rsa_benchmark
    ```
 
-4. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:
+3. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:
    ```bash
    nohup kubectl port-forward -n openfaas svc/gateway 8080:8080 &
    ```
    After execution, hit `Strg+C` to exit the dialog.
 
-5. Give the `fass-cli` access to the OpenFaas deployment:
+4. Give the `fass-cli` access to the OpenFaas deployment:
    ```bash
    PASSWORD=$(kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | base64 --decode; echo)
    echo -n $PASSWORD | faas-cli login --username admin --password-stdin

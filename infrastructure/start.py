@@ -2,6 +2,7 @@
 Impelemnt infrastructure
 """
 import logging
+import os
 import sys
 import time
 import json
@@ -330,6 +331,9 @@ def copy_files(config, machines):
                 if config["mode"] == "edge":
                     path = config["base"] + "/resource_manager/" + rm + "/edge/"
                     out.append(machine.copy_files(path, dest, recursive=True))
+            if "execution_model" in config:
+                path = os.path.join(config["base"], "execution_model")
+                out.append(machine.copy_files(path, dest, recursive=True))
 
             path = config["base"] + "/resource_manager/endpoint/"
             out.append(machine.copy_files(path, dest, recursive=True))
