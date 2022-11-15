@@ -156,7 +156,7 @@ def delete_vms(config, machines):
     for machine in machines:
         if machine.is_local:
             command = (
-                'virsh list --all | grep -o -E "(\w*_%s.%s|\w*_%s.%s)" | xargs -I % sh -c "virsh destroy %"'
+                'virsh list --all | grep -o -E "(\w*_%s.%s|\w*_%s.%s)" | xargs -I %% sh -c "virsh destroy %%"'
                 % (
                     config["infrastructure"]["prefixIP"],
                     config["infrastructure"]["middleIP"],
@@ -166,7 +166,7 @@ def delete_vms(config, machines):
             )
         else:
             comm = (
-                'virsh list --all | grep -o -E \\"(\w*_%s.%s|\w*_%s.%s)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
+                'virsh list --all | grep -o -E \\"(\w*_%s.%s|\w*_%s.%s)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
                 % (
                     config["infrastructure"]["prefixIP"],
                     config["infrastructure"]["middleIP"],
@@ -233,7 +233,7 @@ def create_dir(config, machines):
     """Generate a temporary directory for generated files.
     This directory is located inside the benchmark git repository.
     Later, that data will be sent to each physical machine's
-    config["infrastructure"]["file_path"]/.continuum directory
+    config["infrastructure"]["base_path"]/.continuum directory
 
     Args:
         config (dict): Parsed configuration
@@ -253,7 +253,7 @@ def create_dir(config, machines):
 
 def copy_files(config, machines):
     """Copy Infrastructure and Ansible files to all machines with
-    directory config["infrastructure"]["file_path"]/.continuum
+    directory config["infrastructure"]["base_path"]/.continuum
 
     Args:
         config (dict): Parsed configuration
@@ -267,27 +267,27 @@ def copy_files(config, machines):
             command = (
                 "rm -rf %s/.continuum && mkdir %s/.continuum && mkdir %s/.continuum/images"
                 % (
-                    config["infrastructure"]["file_path"],
-                    config["infrastructure"]["file_path"],
-                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["base_path"],
+                    config["infrastructure"]["base_path"],
+                    config["infrastructure"]["base_path"],
                 )
             )
             output, error = machine.process(command, shell=True)
 
-            dest = config["infrastructure"]["file_path"] + "/.continuum/"
+            dest = config["infrastructure"]["base_path"] + "/.continuum/"
         else:
             command = (
                 'ssh %s "rm -rf %s/.continuum && mkdir %s/.continuum && mkdir %s/.continuum/images"'
                 % (
                     machine.name,
-                    config["infrastructure"]["file_path"],
-                    config["infrastructure"]["file_path"],
-                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["base_path"],
+                    config["infrastructure"]["base_path"],
+                    config["infrastructure"]["base_path"],
                 )
             )
             output, error = machine.process(command, shell=True)
 
-            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["file_path"])
+            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
         if error != []:
             logging.error("".join(error))

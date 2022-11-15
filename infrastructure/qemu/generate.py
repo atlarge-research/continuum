@@ -204,9 +204,9 @@ def start(config, machines):
                     int(period * config["infrastructure"]["cloud_quota"]),
                     "\n".join(pinnings),
                     bridge_name,
-                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["base_path"],
                     name,
-                    config["infrastructure"]["file_path"],
+                    config["infrastructure"]["base_path"],
                     name,
                 )
             )

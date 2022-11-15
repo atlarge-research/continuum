@@ -40,9 +40,9 @@ def install_openfaas(config: dict, machines: Machine):
     command = [
         "ansible-playbook",
         "-i",
-        os.path.join(config["infrastructure"]["file_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(
-            config["infrastructure"]["file_path"], ".continuum/execution_model/openFaas.yml"
+            config["infrastructure"]["base_path"], ".continuum/execution_model/openFaas.yml"
         ),
     ]
 

@@ -388,11 +388,20 @@ def parse_config(parser, arg):
         )
         option_check(parser, config, new, sec, "netperf", bool, lambda x: x in [True, False])
 
-        new["infrastructure"]["file_path"] = str(os.getenv("HOME"))
-        option_check(parser, config, new, sec, "file_path", str, lambda x: os.path.expanduser(x))
-        new["infrastructure"]["file_path"] = os.path.expanduser(new["infrastructure"]["file_path"])
-        if new["infrastructure"]["file_path"][-1] == "/":
-            new["infrastructure"]["file_path"] = config["infrastructure"]["file_path"][:-1]
+        new["infrastructure"]["base_path"] = str(os.getenv("HOME"))
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "base_path",
+            str,
+            lambda x: os.path.expanduser(x),
+            mandatory=False,
+        )
+        new["infrastructure"]["base_path"] = os.path.expanduser(new["infrastructure"]["base_path"])
+        if new["infrastructure"]["base_path"][-1] == "/":
+            new["infrastructure"]["base_path"] = config["infrastructure"]["base_path"][:-1]
 
         new["infrastructure"]["prefixIP"] = "192.168"
         option_check(
@@ -407,13 +416,25 @@ def parse_config(parser, arg):
             and int(x.split(".")[0]) < 255
             and int(x.split(".")[1]) > 0
             and int(x.split(".")[1]) < 255,
+            mandatory=False,
         )
 
         new["infrastructure"]["middleIP"] = "100"
-        option_check(parser, config, new, sec, "middleIP", int, lambda x: x > 0 and x < 255)
+        option_check(
+            parser, config, new, sec, "middleIP", int, lambda x: x > 0 and x < 255, mandatory=False
+        )
 
         new["infrastructure"]["middleIP_base"] = "90"
-        option_check(parser, config, new, sec, "middleIP_base", int, lambda x: x > 0 and x < 255)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "middleIP_base",
+            int,
+            lambda x: x > 0 and x < 255,
+            mandatory=False,
+        )
 
         if new["infrastructure"]["middleIP"] == new["infrastructure"]["middleIP_base"]:
             parser.error("Config: middleIP == middleIP_base")
