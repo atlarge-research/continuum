@@ -131,12 +131,16 @@ def base_image(config, machines):
                 if machine.is_local:
                     command = (
                         "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
-                        % (config["infrastructure"]["base_path"], base_name)
+                        % (config["infrastructure"]["base_path"], base_name.rsplit("_", 1)[0])
                     )
                 else:
                     command = (
                         "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s/.continuum/domain_%s.xml\"'"
-                        % (machine.name, config["infrastructure"]["base_path"], base_name)
+                        % (
+                            machine.name,
+                            config["infrastructure"]["base_path"],
+                            base_name.rsplit("_", 1)[0],
+                        )
                     )
 
                 processes.append(machines[0].process(command, shell=True, output=False))

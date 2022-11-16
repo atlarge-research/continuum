@@ -265,7 +265,7 @@ def copy_files(config, machines):
     logging.info("Start copying files to all nodes")
 
     for machine in machines:
-        # Create a source directory on each machiine
+        # Delete old content
         if machine.is_local:
             command = (
                 "rm -rf %s/.continuum/cloud && \
@@ -273,14 +273,10 @@ def copy_files(config, machines):
                  rm -rf %s/.continuum/endpoint && \
                  rm -rf %s/.continuum/execution_model && \
                  rm -rf %s/.continuum/infrastructure && \
-                 rm %s.continuum/* && \
-                 mkdir -p %s/.continuum && \
-                 mkdir -p %s/.continuum/images"
-                % ((config["infrastructure"]["base_path"],) * 8)
+                 find %s/.continuum -maxdepth 1 -type f -delete"
+                % ((config["infrastructure"]["base_path"],) * 6)
             )
-            output, error = machine.process(command, shell=True)
-
-            dest = config["infrastructure"]["base_path"] + "/.continuum/"
+            machine.process(command, shell=True)
         else:
             command = (
                 'ssh %s "\
@@ -289,16 +285,33 @@ def copy_files(config, machines):
                  rm -rf %s/.continuum/endpoint && \
                  rm -rf %s/.continuum/execution_model && \
                  rm -rf %s/.continuum/infrastructure && \
-                 rm %s.continuum/* && \
+                 find %s/.continuum -maxdepth 1 -type f -delete"'
+                % ((config["infrastructure"]["base_path"],) * 6)
+            )
+            machine.process(command, shell=True)
+
+        # Create a source directory on each machiine
+        if machine.is_local:
+            command = (
+                "mkdir -p %s/.continuum && \
+                 mkdir -p %s/.continuum/images"
+                % ((config["infrastructure"]["base_path"],) * 2)
+            )
+            output, error = machine.process(command, shell=True)
+
+            dest = config["infrastructure"]["base_path"] + "/.continuum/"
+        else:
+            command = (
+                'ssh %s "\
                  mkdir -p %s/.continuum && \
                  mkdir -p %s/.continuum/images"'
-                % ((config["infrastructure"]["base_path"],) * 8)
+                % ((config["infrastructure"]["base_path"],) * 2)
             )
             output, error = machine.process(command, shell=True)
 
             dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
-        if len(error) > 2:
+        if error != []:
             logging.error("".join(error))
             sys.exit()
         elif output != []:
