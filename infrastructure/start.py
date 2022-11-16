@@ -168,20 +168,20 @@ def delete_vms(config, machines):
             command = (
                 'virsh list --all | grep -o -E "(\w*_%s.%s.\w*|\w*_%s.%s.\w*)" | xargs -I %% sh -c "virsh destroy %%"'
                 % (
-                    config["infrastructure"]["prefixIP"],
-                    config["infrastructure"]["middleIP"],
-                    config["infrastructure"]["prefixIP"],
-                    config["infrastructure"]["middleIP_base"],
+                    config["infrastructure"]["prefixIP"].replace(".", "."),
+                    config["infrastructure"]["middleIP"].replace(".", "."),
+                    config["infrastructure"]["prefixIP"].replace(".", "."),
+                    config["infrastructure"]["middleIP_base"].replace(".", "."),
                 )
             )
         else:
             comm = (
                 'virsh list --all | grep -o -E \\"(\w*_%s.%s.\w*|\w*_%s.%s.\w*)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
                 % (
-                    config["infrastructure"]["prefixIP"],
-                    config["infrastructure"]["middleIP"],
-                    config["infrastructure"]["prefixIP"],
-                    config["infrastructure"]["middleIP_base"],
+                    config["infrastructure"]["prefixIP"].replace(".", "."),
+                    config["infrastructure"]["middleIP"].replace(".", "."),
+                    config["infrastructure"]["prefixIP"].replace(".", "."),
+                    config["infrastructure"]["middleIP_base"].replace(".", "."),
                 )
             )
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
@@ -273,9 +273,10 @@ def copy_files(config, machines):
                  rm -rf %s/.continuum/endpoint && \
                  rm -rf %s/.continuum/execution_model && \
                  rm -rf %s/.continuum/infrastructure && \
+                 rm %s.continuum/* && \
                  mkdir -p %s/.continuum && \
                  mkdir -p %s/.continuum/images"
-                % ((config["infrastructure"]["base_path"],) * 7)
+                % ((config["infrastructure"]["base_path"],) * 8)
             )
             output, error = machine.process(command, shell=True)
 
@@ -288,15 +289,16 @@ def copy_files(config, machines):
                  rm -rf %s/.continuum/endpoint && \
                  rm -rf %s/.continuum/execution_model && \
                  rm -rf %s/.continuum/infrastructure && \
+                 rm %s.continuum/* && \
                  mkdir -p %s/.continuum && \
                  mkdir -p %s/.continuum/images"'
-                % ((config["infrastructure"]["base_path"],) * 7)
+                % ((config["infrastructure"]["base_path"],) * 8)
             )
             output, error = machine.process(command, shell=True)
 
             dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
-        if error != []:
+        if len(error) > 2:
             logging.error("".join(error))
             sys.exit()
         elif output != []:

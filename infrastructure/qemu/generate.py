@@ -205,9 +205,9 @@ def start(config, machines):
                     "\n".join(pinnings),
                     bridge_name,
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                 )
             )
             f.close()
@@ -240,9 +240,9 @@ def start(config, machines):
                     "\n".join(pinnings),
                     bridge_name,
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                 )
             )
             f.close()
@@ -274,9 +274,9 @@ def start(config, machines):
                     "\n".join(pinnings),
                     bridge_name,
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                 )
             )
             f.close()
@@ -300,9 +300,9 @@ def start(config, machines):
                     "",
                     bridge_name,
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                     config["infrastructure"]["base_path"],
-                    name,
+                    name.rsplit("_", 1),
                 )
             )
             f.close()
