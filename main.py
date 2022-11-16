@@ -13,6 +13,7 @@ import os
 import time
 import configparser
 import socket
+import getpass
 
 import infrastructure.start as infrastructure
 import resource_manager.start as resource_manager
@@ -552,6 +553,7 @@ def add_constants(config):
     """
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
+    config["username"] = getpass.getuser()
 
     if not config["infrastructure"]["infra_only"]:
         if config["benchmark"]["application"] == "image_classification":

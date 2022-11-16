@@ -390,8 +390,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.cloud_controller_ips.append(ip)
 
-            name = "cloud_controller_%s" % (ip)
-            name = name.replace(".", "")
+            name = "cloud_controller_%s" % (config["username"])
             machine.cloud_controller_names.append(name)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
         else:
@@ -407,8 +406,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.cloud_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
-            name = "cloud%i_%s" % (cloud_index, ip)
-            name = name.replace(".", "")
+            name = "cloud%i_%s" % (cloud_index, config["username"])
             machine.cloud_names.append(name)
             cloud_index += 1
 
@@ -418,8 +416,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.edge_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
-            name = "edge%i_%s" % (edge_index, ip)
-            name = name.replace(".", "")
+            name = "edge%i_%s" % (edge_index, config["username"])
             machine.edge_names.append(name)
             edge_index += 1
 
@@ -429,8 +426,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.endpoint_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
-            name = "endpoint%i_%s" % (endpoint_index, ip)
-            name = name.replace(".", "")
+            name = "endpoint%i_%s" % (endpoint_index, config["username"])
             machine.endpoint_names.append(name)
             endpoint_index += 1
 
@@ -443,8 +439,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             )
             machine.base_ips.append(ip)
 
-            name = "base%i_%s" % (i, ip)
-            name = name.replace(".", "")
+            name = "base%i_%s" % (i, config["username"])
             machine.base_names.append(name)
             middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
         else:
@@ -461,8 +456,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                 )
                 machine.base_ips.append(ip)
 
-                name = "base_cloud_%s%i_%s" % (rm, i, ip)
-                name = name.replace(".", "")
+                name = "base_cloud_%s%i_%s" % (rm, i, config["username"])
                 machine.base_names.append(name)
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
@@ -474,8 +468,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                 )
                 machine.base_ips.append(ip)
 
-                name = "base_edge_%s%i_%s" % (rm, i, ip)
-                name = name.replace(".", "")
+                name = "base_edge_%s%i_%s" % (rm, i, config["username"])
                 machine.base_names.append(name)
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
@@ -487,8 +480,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                 )
                 machine.base_ips.append(ip)
 
-                name = "base_endpoint%i_%s" % (i, ip)
-                name = name.replace(".", "")
+                name = "base_endpoint%i_%s" % (i, config["username"])
                 machine.base_names.append(name)
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 

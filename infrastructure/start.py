@@ -166,23 +166,13 @@ def delete_vms(config, machines):
     for machine in machines:
         if machine.is_local:
             command = (
-                'virsh list --all | grep -o -E "(\w*_%s.%s.\w*|\w*_%s.%s.\w*)" | xargs -I %% sh -c "virsh destroy %%"'
-                % (
-                    config["infrastructure"]["prefixIP"].replace(".", "."),
-                    config["infrastructure"]["middleIP"].replace(".", "."),
-                    config["infrastructure"]["prefixIP"].replace(".", "."),
-                    config["infrastructure"]["middleIP_base"].replace(".", "."),
-                )
+                'virsh list --all | grep -o -E "(\w*_%s)" | xargs -I %% sh -c "virsh destroy %%"'
+                % (config["username"])
             )
         else:
             comm = (
-                'virsh list --all | grep -o -E \\"(\w*_%s.%s.\w*|\w*_%s.%s.\w*)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
-                % (
-                    config["infrastructure"]["prefixIP"].replace(".", "."),
-                    config["infrastructure"]["middleIP"].replace(".", "."),
-                    config["infrastructure"]["prefixIP"].replace(".", "."),
-                    config["infrastructure"]["middleIP_base"].replace(".", "."),
-                )
+                'virsh list --all | grep -o -E \\"(\w*_%s)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
+                % (config["username"])
             )
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
 
@@ -346,9 +336,9 @@ def copy_files(config, machines):
             + machine.endpoint_names
             + machine.base_names
         ):
-            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name.rsplit("_", 1)[0] + ".xml", dest))
+            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name + ".xml", dest))
             out.append(
-                machine.copy_files(config["base"] + "/.tmp/user_data_" + name.rsplit("_", 1)[0] + ".yml", dest)
+                machine.copy_files(config["base"] + "/.tmp/user_data_" + name + ".yml", dest)
             )
 
         # Copy Ansible files for infrastructure

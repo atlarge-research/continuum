@@ -131,7 +131,7 @@ def base_image(config, machines):
                 if machine.is_local:
                     command = (
                         "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
-                        % (config["infrastructure"]["base_path"], base_name.rsplit("_", 1)[0])
+                        % (config["infrastructure"]["base_path"], base_name)
                     )
                 else:
                     command = (
@@ -139,7 +139,7 @@ def base_image(config, machines):
                         % (
                             machine.name,
                             config["infrastructure"]["base_path"],
-                            base_name.rsplit("_", 1)[0],
+                            base_name,
                         )
                     )
 

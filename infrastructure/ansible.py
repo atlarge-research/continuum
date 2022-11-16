@@ -30,8 +30,7 @@ def create_inventory_machine(config, machines):
     for machine in machines:
         base = ""
         if config["infrastructure"]["infra_only"]:
-            base = machine.base_names[0].rsplit("_", 1)[0]
-            base = "base=%s" % (base)
+            base = "base=%s" % (machine.base_names[0])
 
         if machine.is_local:
             f.write("localhost ansible_connection=local %s\n" % (base))
@@ -51,10 +50,9 @@ def create_inventory_machine(config, machines):
             if machine.cloud_controller + machine.clouds == 0:
                 continue
 
-            base = machine.base_names[0].rsplit("_", 1)[0]
+            base = machine.base_names[0]
             if not config["infrastructure"]["infra_only"]:
                 base = [name for name in machine.base_names if "_cloud_" in name][0]
-                base = [name.rsplit("_", 1)[0] for name in base]
 
             if machine.is_local:
                 f.write(
@@ -91,10 +89,9 @@ def create_inventory_machine(config, machines):
             if machine.edges == 0:
                 continue
 
-            base = machine.base_names[0].rsplit("_", 1)[0]
+            base = machine.base_names[0]
             if not config["infrastructure"]["infra_only"]:
                 base = [name for name in machine.base_names if "_edge_" in name][0]
-                base = [name.rsplit("_", 1)[0] for name in base]
 
             if machine.is_local:
                 f.write(
@@ -124,10 +121,9 @@ def create_inventory_machine(config, machines):
             if machine.endpoints == 0:
                 continue
 
-            base = machine.base_names[0].rsplit("_", 1)[0]
+            base = machine.base_names[0]
             if not config["infrastructure"]["infra_only"]:
                 base = [name for name in machine.base_names if "_endpoint" in name][0]
-                base = [name.rsplit("_", 1)[0] for name in base]
 
             if machine.is_local:
                 f.write(
