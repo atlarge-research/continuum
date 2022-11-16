@@ -184,7 +184,7 @@ def start(config, machines):
             machine.cloud_controller_ips + machine.cloud_ips,
             machine.cloud_controller_names + machine.cloud_names,
         ):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
+            f = open(".tmp/domain_%s.xml" % (name.rsplit("_", 1)[0]), "w")
             memory = 1048576 * cc
 
             if config["infrastructure"]["cpu_pin"]:
@@ -212,14 +212,14 @@ def start(config, machines):
             )
             f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
+            f = open(".tmp/user_data_%s.yml" % (name.rsplit("_", 1)[0]), "w")
             hostname = name.replace("_", "")
             f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Edges
         for ip, name in zip(machine.edge_ips, machine.edge_names):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
+            f = open(".tmp/domain_%s.xml" % (name.rsplit("_", 1)[0]), "w")
             memory = 1048576 * ec
 
             if config["infrastructure"]["cpu_pin"]:
@@ -247,13 +247,13 @@ def start(config, machines):
             )
             f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
+            f = open(".tmp/user_data_%s.yml" % (name.rsplit("_", 1)[0]), "w")
             f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Endpoints
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
+            f = open(".tmp/domain_%s.xml" % (name.rsplit("_", 1)[0]), "w")
             memory = 1048576 * pc
 
             if config["infrastructure"]["cpu_pin"]:
@@ -281,13 +281,13 @@ def start(config, machines):
             )
             f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
+            f = open(".tmp/user_data_%s.yml" % (name.rsplit("_", 1)[0]), "w")
             f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Base image(s)
         for ip, name in zip(machine.base_ips, machine.base_names):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
+            f = open(".tmp/domain_%s.xml" % (name.rsplit("_", 1)[0]), "w")
 
             f.write(
                 DOMAIN
@@ -307,6 +307,6 @@ def start(config, machines):
             )
             f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
+            f = open(".tmp/user_data_%s.yml" % (name.rsplit("_", 1)[0]), "w")
             f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
             f.close()

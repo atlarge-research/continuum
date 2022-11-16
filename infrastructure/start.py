@@ -346,9 +346,9 @@ def copy_files(config, machines):
             + machine.endpoint_names
             + machine.base_names
         ):
-            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name + ".xml", dest))
+            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name.rsplit("_", 1)[0] + ".xml", dest))
             out.append(
-                machine.copy_files(config["base"] + "/.tmp/user_data_" + name + ".yml", dest)
+                machine.copy_files(config["base"] + "/.tmp/user_data_" + name.rsplit("_", 1)[0] + ".yml", dest)
             )
 
         # Copy Ansible files for infrastructure
