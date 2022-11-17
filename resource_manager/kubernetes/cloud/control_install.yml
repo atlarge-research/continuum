@@ -57,7 +57,7 @@
     - name: Copy join command to local file
       fetch:
         src: /tmp/join-command.txt
-        dest: "{{ base_path }}/.continuum"
+        dest: "{{ base_path }}/.continuum/"
         flat: true
 
     - name: Remove unneeded Kubernetes join command file
