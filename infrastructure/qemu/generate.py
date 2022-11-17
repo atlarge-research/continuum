@@ -123,7 +123,7 @@ def start(config, machines):
     logging.info("Start writing QEMU config files for cloud / edge")
 
     # Get the SSH public key
-    f = open(config["home"] + "/.ssh/id_rsa_benchmark.pub", "r")
+    f = open("%s.pub" % (config["ssh_key"]), "r")
     ssh_key = f.read().rstrip()
     f.close()
 

@@ -201,14 +201,15 @@ def create_keypair(config, machines):
     for machine in machines:
         if machine.is_local:
             command = [
-                "[[ ! -f %s/.ssh/id_rsa_benchmark.pub ]] && \
-cd %s/.ssh && \
-ssh-keygen -t rsa -b 4096 -f id_rsa_benchmark -C KubeEdge -N '' -q"
-                % (config["home"], config["home"])
+                """
+[[ ! -f %s.pub ]] && 
+cd %s/.ssh &&
+ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q"""
+                % (config["ssh_key"], config["home"], config["ssh_key"].split("/")[-1])
             ]
             output, error = machine.process(command, shell=True)
         else:
-            source = "%s/.ssh/id_rsa_benchmark*" % (config["home"])
+            source = "%s*" % (config["ssh_key"])
             dest = machine.name + ":./.ssh/"
             output, error = machine.copy_files(source, dest)
 

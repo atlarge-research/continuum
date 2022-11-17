@@ -99,12 +99,15 @@ BASE_NAMES              %s""" % (
             ", ".join(self.base_names),
         )
 
-    def process(self, command, shell=False, env=None, output=True, ssh=False, ssh_target=None):
+    def process(
+        self, config, command, shell=False, env=None, output=True, ssh=False, ssh_target=None
+    ):
         """Execute a process using the subprocess library, and return the output/error or the process
 
         Args:
             command (str or list(str)): Command to be executed. Either a string can be given
                 (when using the shell) or a list of strings (when not using the shell)
+            config (dict): Parsed configuration
             shell (bool, optional): Use the shell for the subprocess. Defaults to False.
             env (dict, optional): Environment variables. Defaults to None.
             output (bool, optional): Return the output and error, or the process itself. Defaults to True.
@@ -128,7 +131,7 @@ BASE_NAMES              %s""" % (
                         "ssh",
                         ssh_target,
                         "-i",
-                        str(os.getenv("HOME")) + "/.ssh/id_rsa_benchmark",
+                        config["ssh_key"],
                     ]
 
                 if type(command) == str:

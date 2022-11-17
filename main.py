@@ -554,6 +554,7 @@ def add_constants(config):
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
     config["username"] = getpass.getuser()
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark")
 
     if not config["infrastructure"]["infra_only"]:
         if config["benchmark"]["application"] == "image_classification":
@@ -680,7 +681,7 @@ def main(args):
     if print_ssh:
         s = []
         for ssh in args.config["cloud_ssh"] + args.config["edge_ssh"] + args.config["endpoint_ssh"]:
-            s.append("ssh %s -i %s/.ssh/id_rsa_benchmark" % (ssh, args.config["home"]))
+            s.append("ssh %s -i %s" % (ssh, args.config["ssh_key"]))
 
         logging.info("To access the VMs:\n\t" + "\n\t".join(s) + "\n")
 

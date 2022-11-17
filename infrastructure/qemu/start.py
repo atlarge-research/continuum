@@ -215,10 +215,10 @@ def base_image(config, machines):
         for base_name, ip in zip(machine.base_names, machine.base_ips):
             base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
-                command = "ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean" % (
+                command = "ssh %s@%s -i %s sudo cloud-init clean" % (
                     base_name,
                     ip,
-                    config["home"],
+                    config["ssh_key"],
                 )
                 processes.append(machines[0].process(command, shell=True, output=False))
 

@@ -22,8 +22,8 @@ def create_inventory_machine(config, machines):
     f.write("[all:vars]\n")
     f.write("ansible_python_interpreter=/usr/bin/python3\n")
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
-    f.write("base_path=%s" % (config["infrastructure"]["base_path"]))
-    f.write("username=%s" % (config["username"]))
+    f.write("base_path=%s\n" % (config["infrastructure"]["base_path"]))
+    f.write("username=%s\n" % (config["username"]))
 
     # All hosts group
     f.write("\n[all_hosts]\n")
@@ -171,9 +171,9 @@ def create_inventory_vm(config, machines):
     f.write("[all:vars]\n")
     f.write("ansible_python_interpreter=/usr/bin/python3\n")
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
-    f.write("ansible_ssh_private_key_file=~/.ssh/id_rsa_benchmark\n")
+    f.write("ansible_ssh_private_key_file=%s\n" % (config["ssh_key"]))
     f.write("registry_ip=%s:%i\n" % (host_ip, 5000))
-    f.write("base_path=%s" % (config["infrastructure"]["base_path"]))
+    f.write("base_path=%s\n" % (config["infrastructure"]["base_path"]))
 
     if not config["infrastructure"]["infra_only"]:
         # Tier specific groups
