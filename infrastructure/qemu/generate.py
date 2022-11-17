@@ -95,17 +95,20 @@ final_message: "The system is finally up, after $UPTIME seconds"
 """
 
 
-def find_bridge(machine, bridge):
+def find_bridge(config, machine, bridge):
     """Check if bridge <bridge> is available on the system.
 
     Args:
+        config (dict): Parsed configuration
         machine (Machine object): Object representing the physical machine we currently use
         bridge (str): Bridge name to check
 
     Returns:
         int: Bool representing if we found the bridge on this machine
     """
-    output, error = machine.process("brctl show | grep '^%s' | wc -l" % (bridge), shell=True)
+    output, error = machine.process(
+        config, "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
+    )
     if error != [] or output == []:
         logging.error("ERROR: Could not find a network bridge")
         sys.exit()
@@ -135,17 +138,19 @@ def start(config, machines):
     # 3. Set the gateway variable to the IP of your gateway (e.g. 10.0.2.2, 192.168.122.1, etc)
     # ------------------------------------------------------------------------------------------------
     # Find out what bridge to use
-    bridge = find_bridge(machines[0], "br0")
+    bridge = find_bridge(config, machines[0], "br0")
     bridge_name = "br0"
     if bridge == 0:
-        bridge = find_bridge(machines[0], "virbr0")
+        bridge = find_bridge(config, machines[0], "virbr0")
         bridge_name = "virbr0"
         if bridge == 0:
             logging.error("ERROR: Could not find a network bridge")
             sys.exit()
 
     # Get gateway address
-    output, error = machines[0].process("ip route | grep ' %s '" % (bridge_name), shell=True)
+    output, error = machines[0].process(
+        config, "ip route | grep ' %s '" % (bridge_name), shell=True
+    )
     if error != [] or output == []:
         logging.error("ERROR: Could not find gateway address")
         sys.exit()

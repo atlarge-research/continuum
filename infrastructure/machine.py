@@ -162,7 +162,7 @@ BASE_NAMES              %s""" % (
         else:
             return process
 
-    def check_hardware(self):
+    def check_hardware(self, config):
         """Get the amount of physical cores for this machine.
         This automatically functions as reachability check for this machine.
         """
@@ -174,7 +174,7 @@ BASE_NAMES              %s""" % (
         else:
             command = ["ssh", self.name, command]
 
-        output, error = self.process(command)
+        output, error = self.process(config, command)
 
         if output == []:
             logging.error("".join(error))
@@ -196,7 +196,7 @@ BASE_NAMES              %s""" % (
 
             self.cores = int(threads / threads_per_core)
 
-    def copy_files(self, source, dest, recursive=False):
+    def copy_files(self, config, source, dest, recursive=False):
         """Copy files from host machine to destination machine.
 
         Args:
@@ -216,7 +216,7 @@ BASE_NAMES              %s""" % (
         else:
             command = ["scp " + rec + source + " " + dest]
 
-        return self.process(command, shell=True)
+        return self.process(config, command, shell=True)
 
 
 def make_machine_objects(config):

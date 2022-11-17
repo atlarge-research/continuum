@@ -6,14 +6,15 @@ from infrastructure.machine import Machine
 import main
 
 
-def run_playbook(command: List[str], machine: Machine):
+def run_playbook(config: dict, command: List[str], machine: Machine):
     """Run an Ansible command on a machine and check output.
 
     Args:
+        config (dict): Parsed Configuration
         command (List[str]): command for Ansible
         machines (Machine): physical machine to run Ansible command on
     """
-    process = machine.process(command, output=False)
+    process = machine.process(config, command, output=False)
 
     logging.debug("Check output for Ansible command [%s]" % (" ".join(process.args)))
     output = [line.decode("utf-8") for line in process.stdout.readlines()]
@@ -47,7 +48,7 @@ def install_openfaas(config: dict, machines: Machine):
     ]
 
     # we assume that cloud_controller is on first machine (localhost)
-    run_playbook(command, machines[0])
+    run_playbook(config, command, machines[0])
 
 
 def start(config: dict, machines: List[Machine]):

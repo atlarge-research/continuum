@@ -61,7 +61,7 @@ def start_worker(config, machines):
         vars_str[:-1],
         config["infrastructure"]["base_path"] + "/.continuum/launch_benchmark.yml",
     ]
-    main.ansible_check_output(machines[0].process(command))
+    main.ansible_check_output(machines[0].process(config, command))
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
@@ -82,7 +82,7 @@ def start_worker(config, machines):
                 "--sort-by=.spec.nodeName",
             ]
             output, error = machines[0].process(
-                command, ssh=True, ssh_target=config["cloud_ssh"][0]
+                config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
             )
 
             if error != [] and any("couldn't find any field with path" in line for line in error):
@@ -170,7 +170,7 @@ def start_worker_mist(config, machines):
         )
 
         processes.append(
-            machines[0].process(command, output=False, ssh=True, ssh_target=worker_ssh)
+            machines[0].process(config, command, output=False, ssh=True, ssh_target=worker_ssh)
         )
         container_names.append(cont_name)
 
@@ -201,7 +201,7 @@ def start_worker_mist(config, machines):
                 "--format",
                 '"{{.ID}}: {{.Status}} {{.Names}}"',
             ]
-            output, error = machines[0].process(command, ssh=True, ssh_target=worker_ssh)
+            output, error = machines[0].process(config, command, ssh=True, ssh_target=worker_ssh)
 
             if error != []:
                 logging.error("".join(error))
@@ -304,7 +304,9 @@ def start_endpoint(config, machines):
             )
 
             processes.append(
-                machines[0].process(command, output=False, ssh=True, ssh_target=endpoint_ssh)
+                machines[0].process(
+                    config, command, output=False, ssh=True, ssh_target=endpoint_ssh
+                )
             )
             container_names.append(cont_name)
 
@@ -350,7 +352,7 @@ def wait_endpoint_completion(machines, sshs, container_names):
                 "--format",
                 '"{{.ID}}: {{.Status}} {{.Names}}"',
             ]
-            output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+            output, error = machines[0].process(config, command, ssh=True, ssh_target=ssh)
 
             if error != []:
                 logging.error("".join(error))
@@ -416,7 +418,7 @@ def wait_worker_completion(config, machines):
                 "--sort-by=.spec.nodeName",
             ]
             output, error = machines[0].process(
-                command, ssh=True, ssh_target=config["cloud_ssh"][0]
+                config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
             )
 
             if error != [] or output == []:

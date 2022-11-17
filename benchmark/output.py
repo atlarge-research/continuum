@@ -31,7 +31,7 @@ def get_endpoint_output(config, machines, container_names):
         # Alternatively, use docker logs -t container_name for detailed timestamps
         # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
         command = ["docker", "logs", "-t", cont_name]
-        output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+        output, error = machines[0].process(config, command, ssh=True, ssh_target=ssh)
 
         if error != []:
             logging.error("".join(error))
@@ -66,7 +66,9 @@ def get_worker_output(config, machines):
         "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
         "--sort-by=.spec.nodeName",
     ]
-    output, error = machines[0].process(command, ssh=True, ssh_target=config["cloud_ssh"][0])
+    output, error = machines[0].process(
+        config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
+    )
 
     if error != [] or output == []:
         logging.error("".join(error))
@@ -77,7 +79,9 @@ def get_worker_output(config, machines):
     for line in output[1:]:
         container = line.split(" ")[0]
         command = ["kubectl", "logs", "--timestamps=true", container]
-        output, error = machines[0].process(command, ssh=True, ssh_target=config["cloud_ssh"][0])
+        output, error = machines[0].process(
+            config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
+        )
 
         if error != [] or output == []:
             logging.error("".join(error))
@@ -108,7 +112,7 @@ def get_worker_output_mist(config, machines, container_names):
         # Alternatively, use docker logs -t container_name for detailed timestamps
         # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
         command = ["docker", "logs", "-t", cont_name]
-        output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+        output, error = machines[0].process(config, command, ssh=True, ssh_target=ssh)
 
         if error != []:
             logging.error("".join(error))

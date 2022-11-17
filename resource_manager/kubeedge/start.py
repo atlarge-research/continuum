@@ -30,7 +30,7 @@ def start(config, machines):
             config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
             config["infrastructure"]["base_path"] + "/.continuum/edge/install_mist.yml",
         ]
-        processes.append(machines[0].process(command, output=False))
+        processes.append(machines[0].process(config, command, output=False))
 
         for process in processes:
             logging.debug("Check output for Ansible command [%s]" % (" ".join(process.args)))
@@ -47,7 +47,7 @@ def start(config, machines):
         config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
         config["infrastructure"]["base_path"] + "/.continuum/cloud/control_install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    processes.append(machines[0].process(config, command, output=False))
 
     # Setup edge
     command = [
@@ -56,7 +56,7 @@ def start(config, machines):
         config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
         config["infrastructure"]["base_path"] + "/.continuum/edge/install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    processes.append(machines[0].process(config, command, output=False))
 
     # Check playbooks
     for process in processes:
@@ -87,4 +87,4 @@ def start(config, machines):
 
     # Wait for the cloud to finish before starting the edge
     for command in commands:
-        main.ansible_check_output(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(config, command))

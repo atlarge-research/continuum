@@ -176,7 +176,7 @@ def delete_vms(config, machines):
             )
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
 
-        processes.append(machine.process(command, shell=True, output=False))
+        processes.append(machine.process(config, command, shell=True, output=False))
 
     # Wait for process to finish. Outcome of destroy command does not matter
     for process in processes:
@@ -207,7 +207,7 @@ cd %s/.ssh &&
 ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q"""
                 % (config["ssh_key"], config["home"], config["ssh_key"].split("/")[-1])
             ]
-            output, error = machine.process(command, shell=True)
+            output, error = machine.process(config, command, shell=True)
         else:
             source = "%s*" % (config["ssh_key"])
             dest = machine.name + ":./.ssh/"
@@ -235,7 +235,7 @@ def create_dir(config, machines):
     """
     logging.info("Create a temporary directory for generated files")
     command = "rm -rf %s/.tmp && mkdir %s/.tmp" % (config["base"], config["base"])
-    output, error = machines[0].process(command, shell=True)
+    output, error = machines[0].process(config, command, shell=True)
 
     if error != []:
         logging.error("".join(error))
@@ -267,7 +267,7 @@ def copy_files(config, machines):
                  find %s/.continuum -maxdepth 1 -type f -delete"
                 % ((config["infrastructure"]["base_path"],) * 6)
             )
-            machine.process(command, shell=True)
+            machine.process(config, command, shell=True)
         else:
             command = (
                 'ssh %s "\
@@ -279,7 +279,7 @@ def copy_files(config, machines):
                  find %s/.continuum -maxdepth 1 -type f -delete"'
                 % ((config["infrastructure"]["base_path"],) * 6)
             )
-            machine.process(command, shell=True)
+            machine.process(config, command, shell=True)
 
         # Create a source directory on each machiine
         if machine.is_local:
@@ -288,7 +288,7 @@ def copy_files(config, machines):
                  mkdir -p %s/.continuum/images"
                 % ((config["infrastructure"]["base_path"],) * 2)
             )
-            output, error = machine.process(command, shell=True)
+            output, error = machine.process(config, command, shell=True)
 
             dest = config["infrastructure"]["base_path"] + "/.continuum/"
         else:
@@ -298,7 +298,7 @@ def copy_files(config, machines):
                  mkdir -p %s/.continuum/images"'
                 % ((config["infrastructure"]["base_path"],) * 2)
             )
-            output, error = machine.process(command, shell=True)
+            output, error = machine.process(config, command, shell=True)
 
             dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
@@ -313,8 +313,8 @@ def copy_files(config, machines):
 
         # For the local machine, copy the ansible inventory file and benchmark launch
         if machine.is_local:
-            out.append(machine.copy_files(config["base"] + "/.tmp/inventory", dest))
-            out.append(machine.copy_files(config["base"] + "/.tmp/inventory_vms", dest))
+            out.append(machine.copy_files(config, config["base"] + "/.tmp/inventory", dest))
+            out.append(machine.copy_files(config, config["base"] + "/.tmp/inventory_vms", dest))
 
             if (
                 not config["infrastructure"]["infra_only"]
@@ -327,7 +327,7 @@ def copy_files(config, machines):
                     + config["benchmark"]["resource_manager"]
                     + "/launch_benchmark.yml"
                 )
-                out.append(machine.copy_files(path, dest))
+                out.append(machine.copy_files(config, path, dest))
 
         # Copy VM creation files
         for name in (
@@ -337,9 +337,13 @@ def copy_files(config, machines):
             + machine.endpoint_names
             + machine.base_names
         ):
-            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name + ".xml", dest))
             out.append(
-                machine.copy_files(config["base"] + "/.tmp/user_data_" + name + ".yml", dest)
+                machine.copy_files(config, config["base"] + "/.tmp/domain_" + name + ".xml", dest)
+            )
+            out.append(
+                machine.copy_files(
+                    config, config["base"] + "/.tmp/user_data_" + name + ".yml", dest
+                )
             )
 
         # Copy Ansible files for infrastructure
@@ -349,7 +353,7 @@ def copy_files(config, machines):
             + config["infrastructure"]["provider"]
             + "/infrastructure/"
         )
-        out.append(machine.copy_files(path, dest, recursive=True))
+        out.append(machine.copy_files(config, path, dest, recursive=True))
 
         # For cloud/edge/endpoint specific
         if not config["infrastructure"]["infra_only"]:
@@ -360,17 +364,17 @@ def copy_files(config, machines):
                     rm = "kubeedge"
 
                 path = config["base"] + "/resource_manager/" + rm + "/cloud/"
-                out.append(machine.copy_files(path, dest, recursive=True))
+                out.append(machine.copy_files(config, path, dest, recursive=True))
 
                 if config["mode"] == "edge":
                     path = config["base"] + "/resource_manager/" + rm + "/edge/"
-                    out.append(machine.copy_files(path, dest, recursive=True))
+                    out.append(machine.copy_files(config, path, dest, recursive=True))
             if "execution_model" in config:
                 path = os.path.join(config["base"], "execution_model")
-                out.append(machine.copy_files(path, dest, recursive=True))
+                out.append(machine.copy_files(config, path, dest, recursive=True))
 
             path = config["base"] + "/resource_manager/endpoint/"
-            out.append(machine.copy_files(path, dest, recursive=True))
+            out.append(machine.copy_files(config, path, dest, recursive=True))
 
         for output, error in out:
             if error != []:
@@ -409,7 +413,7 @@ def add_ssh(config, machines, base=[]):
     # Check if old keys are still in the known hosts file
     for ip in ips:
         command = ["ssh-keygen", "-f", config["home"] + "/.ssh/known_hosts", "-R", ip]
-        _, error = machines[0].process(command)
+        _, error = machines[0].process(config, command)
 
         if error != [] and not any("not found in" in err for err in error):
             logging.error("".join(error))
@@ -420,7 +424,7 @@ def add_ssh(config, machines, base=[]):
         logging.info("Wait for VM to have started up")
         while True:
             command = "ssh-keyscan %s >> %s/.ssh/known_hosts" % (ip, config["home"])
-            _, error = machines[0].process(command, shell=True)
+            _, error = machines[0].process(config, command, shell=True)
 
             if any("# " + str(ip) + ":" in err for err in error):
                 break
@@ -441,7 +445,7 @@ def docker_registry(config, machines):
 
     # Check if registry is up
     command = ["curl", "%s/v2/_catalog" % (config["registry"])]
-    output, error = machines[0].process(command)
+    output, error = machines[0].process(config, command)
 
     if error != [] and any("Failed to connect to" in line for line in error):
         # Not yet up, so launch
@@ -457,7 +461,7 @@ def docker_registry(config, machines):
             "registry",
             "registry:2",
         ]
-        output, error = machines[0].process(command)
+        output, error = machines[0].process(config, command)
 
         if error != [] and not (
             any("Unable to find image" in line for line in error)
@@ -490,7 +494,7 @@ def docker_registry(config, machines):
         ]
 
         for command in commands:
-            output, error = machines[0].process(command)
+            output, error = machines[0].process(config, command)
 
             if error != []:
                 logging.error("".join(error))
@@ -546,6 +550,7 @@ def docker_pull(config, machines, base_names):
                         [
                             name,
                             machines[0].process(
+                                config,
                                 command,
                                 output=False,
                                 ssh=True,
@@ -596,7 +601,7 @@ def start(config):
     machines = m.make_machine_objects(config)
 
     for machine in machines:
-        machine.check_hardware()
+        machine.check_hardware(config)
 
     if config["infrastructure"]["cpu_pin"]:
         nodes_per_machine = schedule_pin(config, machines)
