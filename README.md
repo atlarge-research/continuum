@@ -1,4 +1,6 @@
 # Continuum
+This is the tutorial for the distributed systems course at the VU Amsterdam in November 2022.
+
 Continuum is a deployment and benchmarking framework for the edge continuum. Continuum automates setting up an edge continuum environment on virtual machines, emulates network latency and throughput between machines, manages software installations inside the emulated environment, and performs application- and system-level benchmarks.
 
 ## How it works
