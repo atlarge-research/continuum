@@ -498,45 +498,6 @@ def parse_config(parser, arg):
 
         new["mode"] = mode
 
-        # Check if mode and resource manager overlaps
-        if "resource_manager" in new[sec]:
-            if mode == "cloud" and not (new["benchmark"]["resource_manager"] in ["kubernetes"]):
-                parser.error("Config: Cloud-mode requires Kubernetes")
-            elif mode == "edge" and not (
-                new["benchmark"]["resource_manager"] in ["kubeedge", "mist"]
-            ):
-                parser.error("Config: Edge-mode requires KubeEdge or Mist")
-        elif mode != "endpoint":
-            parser.error("Config: Endpoint-only mode doesnt require resource managers")
-
-        # Extended checks: Number of nodes should match deployment mode
-        if mode == "cloud" and (
-            cloud < 2 or edge != 0 or endpoint == 0 or endpoint % (cloud - 1) != 0
-        ):
-            parser.error(
-                "Config: For cloud benchmark, #clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0"
-            )
-        elif (
-            mode == "edge"
-            and new["benchmark"]["resource_manager"] == "kubeedge"
-            and (cloud != 1 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
-        ):
-            parser.error(
-                "Config: For edge benchmark with KubeEdge, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0"
-            )
-        elif (
-            mode == "edge"
-            and new["benchmark"]["resource_manager"] == "mist"
-            and (cloud != 0 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
-        ):
-            parser.error(
-                "Config: For mist benchmarks, #clouds=0, #edges>0, #endpoints>0, and #edges % #endpoints=0"
-            )
-        elif mode == "endpoint" and (cloud != 0 or edge != 0 or endpoint == 0):
-            parser.error("Config: For endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0")
-    elif new["infrastructure"]["infra_only"] and config.has_section(sec):
-        parser.error("Config: benchmark section is present but infra_only=True")
-
     sec = "execution_model"
     if config.has_section(sec):
         new[sec] = dict()

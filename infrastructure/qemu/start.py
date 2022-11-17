@@ -277,6 +277,9 @@ def launch_vms(config, machines, repeat=[]):
     # Launch the VMs concurrently
     logging.info("Start VMs")
 
+    # Sometimes previous QEMU commands aren't finished yet, so it's safer to wait a bit to prevent lock errors
+    time.sleep(5)
+
     processes = []
     if repeat == []:
         for machine in machines:
