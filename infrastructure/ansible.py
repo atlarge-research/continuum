@@ -23,6 +23,7 @@ def create_inventory_machine(config, machines):
     f.write("ansible_python_interpreter=/usr/bin/python3\n")
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
     f.write("base_path=%s" % (config["infrastructure"]["base_path"]))
+    f.write("username=%s" % (config["username"]))
 
     # All hosts group
     f.write("\n[all_hosts]\n")

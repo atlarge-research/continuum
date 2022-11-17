@@ -10,8 +10,8 @@
 
     - name: Remove existing cloud controller images (if any) from {{ base_path }}/.continuum/images to free up space
       shell: |
-        rm -f "{{ base_path }}/.continuum/images/cloud_controller.qcow2"
-        rm -f "{{ base_path }}/.continuum/images/user_data_cloud_controller.img"
+        rm -f "{{ base_path }}/.continuum/images/cloud_controller*.qcow2"
+        rm -f "{{ base_path }}/.continuum/images/user_data_cloud_controller*.img"
       args:
         warn: false
 
