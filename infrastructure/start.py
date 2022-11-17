@@ -22,9 +22,7 @@ def schedule_equal(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Schedule VMs on machine: Based on utilization")
-    machines_per_node = [
-        {"cloud": 0, "edge": 0, "endpoint": 0} for _ in range(len(machines))
-    ]
+    machines_per_node = [{"cloud": 0, "edge": 0, "endpoint": 0} for _ in range(len(machines))]
     machines_cores_used = [0 for _ in range(len(machines))]
 
     types_to_go = {
@@ -50,10 +48,7 @@ def schedule_equal(config, machines):
 
         # Get machine with least cores used compared to total cores
         i = np.argmin(
-            [
-                cores_used / m.cores
-                for cores_used, m in zip(machines_cores_used, machines)
-            ]
+            [cores_used / m.cores for cores_used, m in zip(machines_cores_used, machines)]
         )
 
         # Place VM on that machine
@@ -150,8 +145,18 @@ using the --file option"""
     return machines_per_node
 
 
-def delete_vms(machines):
+def delete_vms(config, machines):
     """The benchmark has been completed succesfully, now delete the VMs.
+
+    TODO This deletes VMs using your current IP range, which might not be the same as your previous run
+    TODO This only deletes images from one /8 range, so 100.100.100.*. If you used more than 255 VMs
+         in your previous runs, you moved to 100.100.101.*, and those won't be removed since
+         this script doesn't know anymore which IP ranges belonged to the previous user
+
+    TODO The easiest fix is to append the hostname to the VM, this is unique and persists over runs
+         However, this doesn't work for multiple users on the same account, which is part of a demo
+         After the demo, the multiple-users-on-same-account setting won't be supported anymore,
+         so switch to hostnames in VM names instead of IPs
 
     Args:
         machines (list(Machine object)): List of machine objects representing physical machines
@@ -160,15 +165,18 @@ def delete_vms(machines):
     processes = []
     for machine in machines:
         if machine.is_local:
-            command = 'virsh list --all | grep -o -E "(cloud\w*|edge\w*|endpoint\w*|base\w*)" | xargs -I % sh -c "virsh destroy %"'
+            command = (
+                'virsh list --all | grep -o -E "(\w*_%s)" | xargs -I %% sh -c "virsh destroy %%"'
+                % (config["username"])
+            )
         else:
-            comm = 'virsh list --all | grep -o -E \\"(cloud\w*|edge\w*|endpoint\w*|base\w*)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
+            comm = (
+                'virsh list --all | grep -o -E \\"(\w*_%s)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
+                % (config["username"])
+            )
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
 
-        processes.append(machine.process(command, shell=True, output=False))
-
-        command = ["rm", "-f", "/tmp/join-command.txt"]
-        processes.append(machine.process(command, ssh=True, output=False))
+        processes.append(machine.process(config, command, shell=True, output=False))
 
     # Wait for process to finish. Outcome of destroy command does not matter
     for process in processes:
@@ -193,14 +201,15 @@ def create_keypair(config, machines):
     for machine in machines:
         if machine.is_local:
             command = [
-                "[[ ! -f %s/.ssh/id_rsa_benchmark.pub ]] && \
-cd %s/.ssh && \
-ssh-keygen -t rsa -b 4096 -f id_rsa_benchmark -C KubeEdge -N '' -q"
-                % (config["home"], config["home"])
+                """
+[[ ! -f %s.pub ]] && 
+cd %s/.ssh &&
+ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q"""
+                % (config["ssh_key"], config["home"], config["ssh_key"].split("/")[-1])
             ]
-            output, error = machine.process(command, shell=True)
+            output, error = machine.process(config, command, shell=True)
         else:
-            source = "%s/.ssh/id_rsa_benchmark*" % (config["home"])
+            source = "%s*" % (config["ssh_key"])
             dest = machine.name + ":./.ssh/"
             output, error = machine.copy_files(source, dest)
 
@@ -217,7 +226,8 @@ ssh-keygen -t rsa -b 4096 -f id_rsa_benchmark -C KubeEdge -N '' -q"
 def create_dir(config, machines):
     """Generate a temporary directory for generated files.
     This directory is located inside the benchmark git repository.
-    Later, that data will be sent to each physical machine's ${HOME}/.continuum directory
+    Later, that data will be sent to each physical machine's
+    config["infrastructure"]["base_path"]/.continuum directory
 
     Args:
         config (dict): Parsed configuration
@@ -225,7 +235,7 @@ def create_dir(config, machines):
     """
     logging.info("Create a temporary directory for generated files")
     command = "rm -rf %s/.tmp && mkdir %s/.tmp" % (config["base"], config["base"])
-    output, error = machines[0].process(command, shell=True)
+    output, error = machines[0].process(config, command, shell=True)
 
     if error != []:
         logging.error("".join(error))
@@ -236,7 +246,8 @@ def create_dir(config, machines):
 
 
 def copy_files(config, machines):
-    """Copy Infrastructure and Ansible files to all machines with directory ${HOME}/.continuum
+    """Copy Infrastructure and Ansible files to all machines with
+    directory config["infrastructure"]["base_path"]/.continuum
 
     Args:
         config (dict): Parsed configuration
@@ -245,22 +256,51 @@ def copy_files(config, machines):
     logging.info("Start copying files to all nodes")
 
     for machine in machines:
+        # Delete old content
+        if machine.is_local:
+            command = (
+                "rm -rf %s/.continuum/cloud && \
+                 rm -rf %s/.continuum/edge && \
+                 rm -rf %s/.continuum/endpoint && \
+                 rm -rf %s/.continuum/execution_model && \
+                 rm -rf %s/.continuum/infrastructure && \
+                 find %s/.continuum -maxdepth 1 -type f -delete"
+                % ((config["infrastructure"]["base_path"],) * 6)
+            )
+            machine.process(config, command, shell=True)
+        else:
+            command = (
+                'ssh %s "\
+                 rm -rf %s/.continuum/cloud && \
+                 rm -rf %s/.continuum/edge && \
+                 rm -rf %s/.continuum/endpoint && \
+                 rm -rf %s/.continuum/execution_model && \
+                 rm -rf %s/.continuum/infrastructure && \
+                 find %s/.continuum -maxdepth 1 -type f -delete"'
+                % ((config["infrastructure"]["base_path"],) * 6)
+            )
+            machine.process(config, command, shell=True)
+
         # Create a source directory on each machiine
         if machine.is_local:
-            command = "rm -rf %s/.continuum && mkdir %s/.continuum" % (
-                config["home"],
-                config["home"],
+            command = (
+                "mkdir -p %s/.continuum && \
+                 mkdir -p %s/.continuum/images"
+                % ((config["infrastructure"]["base_path"],) * 2)
             )
-            output, error = machine.process(command, shell=True)
+            output, error = machine.process(config, command, shell=True)
 
-            dest = config["home"] + "/.continuum/"
+            dest = config["infrastructure"]["base_path"] + "/.continuum/"
         else:
-            command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (
-                machine.name
+            command = (
+                'ssh %s "\
+                 mkdir -p %s/.continuum && \
+                 mkdir -p %s/.continuum/images"'
+                % ((config["infrastructure"]["base_path"],) * 2)
             )
-            output, error = machine.process(command, shell=True)
+            output, error = machine.process(config, command, shell=True)
 
-            dest = machine.name + ":./.continuum/"
+            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
         if error != []:
             logging.error("".join(error))
@@ -273,8 +313,8 @@ def copy_files(config, machines):
 
         # For the local machine, copy the ansible inventory file and benchmark launch
         if machine.is_local:
-            out.append(machine.copy_files(config["base"] + "/.tmp/inventory", dest))
-            out.append(machine.copy_files(config["base"] + "/.tmp/inventory_vms", dest))
+            out.append(machine.copy_files(config, config["base"] + "/.tmp/inventory", dest))
+            out.append(machine.copy_files(config, config["base"] + "/.tmp/inventory_vms", dest))
 
             if (
                 not config["infrastructure"]["infra_only"]
@@ -287,7 +327,7 @@ def copy_files(config, machines):
                     + config["benchmark"]["resource_manager"]
                     + "/launch_benchmark.yml"
                 )
-                out.append(machine.copy_files(path, dest))
+                out.append(machine.copy_files(config, path, dest))
 
         # Copy VM creation files
         for name in (
@@ -298,13 +338,11 @@ def copy_files(config, machines):
             + machine.base_names
         ):
             out.append(
-                machine.copy_files(
-                    config["base"] + "/.tmp/domain_" + name + ".xml", dest
-                )
+                machine.copy_files(config, config["base"] + "/.tmp/domain_" + name + ".xml", dest)
             )
             out.append(
                 machine.copy_files(
-                    config["base"] + "/.tmp/user_data_" + name + ".yml", dest
+                    config, config["base"] + "/.tmp/user_data_" + name + ".yml", dest
                 )
             )
 
@@ -315,7 +353,7 @@ def copy_files(config, machines):
             + config["infrastructure"]["provider"]
             + "/infrastructure/"
         )
-        out.append(machine.copy_files(path, dest, recursive=True))
+        out.append(machine.copy_files(config, path, dest, recursive=True))
 
         # For cloud/edge/endpoint specific
         if not config["infrastructure"]["infra_only"]:
@@ -326,17 +364,17 @@ def copy_files(config, machines):
                     rm = "kubeedge"
 
                 path = config["base"] + "/resource_manager/" + rm + "/cloud/"
-                out.append(machine.copy_files(path, dest, recursive=True))
+                out.append(machine.copy_files(config, path, dest, recursive=True))
 
                 if config["mode"] == "edge":
                     path = config["base"] + "/resource_manager/" + rm + "/edge/"
-                    out.append(machine.copy_files(path, dest, recursive=True))
+                    out.append(machine.copy_files(config, path, dest, recursive=True))
             if "execution_model" in config:
                 path = os.path.join(config["base"], "execution_model")
-                out.append(machine.copy_files(path, dest, recursive=True))
+                out.append(machine.copy_files(config, path, dest, recursive=True))
 
             path = config["base"] + "/resource_manager/endpoint/"
-            out.append(machine.copy_files(path, dest, recursive=True))
+            out.append(machine.copy_files(config, path, dest, recursive=True))
 
         for output, error in out:
             if error != []:
@@ -358,8 +396,7 @@ def add_ssh(config, machines, base=[]):
         base (list, optional): Base image ips to check. Defaults to []
     """
     logging.info(
-        "Start adding ssh keys to the known_hosts file for each VM (base=%s)"
-        % (base == [])
+        "Start adding ssh keys to the known_hosts file for each VM (base=%s)" % (base == [])
     )
 
     # Get IPs of all (base) machines
@@ -376,7 +413,7 @@ def add_ssh(config, machines, base=[]):
     # Check if old keys are still in the known hosts file
     for ip in ips:
         command = ["ssh-keygen", "-f", config["home"] + "/.ssh/known_hosts", "-R", ip]
-        _, error = machines[0].process(command)
+        _, error = machines[0].process(config, command)
 
         if error != [] and not any("not found in" in err for err in error):
             logging.error("".join(error))
@@ -387,7 +424,7 @@ def add_ssh(config, machines, base=[]):
         logging.info("Wait for VM to have started up")
         while True:
             command = "ssh-keyscan %s >> %s/.ssh/known_hosts" % (ip, config["home"])
-            _, error = machines[0].process(command, shell=True)
+            _, error = machines[0].process(config, command, shell=True)
 
             if any("# " + str(ip) + ":" in err for err in error):
                 break
@@ -408,7 +445,7 @@ def docker_registry(config, machines):
 
     # Check if registry is up
     command = ["curl", "%s/v2/_catalog" % (config["registry"])]
-    output, error = machines[0].process(command)
+    output, error = machines[0].process(config, command)
 
     if error != [] and any("Failed to connect to" in line for line in error):
         # Not yet up, so launch
@@ -424,7 +461,7 @@ def docker_registry(config, machines):
             "registry",
             "registry:2",
         ]
-        output, error = machines[0].process(command)
+        output, error = machines[0].process(config, command)
 
         if error != [] and not (
             any("Unable to find image" in line for line in error)
@@ -457,7 +494,7 @@ def docker_registry(config, machines):
         ]
 
         for command in commands:
-            output, error = machines[0].process(command)
+            output, error = machines[0].process(config, command)
 
             if error != []:
                 logging.error("".join(error))
@@ -492,29 +529,20 @@ def docker_pull(config, machines, base_names):
                     if "_%s_" % (config["mode"]) in name:
                         # Subscriber
                         images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][0].split(":")[1])
+                            "%s/%s" % (config["registry"], config["images"][0].split(":")[1])
                         )
                     elif "_endpoint" in name:
                         # Publisher (+ combined)
                         images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][1].split(":")[1])
+                            "%s/%s" % (config["registry"], config["images"][1].split(":")[1])
                         )
                         images.append(
-                            "%s/%s"
-                            % (config["registry"], config["images"][2].split(":")[1])
+                            "%s/%s" % (config["registry"], config["images"][2].split(":")[1])
                         )
                 elif config["mode"] == "endpoint" and "_endpoint" in name:
                     # Combined (+ publisher)
-                    images.append(
-                        "%s/%s"
-                        % (config["registry"], config["images"][2].split(":")[1])
-                    )
-                    images.append(
-                        "%s/%s"
-                        % (config["registry"], config["images"][1].split(":")[1])
-                    )
+                    images.append("%s/%s" % (config["registry"], config["images"][2].split(":")[1]))
+                    images.append("%s/%s" % (config["registry"], config["images"][1].split(":")[1]))
 
                 for image in images:
                     command = ["docker", "pull", image]
@@ -522,6 +550,7 @@ def docker_pull(config, machines, base_names):
                         [
                             name,
                             machines[0].process(
+                                config,
                                 command,
                                 output=False,
                                 ssh=True,
@@ -572,7 +601,7 @@ def start(config):
     machines = m.make_machine_objects(config)
 
     for machine in machines:
-        machine.check_hardware()
+        machine.check_hardware(config)
 
     if config["infrastructure"]["cpu_pin"]:
         nodes_per_machine = schedule_pin(config, machines)
@@ -585,7 +614,7 @@ def start(config):
     m.gather_ips(config, machines)
     m.gather_ssh(config, machines)
 
-    delete_vms(machines)
+    delete_vms(config, machines)
     m.print_schedule(machines)
 
     for machine in machines:

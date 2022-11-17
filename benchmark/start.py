@@ -29,9 +29,7 @@ def start_worker(config, machines):
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
-        workers = (
-            config["infrastructure"]["cloud_nodes"] - 1
-        )  # Includes cloud controller
+        workers = config["infrastructure"]["cloud_nodes"] - 1  # Includes cloud controller
         cores = config["infrastructure"]["cloud_cores"]
     elif config["mode"] == "edge":
         workers = config["infrastructure"]["edge_nodes"]
@@ -58,12 +56,12 @@ def start_worker(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
         "--extra-vars",
         vars_str[:-1],
-        config["home"] + "/.continuum/launch_benchmark.yml",
+        config["infrastructure"]["base_path"] + "/.continuum/launch_benchmark.yml",
     ]
-    main.ansible_check_output(machines[0].process(command))
+    main.ansible_check_output(machines[0].process(config, command))
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
@@ -84,12 +82,10 @@ def start_worker(config, machines):
                 "--sort-by=.spec.nodeName",
             ]
             output, error = machines[0].process(
-                command, ssh=True, ssh_target=config["cloud_ssh"][0]
+                config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
             )
 
-            if error != [] and any(
-                "couldn't find any field with path" in line for line in error
-            ):
+            if error != [] and any("couldn't find any field with path" in line for line in error):
                 logging.debug("Retry getting list of kubernetes pods")
                 time.sleep(5)
                 pending = True
@@ -174,7 +170,7 @@ def start_worker_mist(config, machines):
         )
 
         processes.append(
-            machines[0].process(command, output=False, ssh=True, ssh_target=worker_ssh)
+            machines[0].process(config, command, output=False, ssh=True, ssh_target=worker_ssh)
         )
         container_names.append(cont_name)
 
@@ -184,10 +180,7 @@ def start_worker_mist(config, machines):
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
 
-        if (
-            error != []
-            and "Your kernel does not support swap limit capabilities" not in error[0]
-        ):
+        if error != [] and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
@@ -208,9 +201,7 @@ def start_worker_mist(config, machines):
                 "--format",
                 '"{{.ID}}: {{.Status}} {{.Names}}"',
             ]
-            output, error = machines[0].process(
-                command, ssh=True, ssh_target=worker_ssh
-            )
+            output, error = machines[0].process(config, command, ssh=True, ssh_target=worker_ssh)
 
             if error != []:
                 logging.error("".join(error))
@@ -259,9 +250,7 @@ def start_endpoint(config, machines):
     container_names = []
 
     # Calc endpoints per worker
-    workers = (
-        config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
-    )
+    workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
     if config["mode"] == "cloud" or config["mode"] == "edge":
         # If there is a control machine, dont count that one in
         if config["benchmark"]["resource_manager"] != "mist":
@@ -278,9 +267,7 @@ def start_endpoint(config, machines):
     # For each worker (cloud or edge), connect to end_per_work endpoints.
     for worker_i, worker_ip in enumerate(worker_ips):
         for endpoint_i, endpoint_ssh in enumerate(
-            config["endpoint_ssh"][
-                worker_i * end_per_work : (worker_i + off) * end_per_work
-            ]
+            config["endpoint_ssh"][worker_i * end_per_work : (worker_i + off) * end_per_work]
         ):
             # Docker container name and variables depends on deployment mode
             cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
@@ -292,9 +279,7 @@ def start_endpoint(config, machines):
                 env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
                 env.append("MQTT_LOGS=True")
             else:
-                env.append(
-                    "CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"])
-                )
+                env.append("CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"]))
 
             logging.info("Launch %s" % (cont_name))
 
@@ -314,15 +299,13 @@ def start_endpoint(config, machines):
                     cont_name,
                     config["registry"]
                     + "/"
-                    + config["images"][1 + (int(config["mode"] == "endpoint"))].split(
-                        ":"
-                    )[1],
+                    + config["images"][1 + (int(config["mode"] == "endpoint"))].split(":")[1],
                 ]
             )
 
             processes.append(
                 machines[0].process(
-                    command, output=False, ssh=True, ssh_target=endpoint_ssh
+                    config, command, output=False, ssh=True, ssh_target=endpoint_ssh
                 )
             )
             container_names.append(cont_name)
@@ -333,10 +316,7 @@ def start_endpoint(config, machines):
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
 
-        if (
-            error != []
-            and "Your kernel does not support swap limit capabilities" not in error[0]
-        ):
+        if error != [] and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
@@ -346,11 +326,12 @@ def start_endpoint(config, machines):
     return container_names
 
 
-def wait_endpoint_completion(machines, sshs, container_names):
+def wait_endpoint_completion(config, machines, sshs, container_names):
     """Wait for all containers to be finished running the benchmark on endpoints
     OR for all mist containers, which also use docker so this function can be reused
 
     Args:
+        config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
         sshs (list(str)): SSH addresses to edge or endpoint VMs
         container_names (list(str)): Names of docker containers launched
@@ -359,9 +340,7 @@ def wait_endpoint_completion(machines, sshs, container_names):
     time.sleep(10)
 
     for ssh, cont_name in zip(sshs, container_names):
-        logging.info(
-            "Wait for container to finish: %s on VM %s" % (cont_name, ssh.split("@")[0])
-        )
+        logging.info("Wait for container to finish: %s on VM %s" % (cont_name, ssh.split("@")[0]))
         finished = False
 
         while not finished:
@@ -374,7 +353,7 @@ def wait_endpoint_completion(machines, sshs, container_names):
                 "--format",
                 '"{{.ID}}: {{.Status}} {{.Names}}"',
             ]
-            output, error = machines[0].process(command, ssh=True, ssh_target=ssh)
+            output, error = machines[0].process(config, command, ssh=True, ssh_target=ssh)
 
             if error != []:
                 logging.error("".join(error))
@@ -424,9 +403,7 @@ def wait_worker_completion(config, machines):
     get_list = True
     i = 0
 
-    workers = (
-        config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
-    )
+    workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
     if config["mode"] == "cloud" or config["mode"] == "edge":
         workers -= 1
 
@@ -442,7 +419,7 @@ def wait_worker_completion(config, machines):
                 "--sort-by=.spec.nodeName",
             ]
             output, error = machines[0].process(
-                command, ssh=True, ssh_target=config["cloud_ssh"][0]
+                config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
             )
 
             if error != [] or output == []:
@@ -490,12 +467,12 @@ def start(config, machines):
     container_names = start_endpoint(config, machines)
 
     # Wait for benchmark to finish
-    wait_endpoint_completion(machines, config["endpoint_ssh"], container_names)
+    wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
     if config["mode"] == "cloud" or config["mode"] == "edge":
         if config["benchmark"]["resource_manager"] != "mist":
             wait_worker_completion(config, machines)
         else:
-            wait_endpoint_completion(machines, config["edge_ssh"], container_names_mist)
+            wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_mist)
 
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
@@ -506,9 +483,7 @@ def start(config, machines):
         if config["benchmark"]["resource_manager"] != "mist":
             worker_output = output.get_worker_output(config, machines)
         else:
-            worker_output = output.get_worker_output_mist(
-                config, machines, container_names_mist
-            )
+            worker_output = output.get_worker_output_mist(config, machines, container_names_mist)
 
     # Parse output into dicts, and print result
     worker_metrics, endpoint_metrics = output.gather_metrics(

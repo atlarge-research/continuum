@@ -2,70 +2,70 @@
 - hosts: cloudcontroller
   become: true
   tasks:
-  - name: Ensure docker service is running
-    systemd:
-      name: docker
-      state: started
-  
-  - name: Add cloud user to docker group
-    user:
-      name: "{{ username }}"
-      group: docker
+    - name: Ensure docker service is running
+      systemd:
+        name: docker
+        state: started
 
-  - name: Restart docker service
-    command: systemctl restart docker
+    - name: Add cloud user to docker group
+      user:
+        name: "{{ username }}"
+        group: docker
 
-  - name: Configure node ip
-    lineinfile:
-      path: /etc/default/kubelet
-      line: KUBELET_EXTRA_ARGS=--node-ip={{ cloud_ip }}
-      create: true
+    - name: Restart docker service
+      command: systemctl restart docker
 
-  - name: Restart kubelet
-    service:
-      name: kubelet
-      daemon_reload: true
-      state: restarted
+    - name: Configure node ip
+      lineinfile:
+        path: /etc/default/kubelet
+        line: KUBELET_EXTRA_ARGS=--node-ip={{ cloud_ip }}
+        create: true
 
-  - name: Initialize the Kubernetes cluster using kubeadm
-    command: kubeadm init --apiserver-advertise-address={{ cloud_ip }} --apiserver-cert-extra-sans={{ cloud_ip }}  --node-name cloud-master --pod-network-cidr=10.244.0.0/16
+    - name: Restart kubelet
+      service:
+        name: kubelet
+        daemon_reload: true
+        state: restarted
 
-  - name: Create user Kubernetes directory
-    file:
-      path: "/home/{{ username }}/.kube"
-      state: directory
-  
-  - name: Copy Kubernetes files to user
-    copy:
-      src: /etc/kubernetes/admin.conf
-      dest: "/home/{{ username }}/.kube/config"
-      owner: "{{ username }}"
-      group: "{{ username }}"
-      remote_src: true
+    - name: Initialize the Kubernetes cluster using kubeadm
+      command: kubeadm init --apiserver-advertise-address={{ cloud_ip }} --apiserver-cert-extra-sans={{ cloud_ip }}  --node-name cloud-master --pod-network-cidr=10.244.0.0/16
 
-  - name: Enable networking with Calico, only for cloud mode
-    shell: |
-      if [ "{{ cloud_mode }}" -gt "0" ]; then
-        kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f /kube-flannel.yml
-      fi
+    - name: Create user Kubernetes directory
+      file:
+        path: "/home/{{ username }}/.kube"
+        state: directory
 
-  - name: Create join command for worker nodes (cloud-only)
-    shell: |
-      echo '#!/bin/bash' > /tmp/join-command.txt
-      kubeadm token create --kubeconfig="/home/{{ username }}/.kube/config" --print-join-command >> /tmp/join-command.txt
+    - name: Copy Kubernetes files to user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ username }}/.kube/config"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        remote_src: true
 
-  - name: Copy join command to local file
-    fetch: 
-      src: /tmp/join-command.txt 
-      dest: /tmp/
-      flat: true
+    - name: Enable networking with Calico, only for cloud mode
+      shell: |
+        if [ "{{ cloud_mode }}" -gt "0" ]; then
+          kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f /kube-flannel.yml
+        fi
 
-  - name: Remove unneeded Kubernetes join command file
-    file:
-      path: "{{ item }}"
-      state: absent
-    with_items:
-      - /tmp/join-command.txt 
+    - name: Create join command for worker nodes (cloud-only)
+      shell: |
+        echo '#!/bin/bash' > /tmp/join-command.txt
+        kubeadm token create --kubeconfig="/home/{{ username }}/.kube/config" --print-join-command >> /tmp/join-command.txt
+
+    - name: Copy join command to local file
+      fetch:
+        src: /tmp/join-command.txt
+        dest: "{{ base_path }}/.continuum/"
+        flat: true
+
+    - name: Remove unneeded Kubernetes join command file
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /tmp/join-command.txt
 
   handlers:
     - name: docker status

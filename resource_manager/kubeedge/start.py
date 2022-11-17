@@ -27,15 +27,13 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory_vms",
-            config["home"] + "/.continuum/edge/install_mist.yml",
+            config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+            config["infrastructure"]["base_path"] + "/.continuum/edge/install_mist.yml",
         ]
-        processes.append(machines[0].process(command, output=False))
+        processes.append(machines[0].process(config, command, output=False))
 
         for process in processes:
-            logging.debug(
-                "Check output for Ansible command [%s]" % (" ".join(process.args))
-            )
+            logging.debug("Check output for Ansible command [%s]" % (" ".join(process.args)))
             output = [line.decode("utf-8") for line in process.stdout.readlines()]
             error = [line.decode("utf-8") for line in process.stderr.readlines()]
             main.ansible_check_output((output, error))
@@ -46,25 +44,23 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/cloud/control_install.yml",
+        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["base_path"] + "/.continuum/cloud/control_install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    processes.append(machines[0].process(config, command, output=False))
 
     # Setup edge
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/edge/install.yml",
+        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["base_path"] + "/.continuum/edge/install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    processes.append(machines[0].process(config, command, output=False))
 
     # Check playbooks
     for process in processes:
-        logging.debug(
-            "Check output for Ansible command [%s]" % (" ".join(process.args))
-        )
+        logging.debug("Check output for Ansible command [%s]" % (" ".join(process.args)))
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
         main.ansible_check_output((output, error))
@@ -76,19 +72,19 @@ def start(config, machines):
         [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory_vms",
-            config["home"] + "/.continuum/cloud/control_log.yml",
+            config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+            config["infrastructure"]["base_path"] + "/.continuum/cloud/control_log.yml",
         ]
     )
     commands.append(
         [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory_vms",
-            config["home"] + "/.continuum/edge/log.yml",
+            config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+            config["infrastructure"]["base_path"] + "/.continuum/edge/log.yml",
         ]
     )
 
     # Wait for the cloud to finish before starting the edge
     for command in commands:
-        main.ansible_check_output(machines[0].process(command))
+        main.ansible_check_output(machines[0].process(config, command))

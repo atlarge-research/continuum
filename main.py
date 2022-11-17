@@ -13,6 +13,7 @@ import os
 import time
 import configparser
 import socket
+import getpass
 
 import infrastructure.start as infrastructure
 import resource_manager.start as resource_manager
@@ -71,9 +72,7 @@ def make_wide(formatter, w=120, h=36):
         return formatter
 
 
-def option_check(
-    parser, config, new, section, option, intype, condition, mandatory=True
-):
+def option_check(parser, config, new, section, option, intype, condition, mandatory=True):
     """Check if each config option is present, if the type is correct, and if the value is correct.
 
     Args:
@@ -111,8 +110,7 @@ def option_check(
                 parser.error("Config: Invalid type %s" % (intype))
         except ValueError:
             parser.error(
-                "Config: Invalid type for option %s->%s, expected %s"
-                % (section, option, intype)
+                "Config: Invalid type for option %s->%s, expected %s" % (section, option, intype)
             )
 
         # Check value
@@ -147,9 +145,7 @@ def parse_config(parser, arg):
     if config.has_section(sec):
         new[sec] = dict()
         option_check(parser, config, new, sec, "provider", str, lambda x: x in ["qemu"])
-        option_check(
-            parser, config, new, sec, "infra_only", bool, lambda x: x in [True, False]
-        )
+        option_check(parser, config, new, sec, "infra_only", bool, lambda x: x in [True, False])
         option_check(parser, config, new, sec, "cloud_nodes", int, lambda x: x >= 0)
         option_check(parser, config, new, sec, "edge_nodes", int, lambda x: x >= 0)
         option_check(parser, config, new, sec, "endpoint_nodes", int, lambda x: x >= 0)
@@ -180,19 +176,13 @@ def parse_config(parser, arg):
 
         if new["infrastructure"]["edge_nodes"] > 0:
             option_check(parser, config, new, sec, "edge_cores", int, lambda x: x >= 1)
-            option_check(
-                parser, config, new, sec, "edge_quota", float, lambda x: 0.1 <= x <= 1.0
-            )
+            option_check(parser, config, new, sec, "edge_quota", float, lambda x: 0.1 <= x <= 1.0)
         else:
             option_check(parser, config, new, sec, "edge_cores", int, lambda x: x >= 0)
-            option_check(
-                parser, config, new, sec, "edge_quota", float, lambda x: 0.0 <= x <= 1.0
-            )
+            option_check(parser, config, new, sec, "edge_quota", float, lambda x: 0.0 <= x <= 1.0)
 
         if new["infrastructure"]["endpoint_nodes"] > 0:
-            option_check(
-                parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 1
-            )
+            option_check(parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 1)
             option_check(
                 parser,
                 config,
@@ -203,9 +193,7 @@ def parse_config(parser, arg):
                 lambda x: 0.1 <= x <= 1.0,
             )
         else:
-            option_check(
-                parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 0
-            )
+            option_check(parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 0)
             option_check(
                 parser,
                 config,
@@ -216,9 +204,7 @@ def parse_config(parser, arg):
                 lambda x: 0.0 <= x <= 1.0,
             )
 
-        option_check(
-            parser, config, new, sec, "cpu_pin", bool, lambda x: x in [True, False]
-        )
+        option_check(parser, config, new, sec, "cpu_pin", bool, lambda x: x in [True, False])
 
         option_check(
             parser,
@@ -401,9 +387,58 @@ def parse_config(parser, arg):
             lambda x: True,
             mandatory=False,
         )
+        option_check(parser, config, new, sec, "netperf", bool, lambda x: x in [True, False])
+
+        new["infrastructure"]["base_path"] = str(os.getenv("HOME"))
         option_check(
-            parser, config, new, sec, "netperf", bool, lambda x: x in [True, False]
+            parser,
+            config,
+            new,
+            sec,
+            "base_path",
+            str,
+            lambda x: os.path.expanduser(x),
+            mandatory=False,
         )
+        new["infrastructure"]["base_path"] = os.path.expanduser(new["infrastructure"]["base_path"])
+        if new["infrastructure"]["base_path"][-1] == "/":
+            new["infrastructure"]["base_path"] = config["infrastructure"]["base_path"][:-1]
+
+        new["infrastructure"]["prefixIP"] = "192.168"
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "prefixIP",
+            str,
+            lambda x: len(x.split(".")) == 2
+            and int(x.split(".")[0]) > 0
+            and int(x.split(".")[0]) < 255
+            and int(x.split(".")[1]) > 0
+            and int(x.split(".")[1]) < 255,
+            mandatory=False,
+        )
+
+        new["infrastructure"]["middleIP"] = "100"
+        option_check(
+            parser, config, new, sec, "middleIP", int, lambda x: x > 0 and x < 255, mandatory=False
+        )
+
+        new["infrastructure"]["middleIP_base"] = "90"
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "middleIP_base",
+            int,
+            lambda x: x > 0 and x < 255,
+            mandatory=False,
+        )
+
+        if new["infrastructure"]["middleIP"] == new["infrastructure"]["middleIP_base"]:
+            parser.error("Config: middleIP == middleIP_base")
     else:
         parser.error("Config: infrastructure section missing")
 
@@ -412,9 +447,7 @@ def parse_config(parser, arg):
     edge = new[sec]["edge_nodes"]
     endpoint = new[sec]["endpoint_nodes"]
     if cloud + edge + endpoint == 0:
-        parser.error(
-            "Config: number of cloud+edge+endpoint nodes should be >= 1, not 0"
-        )
+        parser.error("Config: number of cloud+edge+endpoint nodes should be >= 1, not 0")
 
     # Check benchmark
     sec = "benchmark"
@@ -432,14 +465,19 @@ def parse_config(parser, arg):
         )
 
         new["benchmark"]["resource_manager_only"] = False
-        option_check(parser, config, new, sec, "resource_manager_only", bool, lambda x: x in [True, False], False)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "resource_manager_only",
+            bool,
+            lambda x: x in [True, False],
+            False,
+        )
 
-        option_check(
-            parser, config, new, sec, "docker_pull", bool, lambda x: x in [True, False]
-        )
-        option_check(
-            parser, config, new, sec, "delete", bool, lambda x: x in [True, False]
-        )
+        option_check(parser, config, new, sec, "docker_pull", bool, lambda x: x in [True, False])
+        option_check(parser, config, new, sec, "delete", bool, lambda x: x in [True, False])
         option_check(
             parser,
             config,
@@ -460,49 +498,6 @@ def parse_config(parser, arg):
 
         new["mode"] = mode
 
-        # Check if mode and resource manager overlaps
-        if "resource_manager" in new[sec]:
-            if mode == "cloud" and not (
-                new["benchmark"]["resource_manager"] in ["kubernetes"]
-            ):
-                parser.error("Config: Cloud-mode requires Kubernetes")
-            elif mode == "edge" and not (
-                new["benchmark"]["resource_manager"] in ["kubeedge", "mist"]
-            ):
-                parser.error("Config: Edge-mode requires KubeEdge or Mist")
-        elif mode != "endpoint":
-            parser.error("Config: Endpoint-only mode doesnt require resource managers")
-
-        # Extended checks: Number of nodes should match deployment mode
-        if mode == "cloud" and (
-            cloud < 2 or edge != 0 or endpoint == 0 or endpoint % (cloud - 1) != 0
-        ):
-            parser.error(
-                "Config: For cloud benchmark, #clouds>1, #edges=0, #endpoints>0, and (#clouds-1) % #endpoints=0"
-            )
-        elif (
-            mode == "edge"
-            and new["benchmark"]["resource_manager"] == "kubeedge"
-            and (cloud != 1 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
-        ):
-            parser.error(
-                "Config: For edge benchmark with KubeEdge, #clouds=1, #edges>0, #endpoints>0, and #edges % #endpoints=0"
-            )
-        elif (
-            mode == "edge"
-            and new["benchmark"]["resource_manager"] == "mist"
-            and (cloud != 0 or edge == 0 or endpoint == 0 or endpoint % edge != 0)
-        ):
-            parser.error(
-                "Config: For mist benchmarks, #clouds=0, #edges>0, #endpoints>0, and #edges % #endpoints=0"
-            )
-        elif mode == "endpoint" and (cloud != 0 or edge != 0 or endpoint == 0):
-            parser.error(
-                "Config: For endpoint benchmark, #clouds=0, #edges=0, and #endpoints>0"
-            )
-    elif new["infrastructure"]["infra_only"] and config.has_section(sec):
-        parser.error("Config: benchmark section is present but infra_only=True")
-
     sec = "execution_model"
     if config.has_section(sec):
         new[sec] = dict()
@@ -519,6 +514,8 @@ def add_constants(config):
     """
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
+    config["username"] = getpass.getuser()
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark")
 
     if not config["infrastructure"]["infra_only"]:
         if config["benchmark"]["application"] == "image_classification":
@@ -530,13 +527,8 @@ def add_constants(config):
 
     # 100.100.100.100
     # Prefix .Mid.Post
-    config["prefixIP"] = "192.168"
-    config["middleIP"] = 100
     config["postfixIP_lower"] = 2
     config["postfixIP_upper"] = 252
-
-    # Different IP range for base images
-    config["middleIP_base"] = 90
 
     # Get Docker registry IP
     try:
@@ -598,8 +590,7 @@ def set_logging(args):
     )
 
     logging.info(
-        "Logging has been enabled. Writing to stdout and file at %s/%s"
-        % (log_dir, log_name)
+        "Logging has been enabled. Writing to stdout and file at %s/%s" % (log_dir, log_name)
     )
 
     s = []
@@ -645,17 +636,13 @@ def main(args):
             benchmark.start(args.config, machines)
 
         if args.config["benchmark"]["delete"]:
-            infrastructure.delete_vms(machines)
+            infrastructure.delete_vms(args.config, machines)
             print_ssh = False
 
     if print_ssh:
         s = []
-        for ssh in (
-            args.config["cloud_ssh"]
-            + args.config["edge_ssh"]
-            + args.config["endpoint_ssh"]
-        ):
-            s.append("ssh %s -i %s/.ssh/id_rsa_benchmark" % (ssh, args.config["home"]))
+        for ssh in args.config["cloud_ssh"] + args.config["edge_ssh"] + args.config["endpoint_ssh"]:
+            s.append("ssh %s -i %s" % (ssh, args.config["ssh_key"]))
 
         logging.info("To access the VMs:\n\t" + "\n\t".join(s) + "\n")
 
@@ -669,9 +656,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "config", type=lambda x: parse_config(parser, x), help="benchmark config file"
     )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="increase verbosity level"
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 
     args = parser.parse_args()
 
@@ -680,4 +665,3 @@ if __name__ == "__main__":
     set_logging(args)
 
     main(args)
-

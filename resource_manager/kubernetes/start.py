@@ -25,25 +25,23 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/cloud/control_install.yml",
+        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["base_path"] + "/.continuum/cloud/control_install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    processes.append(machines[0].process(config, command, output=False))
 
     # Setup cloud worker
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/cloud/install.yml",
+        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+        config["infrastructure"]["base_path"] + "/.continuum/cloud/install.yml",
     ]
-    processes.append(machines[0].process(command, output=False))
+    processes.append(machines[0].process(config, command, output=False))
 
     # Check playbooks
     for process in processes:
-        logging.debug(
-            "Check output for Ansible command [%s]" % (" ".join(process.args))
-        )
+        logging.debug("Check output for Ansible command [%s]" % (" ".join(process.args)))
         output = [line.decode("utf-8") for line in process.stdout.readlines()]
         error = [line.decode("utf-8") for line in process.stderr.readlines()]
         main.ansible_check_output((output, error))
