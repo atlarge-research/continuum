@@ -1,6 +1,5 @@
 ---
 - hosts: clouds
-  become: true
   tasks:
     - name: Create cloud controller image
       shell: |
