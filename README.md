@@ -23,9 +23,10 @@ The execution flow consists of three phases, each having a configuration and exe
 
 **For other users, please use the main branch of the project instead**
 
-This demo consists of two parts:
+This demo consists of three parts:
 1. Access the servers
 2. Use OpenFaaS
+3. Create your own function in OpenFaaS
 
 ### Part 1: Access the servers
 For this demo, you will get access to VU compute servers. If you don't have access yet, please read and reply to the announcement that was sent to you before the start of this tutorial. For this tutorial, we assume you have access to the compute cluster already.
@@ -77,4 +78,70 @@ faas-cli list
 Now it's time to execute your first serverless function:
 ```bash
 curl http://localhost:8080/function/figlet -d 'Hello world!'
+```
+
+### Part 3: Create your own function in OpenFaaS
+In this part of the tutorial, you will write your first serverless function, deploy it to a registry (Docker Hub), and execute it.
+
+1. OpenFaaS will need to upload your function to Docker Hub. In order to do so, you need an account there. Create an account [here](https://hub.docker.com/signup).
+
+2. If not already done, follow steps 1-4 from part 2 to deploy Continuum with OpenFaaS and make `faas-cli` useable.
+
+3. Execute
+```bash
+docker login
+```
+and provide your username and password from step 1. This will allow OpenFaaS to push your function to Docker Hub.
+
+5. Now it is time to create the surrounding structure for your function. OpenFaaS provides a bunch of templates that help developers to get the structure right.  
+   You can find a list of all templates if you execute `faas-cli template store list`. In this tutorial, we will create a Python function.
+
+6. Create a new folder to store your function in and move to it:
+```bash
+mkdir functions && cd functions
+```
+In the following, all relative paths will assume that you are in `~/functions`.
+
+7. Add your username of Docker Hub as an environment variable. This will adapt the generated template such that it later pulls your function:
+```bash
+export OPENFAAS_PREFIX=your_dockerhub_name
+```
+
+8. Create the template for your function:
+```bash
+faas-cli new --lang python3 first-function
+```
+This creates a few files that tell OpenFaaS how to build and deploy the function (`first-function.yml`) and most importantly what the function to execute contains (`first-function/handler.py`) and what its dependencies are (`first-function/requirements.txt`).
+
+9. It's time to write some code: Edit the file `first-function/handler.py` using your favorite editor. Here, we will use `nano`:
+```bash
+nano first-function/handler.py
+```
+The function gets a request (string) and returns it by default unchanged. If you overwrite the return of the function, this is what you will later see on the console.  
+Try to play around a bit. I have decided to return a random activity from [The Bored API](https://www.boredapi.com/documentation):
+```python
+import requests
+import json
+
+def handle(req):
+    """handle a request to the function
+    Args:
+        req (str): request body
+    """
+    url = "https://www.boredapi.com/api/activity/"
+    result = requests.get(url)
+    parsed_result = result.json()
+    return parsed_result["activity"]
+```
+
+For that to work, I also needed to add `requests` to `first-function/requirements.txt`, because that module is not part of the standard library.
+
+10. Build and deploy your function. The command line tool provides a shortcut for that:
+```bash
+faas-cli up -f first-function.yml
+```
+
+11. You have now deployed your function! Try it out:
+```bash
+curl http://127.0.0.1:8080/function/first-function
 ```
