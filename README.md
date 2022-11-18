@@ -139,7 +139,7 @@ For that to work, I also needed to add `requests` to `first-function/requirement
 10. Build and deploy your function. The command line tool provides a shortcut for that:
 ```bash
 faas-cli up -f first-function.yml
-``
+```
 
 11. You have now deployed your function! Try it out:
 ```bash
