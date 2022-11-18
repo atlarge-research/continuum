@@ -41,6 +41,7 @@ In this part, you will use the Continuum framework to create multiple virtual ma
 
 1. Run Continuum with a configuration for OpenFaas. These configurations are stored in the `/configuration` folder. Specifically, we will use the `configuration/tutorial_openfaas.cfg` configuration. The `resource_manager_only = true` flag and `model = openFaas` in section `execution_model` are critical here. **NOTE**: Do not change the following parameters in the configuration file under any circumstances, this will stop Continuum from working for you and possibly other students: `base_path, prefixIP, middleIP, middleIP_base`.
     ```bash
+    cd ~/continuum
     python3 main.py configuration/tutorial_openfaas.cfg
     ```
 
