@@ -27,8 +27,8 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-            config["infrastructure"]["base_path"] + "/.continuum/edge/install_mist.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/install_mist.yml"),
         ]
         processes.append(machines[0].process(config, command, output=False))
 
@@ -44,8 +44,8 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-        config["infrastructure"]["base_path"] + "/.continuum/cloud/control_install.yml",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/control_install.yml"),
     ]
     processes.append(machines[0].process(config, command, output=False))
 
@@ -53,8 +53,8 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-        config["infrastructure"]["base_path"] + "/.continuum/edge/install.yml",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/install.yml"),
     ]
     processes.append(machines[0].process(config, command, output=False))
 
@@ -72,16 +72,16 @@ def start(config, machines):
         [
             "ansible-playbook",
             "-i",
-            config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-            config["infrastructure"]["base_path"] + "/.continuum/cloud/control_log.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/control_log.yml"),
         ]
     )
     commands.append(
         [
             "ansible-playbook",
             "-i",
-            config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-            config["infrastructure"]["base_path"] + "/.continuum/edge/log.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/log.yml"),
         ]
     )
 

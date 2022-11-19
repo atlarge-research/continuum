@@ -58,7 +58,7 @@ class Experiment:
             dt = datetime.datetime.strptime(dt, "%Y-%m-%d_%H:%M:%S")
 
             if dt >= self.resume:
-                path = log_location + "/" + log
+                path = os.path.join(log_location, log)
                 logging.info("File %s for experiment run %i" % (path, exp_i))
 
                 f = open(path, "r")
