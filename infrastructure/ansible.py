@@ -186,7 +186,7 @@ def create_inventory_vm(config, machines):
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
     f.write("ansible_ssh_private_key_file=~/.ssh/id_rsa_benchmark\n")
     f.write("registry_ip=%s:%i\n" % (host_ip, 5000))
-    f.write("continuum_home=%s/.continuum" % (config["home"]))
+    f.write("continuum_home=%s/.continuum\n" % (config["home"]))
 
     if not config["infrastructure"]["infra_only"]:
         # Tier specific groups
