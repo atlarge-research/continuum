@@ -21,9 +21,7 @@ def schedule_equal(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Schedule VMs on machine: Based on utilization")
-    machines_per_node = [
-        {"cloud": 0, "edge": 0, "endpoint": 0} for _ in range(len(machines))
-    ]
+    machines_per_node = [{"cloud": 0, "edge": 0, "endpoint": 0} for _ in range(len(machines))]
     machines_cores_used = [0 for _ in range(len(machines))]
 
     types_to_go = {
@@ -49,10 +47,7 @@ def schedule_equal(config, machines):
 
         # Get machine with least cores used compared to total cores
         i = np.argmin(
-            [
-                cores_used / m.cores
-                for cores_used, m in zip(machines_cores_used, machines)
-            ]
+            [cores_used / m.cores for cores_used, m in zip(machines_cores_used, machines)]
         )
 
         # Place VM on that machine
@@ -169,10 +164,6 @@ def delete_vms(machines):
         commands.append(command)
         sshs.append(None)
 
-        command = "rm -f /tmp/join-command.txt"
-        commands.append(command)
-        sshs.append(machine.name)
-
     results = machines[0].process(commands, shell=True, ssh=sshs, ssh_key=False)
 
     # Wait for process to finish. Outcome of destroy command does not matter
@@ -252,9 +243,7 @@ def copy_files(config, machines):
                 config["home"],
             )
         else:
-            command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (
-                machine.name
-            )
+            command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (machine.name)
 
         commands.append(command)
 
@@ -306,15 +295,9 @@ def copy_files(config, machines):
             + machine.endpoint_names
             + machine.base_names
         ):
+            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name + ".xml", dest))
             out.append(
-                machine.copy_files(
-                    config["base"] + "/.tmp/domain_" + name + ".xml", dest
-                )
-            )
-            out.append(
-                machine.copy_files(
-                    config["base"] + "/.tmp/user_data_" + name + ".yml", dest
-                )
+                machine.copy_files(config["base"] + "/.tmp/user_data_" + name + ".yml", dest)
             )
 
         # Copy Ansible files for infrastructure
@@ -372,8 +355,7 @@ def add_ssh(config, machines, base=[]):
         base (list, optional): Base image ips to check. Defaults to []
     """
     logging.info(
-        "Start adding ssh keys to the known_hosts file for each VM (base=%s)"
-        % (base == [])
+        "Start adding ssh keys to the known_hosts file for each VM (base=%s)" % (base == [])
     )
 
     # Get IPs of all (base) machines

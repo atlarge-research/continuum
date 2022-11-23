@@ -74,7 +74,6 @@
         state: present
         filename: kubernetes.list
 
-    # Use this version with KubeEdge 1.6.1
     - name: Install Kubernetes binaries
       apt:
         name: "{{ packages }}"
@@ -82,9 +81,45 @@
         update_cache: true
       vars:
         packages:
-          - kubelet=1.24.7-00
-          - kubeadm=1.24.7-00
-          - kubectl=1.24.7-00
+          - kubelet=1.25.3-00
+          - kubeadm=1.25.3-00
+          - kubectl=1.25.3-00
+
+    - name: Stop Kubelet service
+      service:
+        name: kubelet
+        daemon_reload: true
+        state: stopped
+
+    - name: Get Kubernetes binaries from host machine
+      copy:
+        src: /mnt/sdb/matthijs/kubernetes-node-linux-amd64.tar.gz
+        dest: /tmp/kubernetes-node-linux-amd64.tar.gz
+
+    - name: Extract Kubernetes binary archive
+      unarchive:
+        src: /tmp/kubernetes-node-linux-amd64.tar.gz
+        dest: /tmp/
+        remote_src: true
+
+    - name: Move Kubernetes binaries to bin folder
+      shell: mv /tmp/kubernetes/node/bin/* /usr/bin/
+
+    - name: Remove Kubernetes archive
+      file:
+        path: /tmp/kubernetes-node-linux-amd64.tar.gz
+        state: absent
+
+    - name: Remove extracted Kubernetes archive
+      file:
+        path: /tmp/kubernetes
+        state: absent
+
+    - name: Start Kubelet service
+      service:
+        name: kubelet
+        daemon_reload: true
+        state: started
 
     - name: Get Calico
       get_url:

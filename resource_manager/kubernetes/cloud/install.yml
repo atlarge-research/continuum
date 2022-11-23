@@ -21,12 +21,12 @@
     - name: Wait for join command to be finished on cloud controller
       local_action:
         module: wait_for
-        path: /tmp/join-command.txt
+        path: "{{ continuum_home }}/join-command.txt"
       become: false
 
     - name: Copy the join command to the cloud node
       copy:
-        src: /tmp/join-command.txt
+        src: "{{ continuum_home }}/join-command.txt"
         dest: /tmp/join-command.txt
 
     - name: Make the join command file executable

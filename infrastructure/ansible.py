@@ -32,10 +32,7 @@ def create_inventory_machine(config, machines):
             base = "base=%s" % (machine.base_names[0])
 
         if machine.is_local:
-            f.write(
-                "localhost ansible_connection=local username=%s %s\n"
-                % (machine.user, base)
-            )
+            f.write("localhost ansible_connection=local username=%s %s\n" % (machine.user, base))
         else:
             f.write(
                 "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n"
@@ -189,12 +186,13 @@ def create_inventory_vm(config, machines):
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
     f.write("ansible_ssh_private_key_file=~/.ssh/id_rsa_benchmark\n")
     f.write("registry_ip=%s:%i\n" % (host_ip, 5000))
+    f.write("continuum_home=%s/.continuum" % (config["home"]))
 
     if not config["infrastructure"]["infra_only"]:
         # Tier specific groups
-        if (config["mode"] == "cloud" or config["mode"] == "edge") and config[
-            "benchmark"
-        ]["resource_manager"] != "mist":
+        if (config["mode"] == "cloud" or config["mode"] == "edge") and config["benchmark"][
+            "resource_manager"
+        ] != "mist":
             f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips[0]))
 
             # Cloud controller (is always on machine 0)

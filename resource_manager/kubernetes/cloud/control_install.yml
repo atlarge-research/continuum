@@ -34,6 +34,8 @@
           --apiserver-cert-extra-sans={{ cloud_ip }}
           --node-name cloud-master
           --pod-network-cidr=10.244.0.0/16
+          --kubernetes-version=1.25.3
+          --image-repository={{ registry_ip }}
 
     - name: Create user Kubernetes directory
       file:
@@ -62,7 +64,7 @@
     - name: Copy join command to local file
       fetch:
         src: /tmp/join-command.txt
-        dest: /tmp/
+        dest: "{{ continuum_home }}/"
         flat: true
 
     - name: Remove unneeded Kubernetes join command file
