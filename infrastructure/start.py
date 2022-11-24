@@ -448,6 +448,19 @@ def docker_registry(config, machines):
             if image.split(":")[1] in repos:
                 need_pull[i] = False
 
+    # Add Kubernetes source images, always check if they can be pulled
+    images = list(config["images"].values())
+    images_kube = [
+        "redplanet00/kube-proxy:v1.25.3",
+        "redplanet00/kube-controller-manager:v1.25.3",
+        "redplanet00/kube-scheduler:v1.25.3",
+        "redplanet00/kube-apiserver:v1.25.3",
+        "redplanet00/etcd:3.5.4-0",
+        "redplanet00/pause:3.8",
+    ]
+    images += images_kube
+    need_pull += [True] * 6
+
     # Pull images which aren't present yet in the registry
     for image, pull in zip(config["images"].values(), need_pull):
         if not pull:
