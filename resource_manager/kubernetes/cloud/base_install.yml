@@ -121,6 +121,13 @@
         daemon_reload: true
         state: started
 
+    - name: Set endpoints for crictl
+      copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+
     - name: Get Calico
       get_url:
         url: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
