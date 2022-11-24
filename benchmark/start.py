@@ -35,8 +35,7 @@ def cache_worker(config, machines):
     # Global variables for each applications
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s"
-        % (config["registry"], config["images"]["worker"].split(":")[1]),
+        "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": cores
         - 0.4,  # 0.4 for other Kubernetes services that take up CPU, but still guarantee 1 pod per machine
@@ -49,9 +48,7 @@ def cache_worker(config, machines):
         app_vars = {
             "container_port": 1883,
             "mqtt_logs": True,
-            "endpoint_connected": int(
-                config["infrastructure"]["endpoint_nodes"] / worker_apps
-            ),
+            "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / worker_apps),
             "cpu_threads": max(1, int(config["benchmark"]["application_cpu"])),
         }
     elif config["benchmark"]["application"] == "empty":
@@ -77,14 +74,12 @@ def cache_worker(config, machines):
 
     # This only creates the file we need, now launch the benchmark
     command = "kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml"
-    output, error = machines[0].process(
-        command, shell=True, ssh=config["cloud_ssh"][0]
-    )[0]
+    output, error = machines[0].process(command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
     if output == [] or "job.batch/empty created" not in output[0]:
         logging.error("Could not deploy pods: %s" % ("".join(output)))
         sys.exit()
-    if error != []:
+    if error != [] and not all(["[CONTINUUM]" in l for l in error]):
         logging.error("Could not deploy pods: %s" % ("".join(error)))
         sys.exit()
 
@@ -107,14 +102,12 @@ def cache_worker(config, machines):
             ]
             output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
-            if error != [] and any(
-                "couldn't find any field with path" in line for line in error
-            ):
+            if error != [] and any("couldn't find any field with path" in line for line in error):
                 logging.debug("Retry getting list of kubernetes pods")
                 time.sleep(5)
                 pending = True
                 continue
-            elif error != [] or output == []:
+            elif (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
                 logging.error("".join(error))
                 sys.exit()
 
@@ -147,12 +140,9 @@ def cache_worker(config, machines):
     output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
     if output == [] or not ("job.batch" in output[0] and "deleted" in output[0]):
-        logging.error(
-            'Output does not container job.batch "empty" deleted: %s'
-            % ("".join(output))
-        )
+        logging.error('Output does not container job.batch "empty" deleted: %s' % ("".join(output)))
         sys.exit()
-    elif error != []:
+    elif error != [] and not all(["[CONTINUUM]" in l for l in error]):
         logging.error("".join(error))
 
     time.sleep(10)
@@ -175,20 +165,18 @@ def start_worker(config, machines):
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
-        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config[
-            "benchmark"
-        ]["applications_per_worker"]
+        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
+            "applications_per_worker"
+        ]
     elif config["mode"] == "edge":
         worker_apps = (
-            config["infrastructure"]["edge_nodes"]
-            * config["benchmark"]["applications_per_worker"]
+            config["infrastructure"]["edge_nodes"] * config["benchmark"]["applications_per_worker"]
         )
 
     # Global variables for each applications
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s"
-        % (config["registry"], config["images"]["worker"].split(":")[1]),
+        "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
         "replicas": worker_apps,
@@ -200,9 +188,7 @@ def start_worker(config, machines):
         app_vars = {
             "container_port": 1883,
             "mqtt_logs": True,
-            "endpoint_connected": int(
-                config["infrastructure"]["endpoint_nodes"] / worker_apps
-            ),
+            "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / worker_apps),
             "cpu_threads": max(1, int(config["benchmark"]["application_cpu"])),
         }
     elif config["benchmark"]["application"] == "empty":
@@ -228,14 +214,12 @@ def start_worker(config, machines):
 
     # This only creates the file we need, now launch the benchmark
     command = "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml\""
-    output, error = machines[0].process(
-        command, shell=True, ssh=config["cloud_ssh"][0]
-    )[0]
+    output, error = machines[0].process(command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
     if len(output) < 2 or "job.batch/empty created" not in output[1]:
         logging.error("Could not deploy pods: %s" % ("".join(output)))
         sys.exit()
-    if error != []:
+    if error != [] and not all(["[CONTINUUM]" in l for l in error]):
         logging.error("Could not deploy pods: %s" % ("".join(error)))
         sys.exit()
 
@@ -261,14 +245,12 @@ def start_worker(config, machines):
             ]
             output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
-            if error != [] and any(
-                "couldn't find any field with path" in line for line in error
-            ):
+            if error != [] and any("couldn't find any field with path" in line for line in error):
                 logging.debug("Retry getting list of kubernetes pods")
                 time.sleep(5)
                 pending = True
                 continue
-            elif error != [] or output == []:
+            elif (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
                 logging.error("".join(error))
                 sys.exit()
 
@@ -344,8 +326,7 @@ def start_worker_mist(config, machines):
             + [
                 "--name",
                 cont_name,
-                "%s/%s"
-                % (config["registry"], config["images"]["worker"].split(":")[1]),
+                "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
             ]
         )
 
@@ -359,10 +340,7 @@ def start_worker_mist(config, machines):
     for ssh, (output, error) in zip(sshs, results):
         logging.debug("Check output of mist endpoint start in ssh [%s]" % (ssh))
 
-        if (
-            error != []
-            and "Your kernel does not support swap limit capabilities" not in error[0]
-        ):
+        if error != [] and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
@@ -433,9 +411,7 @@ def start_endpoint(config, machines):
     container_names = []
 
     # Calc endpoints per worker
-    workers = (
-        config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
-    )
+    workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
     if config["mode"] == "cloud" or config["mode"] == "edge":
         # If there is a control machine, dont count that one in
         if config["benchmark"]["resource_manager"] != "mist":
@@ -452,9 +428,7 @@ def start_endpoint(config, machines):
     # For each worker (cloud or edge), connect to end_per_work endpoints.
     for worker_i, worker_ip in enumerate(worker_ips):
         for endpoint_i, endpoint_ssh in enumerate(
-            config["endpoint_ssh"][
-                worker_i * end_per_work : (worker_i + off) * end_per_work
-            ]
+            config["endpoint_ssh"][worker_i * end_per_work : (worker_i + off) * end_per_work]
         ):
             # Docker container name and variables depends on deployment mode
             cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
@@ -466,9 +440,7 @@ def start_endpoint(config, machines):
                 env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
                 env.append("MQTT_LOGS=True")
             else:
-                env.append(
-                    "CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"])
-                )
+                env.append("CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"]))
 
             logging.info("Launch %s" % (cont_name))
 
@@ -484,8 +456,7 @@ def start_endpoint(config, machines):
                     "run",
                     "--detach",
                     "--cpus=%i" % (config["benchmark"]["application_endpoint_cpu"]),
-                    "--memory=%ig"
-                    % (config["benchmark"]["application_endpoint_memory"]),
+                    "--memory=%ig" % (config["benchmark"]["application_endpoint_memory"]),
                     "--network=host",
                 ]
                 + ["--env %s" % (e) for e in env]
@@ -506,10 +477,7 @@ def start_endpoint(config, machines):
     for ssh, (output, error) in zip(sshs, results):
         logging.debug("Check output of endpoint start in ssh [%s]" % (ssh))
 
-        if (
-            error != []
-            and "Your kernel does not support swap limit capabilities" not in error[0]
-        ):
+        if error != [] and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
@@ -532,9 +500,7 @@ def wait_endpoint_completion(machines, sshs, container_names):
     time.sleep(10)
 
     for ssh, cont_name in zip(sshs, container_names):
-        logging.info(
-            "Wait for container to finish: %s on VM %s" % (cont_name, ssh.split("@")[0])
-        )
+        logging.info("Wait for container to finish: %s on VM %s" % (cont_name, ssh.split("@")[0]))
         finished = False
 
         while not finished:
@@ -597,9 +563,7 @@ def wait_worker_completion(config, machines):
     get_list = True
     i = 0
 
-    workers = (
-        config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
-    )
+    workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
     if config["mode"] == "cloud" or config["mode"] == "edge":
         workers -= 1
 
@@ -616,7 +580,7 @@ def wait_worker_completion(config, machines):
             ]
             output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
-            if error != [] or output == []:
+            if (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
                 logging.error("".join(error))
                 sys.exit()
 
@@ -682,9 +646,7 @@ def start(config, machines):
         if config["benchmark"]["resource_manager"] != "mist":
             worker_output = output.get_worker_output(config, machines)
         else:
-            worker_output = output.get_worker_output_mist(
-                config, machines, container_names_mist
-            )
+            worker_output = output.get_worker_output_mist(config, machines, container_names_mist)
 
     # Parse output into dicts, and print result
     worker_metrics, endpoint_metrics = output.gather_metrics(

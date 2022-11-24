@@ -31,9 +31,7 @@ def get_endpoint_output(config, machines, container_names):
     results = machines[0].process(commands, ssh=config["endpoint_ssh"])
 
     endpoint_output = []
-    for container, ssh, (output, error) in zip(
-        container_names, config["endpoint_ssh"], results
-    ):
+    for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
         logging.info("Get output from endpoint %s on VM %s" % (container, ssh))
 
         if error != []:
@@ -71,7 +69,7 @@ def get_worker_output(config, machines):
     ]
     output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
 
-    if error != [] or output == []:
+    if (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
         logging.error("".join(error))
         sys.exit()
 
@@ -79,6 +77,12 @@ def get_worker_output(config, machines):
     commands = []
     for line in output[1:]:
         container = line.split(" ")[0]
+
+        command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
+            container,
+            container,
+        )
+        machines[0].process(command, shell=True, ssh=config["cloud_ssh"][0])
 
         if config["benchmark"]["application"] == "image_classification":
             command = ["kubectl", "logs", "--timestamps=true", container]
@@ -93,7 +97,7 @@ def get_worker_output(config, machines):
     # Get the output
     worker_output = []
     for i, (output, error) in enumerate(results):
-        if error != [] or output == []:
+        if (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
             logging.error("Container %i: %s" % (i, "".join(error)))
             sys.exit()
 
@@ -122,9 +126,7 @@ def get_worker_output_mist(config, machines, container_names):
     results = machines[0].process(commands, ssh=config["edge_ssh"])
 
     worker_output = []
-    for container, ssh, (output, error) in zip(
-        container_names, config["endpoint_ssh"], results
-    ):
+    for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
         logging.info("Get output from mist worker %s on VM %s" % (container, ssh))
 
         if error != []:
@@ -225,14 +227,11 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
             sys.exit()
         if len(output) > 1:
             logging.error(
-                "Incorrect output for pod %i and command [%s]: %s"
-                % (i, command, "".join(output))
+                "Incorrect output for pod %i and command [%s]: %s" % (i, command, "".join(output))
             )
             sys.exit()
-        elif error != []:
-            logging.error(
-                "Error for pod %i and command [%s]: %s" % (i, command, "".join(error))
-            )
+        elif error != [] and not all(["[CONTINUUM]" in l for l in error]):
+            logging.error("Error for pod %i and command [%s]: %s" % (i, command, "".join(error)))
             sys.exit()
 
         # Now parse the line to datetime with milliseconds
@@ -294,9 +293,7 @@ def gather_worker_metrics_image(worker_output):
                     unit = line[line.find("(") + 1 : line.find(")")]
                     time = int(line.rstrip().split(":")[-1])
                 except Exception as e:
-                    logging.warn(
-                        "Got an error while parsing line: %s. Exception: %s" % (line, e)
-                    )
+                    logging.warn("Got an error while parsing line: %s. Exception: %s" % (line, e))
                     continue
 
                 units = ["ns"]
@@ -304,9 +301,7 @@ def gather_worker_metrics_image(worker_output):
                     negatives.append(time)
                     continue
                 elif unit not in units:
-                    logging.warn(
-                        "Unit should be [%s], got %s" % (",".join(units), unit)
-                    )
+                    logging.warn("Unit should be [%s], got %s" % (",".join(units), unit))
                     continue
 
                 if unit == "ns":
@@ -315,9 +310,7 @@ def gather_worker_metrics_image(worker_output):
                     elif "Processing" in line:
                         processing.append(round(time / 10**6, 4))
 
-        worker_metrics[-1]["total_time"] = round(
-            (end_time - start_time).total_seconds(), 2
-        )
+        worker_metrics[-1]["total_time"] = round((end_time - start_time).total_seconds(), 2)
 
         if len(negatives) > 0:
             logging.warn("Got %i negative time values" % (len(negatives)))
@@ -334,9 +327,7 @@ def gather_worker_metrics_image(worker_output):
             int(len(delays) * lower_percentile) : int(len(delays) * upper_percentile)
         ]
         processing_perc = processing[
-            int(len(processing) * lower_percentile) : int(
-                len(processing) * upper_percentile
-            )
+            int(len(processing) * lower_percentile) : int(len(processing) * upper_percentile)
         ]
 
         worker_metrics[-1]["comm_delay_avg"] = round(np.mean(delays_perc), 2)
@@ -379,9 +370,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         start_time = to_datetime_image(out[0])
         end_time = to_datetime_image(out[-1])
 
-        endpoint_metrics[-1]["total_time"] = round(
-            (end_time - start_time).total_seconds(), 2
-        )
+        endpoint_metrics[-1]["total_time"] = round((end_time - start_time).total_seconds(), 2)
         endpoint_metrics[-1]["data_avg"] = 0.0
 
         if config["mode"] == "cloud":
@@ -411,9 +400,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     unit = line[line.find("(") + 1 : line.find(")")]
                     number = int(line.rstrip().split(":")[-1])
                 except Exception as e:
-                    logging.warn(
-                        "Got an error while parsing line: %s. Exception: %s" % (line, e)
-                    )
+                    logging.warn("Got an error while parsing line: %s. Exception: %s" % (line, e))
                     continue
 
                 units = ["ns", "bytes"]
@@ -421,9 +408,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     logging.warn("Time/Size < 0 should not be possible: %i" % (number))
                     continue
                 elif unit not in units:
-                    logging.warn(
-                        "Unit should be one of [%s], got %s" % (",".join(units), unit)
-                    )
+                    logging.warn("Unit should be one of [%s], got %s" % (",".join(units), unit))
                     continue
 
                 if "Preparation, preprocessing and processing" in line:
@@ -444,9 +429,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         )
 
         processing_perc = processing[
-            int(len(processing) * lower_percentile) : int(
-                len(processing) * upper_percentile
-            )
+            int(len(processing) * lower_percentile) : int(len(processing) * upper_percentile)
         ]
         latency_perc = latency[
             int(len(latency) * lower_percentile) : int(len(latency) * upper_percentile)
@@ -464,9 +447,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def gather_metrics(
-    machines, config, worker_output, endpoint_output, container_names, starttime
-):
+def gather_metrics(machines, config, worker_output, endpoint_output, container_names, starttime):
     """Process the raw output to lists of dicts
 
     Args:
@@ -507,9 +488,7 @@ def gather_metrics(
 
     endpoint_metrics = []
     if config["infrastructure"]["endpoint_nodes"]:
-        endpoint_metrics = gather_endpoint_metrics(
-            config, endpoint_output, container_names
-        )
+        endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
 
     return worker_metrics, endpoint_metrics
 
@@ -610,9 +589,7 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
 
     # Print ouput in csv format
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        logging.debug(
-            "Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2_output))
-        )
+        logging.debug("Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2_output)))
     else:
         logging.debug("Output in csv format\n%s" % (repr(df2_output)))
 
