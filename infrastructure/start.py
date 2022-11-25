@@ -520,7 +520,7 @@ def docker_pull(config, machines, base_names):
     processes = []
     for machine in machines:
         for name, ip in zip(machine.base_names, machine.base_ips):
-            name_r = name.rstrip(string.digits)
+            name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
             if name_r in base_names:
                 images = []
 
