@@ -204,6 +204,15 @@ def parse_config(parser, arg):
                 lambda x: 0.0 <= x <= 1.0,
             )
 
+        # Now set disk speed
+        option_check(parser, config, new, sec, "cloud_read_speed", int, lambda x: x >= 0)
+        option_check(parser, config, new, sec, "edge_read_speed", int, lambda x: x >= 0)
+        option_check(parser, config, new, sec, "endpoint_read_speed", int, lambda x: x >= 0)
+
+        option_check(parser, config, new, sec, "cloud_write_speed", int, lambda x: x >= 0)
+        option_check(parser, config, new, sec, "edge_write_speed", int, lambda x: x >= 0)
+        option_check(parser, config, new, sec, "endpoint_write_speed", int, lambda x: x >= 0)
+
         option_check(parser, config, new, sec, "cpu_pin", bool, lambda x: x in [True, False])
 
         option_check(
