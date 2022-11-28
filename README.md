@@ -1,5 +1,20 @@
 # Continuum
-Continuum is a deployment and benchmarking framework for the edge continuum. Continuum automates setting up an edge continuum environment on virtual machines, emulates network latency and throughput between machines, manages software installations inside the emulated environment, and performs application- and system-level benchmarks.
+Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
+Continuum offers the following features:
+
+1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
+2. Users can freely configure the specifications of the virtual machines and the network connecting them through a single configuration file.
+3. Continuum automatically installs operating services, resource managers, and applicaitons inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
+4. Continuum can automatically benchmark the resource managers and applications installed in the emulated cluster, and report metrics and logs back to the user.
+5. Continuum is easily extendable, allowing users to add support for more infrastructure providers, operating services, resource managers, and applications.
+
+## Features
+Continuum supports the following software:
+
+1. **Infrastructure**: Virtual machine provisioning through QEMU/KVM on local bare-metal devices.
+2. **Operating Services**: Continuum can set up an MQTT broker on edge device for lightweight communication to endpoint users.
+3. **Resource Manager**: Continuum can deploy containerized applications via Docker and Containerd using the resource managers Kubernetes and KubeEdge. OpenFaaS is supported for deploying serverless functions.
+4. **Applications and application back-ends**: Continuum supports any application that can be deployed on VMs, containers, or serverless functions. As an example, a machine learning application is included.
 
 ## How it works
 Continuum has the following architecture:
@@ -17,6 +32,20 @@ The execution flow consists of three phases, each having a configuration and exe
 4. **Software execution:** Ansible playbooks are executed, installing operating services and resource management software on each machine. This step includes setting up resource management clusters such as Kubernetes.
 5. **Benchmark configuration** The benchmark is configured and prepared based on the user's preferences.
 6. **Benchmark execution:** Applications (encapsulated in containers) are executed using resource managers running on the emulated infrastructure (Kubernetes, KubeEdge, etc.). Meanwhile, application- and system-level metrics are captured, processed, and presented to the user.
+
+## Citation
+When using Continuum for research, please cite the work as follows:
+```
+@misc{https://doi.org/10.48550/arxiv.2207.04159,
+  doi = {10.48550/ARXIV.2207.04159},
+  url = {https://arxiv.org/abs/2207.04159},
+  author = {Jansen, Matthijs and Al-Dulaimy, Auday and Papadopoulos, Alessandro V. and Trivedi, Animesh and Iosup, Alexandru},
+  title = {The SPEC-RG Reference Architecture for the Edge Continuum},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {arXiv.org perpetual, non-exclusive license}
+}
+```
 
 ## Demo
 This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
