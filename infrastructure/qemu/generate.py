@@ -36,6 +36,12 @@ DOMAIN = """\
             <driver type='qcow2' cache='none'/>
             <source file='%s/.continuum/images/%s.qcow2'/>
             <target dev='vda' bus='virtio'/>
+            <iotune>
+                <read_bytes_sec>%i</read_bytes_sec>
+                <write_bytes_sec>%i</write_bytes_sec>
+                <read_bytes_sec_max>%i</read_bytes_sec_max>
+                <write_bytes_sec_max>%i</write_bytes_sec_max>
+            </iotune>
         </disk>
         <disk type='file' device='disk'>
             <source file='%s/.continuum/images/user_data_%s.img'/>
@@ -211,6 +217,10 @@ def start(config, machines):
                     bridge_name,
                     config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["cloud_read_speed"],
+                    config["infrastructure"]["cloud_write_speed"],
+                    config["infrastructure"]["cloud_read_speed"],
+                    config["infrastructure"]["cloud_write_speed"],
                     config["infrastructure"]["base_path"],
                     name,
                 )
@@ -246,6 +256,10 @@ def start(config, machines):
                     bridge_name,
                     config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["edge_read_speed"],
+                    config["infrastructure"]["edge_write_speed"],
+                    config["infrastructure"]["edge_read_speed"],
+                    config["infrastructure"]["edge_write_speed"],
                     config["infrastructure"]["base_path"],
                     name,
                 )
@@ -280,6 +294,10 @@ def start(config, machines):
                     bridge_name,
                     config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["endpoint_read_speed"],
+                    config["infrastructure"]["endpoint_write_speed"],
+                    config["infrastructure"]["endpoint_read_speed"],
+                    config["infrastructure"]["endpoint_write_speed"],
                     config["infrastructure"]["base_path"],
                     name,
                 )
@@ -306,6 +324,10 @@ def start(config, machines):
                     bridge_name,
                     config["infrastructure"]["base_path"],
                     name,
+                    0,
+                    0,
+                    0,
+                    0,
                     config["infrastructure"]["base_path"],
                     name,
                 )
