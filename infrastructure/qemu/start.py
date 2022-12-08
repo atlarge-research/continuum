@@ -28,7 +28,9 @@ def os_image(config, machines):
     for machine in machines:
         command = [
             "find",
-            "%s/.continuum/images/ubuntu2004.qcow2" % (config["infrastructure"]["base_path"]),
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/images/ubuntu2004.qcow2"
+            ),
         ]
         output, error = machine.process(config, command, ssh=True)
 
@@ -70,8 +72,10 @@ def base_image(config, machines):
         for base_name in machine.base_names:
             command = [
                 "find",
-                "%s/.continuum/images/%s.qcow2"
-                % (config["infrastructure"]["base_path"], base_name),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/images/%s.qcow2" % (base_name),
+                ),
             ]
             output, error = machine.process(config, command, ssh=True)
 
@@ -92,28 +96,40 @@ def base_image(config, machines):
                 "ansible-playbook",
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_start.yml"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_start.yml",
+                ),
             ]
         elif "base_cloud" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_cloud_start.yml"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_cloud_start.yml",
+                ),
             ]
         elif "base_edge" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_edge_start.yml"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_edge_start.yml",
+                ),
             ]
         elif "base_endpoint" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_endpoint_start.yml"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_endpoint_start.yml",
+                ),
             ]
 
         main.ansible_check_output(machines[0].process(config, command))
@@ -125,19 +141,15 @@ def base_image(config, machines):
         for base_name, base_ip in zip(machine.base_names, machine.base_ips):
             base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
+                path = os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (base_name)
+                )
                 if machine.is_local:
-                    command = (
-                        "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
-                        % (config["infrastructure"]["base_path"], base_name)
-                    )
+                    command = "virsh --connect qemu:///system create %s" % (path)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s/.continuum/domain_%s.xml\"'"
-                        % (
-                            machine.name,
-                            config["infrastructure"]["base_path"],
-                            base_name,
-                        )
+                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
+                        % (machine.name, path)
                     )
 
                 processes.append(machines[0].process(config, command, shell=True, output=False))
@@ -167,21 +179,27 @@ def base_image(config, machines):
                 "ansible-playbook",
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"),
+                os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"
+                ),
             ]
         elif "base_edge" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"),
+                os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"
+                ),
             ]
         elif "base_endpoint" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"),
+                os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"
+                ),
             ]
 
         if command != []:
@@ -198,7 +216,9 @@ def base_image(config, machines):
         "ansible-playbook",
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"),
+        os.path.join(
+            config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
+        ),
     ]
     main.ansible_check_output(machines[0].process(config, command))
 
@@ -286,15 +306,15 @@ def launch_vms(config, machines, repeat=[]):
                 + machine.edge_names
                 + machine.endpoint_names
             ):
+                path = os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (name)
+                )
                 if machine.is_local:
-                    command = (
-                        "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
-                        % (config["infrastructure"]["base_path"], name)
-                    )
+                    command = "virsh --connect qemu:///system create %s" % (path)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s/.continuum/domain_%s.xml\"'"
-                        % (machine.name, config["infrastructure"]["base_path"], name)
+                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
+                        % (machine.name, path)
                     )
 
                 processes.append(machines[0].process(config, command, shell=True, output=False))
@@ -350,8 +370,10 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            os.path.join(config["infrastructure"]["base_path"],".continuum/inventory"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"
+            ),
         ]
         main.ansible_check_output(machines[0].process(config, command))
 
@@ -361,7 +383,9 @@ def start(config, machines):
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"),
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"
+            ),
         ]
         main.ansible_check_output(machines[0].process(config, command))
 
@@ -371,7 +395,10 @@ def start(config, machines):
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/endpoint_start.yml"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/infrastructure/endpoint_start.yml",
+            ),
         ]
         main.ansible_check_output(machines[0].process(config, command))
 

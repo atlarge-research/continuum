@@ -148,16 +148,6 @@ using the --file option"""
 def delete_vms(config, machines):
     """The benchmark has been completed succesfully, now delete the VMs.
 
-    TODO This deletes VMs using your current IP range, which might not be the same as your previous run
-    TODO This only deletes images from one /8 range, so 100.100.100.*. If you used more than 255 VMs
-         in your previous runs, you moved to 100.100.101.*, and those won't be removed since
-         this script doesn't know anymore which IP ranges belonged to the previous user
-
-    TODO The easiest fix is to append the hostname to the VM, this is unique and persists over runs
-         However, this doesn't work for multiple users on the same account, which is part of a demo
-         After the demo, the multiple-users-on-same-account setting won't be supported anymore,
-         so switch to hostnames in VM names instead of IPs
-
     Args:
         machines (list(Machine object)): List of machine objects representing physical machines
     """
@@ -205,7 +195,11 @@ def create_keypair(config, machines):
 [[ ! -f %s.pub ]] && 
 cd %s &&
 ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q"""
-                % (config["ssh_key"], config["home"], os.path.join(".ssh", config["ssh_key"].split("/")[-1]))
+                % (
+                    config["ssh_key"],
+                    config["home"],
+                    os.path.join(".ssh", config["ssh_key"].split("/")[-1]),
+                )
             ]
             output, error = machine.process(config, command, shell=True)
         else:
@@ -313,19 +307,23 @@ def copy_files(config, machines):
 
         # For the local machine, copy the ansible inventory file and benchmark launch
         if machine.is_local:
-            out.append(machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest))
-            out.append(machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest))
+            out.append(
+                machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest)
+            )
+            out.append(
+                machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest)
+            )
 
             if (
                 not config["infrastructure"]["infra_only"]
                 and (config["mode"] == "cloud" or config["mode"] == "edge")
                 and config["benchmark"]["resource_manager"] != "mist"
             ):
-                path = (os.path.join(
+                path = os.path.join(
                     config["base"],
                     "resource_manager",
                     config["benchmark"]["resource_manager"],
-                    "launch_benchmark.yml")
+                    "launch_benchmark.yml",
                 )
                 out.append(machine.copy_files(config, path, dest))
 
@@ -338,20 +336,19 @@ def copy_files(config, machines):
             + machine.base_names
         ):
             out.append(
-                machine.copy_files(config, os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"), dest)
+                machine.copy_files(
+                    config, os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"), dest
+                )
             )
             out.append(
                 machine.copy_files(
-                    config, os.path.join(config["base"], ".tmp","user_data_" + name + ".yml"), dest
+                    config, os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"), dest
                 )
             )
 
         # Copy Ansible files for infrastructure
-        path = (os.path.join(
-            config["base"],
-            "infrastructure",
-            config["infrastructure"]["provider"],
-            "infrastructure")
+        path = os.path.join(
+            config["base"], "infrastructure", config["infrastructure"]["provider"], "infrastructure"
         )
         out.append(machine.copy_files(config, path, dest, recursive=True))
 
@@ -363,7 +360,7 @@ def copy_files(config, machines):
                 if config["benchmark"]["resource_manager"] == "mist":
                     rm = "kubeedge"
 
-                path = os.path.join(config["base"], "resource_manager",rm, "cloud")
+                path = os.path.join(config["base"], "resource_manager", rm, "cloud")
                 out.append(machine.copy_files(config, path, dest, recursive=True))
 
                 if config["mode"] == "edge":
@@ -529,20 +526,24 @@ def docker_pull(config, machines, base_names):
                     if "_%s_" % (config["mode"]) in name:
                         # Subscriber
                         images.append(
-                            "%s/%s" % (config["registry"], config["images"][0].split(":")[1])
+                            os.path.join(config["registry"], config["images"][0].split(":")[1])
                         )
                     elif "_endpoint" in name:
                         # Publisher (+ combined)
                         images.append(
-                            "%s/%s" % (config["registry"], config["images"][1].split(":")[1])
+                            os.path.join(config["registry"], config["images"][1].split(":")[1])
                         )
                         images.append(
-                            "%s/%s" % (config["registry"], config["images"][2].split(":")[1])
+                            os.path.join(config["registry"], config["images"][2].split(":")[1])
                         )
                 elif config["mode"] == "endpoint" and "_endpoint" in name:
                     # Combined (+ publisher)
-                    images.append("%s/%s" % (config["registry"], config["images"][2].split(":")[1]))
-                    images.append("%s/%s" % (config["registry"], config["images"][1].split(":")[1]))
+                    images.append(
+                        os.path.join(config["registry"], config["images"][2].split(":")[1])
+                    )
+                    images.append(
+                        os.path.join(config["registry"], config["images"][1].split(":")[1])
+                    )
 
                 for image in images:
                     command = ["docker", "pull", image]

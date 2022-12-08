@@ -37,7 +37,7 @@ def start_worker(config, machines):
 
     vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s" % (config["registry"], config["images"][0].split(":")[1]),
+        "image": "%s" % (os.path.join(config["registry"], config["images"][0].split(":")[1])),
         "mqtt_logs": True,
         "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / workers),
         "memory_req": cores - 0.5,
@@ -165,7 +165,7 @@ def start_worker_mist(config, machines):
             + [
                 "--name",
                 cont_name,
-                "%s/%s" % (config["registry"], config["images"][0].split(":")[1]),
+                os.path.join(config["registry"], config["images"][0].split(":")[1]),
             ]
         )
 
@@ -297,7 +297,10 @@ def start_endpoint(config, machines):
                 + [
                     "--name",
                     cont_name,
-                    os.path.join(config["registry"], config["images"][1 + (int(config["mode"] == "endpoint"))].split(":")[1]),
+                    os.path.join(
+                        config["registry"],
+                        config["images"][1 + (int(config["mode"] == "endpoint"))].split(":")[1],
+                    ),
                 ]
             )
 
