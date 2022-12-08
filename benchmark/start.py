@@ -37,7 +37,7 @@ def start_worker(config, machines):
 
     vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s" % (os.path.join(config["registry"], config["images"][0].split(":")[1])),
+        "image": os.path.join(config["registry"], config["images"][0].split(":")[1]),
         "mqtt_logs": True,
         "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / workers),
         "memory_req": cores - 0.5,
