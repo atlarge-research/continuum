@@ -41,8 +41,8 @@ def os_image(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["infrastructure"]["base_path"] + "/.continuum/inventory",
-            config["infrastructure"]["base_path"] + "/.continuum/infrastructure/os.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/os.yml"),
         ]
         main.ansible_check_output(machines[0].process(config, command))
 
@@ -91,32 +91,29 @@ def base_image(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                config["infrastructure"]["base_path"] + "/.continuum/inventory",
-                config["infrastructure"]["base_path"] + "/.continuum/infrastructure/base_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_start.yml"),
             ]
         elif "base_cloud" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["infrastructure"]["base_path"] + "/.continuum/inventory",
-                config["infrastructure"]["base_path"]
-                + "/.continuum/infrastructure/base_cloud_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_cloud_start.yml"),
             ]
         elif "base_edge" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["infrastructure"]["base_path"] + "/.continuum/inventory",
-                config["infrastructure"]["base_path"]
-                + "/.continuum/infrastructure/base_edge_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_edge_start.yml"),
             ]
         elif "base_endpoint" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["infrastructure"]["base_path"] + "/.continuum/inventory",
-                config["infrastructure"]["base_path"]
-                + "/.continuum/infrastructure/base_endpoint_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/base_endpoint_start.yml"),
             ]
 
         main.ansible_check_output(machines[0].process(config, command))
@@ -169,22 +166,22 @@ def base_image(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-                config["infrastructure"]["base_path"] + "/.continuum/cloud/base_install.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"),
             ]
         elif "base_edge" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-                config["infrastructure"]["base_path"] + "/.continuum/edge/base_install.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"),
             ]
         elif "base_endpoint" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-                config["infrastructure"]["base_path"] + "/.continuum/endpoint/base_install.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"),
             ]
 
         if command != []:
@@ -200,8 +197,8 @@ def base_image(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
-        config["infrastructure"]["base_path"] + "/.continuum/infrastructure/netperf.yml",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"),
     ]
     main.ansible_check_output(machines[0].process(config, command))
 
@@ -339,8 +336,8 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["infrastructure"]["base_path"] + "/.continuum/inventory",
-        config["infrastructure"]["base_path"] + "/.continuum/infrastructure/remove.yml",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/remove.yml"),
     ]
     main.ansible_check_output(machines[0].process(config, command))
 
@@ -353,8 +350,8 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["infrastructure"]["base_path"] + "/.continuum/inventory",
-            config["infrastructure"]["base_path"] + "/.continuum/infrastructure/cloud_start.yml",
+            os.path.join(config["infrastructure"]["base_path"],".continuum/inventory"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"),
         ]
         main.ansible_check_output(machines[0].process(config, command))
 
@@ -363,8 +360,8 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["infrastructure"]["base_path"] + "/.continuum/inventory",
-            config["infrastructure"]["base_path"] + "/.continuum/infrastructure/edge_start.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"),
         ]
         main.ansible_check_output(machines[0].process(config, command))
 
@@ -373,8 +370,8 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["infrastructure"]["base_path"] + "/.continuum/inventory",
-            config["infrastructure"]["base_path"] + "/.continuum/infrastructure/endpoint_start.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/endpoint_start.yml"),
         ]
         main.ansible_check_output(machines[0].process(config, command))
 

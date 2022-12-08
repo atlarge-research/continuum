@@ -105,7 +105,7 @@ class Model:
 
             if dt >= self.resume:
                 if index == self.resume_index:
-                    path = log_location + "/" + log
+                    path = os.path.join(log_location, log)
                     logging.info("File %s for experiment run %i" % (path, index))
 
                     f = open(path, "r")

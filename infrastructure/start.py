@@ -203,9 +203,9 @@ def create_keypair(config, machines):
             command = [
                 """
 [[ ! -f %s.pub ]] && 
-cd %s/.ssh &&
+cd %s &&
 ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q"""
-                % (config["ssh_key"], config["home"], config["ssh_key"].split("/")[-1])
+                % (config["ssh_key"], config["home"], os.path.join(".ssh", config["ssh_key"].split("/")[-1]))
             ]
             output, error = machine.process(config, command, shell=True)
         else:
@@ -290,7 +290,7 @@ def copy_files(config, machines):
             )
             output, error = machine.process(config, command, shell=True)
 
-            dest = config["infrastructure"]["base_path"] + "/.continuum/"
+            dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
         else:
             command = (
                 'ssh %s "\
@@ -313,19 +313,19 @@ def copy_files(config, machines):
 
         # For the local machine, copy the ansible inventory file and benchmark launch
         if machine.is_local:
-            out.append(machine.copy_files(config, config["base"] + "/.tmp/inventory", dest))
-            out.append(machine.copy_files(config, config["base"] + "/.tmp/inventory_vms", dest))
+            out.append(machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest))
+            out.append(machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest))
 
             if (
                 not config["infrastructure"]["infra_only"]
                 and (config["mode"] == "cloud" or config["mode"] == "edge")
                 and config["benchmark"]["resource_manager"] != "mist"
             ):
-                path = (
-                    config["base"]
-                    + "/resource_manager/"
-                    + config["benchmark"]["resource_manager"]
-                    + "/launch_benchmark.yml"
+                path = (os.path.join(
+                    config["base"],
+                    "resource_manager",
+                    config["benchmark"]["resource_manager"],
+                    "launch_benchmark.yml")
                 )
                 out.append(machine.copy_files(config, path, dest))
 
@@ -338,20 +338,20 @@ def copy_files(config, machines):
             + machine.base_names
         ):
             out.append(
-                machine.copy_files(config, config["base"] + "/.tmp/domain_" + name + ".xml", dest)
+                machine.copy_files(config, os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"), dest)
             )
             out.append(
                 machine.copy_files(
-                    config, config["base"] + "/.tmp/user_data_" + name + ".yml", dest
+                    config, os.path.join(config["base"], ".tmp","user_data_" + name + ".yml"), dest
                 )
             )
 
         # Copy Ansible files for infrastructure
-        path = (
-            config["base"]
-            + "/infrastructure/"
-            + config["infrastructure"]["provider"]
-            + "/infrastructure/"
+        path = (os.path.join(
+            config["base"],
+            "infrastructure",
+            config["infrastructure"]["provider"],
+            "infrastructure")
         )
         out.append(machine.copy_files(config, path, dest, recursive=True))
 
@@ -363,17 +363,17 @@ def copy_files(config, machines):
                 if config["benchmark"]["resource_manager"] == "mist":
                     rm = "kubeedge"
 
-                path = config["base"] + "/resource_manager/" + rm + "/cloud/"
+                path = os.path.join(config["base"], "resource_manager",rm, "cloud")
                 out.append(machine.copy_files(config, path, dest, recursive=True))
 
                 if config["mode"] == "edge":
-                    path = config["base"] + "/resource_manager/" + rm + "/edge/"
+                    path = os.path.join(config["base"], "resource_manager", rm, "edge")
                     out.append(machine.copy_files(config, path, dest, recursive=True))
             if "execution_model" in config:
                 path = os.path.join(config["base"], "execution_model")
                 out.append(machine.copy_files(config, path, dest, recursive=True))
 
-            path = config["base"] + "/resource_manager/endpoint/"
+            path = os.path.join(config["base"], "resource_manager/endpoint/")
             out.append(machine.copy_files(config, path, dest, recursive=True))
 
         for output, error in out:
@@ -412,7 +412,7 @@ def add_ssh(config, machines, base=[]):
 
     # Check if old keys are still in the known hosts file
     for ip in ips:
-        command = ["ssh-keygen", "-f", config["home"] + "/.ssh/known_hosts", "-R", ip]
+        command = ["ssh-keygen", "-f", os.path.join(config["home"], ".ssh/known_hosts"), "-R", ip]
         _, error = machines[0].process(config, command)
 
         if error != [] and not any("not found in" in err for err in error):
@@ -423,7 +423,7 @@ def add_ssh(config, machines, base=[]):
     for ip in ips:
         logging.info("Wait for VM to have started up")
         while True:
-            command = "ssh-keyscan %s >> %s/.ssh/known_hosts" % (ip, config["home"])
+            command = f"ssh-keyscan {ip} >> {os.path.join(config['home'], '.ssh/known_hosts')}"
             _, error = machines[0].process(config, command, shell=True)
 
             if any("# " + str(ip) + ":" in err for err in error):
@@ -486,7 +486,7 @@ def docker_registry(config, machines):
         if not pull:
             continue
 
-        dest = config["registry"] + "/" + image.split(":")[1]
+        dest = os.path.join(config["registry"], image.split(":")[1])
         commands = [
             ["docker", "pull", image],
             ["docker", "tag", image, dest],

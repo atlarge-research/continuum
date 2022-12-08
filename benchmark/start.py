@@ -56,10 +56,10 @@ def start_worker(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["infrastructure"]["base_path"] + "/.continuum/inventory_vms",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         "--extra-vars",
         vars_str[:-1],
-        config["infrastructure"]["base_path"] + "/.continuum/launch_benchmark.yml",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
     ]
     main.ansible_check_output(machines[0].process(config, command))
 
@@ -297,9 +297,7 @@ def start_endpoint(config, machines):
                 + [
                     "--name",
                     cont_name,
-                    config["registry"]
-                    + "/"
-                    + config["images"][1 + (int(config["mode"] == "endpoint"))].split(":")[1],
+                    os.path.join(config["registry"], config["images"][1 + (int(config["mode"] == "endpoint"))].split(":")[1]),
                 ]
             )
 
