@@ -28,17 +28,22 @@
         state: restarted
 
     - name: Initialize the Kubernetes cluster using kubeadm
-      command: kubeadm init --apiserver-advertise-address={{ cloud_ip }} --apiserver-cert-extra-sans={{ cloud_ip }}  --node-name cloud-master --pod-network-cidr=10.244.0.0/16
+      command: >
+        kubeadm init
+          --apiserver-advertise-address={{ cloud_ip }}
+          --apiserver-cert-extra-sans={{ cloud_ip }}
+          --node-name cloud-master
+          --pod-network-cidr=10.244.0.0/16
 
     - name: Create user Kubernetes directory
       file:
-        path: "/home/{{ username }}/.kube"
+        path: /home/{{ username }}/.kube
         state: directory
 
     - name: Copy Kubernetes files to user
       copy:
         src: /etc/kubernetes/admin.conf
-        dest: "/home/{{ username }}/.kube/config"
+        dest: /home/{{ username }}/.kube/config
         owner: "{{ username }}"
         group: "{{ username }}"
         remote_src: true
@@ -57,7 +62,7 @@
     - name: Copy join command to local file
       fetch:
         src: /tmp/join-command.txt
-        dest: "{{ base_path }}/.continuum/"
+        dest: "{{ continuum_home }}/"
         flat: true
 
     - name: Remove unneeded Kubernetes join command file

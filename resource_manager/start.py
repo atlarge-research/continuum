@@ -22,5 +22,6 @@ def start(config, machines):
     if config["mode"] == "cloud" or config["mode"] == "edge":
         start.start(config, machines)
 
-    # Start RM software on endpoints
-    endpoint.start(config, machines)
+    if config["infrastructure"]["endpoint_nodes"]:
+        # Start RM software on endpoints
+        endpoint.start(config, machines)

@@ -24,20 +24,21 @@ def get_endpoint_output(config, machines, container_names):
     """
     logging.info("Extract output from endpoint publishers")
 
-    endpoint_output = []
-    for ssh, cont_name in zip(config["endpoint_ssh"], container_names):
-        logging.info("Get output from endpoint %s on VM %s" % (cont_name, ssh))
+    # Alternatively, use docker logs -t container_name for detailed timestamps
+    # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
+    commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-        # Alternatively, use docker logs -t container_name for detailed timestamps
-        # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
-        command = ["docker", "logs", "-t", cont_name]
-        output, error = machines[0].process(config, command, ssh=True, ssh_target=ssh)
+    results = machines[0].process(config, commands, ssh=config["endpoint_ssh"])
+
+    endpoint_output = []
+    for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
+        logging.info("Get output from endpoint %s on VM %s" % (container, ssh))
 
         if error != []:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
-            logging.error("Container %s output empty" % (cont_name))
+            logging.error("Container %s output empty" % (container))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -66,25 +67,39 @@ def get_worker_output(config, machines):
         "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
         "--sort-by=.spec.nodeName",
     ]
-    output, error = machines[0].process(
-        config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
-    )
+    output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
-    if error != [] or output == []:
+    if (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
+        # TODO: APP specific, move to app folder
         logging.error("".join(error))
         sys.exit()
 
-    # Get output from pods
-    worker_output = []
+    # Gather commands to get logs
+    commands = []
     for line in output[1:]:
         container = line.split(" ")[0]
-        command = ["kubectl", "logs", "--timestamps=true", container]
-        output, error = machines[0].process(
-            config, command, ssh=True, ssh_target=config["cloud_ssh"][0]
-        )
 
-        if error != [] or output == []:
-            logging.error("".join(error))
+        if config["benchmark"]["application"] == "image_classification":
+            command = ["kubectl", "logs", "--timestamps=true", container]
+        elif config["benchmark"]["application"] == "empty":
+            command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
+                container,
+                container,
+            )
+            machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
+
+            command = ["kubectl", "get", "pod", container, "-o", "yaml"]
+
+        commands.append(command)
+
+    # Get the logs
+    results = machines[0].process(config, commands, ssh=config["cloud_ssh"][0])
+
+    # Get the output
+    worker_output = []
+    for i, (output, error) in enumerate(results):
+        if (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
+            logging.error("Container %i: %s" % (i, "".join(error)))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -105,20 +120,21 @@ def get_worker_output_mist(config, machines, container_names):
     """
     logging.info("Gather output from subscribers")
 
-    worker_output = []
-    for ssh, cont_name in zip(config["edge_ssh"], container_names):
-        logging.info("Get output from mist worker %s on VM %s" % (cont_name, ssh))
+    # Alternatively, use docker logs -t container_name for detailed timestamps
+    # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
+    commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-        # Alternatively, use docker logs -t container_name for detailed timestamps
-        # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
-        command = ["docker", "logs", "-t", cont_name]
-        output, error = machines[0].process(config, command, ssh=True, ssh_target=ssh)
+    results = machines[0].process(config, commands, ssh=config["edge_ssh"])
+
+    worker_output = []
+    for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
+        logging.info("Get output from mist worker %s on VM %s" % (container, ssh))
 
         if error != []:
             logging.error("".join(error))
             sys.exit()
         elif output == []:
-            logging.error("Container %s output empty" % (cont_name))
+            logging.error("Container %s output empty" % (container))
             sys.exit()
 
         output = [line.rstrip() for line in output]
@@ -127,7 +143,7 @@ def get_worker_output_mist(config, machines, container_names):
     return worker_output
 
 
-def to_datetime(s):
+def to_datetime_image(s):
     """Parse a datetime string from docker logs to a Python datetime object
 
     Args:
@@ -143,8 +159,96 @@ def to_datetime(s):
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 
 
-def gather_worker_metrics(worker_output):
-    """Gather metrics from cloud or edge workers
+def gather_worker_metrics_empty(machines, worker_output, starttime):
+    """Gather metrics from cloud or edge workers for the empty app
+
+    Args:
+        worker_output (list(list(str))): Output of each container ran on the edge
+        starttime (datetime): Invocation time of the kubectl apply command that launches the benchmark
+
+    Returns:
+        list(dict): List of parsed output for each cloud or edge worker
+    """
+    logging.info("Gather metrics with start time: %s" % (str(starttime)))
+
+    worker_set = {
+        "total_time": None,  # Total scheduling time
+    }
+
+    worker_metrics = []
+    for _ in range(len(worker_output)):
+        worker_metrics.append(copy.deepcopy(worker_set))
+
+    commands = []
+    sshs = []
+
+    # Parse output and build new commands to get final data with
+    for i, out in enumerate(worker_output):
+        containerID = 0
+        nodename = 0
+
+        for line in out:
+            if "nodeName" in line:
+                nodename = line.split("nodeName: ")[1]
+            elif "containerID" in line:
+                containerID = line.split("://")[1]
+                break
+
+        if containerID == 0 or nodename == 0:
+            logging.error("Could not find containerID for pod or scheduled node")
+            sys.exit()
+
+        # Get output from the worker node using journalctl, to get millisecond timing
+        command = (
+            """sudo journalctl -u containerd -o short-precise | grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'"""
+            % (containerID)
+        )
+        commands.append(command)
+
+        for machine in machines:
+            if nodename in machine.cloud_names + machine.edge_names:
+                if nodename in machine.cloud_names:
+                    i = machine.cloud_names.index(nodename)
+                    ip = machine.cloud_ips[i]
+                elif nodename in machine.edge_names:
+                    i = machine.edge_names.index(nodename)
+                    ip = machine.edge_ips[i]
+
+                ssh = "%s@%s" % (nodename, ip)
+                sshs.append(ssh)
+                break
+
+    # Given the commands and the ssh address to execute it at, execute all commands
+    results = machine.process(config, commands, shell=True, ssh=sshs, retryonoutput=True)
+
+    # Parse the final output to get the total execution time
+    for i, (command, (output, error)) in enumerate(zip(commands, results)):
+        if output == []:
+            logging.error("No output for pod %i and command [%s]" % (i, command))
+            sys.exit()
+        if len(output) > 1:
+            logging.error(
+                "Incorrect output for pod %i and command [%s]: %s" % (i, command, "".join(output))
+            )
+            sys.exit()
+        elif error != [] and not all(["[CONTINUUM]" in l for l in error]):
+            logging.error("Error for pod %i and command [%s]: %s" % (i, command, "".join(error)))
+            sys.exit()
+
+        # Now parse the line to datetime with milliseconds
+        dt = output[0].split('time="')[1].split("+")[0]
+        dt = dt.replace("T", " ")
+        dt = dt[:-3]
+        dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
+        end_time = datetime.timestamp(dt)
+
+        worker_metrics[i]["total_time"] = end_time - starttime
+
+    return sorted(worker_metrics, key=lambda x: x["total_time"])
+
+
+def gather_worker_metrics_image(worker_output):
+    """Gather metrics from cloud or edge workers for the image_classification app
 
     Args:
         worker_output (list(list(str))): Output of each container ran on the edge
@@ -182,9 +286,9 @@ def gather_worker_metrics(worker_output):
         negatives = []
         for line in out:
             if start_time == 0 and "Read image and apply ML" in line:
-                start_time = to_datetime(line)
+                start_time = to_datetime_image(line)
             elif "Get item" in line:
-                end_time = to_datetime(line)
+                end_time = to_datetime_image(line)
             elif any(word in line for word in ["Latency", "Processing"]):
                 try:
                     unit = line[line.find("(") + 1 : line.find(")")]
@@ -264,8 +368,8 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         endpoint_metrics.append(copy.deepcopy(endpoint_set))
 
         # Get timestamp from first and last line
-        start_time = to_datetime(out[0])
-        end_time = to_datetime(out[-1])
+        start_time = to_datetime_image(out[0])
+        end_time = to_datetime_image(out[-1])
 
         endpoint_metrics[-1]["total_time"] = round((end_time - start_time).total_seconds(), 2)
         endpoint_metrics[-1]["data_avg"] = 0.0
@@ -344,7 +448,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def gather_metrics(config, worker_output, endpoint_output, container_names):
+def gather_metrics(machines, config, worker_output, endpoint_output, container_names, starttime):
     """Process the raw output to lists of dicts
 
     Args:
@@ -352,6 +456,7 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
         worker_output (list(list(str))): Output of each container ran on the edge
         endpoint_output (list(list(str))): Output of each endpoint container
         container_names (list(str)): Names of docker containers launched
+        starttime (datetime): Invocation time of the kubectl apply command that launches the benchmark
 
     Returns:
         2x list(dict): Metrics of worker nodes and endpoints
@@ -367,22 +472,54 @@ def gather_metrics(config, worker_output, endpoint_output, container_names):
 
             logging.debug("------------------------------------")
 
-    logging.debug("------------------------------------")
-    logging.debug("ENDPOINT OUTPUT")
-    logging.debug("------------------------------------")
-    for out in endpoint_output:
-        for line in out:
-            logging.debug(line)
-
+    if config["infrastructure"]["endpoint_nodes"]:
         logging.debug("------------------------------------")
+        logging.debug("ENDPOINT OUTPUT")
+        logging.debug("------------------------------------")
+        for out in endpoint_output:
+            for line in out:
+                logging.debug(line)
 
-    worker_metrics = gather_worker_metrics(worker_output)
-    endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
+            logging.debug("------------------------------------")
+
+    if config["benchmark"]["application"] == "image_classification":
+        worker_metrics = gather_worker_metrics_image(worker_output)
+    elif config["benchmark"]["application"] == "empty":
+        worker_metrics = gather_worker_metrics_empty(machines, worker_output, starttime)
+
+    endpoint_metrics = []
+    if config["infrastructure"]["endpoint_nodes"]:
+        endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
+
     return worker_metrics, endpoint_metrics
 
 
-def format_output(config, worker_metrics, endpoint_metrics):
-    """Format processed output to provide useful insights
+def format_output_empty(config, worker_metrics):
+    """Format processed output to provide useful insights (empty)
+
+    Args:
+        config (dict): Parsed configuration
+        sub_metrics (list(dict)): Metrics per worker node
+    """
+    logging.info("------------------------------------")
+    logging.info("%s OUTPUT" % (config["mode"].upper()))
+    logging.info("------------------------------------")
+    df = pd.DataFrame(worker_metrics)
+    df.rename(
+        columns={
+            "total_time": "total_time (ms)",
+        },
+        inplace=True,
+    )
+    df_no_indices = df.to_string(index=False)
+    logging.info("\n" + df_no_indices)
+
+    # Print ouput in csv format
+    logging.debug("Output in csv format\n%s" % (repr(df.to_csv())))
+
+
+def format_output_image(config, worker_metrics, endpoint_metrics):
+    """Format processed output to provide useful insights (image_classification)
 
     Args:
         config (dict): Parsed configuration
@@ -407,49 +544,65 @@ def format_output(config, worker_metrics, endpoint_metrics):
         df1_no_indices = df1.to_string(index=False)
         logging.info("\n" + df1_no_indices)
 
-    logging.info("------------------------------------")
-    logging.info("ENDPOINT OUTPUT")
-    logging.info("------------------------------------")
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        df2 = pd.DataFrame(endpoint_metrics)
-        df2.rename(
-            columns={
-                "worker_id": "connected_to",
-                "total_time": "total_time (s)",
-                "proc_avg": "preproc_time/data (ms)",
-                "data_avg": "data_size_avg (kb)",
-                "latency_avg": "latency_avg (ms)",
-                "latency_stdev": "latency_stdev (ms)",
-            },
-            inplace=True,
-        )
-    else:
-        df2 = pd.DataFrame(
-            endpoint_metrics,
-            columns=[
-                "worker_id",
-                "total_time",
-                "proc_avg",
-                "latency_avg",
-                "latency_stdev",
-            ],
-        )
-        df2.rename(
-            columns={
-                "worker_id": "endpoint_id",
-                "total_time": "total_time (s)",
-                "proc_avg": "proc_time/data (ms)",
-                "latency_avg": "latency_avg (ms)",
-                "latency_stdev": "latency_stdev (ms)",
-            },
-            inplace=True,
-        )
+    df2_output = ""
+    if config["infrastructure"]["endpoint_nodes"]:
+        logging.info("------------------------------------")
+        logging.info("ENDPOINT OUTPUT")
+        logging.info("------------------------------------")
+        if config["mode"] == "cloud" or config["mode"] == "edge":
+            df2 = pd.DataFrame(endpoint_metrics)
+            df2.rename(
+                columns={
+                    "worker_id": "connected_to",
+                    "total_time": "total_time (s)",
+                    "proc_avg": "preproc_time/data (ms)",
+                    "data_avg": "data_size_avg (kb)",
+                    "latency_avg": "latency_avg (ms)",
+                    "latency_stdev": "latency_stdev (ms)",
+                },
+                inplace=True,
+            )
+        else:
+            df2 = pd.DataFrame(
+                endpoint_metrics,
+                columns=[
+                    "worker_id",
+                    "total_time",
+                    "proc_avg",
+                    "latency_avg",
+                    "latency_stdev",
+                ],
+            )
+            df2.rename(
+                columns={
+                    "worker_id": "endpoint_id",
+                    "total_time": "total_time (s)",
+                    "proc_avg": "proc_time/data (ms)",
+                    "latency_avg": "latency_avg (ms)",
+                    "latency_stdev": "latency_stdev (ms)",
+                },
+                inplace=True,
+            )
 
-    df2_no_indices = df2.to_string(index=False)
-    logging.info("\n" + df2_no_indices)
+        df2_no_indices = df2.to_string(index=False)
+        logging.info("\n" + df2_no_indices)
 
     # Print ouput in csv format
     if config["mode"] == "cloud" or config["mode"] == "edge":
         logging.debug("Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2.to_csv())))
     else:
         logging.debug("Output in csv format\n%s" % (repr(df2.to_csv())))
+
+
+def format_output(config, worker_metrics, endpoint_metrics):
+    """Format processed output to provide useful insights
+
+    Args:
+        config (dict): Parsed configuration
+        sub_metrics (list(dict)): Metrics per worker node
+        endpoint_metrics (list(dict)): Metrics per endpoint
+    """
+    if config["benchmark"]["application"] == "image_classification":
+        format_output_image(config, worker_metrics, endpoint_metrics)
+    elif config["benchmark"]["application"] == "empty":
+        format_output_empty(config, worker_metrics)

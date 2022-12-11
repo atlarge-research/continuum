@@ -6,12 +6,11 @@ import logging
 import sys
 
 
-def generate_tc_commands(values, overhead, ips, disk):
+def generate_tc_commands(values, ips, disk):
     """Generate TC commands
 
     Args:
         values (list(float)): Avg latency, Var latency, throughput
-        packets_overhead (int): Increase the buffer by x for safety
         ips (list(str)): List of ips to filter TC for
         disk (int): Qdisc to attach to
 
@@ -27,10 +26,21 @@ def generate_tc_commands(values, overhead, ips, disk):
     if disk == 1:
         # Root disk
         commands.append(
-            ["sudo", "tc", "qdisc", "add", "dev", "ens2", "root", "handle", "1:", "htb"]
+            [
+                "sudo",
+                "tc",
+                "qdisc",
+                "add",
+                "dev",
+                "ens2",
+                "root",
+                "handle",
+                "1:",
+                "htb",
+            ]
         )
 
-    # Set latency
+    # Set throughput
     commands.append(
         [
             "sudo",
@@ -75,27 +85,28 @@ def generate_tc_commands(values, overhead, ips, disk):
             ]
         )
 
-    # Set throughput
-    commands.append(
-        [
-            "sudo",
-            "tc",
-            "qdisc",
-            "add",
-            "dev",
-            "ens2",
-            "parent",
-            "1:%i" % (disk),
-            "handle",
-            "%i0:" % (disk),
-            "netem",
-            "delay",
-            "%sms" % (latency_avg),
-            "%sms" % (latency_var),
-            "distribution",
-            "normal",
-        ]
-    )
+    # Set latency
+    if float(latency_avg) > 0.0:
+        commands.append(
+            [
+                "sudo",
+                "tc",
+                "qdisc",
+                "add",
+                "dev",
+                "ens2",
+                "parent",
+                "1:%i" % (disk),
+                "handle",
+                "%i0:" % (disk),
+                "netem",
+                "delay",
+                "%sms" % (latency_avg),
+                "%sms" % (latency_var),
+                "distribution",
+                "normal",
+            ]
+        )
 
     return commands
 
@@ -110,51 +121,48 @@ def tc_values(config):
         5x list(int, int, int): TC network values to be used
     """
     # Default values
-    cloud = [2.5, 1, 1000]  # Between cloud nodes (wired)
+    cloud = [0, 0, 1000]  # Between cloud nodes (wired)
     edge = [7.5, 2.5, 1000]  # Between edge nodes (wired)
     cloud_edge = [7.5, 2.5, 1000]  # Between cloud and edge (wired)
 
-    # Set values based on 4g/5g preset
-    cloud_endpoint = [0, 0, 0]  # Between cloud and endpoint
-    edge_endpoint = [0, 0, 0]  # Between edge and endpoint
-    if "wireless_network_preset" in config["infrastructure"]:
-        if config["infrastructure"]["wireless_network_preset"] == "4g":
-            cloud_endpoint = [45, 5, 7.21]
-            edge_endpoint = [7.5, 2.5, 7.21]
-        elif config["infrastructure"]["wireless_network_preset"] == "5g":
-            cloud_endpoint = [45, 5, 29.66]
-            edge_endpoint = [7.5, 2.5, 29.66]
+    # Set values based on 4g/5g preset (if the user didn't set anything, 4g is default)
+    if config["infrastructure"]["wireless_network_preset"] == "4g":
+        cloud_endpoint = [45, 5, 7.21]
+        edge_endpoint = [7.5, 2.5, 7.21]
+    elif config["infrastructure"]["wireless_network_preset"] == "5g":
+        cloud_endpoint = [45, 5, 29.66]
+        edge_endpoint = [7.5, 2.5, 29.66]
 
     # Overwrite with custom values
-    if "cloud_latency_avg" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_latency_avg"] != -1:
         cloud[0] = config["infrastructure"]["cloud_latency_avg"]
-    if "cloud_latency_var" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_latency_var"] != -1:
         cloud[1] = config["infrastructure"]["cloud_latency_var"]
-    if "cloud_throughput" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_throughput"] != -1:
         cloud[2] = config["infrastructure"]["cloud_throughput"]
-    if "edge_latency_avg" in config["infrastructure"]:
+    if config["infrastructure"]["edge_latency_avg"] != -1:
         edge[0] = config["infrastructure"]["edge_latency_avg"]
-    if "edge_latency_var" in config["infrastructure"]:
+    if config["infrastructure"]["edge_latency_var"] != -1:
         edge[1] = config["infrastructure"]["edge_latency_var"]
-    if "edge_throughput" in config["infrastructure"]:
+    if config["infrastructure"]["edge_throughput"] != -1:
         edge[2] = config["infrastructure"]["edge_throughput"]
-    if "cloud_edge_latency_avg" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_edge_latency_avg"] != -1:
         cloud_edge[0] = config["infrastructure"]["cloud_edge_latency_avg"]
-    if "cloud_edge_latency_var" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_edge_latency_var"] != -1:
         cloud_edge[1] = config["infrastructure"]["cloud_edge_latency_var"]
-    if "cloud_edge_throughput" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_edge_throughput"] != -1:
         cloud_edge[2] = config["infrastructure"]["cloud_edge_throughput"]
-    if "cloud_endpoint_latency_avg" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_endpoint_latency_avg"] != -1:
         cloud_endpoint[0] = config["infrastructure"]["cloud_endpoint_latency_avg"]
-    if "cloud_endpoint_latency_var" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_endpoint_latency_var"] != -1:
         cloud_endpoint[1] = config["infrastructure"]["cloud_endpoint_latency_var"]
-    if "cloud_endpoint_throughput" in config["infrastructure"]:
+    if config["infrastructure"]["cloud_endpoint_throughput"] != -1:
         cloud_endpoint[2] = config["infrastructure"]["cloud_endpoint_throughput"]
-    if "edge_endpoint_latency_avg" in config["infrastructure"]:
+    if config["infrastructure"]["edge_endpoint_latency_avg"] != -1:
         edge_endpoint[0] = config["infrastructure"]["edge_endpoint_latency_avg"]
-    if "edge_endpoint_latency_var" in config["infrastructure"]:
+    if config["infrastructure"]["edge_endpoint_latency_var"] != -1:
         edge_endpoint[1] = config["infrastructure"]["edge_endpoint_latency_var"]
-    if "edge_endpoint_throughput" in config["infrastructure"]:
+    if config["infrastructure"]["edge_endpoint_throughput"] != -1:
         edge_endpoint[2] = config["infrastructure"]["edge_endpoint_throughput"]
 
     return cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint
@@ -170,7 +178,6 @@ def start(config, machines):
     logging.info("Add network latency between VMs")
     cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint = tc_values(config)
 
-    overhead = 2
     commands = []
 
     # For cloud nodes
@@ -181,19 +188,19 @@ def start(config, machines):
         # Between cloud and other cloud nodes
         targets = list(set(config["control_ips"] + config["cloud_ips"]) - set([ssh.split("@")[1]]))
         if targets != []:
-            command += generate_tc_commands(cloud, overhead, targets, disk)
+            command += generate_tc_commands(cloud, targets, disk)
             disk += 1
 
         # Between cloud and edge nodes
         targets = config["edge_ips"]
         if targets != []:
-            command += generate_tc_commands(cloud_edge, overhead, targets, disk)
+            command += generate_tc_commands(cloud_edge, targets, disk)
             disk += 1
 
         # Between cloud and endpoint nodes
         targets = config["endpoint_ips"]
         if targets != []:
-            command += generate_tc_commands(cloud_endpoint, overhead, targets, disk)
+            command += generate_tc_commands(cloud_endpoint, targets, disk)
 
         commands.append(command)
 
@@ -205,19 +212,19 @@ def start(config, machines):
         # Between edge and other edge nodes
         targets = list(set(config["edge_ips"]) - set([ssh.split("@")[1]]))
         if targets != []:
-            command += generate_tc_commands(edge, overhead, targets, disk)
+            command += generate_tc_commands(edge, targets, disk)
             disk += 1
 
         # Between edge and cloud nodes
         targets = config["control_ips"] + config["cloud_ips"]
         if targets != []:
-            command += generate_tc_commands(cloud_edge, overhead, targets, disk)
+            command += generate_tc_commands(cloud_edge, targets, disk)
             disk += 1
 
         # Between edge and endpoint nodes
         targets = config["endpoint_ips"]
         if targets != []:
-            command += generate_tc_commands(edge_endpoint, overhead, targets, disk)
+            command += generate_tc_commands(edge_endpoint, targets, disk)
 
         commands.append(command)
 
@@ -229,23 +236,23 @@ def start(config, machines):
         # Between endpoint and cloud nodes
         targets = config["control_ips"] + config["cloud_ips"]
         if targets != []:
-            command += generate_tc_commands(cloud_endpoint, overhead, targets, disk)
+            command += generate_tc_commands(cloud_endpoint, targets, disk)
             disk += 1
 
         # Between endpoint and edge nodes
         targets = config["edge_ips"]
         if targets != []:
-            command += generate_tc_commands(edge_endpoint, overhead, targets, disk)
+            command += generate_tc_commands(edge_endpoint, targets, disk)
 
         commands.append(command)
 
-    # Execute TC command in parallel
-    processes = []
+    # Generate all TC commands and the ssh addresses where they need to be executed
+    commands_final = []
+    sshs = []
     for ssh, command in zip(
         config["cloud_ssh"] + config["edge_ssh"] + config["endpoint_ssh"], commands
     ):
         if command == []:
-            processes.append(False)
             continue
 
         c = [" ".join(com) for com in command]
@@ -254,25 +261,22 @@ def start(config, machines):
         c = ";".join(c)
         c = '"' + c + '"'
 
-        processes.append(
-            machines[0].process(config, c, shell=True, output=False, ssh=True, ssh_target=ssh)
-        )
+        commands_final.append(c)
+        sshs.append(ssh)
 
-    # Check output of TC commands
-    logging.info("Check output from TC operations")
-    for process in processes:
-        if process == False:
-            continue
+    # Execute TC command in parallel
+    if commands_final != []:
+        results = machines[0].process(config, commands_final, shell=True, ssh=sshs)
 
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
-
-        if error != []:
-            logging.error("".join(error))
-            sys.exit()
-        elif output != []:
-            logging.error("".join(output))
-            sys.exit()
+        # Check output of TC commands
+        logging.info("Check output from TC operations")
+        for output, error in results:
+            if error != []:
+                logging.error("".join(error))
+                sys.exit()
+            elif output != []:
+                logging.error("".join(output))
+                sys.exit()
 
 
 def netperf_commands(target_ips):
@@ -280,7 +284,6 @@ def netperf_commands(target_ips):
 
     Args:
         target_ips (list(str)): List of ips to use netperf to
-        mode (str): Generate latency or throughput commands
 
     Returns:
         list(str): List of netperf commands
@@ -322,7 +325,7 @@ def benchmark_output(
         target_name (str): Type of VMs on the receiving side of netperf
     """
     for target_ip, command in zip(targets + targets, lat_commands + tp_commands):
-        output, error = machine.process(config, command, ssh=True, ssh_target=ssh)
+        output, error = machine.process(config, command, ssh=ssh)[0]
         logging.info(
             "From %s %s to %s %s: %s" % (source_name, ssh, target_name, target_ip, command)
         )
@@ -341,7 +344,7 @@ def benchmark(config, machines):
 
     # Start the netperf netserver on each machine
     for ssh in config["cloud_ssh"] + config["edge_ssh"] + config["endpoint_ssh"]:
-        _, _ = machines[0].process(config, ["netserver"], ssh=True, ssh_target=ssh)
+        _, _ = machines[0].process(config, ["netserver"], ssh=ssh)[0]
 
     # Between cloud nodes
     for ssh in config["cloud_ssh"]:

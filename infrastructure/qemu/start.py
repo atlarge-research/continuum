@@ -32,21 +32,23 @@ def os_image(config, machines):
                 config["infrastructure"]["base_path"], ".continuum/images/ubuntu2004.qcow2"
             ),
         ]
-        output, error = machine.process(config, command, ssh=True)
+        output, error = machine.process(config, command, ssh=machine.name)[0]
 
         if error != [] or output == []:
-            logging.info("Need to install os image")
             need_image = True
             break
 
     if need_image:
+        logging.info("Need to install OS image")
         command = [
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
             os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/os.yml"),
         ]
-        main.ansible_check_output(machines[0].process(config, command))
+        main.ansible_check_output(machines[0].process(config, command)[0])
+    else:
+        logging.info("OS image is already there")
 
 
 def base_image(config, machines):
@@ -57,17 +59,22 @@ def base_image(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Check if new base image(s) needs to be created")
-    base_names = [machine.base_names for machine in machines]
-    base_names = list(
-        set(
-            [
-                item.rsplit("_", 1)[0].rstrip(string.digits)
-                for sublist in base_names
-                for item in sublist
-            ]
-        )
-    )
+
+    # Create a flat list of base_names, without any special characters
+    base_names = []
+    for machine in machines:
+        for base_name in machine.base_names:
+            name = base_name.rsplit("_", 1)[0]
+            name = name.rstrip(string.digits)
+            base_names.append(name)
+
+    # Names can be duplicates across machines, prevent this (TODO: can this be possible?)
+    base_names = list(set(base_names))
+
+    # Create a mask for the previous list
     need_images = [False for _ in range(len(base_names))]
+
+    # Check if all images are available on each machine, otherwise set need_images
     for machine in machines:
         for base_name in machine.base_names:
             command = [
@@ -77,7 +84,7 @@ def base_image(config, machines):
                     ".continuum/images/%s.qcow2" % (base_name),
                 ),
             ]
-            output, error = machine.process(config, command, ssh=True)
+            output, error = machine.process(config, command, ssh=machine.name)[0]
 
             if error != [] or output == []:
                 base_name = base_name.rsplit("_", 1)[0].rstrip(string.digits)
@@ -86,6 +93,7 @@ def base_image(config, machines):
     # Stop if no base images are required
     base_names = [name for name, need in zip(base_names, need_images) if need]
     if base_names == []:
+        logging.info("Base image(s) are all already present")
         return
 
     # Create base images
@@ -132,10 +140,10 @@ def base_image(config, machines):
                 ),
             ]
 
-        main.ansible_check_output(machines[0].process(config, command))
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
-    # Launch the base VMs concurrently
-    processes = []
+    # Create commands to launch the base VMs concurrently
+    commands = []
     base_ips = []
     for machine in machines:
         for base_name, base_ip in zip(machine.base_names, machine.base_ips):
@@ -152,13 +160,15 @@ def base_image(config, machines):
                         % (machine.name, path)
                     )
 
-                processes.append(machines[0].process(config, command, shell=True, output=False))
+                commands.append(command)
                 base_ips.append(base_ip)
 
-    for process in processes:
-        logging.debug("Check output for command [%s]" % ("".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+    # Now launch the VMs
+    results = machines[0].process(config, commands, shell=True)
+
+    # Check if VM launching went as expected
+    for command, (output, error) in zip(commands, results):
+        logging.debug("Check output for command [%s]" % (command))
 
         if error != [] and "Connection to " not in error[0]:
             logging.error("ERROR: %s" % ("".join(error)))
@@ -171,7 +181,7 @@ def base_image(config, machines):
     infrastructure.add_ssh(config, machines, base=base_ips)
 
     # Install software concurrently (ignore infra_only)
-    processes = []
+    commands = []
     for base_name in base_names:
         command = []
         if "base_cloud" in base_name:
@@ -203,13 +213,14 @@ def base_image(config, machines):
             ]
 
         if command != []:
-            processes.append(machines[0].process(config, command, output=False))
+            commands.append(command)
 
-    for process in processes:
-        logging.debug("Check output for command [%s]" % ("".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
-        main.ansible_check_output((output, error))
+    if commands != []:
+        results = machines[0].process(config, commands)
+
+        for command, (output, error) in zip(commands, results):
+            logging.debug("Check output for command [%s]" % (" ".join(command)))
+            main.ansible_check_output((output, error))
 
     # Install netperf (always, because base images aren't updated)
     command = [
@@ -220,14 +231,47 @@ def base_image(config, machines):
             config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
         ),
     ]
-    main.ansible_check_output(machines[0].process(config, command))
+    main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Install docker containers if required
     if not config["infrastructure"]["infra_only"]:
         infrastructure.docker_pull(config, machines, base_names)
 
+    # Get host timezone
+    command = ["ls", "-alh", "/etc/localtime"]
+    output, error = machines[0].process(config, command)[0]
+
+    if output == [] or "/etc/localtime" not in output[0]:
+        logging.error("Could not get host timezone: %s" % ("".join(output)))
+        sys.exit()
+    elif error != []:
+        logging.error("Could not get host timezone: %s" % ("".join(error)))
+        sys.exit()
+
+    timezone = output[0].split("-> ")[1].strip()
+
+    # Fix timezone on every base vm
+    command = ["sudo", "ln", "-sf", timezone, "/etc/localtime"]
+    sshs = []
+    for machine in machines:
+        for ip, name in zip(machine.base_ips, machine.base_names):
+            name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
+            if name_r in base_names:
+                ssh = "%s@%s" % (name, ip)
+                sshs.append(ssh)
+
+    results = machines[0].process(config, command, ssh=sshs)
+
+    for output, error in results:
+        if output != []:
+            logging.error("Could not set VM timezone: %s" % ("".join(output)))
+            sys.exit()
+        elif error != []:
+            logging.error("Could not set VM timezone: %s" % ("".join(error)))
+            sys.exit()
+
     # Clean the VM
-    processes = []
+    commands = []
     for machine in machines:
         for base_name, ip in zip(machine.base_names, machine.base_ips):
             base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
@@ -237,16 +281,16 @@ def base_image(config, machines):
                     ip,
                     config["ssh_key"],
                 )
-                processes.append(machines[0].process(config, command, shell=True, output=False))
+                commands.append(command)
 
-    for process in processes:
-        logging.info("Check output for command [%s]" % ("".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+    results = machines[0].process(config, commands, shell=True)
+
+    for command, (output, error) in zip(commands, results):
+        logging.info("Check output for command [%s]" % (command))
         main.ansible_check_output((output, error))
 
     # Shutdown VMs
-    processes = []
+    commands = []
     for machine in machines:
         for base_name in machine.base_names:
             base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
@@ -259,15 +303,16 @@ def base_image(config, machines):
                         % (machine.name, base_name)
                     )
 
-                processes.append(machines[0].process(config, command, shell=True, output=False))
+                commands.append(command)
 
-    for process in processes:
-        logging.debug("Check output for command [%s]" % ("".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+    results = machines[0].process(config, commands, shell=True)
+
+    for command, (output, error) in zip(commands, results):
+        logging.debug("Check output for command [%s]" % (command))
 
         if error != [] and not (
-            process.args.split(" ")[0] == "ssh" and any(["Connection to " in e for e in error])
+            command.split(" ")[0] == "ssh"
+            and any(["Connection to " in e for e in error])
         ):
             logging.error("".join(error))
             sys.exit()
@@ -297,7 +342,8 @@ def launch_vms(config, machines, repeat=[]):
     # Sometimes previous QEMU commands aren't finished yet, so it's safer to wait a bit to prevent lock errors
     time.sleep(5)
 
-    processes = []
+    commands = []
+    returns = []
     if repeat == []:
         for machine in machines:
             for name in (
@@ -317,22 +363,22 @@ def launch_vms(config, machines, repeat=[]):
                         % (machine.name, path)
                     )
 
-                processes.append(machines[0].process(config, command, shell=True, output=False))
+                commands.append(command)
+
+        results = machines[0].process(config, commands, shell=True)
     else:
         # Only execute specific commands on repeat until VMs are launched succesfully
-        for rep in repeat:
-            processes.append(machines[0].process(config, rep, shell=True, output=False))
+        commands = repeat
+        results = machines[0].process(config, commands, shell=True)
 
     repeat = []
-    for process in processes:
-        logging.debug("Check output for command [%s]" % ("".join(process.args)))
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+    for command, (output, error) in zip(commands, results):
+        logging.debug("Check output for command [%s]" % (command))
 
         if error != [] and "kex_exchange_identification" in error[0]:
             # Repeat execution if key exchange error, can be solved by executing again
             logging.error("ERROR, REPEAT EXECUTION: %s" % ("".join(error)))
-            repeat.append("".join(process.args))
+            repeat.append(command)
         elif error != [] and "Connection to " not in error[0]:
             logging.error("ERROR: %s" % ("".join(error)))
             sys.exit()
@@ -359,7 +405,7 @@ def start(config, machines):
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
         os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/remove.yml"),
     ]
-    main.ansible_check_output(machines[0].process(config, command))
+    main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Check if os and base image need to be created, and if so do create them
     os_image(config, machines)
@@ -375,7 +421,7 @@ def start(config, machines):
                 config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"
             ),
         ]
-        main.ansible_check_output(machines[0].process(config, command))
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Create edge images
     if config["infrastructure"]["edge_nodes"]:
@@ -387,7 +433,7 @@ def start(config, machines):
                 config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"
             ),
         ]
-        main.ansible_check_output(machines[0].process(config, command))
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Create endpoint images
     if config["infrastructure"]["endpoint_nodes"]:
@@ -400,7 +446,7 @@ def start(config, machines):
                 ".continuum/infrastructure/endpoint_start.yml",
             ),
         ]
-        main.ansible_check_output(machines[0].process(config, command))
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Start VMs
     repeat = []

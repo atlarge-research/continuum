@@ -306,7 +306,14 @@ ENDPOINTS/WORKER        %s""" % (
             marker="o",
             markersize=12,
         )
-        ax2.plot(xs[8], ys[8], color="midnightblue", linewidth=3.0, marker="o", markersize=12)
+        ax2.plot(
+            xs[8],
+            ys[8],
+            color="midnightblue",
+            linewidth=3.0,
+            marker="o",
+            markersize=12,
+        )
 
         # Add horizontal lines every 100 percent
         ax1.axhline(y=100, color="k", linestyle="-", linewidth=3)

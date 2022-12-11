@@ -1,0 +1,27 @@
+# See 
+# - https://github.com/kubeflow/examples/blob/master/.pylintrc
+# - https://pylint.pycqa.org/en/latest/user_guide/configuration/all-options.html
+
+[MASTER]
+jobs=0
+
+[REPORTS]
+evaluation=1.0
+
+# [BASIC]
+# good-names=i,j,continuum
+
+[FORMAT]
+max-line-length=88
+
+[LOGGING]
+logging-modules=logging
+
+[DESIGN]
+max-args=10
+max-branches=25
+max-statements=100
+
+# [pre-commit-hook]
+# command=custom_pylint
+# disable=E0401, C0301

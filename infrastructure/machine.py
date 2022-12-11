@@ -9,6 +9,7 @@ import os
 import subprocess
 import re
 import getpass
+import math
 
 
 class Machine:
@@ -53,6 +54,12 @@ class Machine:
         self.edge_names = []
         self.endpoint_names = []
         self.base_names = []
+
+        # Paramiko SSH client
+        self.client_cloud_controller = []
+        self.client_clouds = []
+        self.client_edges = []
+        self.client_endpoints = []
 
     def __repr__(self):
         """Returns this string when called as print(machine_object)"""
@@ -100,7 +107,14 @@ BASE_NAMES              %s""" % (
         )
 
     def process(
-        self, config, command, shell=False, env=None, output=True, ssh=False, ssh_target=None
+        self,
+        config,
+        command,
+        shell=False,
+        env=None,
+        ssh=None,
+        ssh_key=True,
+        retryonoutput=False,
     ):
         """Execute a process using the subprocess library, and return the output/error or the process
 
@@ -110,57 +124,124 @@ BASE_NAMES              %s""" % (
             config (dict): Parsed configuration
             shell (bool, optional): Use the shell for the subprocess. Defaults to False.
             env (dict, optional): Environment variables. Defaults to None.
-            output (bool, optional): Return the output and error, or the process itself. Defaults to True.
-            ssh (bool, optional): Prepend SSH command if machine is not local. Default to False
-            ssh_target (str, optional): VM to SSH into (instead of physical machine). Default to None
+            ssh (str, optional): VM to SSH into (instead of physical machine). Default to None
+            ssh_key (bool, optional): Use the custom SSH key for VMs. Default to True
+            retryonoutput (bool, optional): Retry command on empty output. Default to False
 
         Returns:
-            (list(str), list(str)) OR subprocess object: Return either the output and error generated
-                by this process, or the process object itself.
+            list(list(str), list(str)): Return a list of [output, error] lists, one per command.
         """
+        # Set the right shell executable (such as bash, or pass it directly)
         executable = None
-        if shell == True:
+        if shell:
             executable = "/bin/bash"
 
-        if ssh:
-            if not (self.is_local and ssh_target == None):
-                if ssh_target == None:
-                    add = ["ssh", self.name]
-                else:
-                    add = [
-                        "ssh",
-                        ssh_target,
-                        "-i",
-                        config["ssh_key"],
-                    ]
+        # You can pass a single string if you want to execute 1 command without bash
+        # OR: Passing one list without bash, move into a nested list
+        if type(command) == str or (
+            type(command[0]) == str and all(len(c.split(" ")) == 1 for c in command)
+        ):
+            command = [command]
 
-                if type(command) == str:
-                    command = " ".join(add) + " " + command
-                elif type(command) == list:
-                    command = add + command
+        # Add SSH logic to the command
+        if ssh != None:
+            # SSH can be a list of multiple SSHs
+            if type(ssh) == str:
+                ssh = [ssh]
+
+            # User can pass a single ssh for many commands, fix that
+            if len(ssh) == 1 and len(command) > 1:
+                ssh = ssh * len(command)
+
+            # Other way around: one command, many ssh commands
+            if len(command) == 1 and len(ssh) > 1:
+                command = command * len(ssh)
+
+            for i, (c, s) in enumerate(zip(command, ssh)):
+                if s == None:
+                    # Don't SSH if no target was set
+                    continue
+                elif self.is_local and s == self.name:
+                    # You can't ssh to the machine you're already on
+                    continue
+
+                add = ["ssh", s]
+                if ssh_key and s != self.name:
+                    # You can only use this custom key to SSH to VMs, not to physical machines
+                    add += ["-i", config["ssh_key"]]
+
+                if shell:
+                    # Use bash shell = use a string
+                    command[i] = " ".join(add) + " " + c
                 else:
-                    logging.error(
-                        "ERROR: Command is not type str or list, could not add ssh info.\nCommand: %s"
-                        % (command)
+                    # Don't use a shell, so a list
+                    command[i] = add + c
+
+        # Execute all commands, max 100 at a time
+        batchsize = 100
+        outputs = []
+
+        new_retries = []
+
+        for i in range(math.ceil(len(command) / batchsize)):
+            processes = []
+            for j, c in enumerate(command[i * batchsize : (i + 1) * batchsize]):
+                logging.debug("Start subprocess: %s" % (c))
+                processes.append(
+                    subprocess.Popen(
+                        c,
+                        shell=shell,
+                        executable=executable,
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
                     )
-                    sys.exit()
+                )
 
-        logging.debug("Start subprocess: %s" % (command))
-        process = subprocess.Popen(
-            command,
-            shell=shell,
-            executable=executable,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+            # Get outputs for this batch of commmands (blocking)
+            for j, process in enumerate(processes):
+                output = [line.decode("utf-8") for line in process.stdout.readlines()]
+                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                outputs.append([output, error])
 
-        if output:
-            output = [line.decode("utf-8") for line in process.stdout.readlines()]
-            error = [line.decode("utf-8") for line in process.stderr.readlines()]
-            return output, error
-        else:
-            return process
+                if retryonoutput and output == []:
+                    new_retries.append(i * batchsize + j)
+
+        # Retry commands with empty output
+        max_tries = 5
+        for t in range(max_tries):
+            if new_retries == []:
+                break
+
+            retries = new_retries
+            new_retries = []
+
+            retries.sort()
+            processes = []
+
+            for i in retries:
+                logging.debug("Retry %i, subprocess %i: %s" % (t, i, command[i]))
+                processes.append(
+                    subprocess.Popen(
+                        command[i],
+                        shell=shell,
+                        executable=executable,
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                )
+
+            # Get outputs for this batch of commmands (blocking)
+            for i, process in zip(retries, processes):
+                output = [line.decode("utf-8") for line in process.stdout.readlines()]
+                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                outputs[i] = [output, error]
+
+                if output == []:
+                    new_retries.append(i)
+
+        return outputs
 
     def check_hardware(self, config):
         """Get the amount of physical cores for this machine.
@@ -174,7 +255,7 @@ BASE_NAMES              %s""" % (
         else:
             command = ["ssh", self.name, command]
 
-        output, error = self.process(config, command)
+        output, error = self.process(config, command)[0]
 
         if output == []:
             logging.error("".join(error))
@@ -216,7 +297,7 @@ BASE_NAMES              %s""" % (
         else:
             command = ["scp " + rec + source + " " + dest]
 
-        return self.process(config, command, shell=True)
+        return self.process(config, command, shell=True)[0]
 
 
 def make_machine_objects(config):
@@ -230,9 +311,7 @@ def make_machine_objects(config):
     """
     logging.info("Initialize machine objects")
     machines = []
-    names = ["local"]
-    if "external_physical_machines" in config["infrastructure"]:
-        names += config["infrastructure"]["external_physical_machines"]
+    names = ["local"] + config["infrastructure"]["external_physical_machines"]
 
     for name in names:
         machine = Machine(name, "local" in name)

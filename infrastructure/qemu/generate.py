@@ -15,7 +15,7 @@ DOMAIN = """\
     <memory>%i</memory>
     <os>
         <type>hvm</type>
-        <boot dev="hd" />
+        <boot dev="hd"/>
     </os>
     <features>
         <acpi/>
@@ -113,7 +113,7 @@ def find_bridge(config, machine, bridge):
     """
     output, error = machine.process(
         config, "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
-    )
+    )[0]
     if error != [] or output == []:
         logging.error("ERROR: Could not find a network bridge")
         sys.exit()
@@ -155,7 +155,7 @@ def start(config, machines):
     # Get gateway address
     output, error = machines[0].process(
         config, "ip route | grep ' %s '" % (bridge_name), shell=True
-    )
+    )[0]
     if error != [] or output == []:
         logging.error("ERROR: Could not find gateway address")
         sys.exit()
@@ -185,7 +185,7 @@ def start(config, machines):
     period = 100000
     pinnings = []
 
-    for i, machine in enumerate(machines):
+    for machine in machines:
         # Counter for pinning vcpu to physical cpu
         start_core = 0
 
@@ -195,7 +195,7 @@ def start(config, machines):
             machine.cloud_controller_names + machine.cloud_names,
         ):
             f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = 1048576 * cc
+            memory = int(1048576 * config["infrastructure"]["cloud_memory"])
 
             if config["infrastructure"]["cpu_pin"]:
                 pinnings = [
@@ -234,7 +234,7 @@ def start(config, machines):
         # Edges
         for ip, name in zip(machine.edge_ips, machine.edge_names):
             f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = 1048576 * ec
+            memory = int(1048576 * config["infrastructure"]["edge_memory"])
 
             if config["infrastructure"]["cpu_pin"]:
                 pinnings = [
@@ -266,13 +266,14 @@ def start(config, machines):
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            hostname = name.replace("_", "")
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Endpoints
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
             f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = 1048576 * pc
+            memory = int(1048576 * config["infrastructure"]["endpoint_memory"])
 
             if config["infrastructure"]["cpu_pin"]:
                 pinnings = [
@@ -304,7 +305,8 @@ def start(config, machines):
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            hostname = name.replace("_", "")
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Base image(s)
@@ -334,5 +336,6 @@ def start(config, machines):
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            hostname = name.replace("_", "")
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()

@@ -76,7 +76,7 @@
     - name: Get Calico
       get_url:
         url: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
-        dest: "/"
+        dest: /
         mode: "0755"
 
     - name: Install Mosquitto
@@ -87,3 +87,13 @@
       vars:
         packages:
           - mosquitto=1.6.9-1
+
+    - name: Update SSH settings to allow many parallel sessions
+      blockinfile:
+        path: /etc/ssh/sshd_config
+        block: |
+          MaxSessions 10000
+          MaxStartups 10000
+
+    - name: Reset SSH client
+      command: systemctl restart sshd

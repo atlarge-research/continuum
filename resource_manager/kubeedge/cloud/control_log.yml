@@ -5,7 +5,7 @@
     - name: Get cergen and fix permissions
       get_url:
         url: https://raw.githubusercontent.com/kubeedge/kubeedge/master/build/tools/certgen.sh
-        dest: "/home/{{ username }}"
+        dest: /home/{{ username }}
         mode: "0755"
 
     - name: Move certgen to KubeEdge directory

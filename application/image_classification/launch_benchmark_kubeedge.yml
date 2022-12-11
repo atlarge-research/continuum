@@ -22,11 +22,8 @@
                 imagePullPolicy: Always
                 resources:
                   requests:
-                    memory: "{{ memory_req }}Gi"
+                    memory: "{{ memory_req }}Mi"
                     cpu: {{ cpu_req }}
-                  limits:
-                    memory: "{{ memory_lim }}Gi"
-                    cpu: {{ cpu_lim }}
                 env:
                 - name: MQTT_LOCAL_IP
                   valueFrom:
@@ -43,10 +40,10 @@
 
     - name: Create job directory
       file:
-        path: "/home/{{ username }}/jobs"
+        path: /home/{{ username }}/jobs
         state: directory
 
-    - name: Create job script per cloud / edge node
+    - name: Create job multiple times
       shell: |
         for i in `seq 0 {{ replicas }}`
         do

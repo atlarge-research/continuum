@@ -6,6 +6,7 @@ import sys
 import logging
 import socket
 import string
+import os
 
 
 def create_inventory_machine(config, machines):
@@ -34,11 +35,17 @@ def create_inventory_machine(config, machines):
             base = "base=%s" % (machine.base_names[0])
 
         if machine.is_local:
-            f.write("localhost ansible_connection=local %s\n" % (base))
+            f.write("localhost ansible_connection=local username=%s %s\n" % (machine.user, base))
         else:
             f.write(
-                "%s ansible_connection=ssh ansible_host=%s ansible_user=%s %s\n"
-                % (machine.name_sanitized, machine.ip, machine.user, base)
+                "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n"
+                % (
+                    machine.name_sanitized,
+                    machine.ip,
+                    machine.user,
+                    machine.user,
+                    base,
+                )
             )
 
     # Specific cloud/edge/endpoint groups for installing RM software
@@ -173,7 +180,7 @@ def create_inventory_vm(config, machines):
     f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
     f.write("ansible_ssh_private_key_file=%s\n" % (config["ssh_key"]))
     f.write("registry_ip=%s:%i\n" % (host_ip, 5000))
-    f.write("base_path=%s\n" % (config["infrastructure"]["base_path"]))
+    f.write("continuum_home=%s\n" % (os.path.join(config["infrastructure"]["base_path"], ".continuum")))
 
     if not config["infrastructure"]["infra_only"]:
         # Tier specific groups
@@ -217,14 +224,15 @@ def create_inventory_vm(config, machines):
                         % (name, ip, name, name)
                     )
 
-        # Endpoitn VM group
-        f.write("\n[endpoints]\n")
-        for machine in machines:
-            for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
-                f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
-                    % (name, ip, name, name)
-                )
+        # Endpoint VM group
+        if config["infrastructure"]["endpoint_nodes"]:
+            f.write("\n[endpoints]\n")
+            for machine in machines:
+                for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
+                    f.write(
+                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
+                        % (name, ip, name, name)
+                    )
 
     # Make group with all base VMs for netperf installation
     f.write("\n[base]\n")
@@ -257,13 +265,14 @@ def create_inventory_vm(config, machines):
                             % (name, ip, name, name)
                         )
 
-        f.write("\n[base_endpoint]\n")
-        for machine in machines:
-            for name, ip in zip(machine.base_names, machine.base_ips):
-                if "base_endpoint" in name.rstrip(string.digits):
-                    f.write(
-                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
-                        % (name, ip, name, name)
-                    )
+        if config["infrastructure"]["endpoint_nodes"]:
+            f.write("\n[base_endpoint]\n")
+            for machine in machines:
+                for name, ip in zip(machine.base_names, machine.base_ips):
+                    if "base_endpoint" in name.rstrip(string.digits):
+                        f.write(
+                            "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
+                            % (name, ip, name, name)
+                        )
 
     f.close()

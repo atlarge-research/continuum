@@ -26,4 +26,4 @@ def start(config, machines):
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(config["infrastructure"]["base_path"], ".continuum/endpoint/install.yml"),
     ]
-    main.ansible_check_output(machines[0].process(config, command))
+    main.ansible_check_output(machines[0].process(config, command)[0])
