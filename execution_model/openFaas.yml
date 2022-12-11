@@ -1,0 +1,20 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Install OpenFaaS
+  hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Install Arkade
+      shell: curl -SLsf https://get.arkade.dev/ | sudo sh
+
+    - name: Install OpenFaaS through Arkade
+      become_user: "{{ username }}"
+      shell: arkade install openfaas --set openfaasPRO=False
+
+    - name: Install OpenFaaS CLI
+      shell: curl -SLsf https://cli.openfaas.com | sudo sh
+
+    - name: kubectl - gateway
+      become_user: "{{ username }}"
+      shell: kubectl rollout status -n openfaas deploy/gateway
+

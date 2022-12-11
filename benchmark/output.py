@@ -28,7 +28,7 @@ def get_endpoint_output(config, machines, container_names):
     # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
     commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-    results = machines[0].process(commands, ssh=config["endpoint_ssh"])
+    results = machines[0].process(config, commands, ssh=config["endpoint_ssh"])
 
     endpoint_output = []
     for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
@@ -67,9 +67,10 @@ def get_worker_output(config, machines):
         "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
         "--sort-by=.spec.nodeName",
     ]
-    output, error = machines[0].process(command, ssh=config["cloud_ssh"][0])[0]
+    output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
     if (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
+        # TODO: APP specific, move to app folder
         logging.error("".join(error))
         sys.exit()
 
@@ -78,21 +79,21 @@ def get_worker_output(config, machines):
     for line in output[1:]:
         container = line.split(" ")[0]
 
-        command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
-            container,
-            container,
-        )
-        machines[0].process(command, shell=True, ssh=config["cloud_ssh"][0])
-
         if config["benchmark"]["application"] == "image_classification":
             command = ["kubectl", "logs", "--timestamps=true", container]
         elif config["benchmark"]["application"] == "empty":
+            command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
+                container,
+                container,
+            )
+            machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
+
             command = ["kubectl", "get", "pod", container, "-o", "yaml"]
 
         commands.append(command)
 
     # Get the logs
-    results = machines[0].process(commands, ssh=config["cloud_ssh"][0])
+    results = machines[0].process(config, commands, ssh=config["cloud_ssh"][0])
 
     # Get the output
     worker_output = []
@@ -123,7 +124,7 @@ def get_worker_output_mist(config, machines, container_names):
     # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
     commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-    results = machines[0].process(commands, ssh=config["edge_ssh"])
+    results = machines[0].process(config, commands, ssh=config["edge_ssh"])
 
     worker_output = []
     for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
@@ -218,7 +219,7 @@ def gather_worker_metrics_empty(machines, worker_output, starttime):
                 break
 
     # Given the commands and the ssh address to execute it at, execute all commands
-    results = machine.process(commands, shell=True, ssh=sshs, retryonoutput=True)
+    results = machine.process(config, commands, shell=True, ssh=sshs, retryonoutput=True)
 
     # Parse the final output to get the total execution time
     for i, (command, (output, error)) in enumerate(zip(commands, results)):
@@ -585,13 +586,12 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
 
         df2_no_indices = df2.to_string(index=False)
         logging.info("\n" + df2_no_indices)
-        df2_output = df2.to_csv()
 
     # Print ouput in csv format
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        logging.debug("Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2_output)))
+        logging.debug("Output in csv format\n%s\n%s" % (repr(df1.to_csv()), repr(df2.to_csv())))
     else:
-        logging.debug("Output in csv format\n%s" % (repr(df2_output)))
+        logging.debug("Output in csv format\n%s" % (repr(df2.to_csv())))
 
 
 def format_output(config, worker_metrics, endpoint_metrics):

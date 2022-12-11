@@ -26,35 +26,32 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory_vms",
-            config["home"] + "/.continuum/edge/install_mist.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/install_mist.yml"),
         ]
 
-        output, error = machines[0].process(command)[0]
-        main.ansible_check_output((output, error))
+        main.ansible_check_output(machines[0].process(config, command)[0])
         return
 
     commands = []
 
     # Setup cloud controller
-    command = [
+    commands.append([
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/cloud/control_install.yml",
-    ]
-    commands.append(command)
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/control_install.yml"),
+    ])
 
     # Setup edge
-    command = [
+    commands.append([
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/edge/install.yml",
-    ]
-    commands.append(command)
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/install.yml"),
+    ])
 
-    results = machines[0].process(commands)
+    results = machines[0].process(config, commands)
 
     # Check playbooks
     for command, (output, error) in zip(commands, results):
@@ -68,19 +65,19 @@ def start(config, machines):
         [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory_vms",
-            config["home"] + "/.continuum/cloud/control_log.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/control_log.yml"),
         ]
     )
     commands.append(
         [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory_vms",
-            config["home"] + "/.continuum/edge/log.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/log.yml"),
         ]
     )
 
     # Wait for the cloud to finish before starting the edge
     for command in commands:
-        main.ansible_check_output(machines[0].process(command)[0])
+        main.ansible_check_output(machines[0].process(config, command)[0])

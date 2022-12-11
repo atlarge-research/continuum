@@ -22,7 +22,7 @@
                 imagePullPolicy: Always
                 resources:
                   requests:
-                    memory: "{{ memory_req }}Gi"
+                    memory: "{{ memory_req }}Mi"
                     cpu: {{ cpu_req }}
                 env:
                 - name: MQTT_LOCAL_IP

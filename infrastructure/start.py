@@ -2,6 +2,7 @@
 Impelemnt infrastructure
 """
 import logging
+import os
 import sys
 import time
 import json
@@ -144,27 +145,34 @@ using the --file option"""
     return machines_per_node
 
 
-def delete_vms(machines):
-    """The benchmark has been completed succesfully, now delete the VMs.
+def delete_vms(config, machines):
+    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs, 
+    and possilby at the end if the run if configured by the user
 
     Args:
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info("Start deleting VMs after benchmark has completed")
+    logging.info("Start deleting VMs")
 
     commands = []
     sshs = []
     for machine in machines:
         if machine.is_local:
-            command = 'virsh list --all | grep -o -E "(cloud\w*|edge\w*|endpoint\w*|base\w*)" | xargs -I % sh -c "virsh destroy %"'
+            command = (
+                'virsh list --all | grep -o -E "(\w*_%s)" | xargs -I %% sh -c "virsh destroy %%"'
+                % (config["username"])
+            )
         else:
-            comm = 'virsh list --all | grep -o -E \\"(cloud\w*|edge\w*|endpoint\w*|base\w*)\\" | xargs -I % sh -c \\"virsh destroy %\\"'
+            comm = (
+                'virsh list --all | grep -o -E \\"(\w*_%s)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
+                % (config["username"])
+            )
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
 
         commands.append(command)
         sshs.append(None)
 
-    results = machines[0].process(commands, shell=True, ssh=sshs, ssh_key=False)
+    results = machines[0].process(config, commands, shell=True, ssh=sshs, ssh_key=False)
 
     # Wait for process to finish. Outcome of destroy command does not matter
     for command, (_, _) in zip(commands, results):
@@ -182,17 +190,15 @@ def create_keypair(config, machines):
     logging.info("Create SSH keys to be used with VMs")
     for machine in machines:
         if machine.is_local:
-            command = [
-                "[[ ! -f %s/.ssh/id_rsa_benchmark.pub ]] && \
-cd %s/.ssh && \
-ssh-keygen -t rsa -b 4096 -f id_rsa_benchmark -C KubeEdge -N '' -q"
-                % (config["home"], config["home"])
-            ]
-            output, error = machine.process(command, shell=True)[0]
+            command = "[[ ! -f %s.pub ]] && ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q" % (
+                config["ssh_key"],
+                os.path.join(".ssh", config["ssh_key"].split("/")[-1]),
+            )
+            output, error = machine.process(config, command, shell=True)[0]
         else:
-            source = "%s/.ssh/id_rsa_benchmark*" % (config["home"])
+            source = "%s*" % (config["ssh_key"])
             dest = machine.name + ":./.ssh/"
-            output, error = machine.copy_files(source, dest)
+            output, error = machine.copy_files(config, source, dest)
 
         if error != []:
             logging.error("".join(error))
@@ -207,15 +213,19 @@ ssh-keygen -t rsa -b 4096 -f id_rsa_benchmark -C KubeEdge -N '' -q"
 def create_dir(config, machines):
     """Generate a temporary directory for generated files.
     This directory is located inside the benchmark git repository.
-    Later, that data will be sent to each physical machine's ${HOME}/.continuum directory
+    Later, that data will be sent to each physical machine's
+    config["infrastructure"]["base_path"]/.continuum directory
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Create a temporary directory for generated files")
-    command = "rm -rf %s/.tmp && mkdir %s/.tmp" % (config["base"], config["base"])
-    output, error = machines[0].process(command, shell=True)[0]
+    command = "rm -rf %s && mkdir %s" % (
+        os.path.join(config["base"], ".tmp"),
+        os.path.join(config["base"], ".tmp"),
+    )
+    output, error = machines[0].process(config, command, shell=True)[0]
 
     if error != []:
         logging.error("".join(error))
@@ -225,29 +235,77 @@ def create_dir(config, machines):
         sys.exit()
 
 
-def copy_files(config, machines):
-    """Copy Infrastructure and Ansible files to all machines with directory ${HOME}/.continuum
+def delete_old_content(config, machines):
+    """Delete continuum content from previous runs, excluding base images
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info("Start copying files to all nodes")
-
-    # Create a source directory on each machiine
     commands = []
     for machine in machines:
         if machine.is_local:
-            command = "rm -rf %s/.continuum && mkdir %s/.continuum" % (
-                config["home"],
-                config["home"],
+            command = ("""\
+rm -rf %s/.continuum/cloud && \
+rm -rf %s/.continuum/edge && \
+rm -rf %s/.continuum/endpoint && \
+rm -rf %s/.continuum/execution_model && \
+rm -rf %s/.continuum/infrastructure && \
+find %s/.continuum -maxdepth 1 -type f -delete"""
+                % ((config["infrastructure"]["base_path"],) * 6)
             )
         else:
-            command = 'ssh %s "rm -rf ./.continuum && mkdir ./.continuum"' % (machine.name)
+            command = ("""\
+ssh %s \"\
+rm -rf %s/.continuum/cloud && \
+rm -rf %s/.continuum/edge && \
+rm -rf %s/.continuum/endpoint && \
+rm -rf %s/.continuum/execution_model && \
+rm -rf %s/.continuum/infrastructure && \
+find %s/.continuum -maxdepth 1 -type f -delete\""""
+                % ((machine.name,) + (config["infrastructure"]["base_path"],) * 6)
+            )
+
+        commands.append(command)
+    
+    results = machines[0].process(config, commands, shell=True)
+
+    for output, error in results:
+        if error != [] and not all(["No such file or directory" in line for line in error]):
+            logging.error("".join(error))
+            sys.exit()
+        elif output != []:
+            logging.error("".join(output))
+            sys.exit()
+
+def create_continuum_dir(config, machines):
+    """Create the .continuum and .continuum/images folders for storage
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    commands = []
+    for machine in machines:
+        if machine.is_local:
+            command = (
+                "mkdir -p %s/.continuum && \
+                 mkdir -p %s/.continuum/images"
+                % ((config["infrastructure"]["base_path"],) * 2)
+            )
+            dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
+        else:
+            command = (
+                'ssh %s "\
+                 mkdir -p %s/.continuum && \
+                 mkdir -p %s/.continuum/images"'
+                % ((machine.name,) + (config["infrastructure"]["base_path"],) * 2)
+            )
+            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
         commands.append(command)
 
-    results = machines[0].process(commands, shell=True)
+    results = machines[0].process(config, commands, shell=True)
 
     for output, error in results:
         if error != []:
@@ -257,35 +315,54 @@ def copy_files(config, machines):
             logging.error("".join(output))
             sys.exit()
 
-    # For the local machine, copy the ansible inventory file and benchmark launch
+
+def copy_files(config, machines):
+    """Copy Infrastructure and Ansible files to all machines with
+    directory config["infrastructure"]["base_path"]/.continuum
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Start copying files to all nodes")
+
+    # Delete old content
+    delete_old_content(config, machines)
+
+    # Create a source directory on each machine
+    create_continuum_dir(config, machines)
+
+    # Now copy the files over
     for machine in machines:
         if machine.is_local:
-            dest = config["home"] + "/.continuum/"
+            dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
         else:
-            dest = machine.name + ":./.continuum/"
+            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
         out = []
 
         # For the local machine, copy the ansible inventory file and benchmark launch
         if machine.is_local:
-            out.append(machine.copy_files(config["base"] + "/.tmp/inventory", dest))
-            out.append(machine.copy_files(config["base"] + "/.tmp/inventory_vms", dest))
+            out.append(
+                machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest)
+            )
+            out.append(
+                machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest)
+            )
 
             if (
                 not config["infrastructure"]["infra_only"]
                 and (config["mode"] == "cloud" or config["mode"] == "edge")
                 and config["benchmark"]["resource_manager"] != "mist"
             ):
-                path = (
-                    config["base"]
-                    + "/application/"
-                    + config["benchmark"]["application"]
-                    + "/launch_benchmark_"
-                    + config["benchmark"]["resource_manager"]
-                    + ".yml"
+                path = os.path.join(
+                    config["base"],
+                    "application",
+                    config["benchmark"]["application"],
+                    "launch_benchmark_%s.yml" % (config["benchmark"]["resource_manager"]),
                 )
                 d = dest + "launch_benchmark.yml"
-                out.append(machine.copy_files(path, d))
+                out.append(machine.copy_files(config, path, d))
 
         # Copy VM creation files
         for name in (
@@ -295,19 +372,22 @@ def copy_files(config, machines):
             + machine.endpoint_names
             + machine.base_names
         ):
-            out.append(machine.copy_files(config["base"] + "/.tmp/domain_" + name + ".xml", dest))
             out.append(
-                machine.copy_files(config["base"] + "/.tmp/user_data_" + name + ".yml", dest)
+                machine.copy_files(
+                    config, os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"), dest
+                )
+            )
+            out.append(
+                machine.copy_files(
+                    config, os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"), dest
+                )
             )
 
         # Copy Ansible files for infrastructure
-        path = (
-            config["base"]
-            + "/infrastructure/"
-            + config["infrastructure"]["provider"]
-            + "/infrastructure/"
+        path = os.path.join(
+            config["base"], "infrastructure", config["infrastructure"]["provider"], "infrastructure"
         )
-        out.append(machine.copy_files(path, dest, recursive=True))
+        out.append(machine.copy_files(config, path, dest, recursive=True))
 
         # For cloud/edge/endpoint specific
         if not config["infrastructure"]["infra_only"]:
@@ -317,23 +397,18 @@ def copy_files(config, machines):
                 if config["benchmark"]["resource_manager"] == "mist":
                     rm = "kubeedge"
 
-                if (
-                    config["benchmark"]["resource_manager"] == "kubernetes"
-                    or config["benchmark"]["resource_manager"] == "kubeedge"
-                ):
-                    path = config["base"] + "/resource_manager/kubernetes/config.toml"
-                    out.append(machine.copy_files(path, dest))
-
-                path = config["base"] + "/resource_manager/" + rm + "/cloud/"
-                out.append(machine.copy_files(path, dest, recursive=True))
+                path = os.path.join(config["base"], "resource_manager", rm, "cloud")
+                out.append(machine.copy_files(config, path, dest, recursive=True))
 
                 if config["mode"] == "edge":
-                    path = config["base"] + "/resource_manager/" + rm + "/edge/"
-                    out.append(machine.copy_files(path, dest, recursive=True))
+                    path = os.path.join(config["base"], "resource_manager", rm, "edge")
+                    out.append(machine.copy_files(config, path, dest, recursive=True))
+            if "execution_model" in config:
+                path = os.path.join(config["base"], "execution_model")
+                out.append(machine.copy_files(config, path, dest, recursive=True))
 
-            if config["infrastructure"]["endpoint_nodes"]:
-                path = config["base"] + "/resource_manager/endpoint/"
-                out.append(machine.copy_files(path, dest, recursive=True))
+            path = os.path.join(config["base"], "resource_manager/endpoint/")
+            out.append(machine.copy_files(config, path, dest, recursive=True))
 
         for output, error in out:
             if error != []:
@@ -371,14 +446,8 @@ def add_ssh(config, machines, base=[]):
 
     # Check if old keys are still in the known hosts file
     for ip in ips:
-        command = [
-            "ssh-keygen",
-            "-f",
-            config["home"] + "/.ssh/known_hosts",
-            "-R",
-            ip,
-        ]
-        _, error = machines[0].process(command)[0]
+        command = ["ssh-keygen", "-f", os.path.join(config["home"], ".ssh/known_hosts"), "-R", ip]
+        _, error = machines[0].process(config, command)[0]
 
         if error != [] and not any("not found in" in err for err in error):
             logging.error("".join(error))
@@ -388,8 +457,8 @@ def add_ssh(config, machines, base=[]):
     for ip in ips:
         logging.info("Wait for VM to have started up")
         while True:
-            command = "ssh-keyscan %s >> %s/.ssh/known_hosts" % (ip, config["home"])
-            _, error = machines[0].process(command, shell=True)[0]
+            command = f"ssh-keyscan {ip} >> {os.path.join(config['home'], '.ssh/known_hosts')}"
+            _, error = machines[0].process(config, command, shell=True)[0]
 
             if any("# " + str(ip) + ":" in err for err in error):
                 break
@@ -400,7 +469,7 @@ def add_ssh(config, machines, base=[]):
 
 
 def docker_registry(config, machines):
-    """Create and fill a local, private docker registry without the images needed for the benchmark.
+    """Create and fill a local, private docker registry with the images needed for the benchmark.
     This is to prevent each spawned VM to pull from DockerHub, which has a rate limit.
 
     Args:
@@ -412,7 +481,7 @@ def docker_registry(config, machines):
 
     # Check if registry is up
     command = ["curl", "%s/v2/_catalog" % (config["registry"])]
-    output, error = machines[0].process(command)[0]
+    output, error = machines[0].process(config, command)[0]
 
     if error != [] and any("Failed to connect to" in line for line in error):
         # Not yet up, so launch
@@ -428,7 +497,7 @@ def docker_registry(config, machines):
             "registry",
             "registry:2",
         ]
-        output, error = machines[0].process(command)[0]
+        output, error = machines[0].process(config, command)[0]
 
         if error != [] and not (
             any("Unable to find image" in line for line in error)
@@ -448,35 +517,35 @@ def docker_registry(config, machines):
             if image.split(":")[1] in repos:
                 need_pull[i] = False
 
-    # Add Kubernetes source images, always check if they can be pulled
     images = list(config["images"].values())
-    images_kube = [
-        "redplanet00/kube-proxy:v1.25.3",
-        "redplanet00/kube-controller-manager:v1.25.3",
-        "redplanet00/kube-scheduler:v1.25.3",
-        "redplanet00/kube-apiserver:v1.25.3",
-        "redplanet00/etcd:3.5.4-0",
-        "redplanet00/pause:3.8",
-    ]
-    images += images_kube
-    need_pull += [True] * 6
+
+    # TODO This is RM specific, move this to the RM code
+    if config["benchmark"]["resource_manager"] == "kubernetes-control":
+        images_kube = [
+            "redplanet00/kube-proxy:v1.25.3",
+            "redplanet00/kube-controller-manager:v1.25.3",
+            "redplanet00/kube-scheduler:v1.25.3",
+            "redplanet00/kube-apiserver:v1.25.3",
+            "redplanet00/etcd:3.5.4-0",
+            "redplanet00/pause:3.8",
+        ]
+        images += images_kube
+        need_pull += [True] * 6
 
     # Pull images which aren't present yet in the registry
-    for image, pull in zip(config["images"].values(), need_pull):
+    for image, pull in zip(images, need_pull):
         if not pull:
             continue
 
-        dest = config["registry"] + "/" + image.split(":")[1]
+        dest = os.path.join(config["registry"], image.split(":")[1])
         commands = [
             ["docker", "pull", image],
             ["docker", "tag", image, dest],
             ["docker", "push", dest],
-            ["docker", "image", "remove", image],
-            ["docker", "image", "remove", dest],
         ]
 
         for command in commands:
-            output, error = machines[0].process(command)[0]
+            output, error = machines[0].process(config, command)[0]
 
             if error != []:
                 logging.error("".join(error))
@@ -504,59 +573,47 @@ def docker_pull(config, machines, base_names):
     sshs = []
     for machine in machines:
         for name, ip in zip(machine.base_names, machine.base_ips):
-            name_r = name.rstrip(string.digits)
+            name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
             if name_r in base_names:
                 images = []
 
-                # Load worker application
                 if "_cloud_" in name or "_edge_" in name:
-                    # Kubernetes or KubeEdge use registries for cloud/edge
-                    if (
-                        config["benchmark"]["resource_manager"] == "kubernetes"
-                        or config["benchmark"]["resource_manager"] == "kubeedge"
-                    ):
-                        continue
-
+                    # Load worker application (always in base image for mist deployment)
                     images.append(config["images"]["worker"].split(":")[1])
                 elif "_endpoint" in name:
                     # Load endpoint and combined applications
                     images.append(config["images"]["endpoint"].split(":")[1])
                     images.append(config["images"]["combined"].split(":")[1])
 
-                # Pull
                 for image in images:
-                    command = [
-                        "docker",
-                        "pull",
-                        "%s/%s" % (config["registry"], image),
-                    ]
+                    command = ["docker", "pull", os.path.join(config["registry"], image)]
                     commands.append(command)
                     sshs.append(name + "@" + ip)
 
-    if commands != []:
-        results = machines[0].process(commands, ssh=sshs)
+        if commands != []:
+            results = machines[0].process(config, commands, ssh=sshs)
 
-        for ssh, (output, error) in zip(sshs, results):
-            logging.info("Execute docker pull command on address [%s]" % (ssh))
+            for ssh, (output, error) in zip(sshs, results):
+                logging.info("Execute docker pull command on address [%s]" % (ssh))
 
-            if error != [] and any(
-                "server gave HTTP response to HTTPS client" in line for line in error
-            ):
-                logging.warn(
-                    """\
-    File /etc/docker/daemon.json does not exist, or is empty on machine %s. 
-    This will most likely prevent the machine from pulling endpoint docker images 
-    from the private Docker registry running on the main machine %s.
-    Please create this file on machine %s with content: { "insecure-registries":["%s"] }
-    Followed by a restart of Docker: systemctl restart docker"""
-                    % (ssh, machines[0].name, ssh, config["registry"])
-                )
-            if error != []:
-                logging.error("".join(error))
-                sys.exit()
-            elif output == []:
-                logging.error("No output from command docker pull")
-                sys.exit()
+                if error != [] and any(
+                    "server gave HTTP response to HTTPS client" in line for line in error
+                ):
+                    logging.warn(
+                        """\
+        File /etc/docker/daemon.json does not exist, or is empty on machine %s. 
+        This will most likely prevent the machine from pulling endpoint docker images 
+        from the private Docker registry running on the main machine %s.
+        Please create this file on machine %s with content: { "insecure-registries":["%s"] }
+        Followed by a restart of Docker: systemctl restart docker"""
+                        % (ssh, machines[0].name, ssh, config["registry"])
+                    )
+                if error != []:
+                    logging.error("".join(error))
+                    sys.exit()
+                elif output == []:
+                    logging.error("No output from command docker pull")
+                    sys.exit()
 
 
 def start(config):
@@ -575,7 +632,7 @@ def start(config):
     machines = m.make_machine_objects(config)
 
     for machine in machines:
-        machine.check_hardware()
+        machine.check_hardware(config)
 
     if config["infrastructure"]["cpu_pin"]:
         nodes_per_machine = schedule_pin(config, machines)
@@ -588,7 +645,7 @@ def start(config):
     m.gather_ips(config, machines)
     m.gather_ssh(config, machines)
 
-    delete_vms(machines)
+    delete_vms(config, machines)
     m.print_schedule(machines)
 
     for machine in machines:

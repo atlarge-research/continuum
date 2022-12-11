@@ -34,8 +34,6 @@
           --apiserver-cert-extra-sans={{ cloud_ip }}
           --node-name cloud-master
           --pod-network-cidr=10.244.0.0/16
-          --kubernetes-version=1.25.3
-          --image-repository={{ registry_ip }}
 
     - name: Create user Kubernetes directory
       file:
@@ -59,7 +57,7 @@
     - name: Create join command for worker nodes (cloud-only)
       shell: |
         echo '#!/bin/bash' > /tmp/join-command.txt
-        kubeadm token create \--kubeconfig="/home/{{ username }}/.kube/config" --print-join-command >> /tmp/join-command.txt
+        kubeadm token create --kubeconfig="/home/{{ username }}/.kube/config" --print-join-command >> /tmp/join-command.txt
 
     - name: Copy join command to local file
       fetch:

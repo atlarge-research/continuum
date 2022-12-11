@@ -112,10 +112,7 @@ def send():
                 time.sleep(frame)
                 sec_frame = float(time.time_ns() - start_time) / 10**9
         else:
-            print(
-                "Can't keep up with %f seconds per frame: Took %f"
-                % (SEC_PER_FRAME, sec_frame)
-            )
+            print("Can't keep up with %f seconds per frame: Took %f" % (SEC_PER_FRAME, sec_frame))
 
     # Make sure the finish message arrives
     remote_client.loop_start()

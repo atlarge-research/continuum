@@ -7,7 +7,6 @@ too many things can change depending on user input.
 import logging
 import sys
 import re
-from pathlib import Path
 
 
 DOMAIN = """\
@@ -34,11 +33,17 @@ DOMAIN = """\
         </interface>
         <disk type='file' device='disk'>
             <driver type='qcow2' cache='none'/>
-            <source file='/var/lib/libvirt/images/%s.qcow2'/>
+            <source file='%s/.continuum/images/%s.qcow2'/>
             <target dev='vda' bus='virtio'/>
+            <iotune>
+                <read_bytes_sec>%i</read_bytes_sec>
+                <write_bytes_sec>%i</write_bytes_sec>
+                <read_bytes_sec_max>%i</read_bytes_sec_max>
+                <write_bytes_sec_max>%i</write_bytes_sec_max>
+            </iotune>
         </disk>
         <disk type='file' device='disk'>
-            <source file='/var/lib/libvirt/images/user_data_%s.img'/>
+            <source file='%s/.continuum/images/user_data_%s.img'/>
             <target dev='vdb' bus='virtio'/>
         </disk>
         <console type="pty">
@@ -95,10 +100,11 @@ final_message: "The system is finally up, after $UPTIME seconds"
 """
 
 
-def find_bridge(machine, bridge):
+def find_bridge(config, machine, bridge):
     """Check if bridge <bridge> is available on the system.
 
     Args:
+        config (dict): Parsed configuration
         machine (Machine object): Object representing the physical machine we currently use
         bridge (str): Bridge name to check
 
@@ -106,7 +112,7 @@ def find_bridge(machine, bridge):
         int: Bool representing if we found the bridge on this machine
     """
     output, error = machine.process(
-        "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
+        config, "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
     )[0]
     if error != [] or output == []:
         logging.error("ERROR: Could not find a network bridge")
@@ -125,8 +131,7 @@ def start(config, machines):
     logging.info("Start writing QEMU config files for cloud / edge")
 
     # Get the SSH public key
-    home = str(Path.home())
-    f = open(home + "/.ssh/id_rsa_benchmark.pub", "r")
+    f = open("%s.pub" % (config["ssh_key"]), "r")
     ssh_key = f.read().rstrip()
     f.close()
 
@@ -138,10 +143,10 @@ def start(config, machines):
     # 3. Set the gateway variable to the IP of your gateway (e.g. 10.0.2.2, 192.168.122.1, etc)
     # ------------------------------------------------------------------------------------------------
     # Find out what bridge to use
-    bridge = find_bridge(machines[0], "br0")
+    bridge = find_bridge(config, machines[0], "br0")
     bridge_name = "br0"
     if bridge == 0:
-        bridge = find_bridge(machines[0], "virbr0")
+        bridge = find_bridge(config, machines[0], "virbr0")
         bridge_name = "virbr0"
         if bridge == 0:
             logging.error("ERROR: Could not find a network bridge")
@@ -149,7 +154,7 @@ def start(config, machines):
 
     # Get gateway address
     output, error = machines[0].process(
-        "ip route | grep ' %s '" % (bridge_name), shell=True
+        config, "ip route | grep ' %s '" % (bridge_name), shell=True
     )[0]
     if error != [] or output == []:
         logging.error("ERROR: Could not find gateway address")
@@ -209,7 +214,13 @@ def start(config, machines):
                     int(period * config["infrastructure"]["cloud_quota"]),
                     "\n".join(pinnings),
                     bridge_name,
+                    config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["cloud_read_speed"],
+                    config["infrastructure"]["cloud_write_speed"],
+                    config["infrastructure"]["cloud_read_speed"],
+                    config["infrastructure"]["cloud_write_speed"],
+                    config["infrastructure"]["base_path"],
                     name,
                 )
             )
@@ -217,9 +228,7 @@ def start(config, machines):
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
             hostname = name.replace("_", "")
-            f.write(
-                USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway)
-            )
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Edges
@@ -244,14 +253,21 @@ def start(config, machines):
                     int(period * config["infrastructure"]["edge_quota"]),
                     "\n".join(pinnings),
                     bridge_name,
+                    config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["edge_read_speed"],
+                    config["infrastructure"]["edge_write_speed"],
+                    config["infrastructure"]["edge_read_speed"],
+                    config["infrastructure"]["edge_write_speed"],
+                    config["infrastructure"]["base_path"],
                     name,
                 )
             )
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            hostname = name.replace("_", "")
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Endpoints
@@ -276,23 +292,50 @@ def start(config, machines):
                     int(period * config["infrastructure"]["endpoint_quota"]),
                     "\n".join(pinnings),
                     bridge_name,
+                    config["infrastructure"]["base_path"],
                     name,
+                    config["infrastructure"]["endpoint_read_speed"],
+                    config["infrastructure"]["endpoint_write_speed"],
+                    config["infrastructure"]["endpoint_read_speed"],
+                    config["infrastructure"]["endpoint_write_speed"],
+                    config["infrastructure"]["base_path"],
                     name,
                 )
             )
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            hostname = name.replace("_", "")
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()
 
         # Base image(s)
         for ip, name in zip(machine.base_ips, machine.base_names):
             f = open(".tmp/domain_%s.xml" % (name), "w")
 
-            f.write(DOMAIN % (name, 1048576, 1, 0, 0, "", bridge_name, name, name))
+            f.write(
+                DOMAIN
+                % (
+                    name,
+                    1048576,
+                    1,
+                    0,
+                    0,
+                    "",
+                    bridge_name,
+                    config["infrastructure"]["base_path"],
+                    name,
+                    0,
+                    0,
+                    0,
+                    0,
+                    config["infrastructure"]["base_path"],
+                    name,
+                )
+            )
             f.close()
 
             f = open(".tmp/user_data_%s.yml" % (name), "w")
-            f.write(USER_DATA % (name, name, name, name, ssh_key, name, ip, gateway))
+            hostname = name.replace("_", "")
+            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
             f.close()

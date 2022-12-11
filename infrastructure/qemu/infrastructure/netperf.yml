@@ -18,7 +18,7 @@
     - name: Get Netperf and unarchive it
       unarchive:
         src: https://github.com/HewlettPackard/netperf/archive/refs/tags/netperf-2.7.0.tar.gz
-        dest: /home/{{ username }}
+        dest: "/tmp"
         remote_src: true
 
     - name: Remove unneeded Netperf files
@@ -26,7 +26,7 @@
         path: "{{ item }}"
         state: absent
       with_items:
-        - /home/{{ username }}/netperf-2.7.0.tar.gz
+        - "/tmp/netperf-2.7.0.tar.gz"
 
     - name: Install netperf dependencies
       apt:
@@ -44,4 +44,4 @@
         make
         make install
       args:
-        chdir: /home/{{ username }}/netperf-netperf-2.7.0/
+        chdir: "/tmp/netperf-netperf-2.7.0/"

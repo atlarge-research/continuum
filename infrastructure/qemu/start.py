@@ -26,8 +26,13 @@ def os_image(config, machines):
     logging.info("Check if a new OS image needs to be created")
     need_image = False
     for machine in machines:
-        command = ["find", "/var/lib/libvirt/images/ubuntu2004.qcow2"]
-        output, error = machine.process(command, ssh=machine.name)[0]
+        command = [
+            "find",
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/images/ubuntu2004.qcow2"
+            ),
+        ]
+        output, error = machine.process(config, command, ssh=machine.name)[0]
 
         if error != [] or output == []:
             need_image = True
@@ -38,10 +43,10 @@ def os_image(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory",
-            config["home"] + "/.continuum/infrastructure/os.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/os.yml"),
         ]
-        main.ansible_check_output(machines[0].process(command)[0])
+        main.ansible_check_output(machines[0].process(config, command)[0])
     else:
         logging.info("OS image is already there")
 
@@ -59,7 +64,8 @@ def base_image(config, machines):
     base_names = []
     for machine in machines:
         for base_name in machine.base_names:
-            name = base_name.rstrip(string.digits)
+            name = base_name.rsplit("_", 1)[0]
+            name = name.rstrip(string.digits)
             base_names.append(name)
 
     # Names can be duplicates across machines, prevent this (TODO: can this be possible?)
@@ -71,11 +77,17 @@ def base_image(config, machines):
     # Check if all images are available on each machine, otherwise set need_images
     for machine in machines:
         for base_name in machine.base_names:
-            command = ["find", "/var/lib/libvirt/images/%s.qcow2" % (base_name)]
-            output, error = machine.process(command, ssh=machine.name)[0]
+            command = [
+                "find",
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/images/%s.qcow2" % (base_name),
+                ),
+            ]
+            output, error = machine.process(config, command, ssh=machine.name)[0]
 
             if error != [] or output == []:
-                base_name = base_name.rstrip(string.digits)
+                base_name = base_name.rsplit("_", 1)[0].rstrip(string.digits)
                 need_images[base_names.index(base_name)] = True
 
     # Stop if no base images are required
@@ -91,56 +103,68 @@ def base_image(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                config["home"] + "/.continuum/inventory",
-                config["home"] + "/.continuum/infrastructure/base_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_start.yml",
+                ),
             ]
         elif "base_cloud" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["home"] + "/.continuum/inventory",
-                config["home"] + "/.continuum/infrastructure/base_cloud_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_cloud_start.yml",
+                ),
             ]
         elif "base_edge" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["home"] + "/.continuum/inventory",
-                config["home"] + "/.continuum/infrastructure/base_edge_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_edge_start.yml",
+                ),
             ]
         elif "base_endpoint" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["home"] + "/.continuum/inventory",
-                config["home"] + "/.continuum/infrastructure/base_endpoint_start.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_endpoint_start.yml",
+                ),
             ]
 
-        main.ansible_check_output(machines[0].process(command)[0])
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Create commands to launch the base VMs concurrently
     commands = []
     base_ips = []
     for machine in machines:
         for base_name, base_ip in zip(machine.base_names, machine.base_ips):
-            base_name_r = base_name.rstrip(string.digits)
+            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
+                path = os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (base_name)
+                )
                 if machine.is_local:
-                    command = (
-                        "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
-                        % (config["home"], base_name)
-                    )
+                    command = "virsh --connect qemu:///system create %s" % (path)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s/.continuum/domain_%s.xml\"'"
-                        % (machine.name, config["home"], base_name)
+                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
+                        % (machine.name, path)
                     )
 
                 commands.append(command)
                 base_ips.append(base_ip)
 
     # Now launch the VMs
-    results = machines[0].process(commands, shell=True)
+    results = machines[0].process(config, commands, shell=True)
 
     # Check if VM launching went as expected
     for command, (output, error) in zip(commands, results):
@@ -164,29 +188,35 @@ def base_image(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                config["home"] + "/.continuum/inventory_vms",
-                config["home"] + "/.continuum/cloud/base_install.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"
+                ),
             ]
         elif "base_edge" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["home"] + "/.continuum/inventory_vms",
-                config["home"] + "/.continuum/edge/base_install.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"
+                ),
             ]
         elif "base_endpoint" in base_name:
             command = [
                 "ansible-playbook",
                 "-i",
-                config["home"] + "/.continuum/inventory_vms",
-                config["home"] + "/.continuum/endpoint/base_install.yml",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"
+                ),
             ]
 
         if command != []:
             commands.append(command)
 
     if commands != []:
-        results = machines[0].process(commands)
+        results = machines[0].process(config, commands)
 
         for command, (output, error) in zip(commands, results):
             logging.debug("Check output for command [%s]" % (" ".join(command)))
@@ -196,10 +226,12 @@ def base_image(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory_vms",
-        config["home"] + "/.continuum/infrastructure/netperf.yml",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(
+            config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
+        ),
     ]
-    main.ansible_check_output(machines[0].process(command)[0])
+    main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Install docker containers if required
     if not config["infrastructure"]["infra_only"]:
@@ -207,7 +239,7 @@ def base_image(config, machines):
 
     # Get host timezone
     command = ["ls", "-alh", "/etc/localtime"]
-    output, error = machines[0].process(command)[0]
+    output, error = machines[0].process(config, command)[0]
 
     if output == [] or "/etc/localtime" not in output[0]:
         logging.error("Could not get host timezone: %s" % ("".join(output)))
@@ -223,10 +255,12 @@ def base_image(config, machines):
     sshs = []
     for machine in machines:
         for ip, name in zip(machine.base_ips, machine.base_names):
-            ssh = "%s@%s" % (name, ip)
-            sshs.append(ssh)
+            name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
+            if name_r in base_names:
+                ssh = "%s@%s" % (name, ip)
+                sshs.append(ssh)
 
-    results = machines[0].process(command, ssh=sshs)
+    results = machines[0].process(config, command, ssh=sshs)
 
     for output, error in results:
         if output != []:
@@ -240,15 +274,16 @@ def base_image(config, machines):
     commands = []
     for machine in machines:
         for base_name, ip in zip(machine.base_names, machine.base_ips):
-            base_name_r = base_name.rstrip(string.digits)
+            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
-                command = (
-                    "ssh %s@%s -i %s/.ssh/id_rsa_benchmark sudo cloud-init clean"
-                    % (base_name, ip, config["home"])
+                command = "ssh %s@%s -i %s sudo cloud-init clean" % (
+                    base_name,
+                    ip,
+                    config["ssh_key"],
                 )
                 commands.append(command)
 
-    results = machines[0].process(commands, shell=True)
+    results = machines[0].process(config, commands, shell=True)
 
     for command, (output, error) in zip(commands, results):
         logging.info("Check output for command [%s]" % (command))
@@ -258,7 +293,7 @@ def base_image(config, machines):
     commands = []
     for machine in machines:
         for base_name in machine.base_names:
-            base_name_r = base_name.rstrip(string.digits)
+            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
                 if machine.is_local:
                     command = "virsh --connect qemu:///system shutdown %s" % (base_name)
@@ -270,7 +305,7 @@ def base_image(config, machines):
 
                 commands.append(command)
 
-    results = machines[0].process(command, shell=True)
+    results = machines[0].process(config, commands, shell=True)
 
     for command, (output, error) in zip(commands, results):
         logging.debug("Check output for command [%s]" % (command))
@@ -317,24 +352,24 @@ def launch_vms(config, machines, repeat=[]):
                 + machine.edge_names
                 + machine.endpoint_names
             ):
+                path = os.path.join(
+                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (name)
+                )
                 if machine.is_local:
-                    command = (
-                        "virsh --connect qemu:///system create %s/.continuum/domain_%s.xml"
-                        % (config["home"], name)
-                    )
+                    command = "virsh --connect qemu:///system create %s" % (path)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s/.continuum/domain_%s.xml\"'"
-                        % (machine.name, config["home"], name)
+                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
+                        % (machine.name, path)
                     )
 
                 commands.append(command)
 
-        results = machines[0].process(commands, shell=True)
+        results = machines[0].process(config, commands, shell=True)
     else:
         # Only execute specific commands on repeat until VMs are launched succesfully
         commands = repeat
-        results = machines[0].process(commands, shell=True)
+        results = machines[0].process(config, commands, shell=True)
 
     repeat = []
     for command, (output, error) in zip(commands, results):
@@ -367,10 +402,10 @@ def start(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        config["home"] + "/.continuum/inventory",
-        config["home"] + "/.continuum/infrastructure/remove.yml",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/remove.yml"),
     ]
-    main.ansible_check_output(machines[0].process(command)[0])
+    main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Check if os and base image need to be created, and if so do create them
     os_image(config, machines)
@@ -381,30 +416,37 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory",
-            config["home"] + "/.continuum/infrastructure/cloud_start.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"
+            ),
         ]
-        main.ansible_check_output(machines[0].process(command)[0])
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Create edge images
     if config["infrastructure"]["edge_nodes"]:
         command = [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory",
-            config["home"] + "/.continuum/infrastructure/edge_start.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"
+            ),
         ]
-        main.ansible_check_output(machines[0].process(command)[0])
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Create endpoint images
     if config["infrastructure"]["endpoint_nodes"]:
         command = [
             "ansible-playbook",
             "-i",
-            config["home"] + "/.continuum/inventory",
-            config["home"] + "/.continuum/infrastructure/endpoint_start.yml",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/infrastructure/endpoint_start.yml",
+            ),
         ]
-        main.ansible_check_output(machines[0].process(command)[0])
+        main.ansible_check_output(machines[0].process(config, command)[0])
 
     # Start VMs
     repeat = []

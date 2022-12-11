@@ -108,6 +108,7 @@ BASE_NAMES              %s""" % (
 
     def process(
         self,
+        config,
         command,
         shell=False,
         env=None,
@@ -120,6 +121,7 @@ BASE_NAMES              %s""" % (
         Args:
             command (str or list(str)): Command to be executed. Either a string can be given
                 (when using the shell) or a list of strings (when not using the shell)
+            config (dict): Parsed configuration
             shell (bool, optional): Use the shell for the subprocess. Defaults to False.
             env (dict, optional): Environment variables. Defaults to None.
             ssh (str, optional): VM to SSH into (instead of physical machine). Default to None
@@ -166,7 +168,7 @@ BASE_NAMES              %s""" % (
                 add = ["ssh", s]
                 if ssh_key and s != self.name:
                     # You can only use this custom key to SSH to VMs, not to physical machines
-                    add += ["-i", str(os.getenv("HOME")) + "/.ssh/id_rsa_benchmark"]
+                    add += ["-i", config["ssh_key"]]
 
                 if shell:
                     # Use bash shell = use a string
@@ -241,7 +243,7 @@ BASE_NAMES              %s""" % (
 
         return outputs
 
-    def check_hardware(self):
+    def check_hardware(self, config):
         """Get the amount of physical cores for this machine.
         This automatically functions as reachability check for this machine.
         """
@@ -253,7 +255,7 @@ BASE_NAMES              %s""" % (
         else:
             command = ["ssh", self.name, command]
 
-        output, error = self.process(command)[0]
+        output, error = self.process(config, command)[0]
 
         if output == []:
             logging.error("".join(error))
@@ -268,19 +270,14 @@ BASE_NAMES              %s""" % (
                     threads_per_core = int(line.split(":")[-1])
 
             if threads == -1 or threads_per_core == -1:
-                logging.error(
-                    "Command did not produce the expected output: %s"
-                    % ("".join(output))
-                )
+                logging.error("Command did not produce the expected output: %s" % ("".join(output)))
                 sys.exit()
 
-            logging.debug(
-                "Threads: %s | Threads_per_core: %s" % (threads, threads_per_core)
-            )
+            logging.debug("Threads: %s | Threads_per_core: %s" % (threads, threads_per_core))
 
             self.cores = int(threads / threads_per_core)
 
-    def copy_files(self, source, dest, recursive=False):
+    def copy_files(self, config, source, dest, recursive=False):
         """Copy files from host machine to destination machine.
 
         Args:
@@ -300,7 +297,7 @@ BASE_NAMES              %s""" % (
         else:
             command = ["scp " + rec + source + " " + dest]
 
-        return self.process(command, shell=True)[0]
+        return self.process(config, command, shell=True)[0]
 
 
 def make_machine_objects(config):
@@ -314,9 +311,7 @@ def make_machine_objects(config):
     """
     logging.info("Initialize machine objects")
     machines = []
-    names = ["local"]
-    if "external_physical_machines" in config["infrastructure"]:
-        names += config["infrastructure"]["external_physical_machines"]
+    names = ["local"] + config["infrastructure"]["external_physical_machines"]
 
     for name in names:
         machine = Machine(name, "local" in name)
@@ -453,10 +448,10 @@ def set_ip_names(config, machines, nodes_per_machine):
             the number of those machines per physical node
     """
     logging.info("Set the IPs and names of all VMs for each physical machine")
-    middle_ip = config["middleIP"]
+    middle_ip = config["infrastructure"]["middleIP"]
     postfix_ip = config["postfixIP_lower"]
 
-    middle_ip_base = config["middleIP_base"]
+    middle_ip_base = config["infrastructure"]["middleIP_base"]
     postfix_ip_base = config["postfixIP_lower"]
 
     cloud_index = 0
@@ -474,9 +469,11 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.cloud_controller = int(nodes["cloud"] > 0)
             machine.clouds = nodes["cloud"] - int(nodes["cloud"] > 0)
 
-            ip = "%s.%s.%s" % (config["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.cloud_controller_ips.append(ip)
-            machine.cloud_controller_names.append("cloud_controller")
+
+            name = "cloud_controller_%s" % (config["username"])
+            machine.cloud_controller_names.append(name)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
         else:
             machine.cloud_controller = 0
@@ -487,75 +484,89 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for cloud
         for _ in range(machine.clouds):
-            ip = "%s.%s.%s" % (config["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.cloud_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
-            name = "cloud" + str(cloud_index)
+            name = "cloud%i_%s" % (cloud_index, config["username"])
             machine.cloud_names.append(name)
             cloud_index += 1
 
         # Set IP / name for edge
         for _ in range(machine.edges):
-            ip = "%s.%s.%s" % (config["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.edge_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
-            name = "edge" + str(edge_index)
+            name = "edge%i_%s" % (edge_index, config["username"])
             machine.edge_names.append(name)
             edge_index += 1
 
         # Set IP / name for endpoint
         for _ in range(machine.endpoints):
-            ip = "%s.%s.%s" % (config["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.endpoint_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
-            name = "endpoint" + str(endpoint_index)
+            name = "endpoint%i_%s" % (endpoint_index, config["username"])
             machine.endpoint_names.append(name)
             endpoint_index += 1
 
         # Set IP / name for base image(s)
         if config["infrastructure"]["infra_only"]:
-            machine.base_ips.append(
-                "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip_base,
+                postfix_ip_base,
             )
-            machine.base_names.append("base" + str(i))
-            middle_ip_base, postfix_ip_base = update_ip(
-                config, middle_ip_base, postfix_ip_base
-            )
+            machine.base_ips.append(ip)
+
+            name = "base%i_%s" % (i, config["username"])
+            machine.base_names.append(name)
+            middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
         else:
-            # Use Kubeedge setup code for mist computing
-            rm = config["benchmark"]["resource_manager"]
-            if config["benchmark"]["resource_manager"] == "mist":
-                rm = "kubeedge"
+            # Base images for resource manager images
+            if "resource_manager" in config["benchmark"]:
+                # Use Kubeedge setup code for mist computing
+                rm = config["benchmark"]["resource_manager"]
+                if config["benchmark"]["resource_manager"] == "mist":
+                    rm = "kubeedge"
 
             if machine.cloud_controller + machine.clouds > 0:
-                machine.base_ips.append(
-                    "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
                 )
-                machine.base_names.append("base_cloud_%s%i" % (rm, i))
-                middle_ip_base, postfix_ip_base = update_ip(
-                    config, middle_ip_base, postfix_ip_base
-                )
+                machine.base_ips.append(ip)
+
+                name = "base_cloud_%s%i_%s" % (rm, i, config["username"])
+                machine.base_names.append(name)
+                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.edges > 0:
-                machine.base_ips.append(
-                    "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
                 )
-                machine.base_names.append("base_edge_%s%i" % (rm, i))
-                middle_ip_base, postfix_ip_base = update_ip(
-                    config, middle_ip_base, postfix_ip_base
-                )
+                machine.base_ips.append(ip)
+
+                name = "base_edge_%s%i_%s" % (rm, i, config["username"])
+                machine.base_names.append(name)
+                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
             if machine.endpoints > 0:
-                machine.base_ips.append(
-                    "%s.%s.%s" % (config["prefixIP"], middle_ip_base, postfix_ip_base)
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
                 )
-                machine.base_names.append("base_endpoint%i" % (i))
-                middle_ip_base, postfix_ip_base = update_ip(
-                    config, middle_ip_base, postfix_ip_base
-                )
+                machine.base_ips.append(ip)
+
+                name = "base_endpoint%i_%s" % (i, config["username"])
+                machine.base_names.append(name)
+                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
 
 
 def print_schedule(machines):
@@ -568,10 +579,7 @@ def print_schedule(machines):
     logging.info("Schedule of VMs and containers on physical machines")
     logging.info("-" * 78)
 
-    logging.info(
-        "%-30s %-15s %-15s %-15s"
-        % ("Machine", "Cloud nodes", "Edge nodes", "Endpoints")
-    )
+    logging.info("%-30s %-15s %-15s %-15s" % ("Machine", "Cloud nodes", "Edge nodes", "Endpoints"))
 
     for machine in machines:
         logging.info(
