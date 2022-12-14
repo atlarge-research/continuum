@@ -62,8 +62,8 @@ For this demo, you will get access to VU compute servers.
 We currently only support this demo on our own servers.
 
 1. Send a public SSH key to the provided email address. You will receive a username `asci-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`.
-2. Access the headnode of the cluster over SSH: `ssh -L 3000:192.168.ZZZ.2:3000 asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using the X and ZZZ from step 1.
-3. Access the specific server: `ssh -L 3000:192.168.ZZZ.2:3000 nodeX`, using the X and ZZZ from step 1.
+2. Access the headnode of the cluster over SSH: `ssh asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using the X and ZZZ from step 1.
+3. Access the specific server: `ssh nodeX`, using the X and ZZZ from step 1.
 4. Now you are in your home directory on one of the servers. Most likely, continuum repository should already be cloned for you, you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo.
 
 ### Part 2: Deploy Continuum with Kubernetes and KubeEdge
@@ -104,7 +104,10 @@ You should already have received an explanation on this during the presentation.
 
 ## Part 3: Deploy Continuum with OpenFaaS
 1. Start Continuum with Kubernetes and OpenFaaS, while inside the Continuum repository: `python3 main.py configuration/openfaas-cloud.cfg`. Wait for this to complete.
-2. This time, no application has started yet. We will do that now. Go to `cd DS-serverless/deployment`. Here we will start the serverless functions inside our Kubernetes / OpenFaaS cluster, and monitor the state of the applications. Do `pyinfra inventory.py deploy.py`. If it crashes during execution, execute this command again (this may sometimes happen). If it still doesn't work after several retries, please contact the teaching staff. 
+2. Open an SSH tunnel in a new terminal:
+    1. To the headnode of the cluster, from your local computer: `ssh -L 3000:192.168.ZZZ.2:3000 asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using the X and ZZZ from step 1.
+    3. From the headnode to the specific machine: `ssh -L 3000:192.168.ZZZ.2:3000 nodeX`, using the X and ZZZ from step 1.
+2. No application has started yet in step 1. We will do that now. Go to `cd DS-serverless/deployment`. Here we will start the serverless functions inside our Kubernetes / OpenFaaS cluster, and monitor the state of the applications. Do `pyinfra inventory.py deploy.py`. If it crashes during execution, execute this command again (this may sometimes happen). If it still doesn't work after several retries, please contact the teaching staff. 
 3. If you used the correct SSH commands noted at the start of this demo, you should open the following URL in your browser on your local computer: `http://localhost:3000`. This will open the Grafana dashboard that visualizes the state of your cluster and the applications running in your cluster. Log in with username and password `admin`, skip creating a new password, go to the dashboard (the icon with the 4 boxes in the left navigation bar), and under Default open Function Dashboard DS2022. This will show you a live view of the resource usage of each application. Each application has a different resource usage, and you can inspect how these applications affect each other. 
 4. You can also go to "Logs Fibonacchi" under Dashboard, which shows the average execution time per serverless function, split up per application. Can you see the variation in execution time? Why would this happen?
 5. Go back to the Continuum repository, and run OpenFaas at the edge: `python3 main.py configuration/openfaas-edge.cfg`. Now repeat steps 2-4. Can you see any differences?
