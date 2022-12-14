@@ -1,6 +1,6 @@
 # Continuum
 Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
-Continuum offers the following features:
+Continuum offers the following features: 
 
 1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
 2. Users can freely configure the specifications of the virtual machines and the network connecting them through a single configuration file.
