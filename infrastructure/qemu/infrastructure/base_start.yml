@@ -1,6 +1,5 @@
 ---
 - hosts: all_hosts
-  become: true
   tasks:
     - name: Remove old base image from {{ base_path }}/.continuum/images
       shell: |

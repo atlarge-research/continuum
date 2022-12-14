@@ -70,7 +70,7 @@ We currently only support this demo on our own servers.
 In this part, you will use the Continuum framework to deploy Kubernetes in the Compute Continuum.
 You should already have received an explanation on this during the presentation.
 
-1. Use Continuum to create 1 endpoint VM, which is used to run a machine learning application, namely image recognition. With this, you emulate a (security) camera device that generates 5 images per second for 5 minutes (300 seconds), and each image will be analyized using machine learning. You will test how well the application can be run on an endpoint without offloading to cloud or edge. While in the Continuum repository, do `python3 main.py configuration/kubernetes-cloud.cfg`. This will start the Continuum framework, and may take serveral minutes to complete.
+1. Use Continuum to create 1 endpoint VM, which is used to run a machine learning application, namely image recognition. With this, you emulate a (security) camera device that generates 5 images per second for 5 minutes (300 seconds), and each image will be analyized using machine learning. You will test how well the application can be run on an endpoint without offloading to cloud or edge. While in the Continuum repository, do `python3 main.py configuration/endpoint.cfg`. This will start the Continuum framework, and may take serveral minutes to complete.
 2. After the framework has completed, you will get output similar to this:
     ```
     ------------------------------------

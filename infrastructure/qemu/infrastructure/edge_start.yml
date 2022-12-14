@@ -1,6 +1,5 @@
 ---
 - hosts: edges
-  become: true
   tasks:
     - name: Create edge images
       shell: |
