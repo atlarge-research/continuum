@@ -62,9 +62,9 @@ For this demo, you will get access to VU compute servers.
 We currently only support this demo on our own servers.
 
 1. Send a public SSH key to the provided email address. You will receive a username `asci-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`.
-2. Access the headnode of the cluster over SSH: `ssh asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using the X and ZZZ from step 1.
+2. Access the headnode of the cluster over SSH: `ssh asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using your username from step 1.
 3. Access the specific server: `ssh nodeX`, using the X and ZZZ from step 1.
-4. Now you are in your home directory on one of the servers. Most likely, continuum repository should already be cloned for you, you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo.
+4. Now you are in your home directory on one of the servers. The Continuum repository should already be cloned for you, you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo.
 
 ### Part 2: Deploy Continuum with Kubernetes and KubeEdge
 In this part, you will use the Continuum framework to deploy Kubernetes in the Compute Continuum.
