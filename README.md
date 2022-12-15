@@ -47,6 +47,9 @@ When using Continuum for research, please cite the work as follows:
 }
 ```
 
+### Acknowledgment
+This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
+
 ## Demo
 This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
 The demo contains three parts:
