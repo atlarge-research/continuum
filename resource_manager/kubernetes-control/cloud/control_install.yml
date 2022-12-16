@@ -59,7 +59,8 @@
     - name: Create join command for worker nodes (cloud-only)
       shell: |
         echo '#!/bin/bash' > /tmp/join-command.txt
-        kubeadm token create --kubeconfig="/home/{{ username }}/.kube/config" --print-join-command >> /tmp/join-command.txt
+        kubeadm token create --kubeconfig="/home/{{ username }}/.kube/config" \
+          --print-join-command >> /tmp/join-command.txt
 
     - name: Copy join command to local file
       fetch:

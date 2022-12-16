@@ -1,27 +1,40 @@
+"""Create a pre-commit hook for this repo,
+which runs code linters and formatters automatically before commits"""
+
 import os
 import stat
 
 
 def main():
-    """Create a pre-commit hook for this repo, which runs code linters and formatters automatically before commits"""
+    """Generate the content of the pre-commit file, and create the file"""
     content = """\
 #!/bin/sh
+echo "-------------------------------"
+echo "Black"
+echo "-------------------------------"
+black --line-length 100 ./
 
-# Check python
+echo "-------------------------------"
+echo "Pylint"
+echo "-------------------------------"
 for i in $(find ./ -type f -name "*.py"); do
     pylint --rcfile=./sysconfig/pylintrc $i
 done
 
-black ./
+echo "-------------------------------"
+echo "Yamllint"
+echo "-------------------------------"
+yamllint --strict --config-data "{extends: default, rules: {line-length: {max: 110}}}" ./
 
-# Check Ansible YAML files
-yamllint --strict --config-data "{extends: default, rules: {line-length: {max: 100}}}" ./
+echo "-------------------------------"
+echo "Ansible-lint"
+echo "-------------------------------"
 ansible-lint --profile production --strict"""
 
     target = ".git/hooks/pre-commit"
-    f = open(target, mode="w")
-    f.write(content)
-    f.close()
+    with open(target, mode="w", encoding="utf-8") as f:
+        f.write(content)
+        f.close()
 
     st = os.stat(target)
     os.chmod(target, st.st_mode | stat.S_IEXEC)

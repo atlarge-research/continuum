@@ -2,34 +2,34 @@
 - hosts: all_hosts
   become: true
   tasks:
-    - name: Remove existing base image user data (if any) from {{ base_path }}/.continuum/images to free up space
+    - name: Remove existing base image user data (if any)
       shell: |
         rm -f "{{ base_path }}/.continuum/images/user_data_base*.img"
       args:
         warn: false
 
-    - name: Remove existing cloud controller images (if any) from {{ base_path }}/.continuum/images to free up space
+    - name: Remove existing cloud controller images (if any)
       shell: |
         rm -f "{{ base_path }}/.continuum/images/cloud_controller*.qcow2"
         rm -f "{{ base_path }}/.continuum/images/user_data_cloud_controller*.img"
       args:
         warn: false
 
-    - name: Remove existing cloud images (if any) from {{ base_path }}/.continuum/images to free up space
+    - name: Remove existing cloud images (if any)
       shell: |
         rm -f "{{ base_path }}/.continuum/images/cloud*.qcow2"
         rm -f "{{ base_path }}/.continuum/images/user_data_cloud*.img"
       args:
         warn: false
 
-    - name: Remove existing edge images (if any) from {{ base_path }}/.continuum/images to free up space
+    - name: Remove existing edge images (if any)
       shell: |
         rm -f "{{ base_path }}/.continuum/images/edge*.qcow2"
         rm -f "{{ base_path }}/.continuum/images/user_data_edge*.img"
       args:
         warn: false
 
-    - name: Remove existing endpoint images (if any) from {{ base_path }}/.continuum/images to free up space
+    - name: Remove existing endpoint images (if any)
       shell: |
         rm -f "{{ base_path }}/.continuum/images/endpoint*.qcow2"
         rm -f "{{ base_path }}/.continuum/images/user_data_endpoint*.img"

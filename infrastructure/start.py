@@ -9,9 +9,12 @@ import json
 import string
 import numpy as np
 
-from . import machine as m
-from . import ansible
-from . import network
+import machine as m
+import ansible
+import network
+
+from .qemu import generate
+from .qemu import start as vm
 
 
 def schedule_equal(config, machines):
@@ -64,8 +67,7 @@ def schedule_pin(config, machines):
     on the available hardware using a greedy algorithm:
     - If physical node 0 can fit the next cloud / edge VM or endpoint container, do it.
     - If not, go to the next node and try to fit it on there.
-    - Then continue fitting the next cloud / edge VM or endpoint container on the node you left.
-        - So once we go to the next node, we will never consider the old node for scheduling anymore.
+    - The scheduling algorithm never considers to previous node for any scheduling anymore.
 
     Args:
         config (dict): Parsed configuration
@@ -146,7 +148,7 @@ using the --file option"""
 
 
 def delete_vms(config, machines):
-    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs, 
+    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
     and possilby at the end if the run if configured by the user
 
     Args:
@@ -159,12 +161,14 @@ def delete_vms(config, machines):
     for machine in machines:
         if machine.is_local:
             command = (
-                'virsh list --all | grep -o -E "(\w*_%s)" | xargs -I %% sh -c "virsh destroy %%"'
+                r'virsh list --all | grep -o -E "(\w*_%s)" | \
+xargs -I %% sh -c "virsh destroy %%"'
                 % (config["username"])
             )
         else:
             comm = (
-                'virsh list --all | grep -o -E \\"(\w*_%s)\\" | xargs -I %% sh -c \\"virsh destroy %%\\"'
+                r"virsh list --all | grep -o -E \"(\w*_%s)\" | \
+xargs -I %% sh -c \"virsh destroy %%\""
                 % (config["username"])
             )
             command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
@@ -176,7 +180,7 @@ def delete_vms(config, machines):
 
     # Wait for process to finish. Outcome of destroy command does not matter
     for command, (_, _) in zip(commands, results):
-        logging.debug("Check output for command [%s]" % (command))
+        logging.debug("Check output for command [%s]", command)
 
 
 def create_keypair(config, machines):
@@ -190,9 +194,12 @@ def create_keypair(config, machines):
     logging.info("Create SSH keys to be used with VMs")
     for machine in machines:
         if machine.is_local:
-            command = "[[ ! -f %s.pub ]] && ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q" % (
-                config["ssh_key"],
-                os.path.join(".ssh", config["ssh_key"].split("/")[-1]),
+            command = (
+                "[[ ! -f %s.pub ]] && ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q"
+                % (
+                    config["ssh_key"],
+                    os.path.join(".ssh", config["ssh_key"].split("/")[-1]),
+                )
             )
             output, error = machine.process(config, command, shell=True)[0]
         else:
@@ -200,12 +207,10 @@ def create_keypair(config, machines):
             dest = machine.name + ":./.ssh/"
             output, error = machine.copy_files(config, source, dest)
 
-        if error != []:
+        if error:
             logging.error("".join(error))
             sys.exit()
-        elif output != [] and not any(
-            "Your public key has been saved in" in line for line in output
-        ):
+        elif output and not any("Your public key has been saved in" in line for line in output):
             logging.error("".join(output))
             sys.exit()
 
@@ -227,10 +232,10 @@ def create_dir(config, machines):
     )
     output, error = machines[0].process(config, command, shell=True)[0]
 
-    if error != []:
+    if error:
         logging.error("".join(error))
         sys.exit()
-    elif output != []:
+    elif output:
         logging.error("".join(output))
         sys.exit()
 
@@ -245,38 +250,39 @@ def delete_old_content(config, machines):
     commands = []
     for machine in machines:
         if machine.is_local:
-            command = ("""\
+            command = """\
 rm -rf %s/.continuum/cloud && \
 rm -rf %s/.continuum/edge && \
 rm -rf %s/.continuum/endpoint && \
 rm -rf %s/.continuum/execution_model && \
 rm -rf %s/.continuum/infrastructure && \
-find %s/.continuum -maxdepth 1 -type f -delete"""
-                % ((config["infrastructure"]["base_path"],) * 6)
+find %s/.continuum -maxdepth 1 -type f -delete""" % (
+                (config["infrastructure"]["base_path"],) * 6
             )
         else:
-            command = ("""\
+            command = """\
 ssh %s \"\
 rm -rf %s/.continuum/cloud && \
 rm -rf %s/.continuum/edge && \
 rm -rf %s/.continuum/endpoint && \
 rm -rf %s/.continuum/execution_model && \
 rm -rf %s/.continuum/infrastructure && \
-find %s/.continuum -maxdepth 1 -type f -delete\""""
-                % ((machine.name,) + (config["infrastructure"]["base_path"],) * 6)
+find %s/.continuum -maxdepth 1 -type f -delete\"""" % (
+                (machine.name,) + (config["infrastructure"]["base_path"],) * 6
             )
 
         commands.append(command)
-    
+
     results = machines[0].process(config, commands, shell=True)
 
     for output, error in results:
-        if error != [] and not all(["No such file or directory" in line for line in error]):
+        if error and not all("No such file or directory" in line for line in error):
             logging.error("".join(error))
             sys.exit()
-        elif output != []:
+        elif output:
             logging.error("".join(output))
             sys.exit()
+
 
 def create_continuum_dir(config, machines):
     """Create the .continuum and .continuum/images folders for storage
@@ -293,7 +299,6 @@ def create_continuum_dir(config, machines):
                  mkdir -p %s/.continuum/images"
                 % ((config["infrastructure"]["base_path"],) * 2)
             )
-            dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
         else:
             command = (
                 'ssh %s "\
@@ -301,17 +306,16 @@ def create_continuum_dir(config, machines):
                  mkdir -p %s/.continuum/images"'
                 % ((machine.name,) + (config["infrastructure"]["base_path"],) * 2)
             )
-            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
         commands.append(command)
 
     results = machines[0].process(config, commands, shell=True)
 
     for output, error in results:
-        if error != []:
+        if error:
             logging.error("".join(error))
             sys.exit()
-        elif output != []:
+        elif output:
             logging.error("".join(output))
             sys.exit()
 
@@ -374,18 +378,25 @@ def copy_files(config, machines):
         ):
             out.append(
                 machine.copy_files(
-                    config, os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"), dest
+                    config,
+                    os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"),
+                    dest,
                 )
             )
             out.append(
                 machine.copy_files(
-                    config, os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"), dest
+                    config,
+                    os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"),
+                    dest,
                 )
             )
 
         # Copy Ansible files for infrastructure
         path = os.path.join(
-            config["base"], "infrastructure", config["infrastructure"]["provider"], "infrastructure"
+            config["base"],
+            "infrastructure",
+            config["infrastructure"]["provider"],
+            "infrastructure",
         )
         out.append(machine.copy_files(config, path, dest, recursive=True))
 
@@ -411,15 +422,15 @@ def copy_files(config, machines):
             out.append(machine.copy_files(config, path, dest, recursive=True))
 
         for output, error in out:
-            if error != []:
+            if error:
                 logging.error("".join(error))
                 sys.exit()
-            elif output != []:
+            elif output:
                 logging.error("".join(output))
                 sys.exit()
 
 
-def add_ssh(config, machines, base=[]):
+def add_ssh(config, machines, base=None):
     """Add SSH keys for generated VMs to known_hosts file
     Since all VMs are connected via a network bridge,
     only touch the known_hosts file of the main physical machine
@@ -427,14 +438,15 @@ def add_ssh(config, machines, base=[]):
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
-        base (list, optional): Base image ips to check. Defaults to []
+        base (list, optional): Base image ips to check. Defaults to None
     """
     logging.info(
-        "Start adding ssh keys to the known_hosts file for each VM (base=%s)" % (base == [])
+        "Start adding ssh keys to the known_hosts file for each VM (base=%s)",
+        base == [] or base is None,
     )
 
     # Get IPs of all (base) machines
-    if base != []:
+    if base:
         ips = base
     else:
         ips = (
@@ -446,10 +458,16 @@ def add_ssh(config, machines, base=[]):
 
     # Check if old keys are still in the known hosts file
     for ip in ips:
-        command = ["ssh-keygen", "-f", os.path.join(config["home"], ".ssh/known_hosts"), "-R", ip]
+        command = [
+            "ssh-keygen",
+            "-f",
+            os.path.join(config["home"], ".ssh/known_hosts"),
+            "-R",
+            ip,
+        ]
         _, error = machines[0].process(config, command)[0]
 
-        if error != [] and not any("not found in" in err for err in error):
+        if error and not any("not found in" in err for err in error):
             logging.error("".join(error))
             sys.exit()
 
@@ -483,7 +501,7 @@ def docker_registry(config, machines):
     command = ["curl", "%s/v2/_catalog" % (config["registry"])]
     output, error = machines[0].process(config, command)[0]
 
-    if error != [] and any("Failed to connect to" in line for line in error):
+    if error and any("Failed to connect to" in line for line in error):
         # Not yet up, so launch
         port = config["registry"].split(":")[-1]
         command = [
@@ -499,13 +517,13 @@ def docker_registry(config, machines):
         ]
         output, error = machines[0].process(config, command)[0]
 
-        if error != [] and not (
+        if error and not (
             any("Unable to find image" in line for line in error)
             and any("Pulling from" in line for line in error)
         ):
             logging.error("".join(error))
             sys.exit()
-    elif output == []:
+    elif not output:
         # Crash
         logging.error("No output from Docker container")
         sys.exit()
@@ -547,7 +565,7 @@ def docker_registry(config, machines):
         for command in commands:
             output, error = machines[0].process(config, command)[0]
 
-            if error != []:
+            if error:
                 logging.error("".join(error))
                 sys.exit()
 
@@ -586,32 +604,39 @@ def docker_pull(config, machines, base_names):
                     images.append(config["images"]["combined"].split(":")[1])
 
                 for image in images:
-                    command = ["docker", "pull", os.path.join(config["registry"], image)]
+                    command = [
+                        "docker",
+                        "pull",
+                        os.path.join(config["registry"], image),
+                    ]
                     commands.append(command)
                     sshs.append(name + "@" + ip)
 
-        if commands != []:
+        if commands:
             results = machines[0].process(config, commands, ssh=sshs)
 
             for ssh, (output, error) in zip(sshs, results):
-                logging.info("Execute docker pull command on address [%s]" % (ssh))
+                logging.info("Execute docker pull command on address [%s]", ssh)
 
-                if error != [] and any(
+                if error and any(
                     "server gave HTTP response to HTTPS client" in line for line in error
                 ):
-                    logging.warn(
+                    logging.warning(
                         """\
         File /etc/docker/daemon.json does not exist, or is empty on machine %s. 
         This will most likely prevent the machine from pulling endpoint docker images 
         from the private Docker registry running on the main machine %s.
         Please create this file on machine %s with content: { "insecure-registries":["%s"] }
-        Followed by a restart of Docker: systemctl restart docker"""
-                        % (ssh, machines[0].name, ssh, config["registry"])
+        Followed by a restart of Docker: systemctl restart docker""",
+                        ssh,
+                        machines[0].name,
+                        ssh,
+                        config["registry"],
                     )
-                if error != []:
+                if error:
                     logging.error("".join(error))
                     sys.exit()
-                elif output == []:
+                elif not output:
                     logging.error("No output from command docker pull")
                     sys.exit()
 
@@ -625,10 +650,6 @@ def start(config):
     Returns:
         list(Machine object): List of machine objects representing physical machines
     """
-    if config["infrastructure"]["provider"] == "qemu":
-        from .qemu import generate
-        from .qemu import start
-
     machines = m.make_machine_objects(config)
 
     for machine in machines:
@@ -665,7 +686,7 @@ def start(config):
     if not config["infrastructure"]["infra_only"]:
         docker_registry(config, machines)
 
-    start.start(config, machines)
+    vm.start(config, machines)
     add_ssh(config, machines)
 
     if config["infrastructure"]["network_emulation"]:

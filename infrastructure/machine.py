@@ -5,7 +5,6 @@ The Machine object represents a physical machine used to run this benchmark
 
 import sys
 import logging
-import os
 import subprocess
 import re
 import getpass
@@ -13,6 +12,11 @@ import math
 
 
 class Machine:
+    """The Machine object represent one physical machine Continuum runs on.
+    The object includes all information about the machine, mainly info on
+    the virtual machines that run on that particular physical machine.
+    """
+
     def __init__(self, name, is_local):
         """Initialize the object
 
@@ -29,19 +33,19 @@ class Machine:
         # Assume user@ip as name for remote nodes
         if is_local:
             self.user = str(getpass.getuser())
-            self.ip = None
+            self.ip = ""
         else:
             self.user = name.split("@")[0]
             self.ip = name.split("@")[1]
 
         # Cores on this machine
-        self.cores = None
+        self.cores = -1
 
         # VM info
-        self.cloud_controller = None
-        self.clouds = None
-        self.edges = None
-        self.endpoints = None
+        self.cloud_controller = -1
+        self.clouds = -1
+        self.edges = -1
+        self.endpoints = -1
 
         self.cloud_controller_ips = []
         self.cloud_ips = []
@@ -116,7 +120,7 @@ BASE_NAMES              %s""" % (
         ssh_key=True,
         retryonoutput=False,
     ):
-        """Execute a process using the subprocess library, and return the output/error or the process
+        """Execute a process using the subprocess library, return the output/error of the process
 
         Args:
             command (str or list(str)): Command to be executed. Either a string can be given
@@ -138,15 +142,15 @@ BASE_NAMES              %s""" % (
 
         # You can pass a single string if you want to execute 1 command without bash
         # OR: Passing one list without bash, move into a nested list
-        if type(command) == str or (
-            type(command[0]) == str and all(len(c.split(" ")) == 1 for c in command)
+        if isinstance(command, str) or (
+            isinstance(command[0], str) and all(len(c.split(" ")) == 1 for c in command)
         ):
             command = [command]
 
         # Add SSH logic to the command
-        if ssh != None:
+        if ssh is not None:
             # SSH can be a list of multiple SSHs
-            if type(ssh) == str:
+            if isinstance(ssh, str):
                 ssh = [ssh]
 
             # User can pass a single ssh for many commands, fix that
@@ -158,10 +162,11 @@ BASE_NAMES              %s""" % (
                 command = command * len(ssh)
 
             for i, (c, s) in enumerate(zip(command, ssh)):
-                if s == None:
+                if s is None:
                     # Don't SSH if no target was set
                     continue
-                elif self.is_local and s == self.name:
+
+                if self.is_local and s == self.name:
                     # You can't ssh to the machine you're already on
                     continue
 
@@ -186,17 +191,16 @@ BASE_NAMES              %s""" % (
         for i in range(math.ceil(len(command) / batchsize)):
             processes = []
             for j, c in enumerate(command[i * batchsize : (i + 1) * batchsize]):
-                logging.debug("Start subprocess: %s" % (c))
-                processes.append(
-                    subprocess.Popen(
-                        c,
-                        shell=shell,
-                        executable=executable,
-                        env=env,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                    )
-                )
+                logging.debug("Start subprocess: %s", c)
+                with subprocess.Popen(
+                    c,
+                    shell=shell,
+                    executable=executable,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ) as process:
+                    processes.append(process)
 
             # Get outputs for this batch of commmands (blocking)
             for j, process in enumerate(processes):
@@ -204,13 +208,13 @@ BASE_NAMES              %s""" % (
                 error = [line.decode("utf-8") for line in process.stderr.readlines()]
                 outputs.append([output, error])
 
-                if retryonoutput and output == []:
+                if retryonoutput and not output:
                     new_retries.append(i * batchsize + j)
 
         # Retry commands with empty output
         max_tries = 5
         for t in range(max_tries):
-            if new_retries == []:
+            if not new_retries:
                 break
 
             retries = new_retries
@@ -220,17 +224,16 @@ BASE_NAMES              %s""" % (
             processes = []
 
             for i in retries:
-                logging.debug("Retry %i, subprocess %i: %s" % (t, i, command[i]))
-                processes.append(
-                    subprocess.Popen(
-                        command[i],
-                        shell=shell,
-                        executable=executable,
-                        env=env,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                    )
-                )
+                logging.debug("Retry %i, subprocess %i: %s", t, i, command[i])
+                with subprocess.Popen(
+                    command[i],
+                    shell=shell,
+                    executable=executable,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ) as process:
+                    processes.append(process)
 
             # Get outputs for this batch of commmands (blocking)
             for i, process in zip(retries, processes):
@@ -238,7 +241,7 @@ BASE_NAMES              %s""" % (
                 error = [line.decode("utf-8") for line in process.stderr.readlines()]
                 outputs[i] = [output, error]
 
-                if output == []:
+                if not output:
                     new_retries.append(i)
 
         return outputs
@@ -247,7 +250,7 @@ BASE_NAMES              %s""" % (
         """Get the amount of physical cores for this machine.
         This automatically functions as reachability check for this machine.
         """
-        logging.info("Check hardware of node %s" % (self.name))
+        logging.info("Check hardware of node %s", self.name)
         command = "lscpu"
 
         if self.is_local:
@@ -257,7 +260,7 @@ BASE_NAMES              %s""" % (
 
         output, error = self.process(config, command)[0]
 
-        if output == []:
+        if not output:
             logging.error("".join(error))
             sys.exit()
         else:
@@ -270,10 +273,10 @@ BASE_NAMES              %s""" % (
                     threads_per_core = int(line.split(":")[-1])
 
             if threads == -1 or threads_per_core == -1:
-                logging.error("Command did not produce the expected output: %s" % ("".join(output)))
+                logging.error("Command did not produce the expected output: %s", "".join(output))
                 sys.exit()
 
-            logging.debug("Threads: %s | Threads_per_core: %s" % (threads, threads_per_core))
+            logging.debug("Threads: %s | Threads_per_core: %s", threads, threads_per_core)
 
             self.cores = int(threads / threads_per_core)
 
@@ -343,8 +346,11 @@ def remove_idle(machines, nodes_per_machine):
     m1 = "" if len(machines) <= 1 else "s"
     m2 = "" if len(new_machines) <= 1 else "s"
     logging.debug(
-        "User offered %i machine%s, we will use %i machine%s"
-        % (len(machines), m1, len(new_machines), m2)
+        "User offered %i machine%s, we will use %i machine%s",
+        len(machines),
+        m1,
+        len(new_machines),
+        m2,
     )
     return new_machines, new_nodes_per_machine
 
@@ -378,9 +384,9 @@ def gather_ssh(config, machines):
     config["edge_ssh"] = edge_ssh
     config["endpoint_ssh"] = endpoint_ssh
 
-    logging.debug("Cloud SSH: " + ", ".join(config["cloud_ssh"]))
-    logging.debug("Edge SSH: " + ", ".join(config["edge_ssh"]))
-    logging.debug("Endpoint SSH: " + ", ".join(config["endpoint_ssh"]))
+    logging.debug("Cloud SSH: %s", ", ".join(config["cloud_ssh"]))
+    logging.debug("Edge SSH: %s", ", ".join(config["edge_ssh"]))
+    logging.debug("Endpoint SSH: %s", ", ".join(config["endpoint_ssh"]))
 
 
 def gather_ips(config, machines):
@@ -410,11 +416,11 @@ def gather_ips(config, machines):
     config["endpoint_ips"] = endpoint_ips
     config["base_ips"] = base_ips
 
-    logging.debug("Control IPs: " + ", ".join(config["control_ips"]))
-    logging.debug("Cloud IPs: " + ", ".join(config["cloud_ips"]))
-    logging.debug("Edge IPs: " + ", ".join(config["edge_ips"]))
-    logging.debug("Endpoint IPs: " + ", ".join(config["endpoint_ips"]))
-    logging.debug("Base IPs: " + ", ".join(config["base_ips"]))
+    logging.debug("Control IPs: %s", ", ".join(config["control_ips"]))
+    logging.debug("Cloud IPs: %s", ", ".join(config["cloud_ips"]))
+    logging.debug("Edge IPs: %s", ", ".join(config["edge_ips"]))
+    logging.debug("Endpoint IPs: %s", ", ".join(config["endpoint_ips"]))
+    logging.debug("Base IPs: %s", ", ".join(config["base_ips"]))
 
 
 def update_ip(config, middle_ip, postfix_ip):
@@ -469,7 +475,11 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.cloud_controller = int(nodes["cloud"] > 0)
             machine.clouds = nodes["cloud"] - int(nodes["cloud"] > 0)
 
-            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
             machine.cloud_controller_ips.append(ip)
 
             name = "cloud_controller_%s" % (config["username"])
@@ -484,7 +494,11 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for cloud
         for _ in range(machine.clouds):
-            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
             machine.cloud_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
@@ -494,7 +508,11 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for edge
         for _ in range(machine.edges):
-            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
             machine.edge_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
@@ -504,7 +522,11 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for endpoint
         for _ in range(machine.endpoints):
-            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
             machine.endpoint_ips.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
@@ -579,17 +601,15 @@ def print_schedule(machines):
     logging.info("Schedule of VMs and containers on physical machines")
     logging.info("-" * 78)
 
-    logging.info("%-30s %-15s %-15s %-15s" % ("Machine", "Cloud nodes", "Edge nodes", "Endpoints"))
+    logging.info("%-30s %-15s %-15s %-15s", "Machine", "Cloud nodes", "Edge nodes", "Endpoints")
 
     for machine in machines:
         logging.info(
-            "%-30s %-15s %-15s %-15s"
-            % (
-                machine.name,
-                machine.cloud_controller + machine.clouds,
-                machine.edges,
-                machine.endpoints,
-            )
+            "%-30s %-15s %-15s %-15s",
+            machine.name,
+            machine.cloud_controller + machine.clouds,
+            machine.edges,
+            machine.endpoints,
         )
 
     logging.info("-" * 78)

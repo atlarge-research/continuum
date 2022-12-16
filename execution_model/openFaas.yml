@@ -17,4 +17,3 @@
     - name: kubectl - gateway
       become_user: "{{ username }}"
       shell: kubectl rollout status -n openfaas deploy/gateway
-

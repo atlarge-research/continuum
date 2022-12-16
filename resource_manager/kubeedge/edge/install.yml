@@ -27,7 +27,9 @@
         dest: /tmp/join-command.txt
 
     - name: Join the cloud controller kubernetes server
-      shell: nohup keadm join --cloudcore-ipport={{ cloud_ip }}:10000 --token=$(cat /tmp/join-command.txt) --kubeedge-version=1.8.1
+      shell: >
+        nohup keadm join --cloudcore-ipport={{ cloud_ip }}:10000
+        --token=$(cat /tmp/join-command.txt) --kubeedge-version=1.8.1
 
     - name: Remove unneeded KubeEdge join command file
       file:

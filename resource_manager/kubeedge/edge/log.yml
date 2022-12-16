@@ -11,7 +11,9 @@
       command: mv -f "/home/{{ username }}/edgecore.yaml" /etc/kubeedge/config/edgecore.yaml
 
     - name: Disable KubeProxy restart
-      shell: sed '/^ExecStart=.*/a Environment="CHECK_EDGECORE_ENVIRONMENT=false"' /etc/kubeedge/edgecore.service > edgecore.service
+      shell: >
+        sed '/^ExecStart=.*/a Environment="CHECK_EDGECORE_ENVIRONMENT=false"'
+        /etc/kubeedge/edgecore.service > edgecore.service
       args:
         warn: false
 

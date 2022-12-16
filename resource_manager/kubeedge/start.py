@@ -3,13 +3,15 @@ Setup KubeEdge on cloud/edge
 """
 
 import logging
-
 import os
 import sys
 
-sys.path.append(os.path.abspath("../.."))
+# pylint: disable=wrong-import-position
 
+sys.path.append(os.path.abspath("../.."))
 import main
+
+# pylint: enable=wrong-import-position
 
 
 def start(config, machines):
@@ -27,7 +29,10 @@ def start(config, machines):
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/install_mist.yml"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/edge/install_mist.yml",
+            ),
         ]
 
         main.ansible_check_output(machines[0].process(config, command)[0])
@@ -36,26 +41,33 @@ def start(config, machines):
     commands = []
 
     # Setup cloud controller
-    commands.append([
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/control_install.yml"),
-    ])
+    commands.append(
+        [
+            "ansible-playbook",
+            "-i",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/cloud/control_install.yml",
+            ),
+        ]
+    )
 
     # Setup edge
-    commands.append([
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/install.yml"),
-    ])
+    commands.append(
+        [
+            "ansible-playbook",
+            "-i",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/edge/install.yml"),
+        ]
+    )
 
     results = machines[0].process(config, commands)
 
     # Check playbooks
     for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for Ansible command [%s]" % (" ".join(command)))
+        logging.debug("Check output for Ansible command [%s]", " ".join(command))
         main.ansible_check_output((output, error))
 
     # Patch: Fix accessing KubeEdge logs from the cloud host
@@ -66,7 +78,10 @@ def start(config, machines):
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/control_log.yml"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/cloud/control_log.yml",
+            ),
         ]
     )
     commands.append(

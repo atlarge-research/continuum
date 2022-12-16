@@ -6,10 +6,10 @@ Check the documentation and help for more information.
 """
 
 import argparse
+import os
 import os.path
 import sys
 import logging
-import os
 import time
 import configparser
 import socket
@@ -72,7 +72,17 @@ def make_wide(formatter, w=120, h=36):
         return formatter
 
 
-def option_check(parser, config, new, section, option, intype, condition, mandatory=False, default="default"):
+def option_check(
+    parser,
+    config,
+    new,
+    section,
+    option,
+    intype,
+    condition,
+    mandatory=False,
+    default="default",
+):
     """Check if each config option is present, if the type is correct, and if the value is correct.
 
     Args:
@@ -146,13 +156,31 @@ def parse_config(parser, arg):
     config.read(arg)
 
     # Parsed values will be saved in a dict because ConfigParser can only hold strings
-    new = dict()
+    new = {}
 
     sec = "infrastructure"
     if config.has_section(sec):
-        new[sec] = dict()
-        option_check(parser, config, new, sec, "provider", str, lambda x: x in ["qemu"], mandatory=True)
-        option_check(parser, config, new, sec, "infra_only", bool, lambda x: x in [True, False], default=False)
+        new[sec] = {}
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "provider",
+            str,
+            lambda x: x in ["qemu"],
+            mandatory=True,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "infra_only",
+            bool,
+            lambda x: x in [True, False],
+            default=False,
+        )
 
         option_check(parser, config, new, sec, "cloud_nodes", int, lambda x: x >= 0, default=0)
         option_check(parser, config, new, sec, "edge_nodes", int, lambda x: x >= 0, default=0)
@@ -177,9 +205,39 @@ def parse_config(parser, arg):
             mandatory = True
             default = "default"
 
-        option_check(parser, config, new, sec, "cloud_cores", int, lambda x: x >= 2, mandatory=mandatory, default=default)
-        option_check(parser, config, new, sec, "cloud_memory", int, lambda x: x >= 1, mandatory=mandatory, default=default)
-        option_check(parser, config, new, sec, "cloud_quota", float, lambda x: 0.1 <= x <= 1.0, mandatory=mandatory, default=default)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "cloud_cores",
+            int,
+            lambda x: x >= 2,
+            mandatory=mandatory,
+            default=default,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "cloud_memory",
+            int,
+            lambda x: x >= 1,
+            mandatory=mandatory,
+            default=default,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "cloud_quota",
+            float,
+            lambda x: 0.1 <= x <= 1.0,
+            mandatory=mandatory,
+            default=default,
+        )
 
         mandatory = False
         default = 0
@@ -187,9 +245,39 @@ def parse_config(parser, arg):
             mandatory = True
             default = "default"
 
-        option_check(parser, config, new, sec, "edge_cores", int, lambda x: x >= 1, mandatory=mandatory, default=default)
-        option_check(parser, config, new, sec, "edge_memory", int, lambda x: x >= 1, mandatory=mandatory, default=default)
-        option_check(parser, config, new, sec, "edge_quota", float, lambda x: 0.1 <= x <= 1.0, mandatory=mandatory, default=default)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "edge_cores",
+            int,
+            lambda x: x >= 1,
+            mandatory=mandatory,
+            default=default,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "edge_memory",
+            int,
+            lambda x: x >= 1,
+            mandatory=mandatory,
+            default=default,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "edge_quota",
+            float,
+            lambda x: 0.1 <= x <= 1.0,
+            mandatory=mandatory,
+            default=default,
+        )
 
         mandatory = False
         default = 0
@@ -197,21 +285,114 @@ def parse_config(parser, arg):
             mandatory = True
             default = "default"
 
-        option_check(parser, config, new, sec, "endpoint_cores", int, lambda x: x >= 1, mandatory=mandatory, default=default)
-        option_check(parser, config, new, sec, "endpoint_memory", int, lambda x: x >= 1, mandatory=mandatory, default=default)
-        option_check(parser, config, new, sec, "endpoint_quota", float, lambda x: 0.1 <= x <= 1.0, mandatory=mandatory, default=default)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "endpoint_cores",
+            int,
+            lambda x: x >= 1,
+            mandatory=mandatory,
+            default=default,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "endpoint_memory",
+            int,
+            lambda x: x >= 1,
+            mandatory=mandatory,
+            default=default,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "endpoint_quota",
+            float,
+            lambda x: 0.1 <= x <= 1.0,
+            mandatory=mandatory,
+            default=default,
+        )
 
         # Now set disk speed
-        option_check(parser, config, new, sec, "cloud_read_speed", int, lambda x: x >= 0, default=0)
-        option_check(parser, config, new, sec, "edge_read_speed", int, lambda x: x >= 0, default=0)
-        option_check(parser, config, new, sec, "endpoint_read_speed", int, lambda x: x >= 0, default=0)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "cloud_read_speed",
+            int,
+            lambda x: x >= 0,
+            default=0,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "edge_read_speed",
+            int,
+            lambda x: x >= 0,
+            default=0,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "endpoint_read_speed",
+            int,
+            lambda x: x >= 0,
+            default=0,
+        )
 
-        option_check(parser, config, new, sec, "cloud_write_speed", int, lambda x: x >= 0, default=0)
-        option_check(parser, config, new, sec, "edge_write_speed", int, lambda x: x >= 0, default=0)
-        option_check(parser, config, new, sec, "endpoint_write_speed", int, lambda x: x >= 0, default=0)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "cloud_write_speed",
+            int,
+            lambda x: x >= 0,
+            default=0,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "edge_write_speed",
+            int,
+            lambda x: x >= 0,
+            default=0,
+        )
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "endpoint_write_speed",
+            int,
+            lambda x: x >= 0,
+            default=0,
+        )
 
         # Pin VM cores in physical CPU cores
-        option_check(parser, config, new, sec, "cpu_pin", bool, lambda x: x in [True, False], default=False)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "cpu_pin",
+            bool,
+            lambda x: x in [True, False],
+            default=False,
+        )
 
         # Set network info
         option_check(
@@ -222,7 +403,7 @@ def parse_config(parser, arg):
             "network_emulation",
             bool,
             lambda x: x in [True, False],
-            default=False
+            default=False,
         )
 
         # Only set detailed values if network_emulation = True
@@ -235,7 +416,7 @@ def parse_config(parser, arg):
                 "wireless_network_preset",
                 str,
                 lambda x: x in ["4g", "5g"],
-                default="4g"
+                default="4g",
             )
 
             option_check(
@@ -246,7 +427,7 @@ def parse_config(parser, arg):
                 "cloud_latency_avg",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -256,7 +437,7 @@ def parse_config(parser, arg):
                 "cloud_latency_var",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -266,7 +447,7 @@ def parse_config(parser, arg):
                 "cloud_throughput",
                 float,
                 lambda x: x >= 1.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -276,7 +457,7 @@ def parse_config(parser, arg):
                 "edge_latency_avg",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -286,7 +467,7 @@ def parse_config(parser, arg):
                 "edge_latency_var",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -296,7 +477,7 @@ def parse_config(parser, arg):
                 "edge_throughput",
                 float,
                 lambda x: x >= 1.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -306,7 +487,7 @@ def parse_config(parser, arg):
                 "cloud_edge_latency_avg",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -316,7 +497,7 @@ def parse_config(parser, arg):
                 "cloud_edge_latency_var",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -326,7 +507,7 @@ def parse_config(parser, arg):
                 "cloud_edge_throughput",
                 float,
                 lambda x: x >= 1.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -336,7 +517,7 @@ def parse_config(parser, arg):
                 "cloud_endpoint_latency_avg",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -346,7 +527,7 @@ def parse_config(parser, arg):
                 "cloud_endpoint_latency_var",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -356,7 +537,7 @@ def parse_config(parser, arg):
                 "cloud_endpoint_throughput",
                 float,
                 lambda x: x >= 1.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -366,7 +547,7 @@ def parse_config(parser, arg):
                 "edge_endpoint_latency_avg",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -376,7 +557,7 @@ def parse_config(parser, arg):
                 "edge_endpoint_latency_var",
                 float,
                 lambda x: x >= 0.0,
-                default=-1
+                default=-1,
             )
             option_check(
                 parser,
@@ -386,7 +567,7 @@ def parse_config(parser, arg):
                 "edge_endpoint_throughput",
                 float,
                 lambda x: x >= 1.0,
-                default=-1
+                default=-1,
             )
 
         # Use multiple physical machines for the framework
@@ -398,11 +579,20 @@ def parse_config(parser, arg):
             "external_physical_machines",
             list,
             lambda x: True,
-            default=[]
+            default=[],
         )
 
         # Benchmark the network between the VMs
-        option_check(parser, config, new, sec, "netperf", bool, lambda x: x in [True, False], default=False)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "netperf",
+            bool,
+            lambda x: x in [True, False],
+            default=False,
+        )
 
         # Set the location where the continuum framework files are stored, including VMs
         option_check(
@@ -412,7 +602,7 @@ def parse_config(parser, arg):
             sec,
             "base_path",
             str,
-            lambda x: os.path.expanduser(x),
+            os.path.expanduser,
             default=os.getenv("HOME"),
         )
 
@@ -437,7 +627,14 @@ def parse_config(parser, arg):
         )
 
         option_check(
-            parser, config, new, sec, "middleIP", int, lambda x: x > 0 and x < 255, default="100"
+            parser,
+            config,
+            new,
+            sec,
+            "middleIP",
+            int,
+            lambda x: 0 < x < 255,
+            default="100",
         )
 
         option_check(
@@ -447,21 +644,30 @@ def parse_config(parser, arg):
             sec,
             "middleIP_base",
             int,
-            lambda x: x > 0 and x < 255,
+            lambda x: 0 < x < 255,
             default="90",
         )
 
         if new[sec]["middleIP"] == new[sec]["middleIP_base"]:
             parser.error("Config: middleIP == middleIP_base")
 
-        option_check(parser, config, new, sec, "delete", bool, lambda x: x in [True, False], default=False)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "delete",
+            bool,
+            lambda x: x in [True, False],
+            default=False,
+        )
     else:
         parser.error("Config: infrastructure section missing")
 
     # Check benchmark
     sec = "benchmark"
     if not new["infrastructure"]["infra_only"] and config.has_section(sec):
-        new[sec] = dict()
+        new[sec] = {}
         option_check(
             parser,
             config,
@@ -484,7 +690,16 @@ def parse_config(parser, arg):
             default=False,
         )
 
-        option_check(parser, config, new, sec, "docker_pull", bool, lambda x: x in [True, False], default=False)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "docker_pull",
+            bool,
+            lambda x: x in [True, False],
+            default=False,
+        )
         option_check(
             parser,
             config,
@@ -493,7 +708,7 @@ def parse_config(parser, arg):
             "application",
             str,
             lambda x: x in ["image_classification", "empty"],
-            mandatory=True
+            mandatory=True,
         )
 
         # Set default values first
@@ -562,16 +777,52 @@ def parse_config(parser, arg):
         )
 
         if new[sec]["application"] == "image_classification":
-            option_check(parser, config, new, sec, "frequency", int, lambda x: x >= 1, mandatory=True)
+            option_check(
+                parser,
+                config,
+                new,
+                sec,
+                "frequency",
+                int,
+                lambda x: x >= 1,
+                mandatory=True,
+            )
         elif new[sec]["application"] == "empty":
-            option_check(parser, config, new, sec, "sleep_time", int, lambda x: x >= 1, mandatory=True)
+            option_check(
+                parser,
+                config,
+                new,
+                sec,
+                "sleep_time",
+                int,
+                lambda x: x >= 1,
+                mandatory=True,
+            )
 
-        option_check(parser, config, new, sec, "cache_worker", bool, lambda x: x in [True, False], default=False)
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "cache_worker",
+            bool,
+            lambda x: x in [True, False],
+            default=False,
+        )
 
     sec = "execution_model"
     if config.has_section(sec):
-        new[sec] = dict()
-        option_check(parser, config, new, sec, "model", str, lambda x: x in ["openFaas"], mandatory=True)
+        new[sec] = {}
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "model",
+            str,
+            lambda x: x in ["openFaas"],
+            mandatory=True,
+        )
 
     return new
 
@@ -607,21 +858,16 @@ def add_constants(config):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         host_ip = s.getsockname()[0]
-    except Exception as e:
-        logging.error("Could not get host ip: %s" % (e))
+    except socket.gaierror as e:
+        logging.error("Could not get host ip with error: %s", e)
         sys.exit()
 
     config["registry"] = host_ip + ":5000"
 
 
-def shorten_filename(filename):
-    f = os.path.split(filename)[1]
-    return "%s~%s" % (f[:3], f[-16:]) if len(f) > 19 else f
-
-
 def set_logging(args):
     """Enable logging to both stdout and file (BENCHMARK_FOLDER/logs)
-    If the -v / --verbose option is used, stdout will report logging.DEBUG, otherwise only logging.INFO
+    If -v/--verbose is used, stdout will report logging.DEBUG, otherwise only logging.INFO
     The file will always use logging.DEBUG (which is the bigger scope)
 
     Args:
@@ -661,16 +907,15 @@ def set_logging(args):
         handlers=[file_handler, stdout_handler],
     )
 
-    logging.info(
-        "Logging has been enabled. Writing to stdout and file at %s/%s" % (log_dir, log_name)
-    )
+    logging.info("Logging has been enabled. Writing to stdout and file %s/%s", log_dir, log_name)
 
     s = []
     header = True
     for key, value in args.config.items():
-        if type(value) is dict:
+        if isinstance(value, dict):
             s.append("[" + key + "]")
-            for k, v in dict(args.config[key]).items():
+            category = dict(args.config[key])
+            for k, v in category.items():
                 s.append("%-30s = %s" % (k, v))
 
             s.append("")
@@ -679,7 +924,7 @@ def set_logging(args):
                 s.append("[constants]")
                 header = False
 
-            if type(value) is list:
+            if isinstance(value, list):
                 s.append("%-30s = %s" % (key, value[0]))
                 if len(value) > 1:
                     for v in value[1:]:
@@ -687,7 +932,7 @@ def set_logging(args):
             else:
                 s.append("%-30s = %s" % (key, value))
 
-    logging.debug("\n" + "\n".join(s))
+    logging.debug("\n%s", "\n".join(s))
 
 
 def main(args):
@@ -713,26 +958,26 @@ def main(args):
         for ssh in args.config["cloud_ssh"] + args.config["edge_ssh"] + args.config["endpoint_ssh"]:
             s.append("ssh %s -i %s" % (ssh, args.config["ssh_key"]))
 
-        logging.info("To access the VMs:\n\t" + "\n\t".join(s) + "\n")
+        logging.info("To access the VMs:\n\t%s\n", "\n\t".join(s))
 
 
 if __name__ == "__main__":
-    """Get input arguments, and validate those arguments"""
-    parser = argparse.ArgumentParser(
+    # Get input arguments, and validate those arguments
+    parser_obj = argparse.ArgumentParser(
         formatter_class=make_wide(argparse.HelpFormatter, w=120, h=500)
     )
 
-    parser.add_argument(
+    parser_obj.add_argument(
         "config",
-        type=lambda x: parse_config(parser, x),
+        type=lambda x: parse_config(parser_obj, x),
         help="benchmark config file",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
+    parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 
-    args = parser.parse_args()
+    arguments = parser_obj.parse_args()
 
     # Set loggers
-    add_constants(args.config)
-    set_logging(args)
+    add_constants(arguments.config)
+    set_logging(arguments)
 
-    main(args)
+    main(arguments)

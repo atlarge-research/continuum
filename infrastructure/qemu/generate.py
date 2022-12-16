@@ -131,17 +131,17 @@ def start(config, machines):
     logging.info("Start writing QEMU config files for cloud / edge")
 
     # Get the SSH public key
-    f = open("%s.pub" % (config["ssh_key"]), "r")
-    ssh_key = f.read().rstrip()
-    f.close()
+    with open("%s.pub" % (config["ssh_key"]), "r", encoding="utf-8") as f:
+        ssh_key = f.read().rstrip()
+        f.close()
 
-    # ------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------
     # NOTE
     # If an error occurs in the following lines, please:
     # 1. Comment this part of the code between the two ---- lines out
     # 2. Set the "bridge_name" variable to the name of your bridge (e.g. br0, virbr0, etc.)
     # 3. Set the gateway variable to the IP of your gateway (e.g. 10.0.2.2, 192.168.122.1, etc)
-    # ------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------
     # Find out what bridge to use
     bridge = find_bridge(config, machines[0], "br0")
     bridge_name = "br0"
@@ -176,7 +176,7 @@ def start(config, machines):
                     sys.exit()
 
                 gateway = gatewaylist[1].rstrip()
-    # ------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------
 
     cc = config["infrastructure"]["cloud_cores"]
     ec = config["infrastructure"]["edge_cores"]
@@ -194,148 +194,148 @@ def start(config, machines):
             machine.cloud_controller_ips + machine.cloud_ips,
             machine.cloud_controller_names + machine.cloud_names,
         ):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = int(1048576 * config["infrastructure"]["cloud_memory"])
+            with open(".tmp/domain_%s.xml" % (name), "w", encoding="utf-8") as f:
+                memory = int(1048576 * config["infrastructure"]["cloud_memory"])
 
-            if config["infrastructure"]["cpu_pin"]:
-                pinnings = [
-                    '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
-                    for a, b in zip(range(cc), range(start_core, start_core + cc))
-                ]
-                start_core += cc
+                if config["infrastructure"]["cpu_pin"]:
+                    pinnings = [
+                        '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
+                        for a, b in zip(range(cc), range(start_core, start_core + cc))
+                    ]
+                    start_core += cc
 
-            f.write(
-                DOMAIN
-                % (
-                    name,
-                    memory,
-                    cc,
-                    period,
-                    int(period * config["infrastructure"]["cloud_quota"]),
-                    "\n".join(pinnings),
-                    bridge_name,
-                    config["infrastructure"]["base_path"],
-                    name,
-                    config["infrastructure"]["cloud_read_speed"],
-                    config["infrastructure"]["cloud_write_speed"],
-                    config["infrastructure"]["cloud_read_speed"],
-                    config["infrastructure"]["cloud_write_speed"],
-                    config["infrastructure"]["base_path"],
-                    name,
+                f.write(
+                    DOMAIN
+                    % (
+                        name,
+                        memory,
+                        cc,
+                        period,
+                        int(period * config["infrastructure"]["cloud_quota"]),
+                        "\n".join(pinnings),
+                        bridge_name,
+                        config["infrastructure"]["base_path"],
+                        name,
+                        config["infrastructure"]["cloud_read_speed"],
+                        config["infrastructure"]["cloud_write_speed"],
+                        config["infrastructure"]["cloud_read_speed"],
+                        config["infrastructure"]["cloud_write_speed"],
+                        config["infrastructure"]["base_path"],
+                        name,
+                    )
                 )
-            )
-            f.close()
+                f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
-            hostname = name.replace("_", "")
-            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
-            f.close()
+            with open(".tmp/user_data_%s.yml" % (name), "w", encoding="utf-8") as f:
+                hostname = name.replace("_", "")
+                f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
+                f.close()
 
         # Edges
         for ip, name in zip(machine.edge_ips, machine.edge_names):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = int(1048576 * config["infrastructure"]["edge_memory"])
+            with open(".tmp/domain_%s.xml" % (name), "w", encoding="utf-8") as f:
+                memory = int(1048576 * config["infrastructure"]["edge_memory"])
 
-            if config["infrastructure"]["cpu_pin"]:
-                pinnings = [
-                    '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
-                    for a, b in zip(range(ec), range(start_core, start_core + ec))
-                ]
-                start_core += ec
+                if config["infrastructure"]["cpu_pin"]:
+                    pinnings = [
+                        '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
+                        for a, b in zip(range(ec), range(start_core, start_core + ec))
+                    ]
+                    start_core += ec
 
-            f.write(
-                DOMAIN
-                % (
-                    name,
-                    memory,
-                    ec,
-                    period,
-                    int(period * config["infrastructure"]["edge_quota"]),
-                    "\n".join(pinnings),
-                    bridge_name,
-                    config["infrastructure"]["base_path"],
-                    name,
-                    config["infrastructure"]["edge_read_speed"],
-                    config["infrastructure"]["edge_write_speed"],
-                    config["infrastructure"]["edge_read_speed"],
-                    config["infrastructure"]["edge_write_speed"],
-                    config["infrastructure"]["base_path"],
-                    name,
+                f.write(
+                    DOMAIN
+                    % (
+                        name,
+                        memory,
+                        ec,
+                        period,
+                        int(period * config["infrastructure"]["edge_quota"]),
+                        "\n".join(pinnings),
+                        bridge_name,
+                        config["infrastructure"]["base_path"],
+                        name,
+                        config["infrastructure"]["edge_read_speed"],
+                        config["infrastructure"]["edge_write_speed"],
+                        config["infrastructure"]["edge_read_speed"],
+                        config["infrastructure"]["edge_write_speed"],
+                        config["infrastructure"]["base_path"],
+                        name,
+                    )
                 )
-            )
-            f.close()
+                f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
-            hostname = name.replace("_", "")
-            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
-            f.close()
+            with open(".tmp/user_data_%s.yml" % (name), "w", encoding="utf-8") as f:
+                hostname = name.replace("_", "")
+                f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
+                f.close()
 
         # Endpoints
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
-            memory = int(1048576 * config["infrastructure"]["endpoint_memory"])
+            with open(".tmp/domain_%s.xml" % (name), "w", encoding="utf-8") as f:
+                memory = int(1048576 * config["infrastructure"]["endpoint_memory"])
 
-            if config["infrastructure"]["cpu_pin"]:
-                pinnings = [
-                    '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
-                    for a, b in zip(range(pc), range(start_core, start_core + pc))
-                ]
-                start_core += pc
+                if config["infrastructure"]["cpu_pin"]:
+                    pinnings = [
+                        '        <vcpupin vcpu="%i" cpuset="%i"/>' % (a, b)
+                        for a, b in zip(range(pc), range(start_core, start_core + pc))
+                    ]
+                    start_core += pc
 
-            f.write(
-                DOMAIN
-                % (
-                    name,
-                    memory,
-                    pc,
-                    period,
-                    int(period * config["infrastructure"]["endpoint_quota"]),
-                    "\n".join(pinnings),
-                    bridge_name,
-                    config["infrastructure"]["base_path"],
-                    name,
-                    config["infrastructure"]["endpoint_read_speed"],
-                    config["infrastructure"]["endpoint_write_speed"],
-                    config["infrastructure"]["endpoint_read_speed"],
-                    config["infrastructure"]["endpoint_write_speed"],
-                    config["infrastructure"]["base_path"],
-                    name,
+                f.write(
+                    DOMAIN
+                    % (
+                        name,
+                        memory,
+                        pc,
+                        period,
+                        int(period * config["infrastructure"]["endpoint_quota"]),
+                        "\n".join(pinnings),
+                        bridge_name,
+                        config["infrastructure"]["base_path"],
+                        name,
+                        config["infrastructure"]["endpoint_read_speed"],
+                        config["infrastructure"]["endpoint_write_speed"],
+                        config["infrastructure"]["endpoint_read_speed"],
+                        config["infrastructure"]["endpoint_write_speed"],
+                        config["infrastructure"]["base_path"],
+                        name,
+                    )
                 )
-            )
-            f.close()
+                f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
-            hostname = name.replace("_", "")
-            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
-            f.close()
+            with open(".tmp/user_data_%s.yml" % (name), "w", encoding="utf-8") as f:
+                hostname = name.replace("_", "")
+                f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
+                f.close()
 
         # Base image(s)
         for ip, name in zip(machine.base_ips, machine.base_names):
-            f = open(".tmp/domain_%s.xml" % (name), "w")
+            with open(".tmp/domain_%s.xml" % (name), "w", encoding="utf-8") as f:
 
-            f.write(
-                DOMAIN
-                % (
-                    name,
-                    1048576,
-                    1,
-                    0,
-                    0,
-                    "",
-                    bridge_name,
-                    config["infrastructure"]["base_path"],
-                    name,
-                    0,
-                    0,
-                    0,
-                    0,
-                    config["infrastructure"]["base_path"],
-                    name,
+                f.write(
+                    DOMAIN
+                    % (
+                        name,
+                        1048576,
+                        1,
+                        0,
+                        0,
+                        "",
+                        bridge_name,
+                        config["infrastructure"]["base_path"],
+                        name,
+                        0,
+                        0,
+                        0,
+                        0,
+                        config["infrastructure"]["base_path"],
+                        name,
+                    )
                 )
-            )
-            f.close()
+                f.close()
 
-            f = open(".tmp/user_data_%s.yml" % (name), "w")
-            hostname = name.replace("_", "")
-            f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
-            f.close()
+            with open(".tmp/user_data_%s.yml" % (name), "w", encoding="utf-8") as f:
+                hostname = name.replace("_", "")
+                f.write(USER_DATA % (hostname, hostname, name, name, ssh_key, name, ip, gateway))
+                f.close()

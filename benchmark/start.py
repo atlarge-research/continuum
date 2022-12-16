@@ -6,11 +6,13 @@ import logging
 import sys
 import time
 import os
-import sys
+
+# pylint: disable=wrong-import-position
 
 sys.path.append(os.path.abspath(".."))
-
 import main
+
+# pylint: enable=wrong-import-position
 
 from . import output
 
@@ -22,7 +24,7 @@ def cache_worker(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info("Cache subscriber pods on %s" % (config["mode"]))
+    logging.info("Cache subscriber pods on %s", config["mode"])
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
@@ -39,7 +41,7 @@ def cache_worker(config, machines):
         "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": cores - 0.4,
-        "replicas": worker_apps - 1, # 0 indexed comparison
+        "replicas": worker_apps - 1,  # 0 indexed comparison
         "pull_policy": "IfNotPresent",
     }
 
@@ -68,7 +70,7 @@ def cache_worker(config, machines):
     command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         vars_str[:-1],
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml")
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
     )
 
     main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
@@ -77,16 +79,16 @@ def cache_worker(config, machines):
     command = "kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml"
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
-    if output == [] or "job.batch/empty created" not in output[0]:
-        logging.error("Could not deploy pods: %s" % ("".join(output)))
+    if not output or "job.batch/empty created" not in output[0]:
+        logging.error("Could not deploy pods: %s", "".join(output))
         sys.exit()
-    if error != [] and not all(["[CONTINUUM]" in l for l in error]):
-        logging.error("Could not deploy pods: %s" % ("".join(error)))
+    if error and not all("[CONTINUUM]" in l for l in error):
+        logging.error("Could not deploy pods: %s", "".join(error))
         sys.exit()
 
     # Waiting for the applications to fully initialize
     time.sleep(10)
-    logging.info("Deployed %i %s applications" % (worker_apps, config["mode"]))
+    logging.info("Deployed %i %s applications", worker_apps, config["mode"])
 
     pending = True
     i = 0
@@ -103,12 +105,12 @@ def cache_worker(config, machines):
             ]
             output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
-            if error != [] and any("couldn't find any field with path" in line for line in error):
+            if error and any("couldn't find any field with path" in line for line in error):
                 logging.debug("Retry getting list of kubernetes pods")
                 time.sleep(5)
                 pending = True
                 continue
-            elif (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
+            elif (error and not all("[CONTINUUM]" in l for l in error)) or not output:
                 logging.error("".join(error))
                 sys.exit()
 
@@ -125,8 +127,9 @@ def cache_worker(config, machines):
             pending = False
         else:
             logging.error(
-                'Container on cloud/edge %s has status %s, expected "Pending", "Running", or "Succeeded"'
-                % (app_name, app_status)
+                'Container on cloud/edge %s has status %s, expected "Pending", "Running", or "Succeeded"',
+                app_name,
+                app_status,
             )
             sys.exit()
 
@@ -140,10 +143,10 @@ def cache_worker(config, machines):
     ]
     output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
-    if output == [] or not ("job.batch" in output[0] and "deleted" in output[0]):
-        logging.error('Output does not container job.batch "empty" deleted: %s' % ("".join(output)))
+    if not output or not ("job.batch" in output[0] and "deleted" in output[0]):
+        logging.error('Output does not container job.batch "empty" deleted: %s', "".join(output))
         sys.exit()
-    elif error != [] and not all(["[CONTINUUM]" in l for l in error]):
+    elif error and not all("[CONTINUUM]" in l for l in error):
         logging.error("".join(error))
 
     time.sleep(10)
@@ -162,7 +165,7 @@ def start_worker(config, machines):
     Returns:
         (datetime): Invocation time of the kubectl apply command that launches the benchmark
     """
-    logging.info("Start subscriber pods on %s" % (config["mode"]))
+    logging.info("Start subscriber pods on %s", config["mode"])
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
@@ -180,7 +183,7 @@ def start_worker(config, machines):
         "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
-        "replicas": worker_apps - 1, # 0 indexed comparison
+        "replicas": worker_apps - 1,  # 0 indexed comparison
         "pull_policy": "Never",
     }
 
@@ -209,7 +212,7 @@ def start_worker(config, machines):
     command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         vars_str[:-1],
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml")
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
     )
 
     main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
@@ -221,20 +224,22 @@ def start_worker(config, machines):
         #       with classes etc.
         # This only creates the file we need, now launch the benchmark
         command = "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml\""
-        output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+        output, error = machines[0].process(
+            config, command, shell=True, ssh=config["cloud_ssh"][0]
+        )[0]
 
         if len(output) < 2 or "job.batch/empty created" not in output[1]:
-            logging.error("Could not deploy pods: %s" % ("".join(output)))
+            logging.error("Could not deploy pods: %s", "".join(output))
             sys.exit()
-        if error != [] and not all(["[CONTINUUM]" in l for l in error]):
-            logging.error("Could not deploy pods: %s" % ("".join(error)))
+        if error and not all("[CONTINUUM]" in l for l in error):
+            logging.error("Could not deploy pods: %s", "".join(error))
             sys.exit()
 
         starttime = float(output[0])
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
-    logging.info("Deployed %i %s applications" % (worker_apps, config["mode"]))
+    logging.info("Deployed %i %s applications", worker_apps, config["mode"])
     logging.info("Wait for subscriber applications to be scheduled and running")
 
     pending = True
@@ -252,12 +257,12 @@ def start_worker(config, machines):
             ]
             output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
-            if error != [] and any("couldn't find any field with path" in line for line in error):
+            if error and any("couldn't find any field with path" in line for line in error):
                 logging.debug("Retry getting list of kubernetes pods")
                 time.sleep(5)
                 pending = True
                 continue
-            elif (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
+            elif (error and not all("[CONTINUUM]" in l for l in error)) or not output:
                 # TODO: Application specific filter again, move to application code
                 logging.error("".join(error))
                 sys.exit()
@@ -275,8 +280,9 @@ def start_worker(config, machines):
             pending = False
         else:
             logging.error(
-                'Container on cloud/edge %s has status %s, expected "Pending" or "Running"'
-                % (app_name, app_status)
+                'Container on cloud/edge %s has status %s, expected "Pending" or "Running"',
+                app_name,
+                app_status,
             )
             sys.exit()
 
@@ -346,12 +352,12 @@ def start_worker_mist(config, machines):
 
     # Checkout process output
     for ssh, (output, error) in zip(sshs, results):
-        logging.debug("Check output of mist endpoint start in ssh [%s]" % (ssh))
+        logging.debug("Check output of mist endpoint start in ssh [%s]", ssh)
 
-        if error != [] and "Your kernel does not support swap limit capabilities" not in error[0]:
+        if error and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
             sys.exit()
-        elif output == []:
+        elif not output:
             logging.error("No output from docker container")
             sys.exit()
 
@@ -363,13 +369,13 @@ def start_worker_mist(config, machines):
         deployed = False
 
         while not deployed:
-            command = 'docker container ls -a --format \\\"{{.ID}}: {{.Status}} {{.Names}}\\\"'
+            command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
             output, error = machines[0].process(config, command, shell=True, ssh=ssh)[0]
 
-            if error != []:
+            if error:
                 logging.error("".join(error))
                 sys.exit()
-            elif output == []:
+            elif not output:
                 logging.error("No output from docker container")
                 sys.exit()
 
@@ -382,8 +388,9 @@ def start_worker_mist(config, machines):
 
             if status_line == None:
                 logging.error(
-                    "ERROR: Could not find the status of any container running in VM %s: %s"
-                    % (worker_ssh.split("@")[0], "".join(output))
+                    "ERROR: Could not find the status of any container running in VM %s: %s",
+                    worker_ssh.split("@")[0],
+                    "".join(output),
                 )
                 sys.exit()
 
@@ -446,7 +453,7 @@ def start_endpoint(config, machines):
             else:
                 env.append("CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"]))
 
-            logging.info("Launch %s" % (cont_name))
+            logging.info("Launch %s", cont_name)
 
             # Decide wether to use the endpoint or combined image
             image = "endpoint"
@@ -482,12 +489,12 @@ def start_endpoint(config, machines):
 
     # Checkout process output
     for ssh, (output, error) in zip(sshs, results):
-        logging.debug("Check output of endpoint start in ssh [%s]" % (ssh))
+        logging.debug("Check output of endpoint start in ssh [%s]", ssh)
 
-        if error != [] and "Your kernel does not support swap limit capabilities" not in error[0]:
+        if error and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
             sys.exit()
-        elif output == []:
+        elif not output:
             logging.error("No output from docker container")
             sys.exit()
 
@@ -508,18 +515,18 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
     time.sleep(10)
 
     for ssh, cont_name in zip(sshs, container_names):
-        logging.info("Wait for container to finish: %s on VM %s" % (cont_name, ssh.split("@")[0]))
+        logging.info("Wait for container to finish: %s on VM %s", cont_name, ssh.split("@")[0])
         finished = False
 
         while not finished:
             # Get list of docker containers
-            command = 'docker container ls -a --format \\\"{{.ID}}: {{.Status}} {{.Names}}\\\"'
+            command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
             output, error = machines[0].process(config, command, shell=True, ssh=ssh)[0]
 
-            if error != []:
+            if error:
                 logging.error("".join(error))
                 sys.exit()
-            elif output == []:
+            elif not output:
                 logging.error("No output from docker container")
                 sys.exit()
 
@@ -531,8 +538,10 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
 
             if status_line == None:
                 logging.error(
-                    "ERROR: Could not find status of container %s running in VM %s: %s"
-                    % (cont_name, ssh.split("@")[0], "".join(output))
+                    "ERROR: Could not find status of container %s running in VM %s: %s",
+                    cont_name,
+                    ssh.split("@")[0],
+                    "".join(output),
                 )
                 sys.exit()
 
@@ -545,8 +554,10 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                 finished = True
             else:
                 logging.error(
-                    'ERROR: Container %s failed in VM %s with status "%s"'
-                    % (cont_name, ssh.split("@")[0], status_line)
+                    'ERROR: Container %s failed in VM %s with status "%s"',
+                    cont_name,
+                    ssh.split("@")[0],
+                    status_line,
                 )
                 sys.exit()
 
@@ -581,7 +592,7 @@ def wait_worker_completion(config, machines):
             ]
             output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
-            if (error != [] and not all(["[CONTINUUM]" in l for l in error])) or output == []:
+            if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
                 # TODO: Application specific filter
                 logging.error("".join(error))
                 sys.exit()
@@ -600,10 +611,9 @@ def wait_worker_completion(config, machines):
             get_list = False
         else:
             logging.error(
-                (
-                    'ERROR: Container on cloud/edge %s has status %s, expected "Running" or "Succeeded"'
-                    % (app_name, app_status)
-                )
+                'ERROR: Container on cloud/edge %s has status %s, expected "Running" or "Succeeded"',
+                app_name,
+                app_status,
             )
             sys.exit()
 

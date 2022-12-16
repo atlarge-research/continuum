@@ -1,3 +1,4 @@
+"""Install a configured execution model on top of the infrastructure and resource manager"""
 import logging
 import os
 import sys
@@ -15,7 +16,8 @@ def install_openfaas(config: dict, machines: Machine):
     """
     if config["benchmark"]["resource_manager"] != "kubernetes":
         logging.error(
-            f"FAILED! OpenFaaS only runs with Kubernetes, but {config['benchmark']['resource_manager']} was installed"
+            "FAILED! OpenFaaS only runs with Kubernetes, but %s was installed",
+            config["benchmark"]["resource_manager"],
         )
         sys.exit()
 
@@ -26,7 +28,8 @@ def install_openfaas(config: dict, machines: Machine):
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(
-            config["infrastructure"]["base_path"], ".continuum/execution_model/openFaas.yml"
+            config["infrastructure"]["base_path"],
+            ".continuum/execution_model/openFaas.yml",
         ),
     ]
 
@@ -43,7 +46,8 @@ def start(config: dict, machines: List[Machine]):
     """
     if "execution_model" not in config:
         logging.error(
-            "FAILED! Key execution_model is missing in config, but it was tried to install an execution model anyway"
+            "FAILED! Key execution_model is missing in config, \
+            but it tried to install an execution model anyway"
         )
         sys.exit()
 

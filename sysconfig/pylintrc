@@ -1,27 +1,31 @@
 # See 
-# - https://github.com/kubeflow/examples/blob/master/.pylintrc
 # - https://pylint.pycqa.org/en/latest/user_guide/configuration/all-options.html
 
 [MASTER]
 jobs=0
 
-[REPORTS]
-evaluation=1.0
+# consider-using-f-string:   We are not using f strings
+# trailing-whitespace:       These are handled by black. 
+#                            The remaining errors are from multi-line string, where pylint incorrectly errors.
+# fixme:                     Don't crash when a TODO message is found.
+# relative-beyond-top-level: Continuum's package importing is a bit messy. Ignore this.
+# global-statement:          Sometimes you need to use the GLOBAL keyword in a function.
+disable=consider-using-f-string,trailing-whitespace,fixme,relative-beyond-top-level,global-statement
+init-hook='import sys; sys.path.append(".")'
 
-# [BASIC]
-# good-names=i,j,continuum
+[BASIC]
+good-names=C_w,Q_w,C_e,Q_e,T_proc,T_pre,
+good-names-rgxs=^[_a-zA-Z][_a-zA-Z0-9]?$
 
 [FORMAT]
-max-line-length=88
+max-line-length=100
 
 [LOGGING]
 logging-modules=logging
 
 [DESIGN]
+max-locals=30
 max-args=10
-max-branches=25
-max-statements=100
-
-# [pre-commit-hook]
-# command=custom_pylint
-# disable=E0401, C0301
+max-branches=50
+max-statements=120
+max-attributes=25

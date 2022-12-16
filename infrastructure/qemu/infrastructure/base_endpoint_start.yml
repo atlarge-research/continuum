@@ -9,7 +9,9 @@
         warn: false
 
     - name: Create base image
-      command: qemu-img create -f qcow2 -F qcow2 -b "{{ base_path }}/.continuum/images/ubuntu2004.qcow2" "{{ base_path }}/.continuum/images/{{ base_endpoint }}.qcow2"
+      command: >
+        qemu-img create -f qcow2 -F qcow2 -b "{{ base_path }}/.continuum/images/ubuntu2004.qcow2"
+        "{{ base_path }}/.continuum/images/{{ base_endpoint }}.qcow2"
 
     - name: Install cloudinit requirements
       package:
@@ -26,4 +28,6 @@
       when: ansible_os_family == "RedHat"
 
     - name: Add cloudinit disk for base
-      command: cloud-localds "{{ base_path }}/.continuum/images/user_data_{{ base_endpoint }}.img" "{{ base_path }}/.continuum/user_data_{{ base_endpoint }}.yml"
+      command: >
+        cloud-localds "{{ base_path }}/.continuum/images/user_data_{{ base_endpoint }}.img"
+        "{{ base_path }}/.continuum/user_data_{{ base_endpoint }}.yml"

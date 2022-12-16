@@ -6,9 +6,12 @@ import logging
 import os
 import sys
 
-sys.path.append(os.path.abspath("../.."))
+# pylint: disable=wrong-import-position
 
+sys.path.append(os.path.abspath("../.."))
 import main
+
+# pylint: enable=wrong-import-position
 
 
 def start(config, machines):

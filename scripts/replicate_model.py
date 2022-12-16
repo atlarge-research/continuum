@@ -2,21 +2,26 @@
 Use the mathematical model from the paper, with data from the benchmark
 """
 
+import sys
+import os
 import argparse
-from cgitb import enable
 import logging
 import subprocess
-import pandas as pd
 import datetime
-import os
-import matplotlib.pyplot as plt
-import numpy as np
 import time
-import sys
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib import colors
+
+
+# pylint: disable=wrong-import-position
 
 sys.path.append(os.path.abspath("../"))
-
 import main as cont_main
+
+# pylint: enable=wrong-import-position
+
 
 # Home dir should be continuum/
 os.chdir("../")
@@ -25,12 +30,12 @@ os.chdir("../")
 def enable_logging(verbose):
     """Enable logging"""
     # Set parameters
-    level = logging.INFO
+    level_new = logging.INFO
     if verbose:
-        level = logging.DEBUG
+        level_new = logging.DEBUG
 
-    format = "[%(asctime)s %(filename)20s:%(lineno)4s - %(funcName)25s() ] %(message)s"
-    logging.basicConfig(format=format, level=level, datefmt="%Y-%m-%d %H:%M:%S")
+    format_new = "[%(asctime)s %(filename)20s:%(lineno)4s - %(funcName)25s() ] %(message)s"
+    logging.basicConfig(format=format_new, level=level_new, datefmt="%Y-%m-%d %H:%M:%S")
 
     logging.info("Logging has been enabled")
 
@@ -78,9 +83,10 @@ class Model:
             command (list(str)): Command to be executed
         """
         logging.info(" ".join(command))
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        output = [line.decode("utf-8") for line in process.stdout.readlines()]
-        error = [line.decode("utf-8") for line in process.stderr.readlines()]
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+            output = [line.decode("utf-8") for line in process.stdout.readlines()]
+            error = [line.decode("utf-8") for line in process.stderr.readlines()]
+
         return output, error
 
     def check_resume(self, local=True):
@@ -106,31 +112,31 @@ class Model:
             if dt >= self.resume:
                 if index == self.resume_index:
                     path = os.path.join(log_location, log)
-                    logging.info("File %s for experiment run %i" % (path, index))
+                    logging.info("File %s for experiment run %i", path, index)
 
-                    f = open(path, "r")
-                    output = [line for line in f.readlines()]
-                    f.close()
+                    with open(path, "r", encoding="utf-8") as f:
+                        output = f.readlines()
+                        f.close()
 
                     self.resume_index += 1
                     return output, []
-                else:
-                    index += 1
+
+                index += 1
 
         self.resume_index += 1
         return [], []
 
-    def str_to_df(self, input):
+    def str_to_df(self, csv):
         """Parse a csv as string to a Pandas DataFrame
 
         Args:
-            input (str): Csv string to parse (e.g. a,b,c,d\ne,f,g,h\n)
+            csv (str): Csv string to parse (e.g. a,b,c,d\ne,f,g,h\n)
 
         Returns:
             DataFrame: Pandas DataFrame containing the parsed Csv
         """
         # Split string into list
-        l = [x.split(",") for x in input.split("\\n")]
+        l = [x.split(",") for x in csv.split("\\n")]
         l = l[:-1]
         l = [sub[1:] for sub in l]
 
@@ -186,7 +192,7 @@ T_proc      norm. processing time   %.2f sec
 
         # Parse output to dataframe
         df = self.str_to_df(output[-4][1:-2])
-        logging.debug("\n" + df.to_string(index=False))
+        logging.debug("\n%s", df.to_string(index=False))
 
         # Extract the required data
         df["proc_time/data (ms)"] = pd.to_numeric(df["proc_time/data (ms)"], downcast="float")
@@ -204,8 +210,15 @@ T_proc      norm. processing time   %.2f sec
 To satisfy: (T_proc * R) < (C_e * Q_e)
             (%.2f * %i) < (%i * %.2f)
             %.2f < %.2f
-            %s with a system load of %.2f"""
-            % (self.T_proc, self.R, self.C_e, self.Q_e, demand, capacity, satisfy, system_load)
+            %s with a system load of %.2f""",
+            self.T_proc,
+            self.R,
+            self.C_e,
+            self.Q_e,
+            demand,
+            capacity,
+            satisfy,
+            system_load,
         )
 
         self.condition_proc = [satisfy, demand, capacity]
@@ -216,14 +229,14 @@ To satisfy: (T_proc * R) < (C_e * Q_e)
         if self.condition_proc[0]:
             satisfy = "Possible"
 
-        logging.info("Full processing on endpoints: %s" % (satisfy))
+        logging.info("Full processing on endpoints: %s", satisfy)
 
         if satisfy == "Not possible":
             condition = []
             if not self.condition_proc[0]:
                 condition.append("Insufficient compute capacity on endpoint")
 
-            logging.info("Cause: %s" % (", ".join(condition)))
+            logging.info("Cause: %s", ", ".join(condition))
 
     def verify(self):
         """Benchmark a local deployment (endpoint-only) to verify the model"""
@@ -237,7 +250,7 @@ To satisfy: (T_proc * R) < (C_e * Q_e)
 
         # Parse output of endpoint to dataframe
         df = self.str_to_df(output[-4][1:-2])
-        logging.info("\n" + df.to_string(index=False))
+        logging.info("\n%s", df.to_string(index=False))
 
 
 class ModelOffload(Model):
@@ -298,14 +311,16 @@ T_pre       norm. preproc time      %.2f sec
 
         # Parse output of worker to dataframe, and extract required data
         df_worker = self.str_to_df(output[-5][1:-2])
-        logging.debug("\n" + df_worker.to_string(index=False))
+        logging.debug("\n%s", df_worker.to_string(index=False))
 
-        df_worker["proc_time/data (ms)"] = pd.to_numeric(df_worker["proc_time/data (ms)"], downcast="float")
+        df_worker["proc_time/data (ms)"] = pd.to_numeric(
+            df_worker["proc_time/data (ms)"], downcast="float"
+        )
         self.T_proc = df_worker["proc_time/data (ms)"].mean() / 1000.0
 
         # Parse output of endpoint to dataframe, and extract required data
         df_endpoint = self.str_to_df(output[-4][1:-2])
-        logging.debug("\n" + df_endpoint.to_string(index=False))
+        logging.debug("\n%s", df_endpoint.to_string(index=False))
 
         df_endpoint["preproc_time/data (ms)"] = pd.to_numeric(
             df_endpoint["preproc_time/data (ms)"], downcast="float"
@@ -330,8 +345,16 @@ T_pre       norm. preproc time      %.2f sec
 To satisfy: (T_proc * R * E) < (C_w * Q_w)
             (%.2f * %i * %i) < (%i * %.2f)
             %.2f < %.2f
-            %s with a system load of %.2f"""
-            % (self.T_proc, self.R, self.E, self.C_w, self.Q_w, demand, capacity, satisfy, system_load)
+            %s with a system load of %.2f""",
+            self.T_proc,
+            self.R,
+            self.E,
+            self.C_w,
+            self.Q_w,
+            demand,
+            capacity,
+            satisfy,
+            system_load,
         )
 
         self.condition_proc = [satisfy, demand, capacity]
@@ -348,8 +371,15 @@ To satisfy: (T_proc * R * E) < (C_w * Q_w)
 To satisfy: (T_pre * R) < (C_e * Q_e)
             (%.2f * %i) < (%i * %.2f)
             %.2f < %.2f
-            %s with a system load of %.2f"""
-            % (self.T_pre, self.R, self.C_e, self.Q_e, demand, capacity, satisfy, system_load)
+            %s with a system load of %.2f""",
+            self.T_pre,
+            self.R,
+            self.C_e,
+            self.Q_e,
+            demand,
+            capacity,
+            satisfy,
+            system_load,
         )
 
         self.condition_pre = [satisfy, demand, capacity]
@@ -364,8 +394,10 @@ To satisfy: (T_pre * R) < (C_e * Q_e)
             """
 To satisfy: D < B
             %.2f < %.2f
-            %s"""
-            % (demand, capacity, satisfy)
+            %s""",
+            demand,
+            capacity,
+            satisfy,
         )
 
         self.condition_net = [satisfy]
@@ -376,7 +408,7 @@ To satisfy: D < B
         if self.condition_proc[0] and self.condition_pre[0] and self.condition_net[0]:
             satisfy = "Possible"
 
-        logging.info("Full offloading to workers: %s" % (satisfy))
+        logging.info("Full offloading to workers: %s", satisfy)
 
         if satisfy == "Not possible":
             condition = []
@@ -387,7 +419,7 @@ To satisfy: D < B
             if not self.condition_net[0]:
                 condition.append("Insufficient network throughput")
 
-            logging.info("Cause: %s" % (", ".join(condition)))
+            logging.info("Cause: %s", ", ".join(condition))
 
     def verify(self):
         """Benchmark an edge offloading deployment to verify the model"""
@@ -401,14 +433,26 @@ To satisfy: D < B
 
         # Parse output of worker to dataframe
         df_worker = self.str_to_df(output[-5][1:-2])
-        logging.info("\n" + df_worker.to_string(index=False))
+        logging.info("\n%s", df_worker.to_string(index=False))
 
         # Parse output of endpoint to dataframe
         df_endpoint = self.str_to_df(output[-4][1:-2])
-        logging.info("\n" + df_endpoint.to_string(index=False))
+        logging.info("\n%s", df_endpoint.to_string(index=False))
 
 
 def heatmap_truth(x, y, capacity_cutoff_endpoint, capacity_cutoff_edge):
+    """Classify Y values (compute capacity) based on the cutoff in compute capacity
+    between endpoint, edge, and cloud
+
+    Args:
+        x (int): Compute demand
+        y (_type_): Compute capacity
+        capacity_cutoff_endpoint (int): Compute capacity cutoff between endpoint and edge
+        capacity_cutoff_edge (int): Compute capacity cutoff between edge and cloud
+
+    Returns:
+        float: Heatmap color between -1 and 1.
+    """
     c1 = np.greater_equal(y, x)
     c2 = np.less_equal(y, capacity_cutoff_endpoint)
     c3 = np.less_equal(y, capacity_cutoff_edge)
@@ -418,9 +462,15 @@ def heatmap_truth(x, y, capacity_cutoff_endpoint, capacity_cutoff_edge):
 
 
 def heatmap(local, offload):
+    """Plot a heatmap based on the model results
+
+    Args:
+        local (object): Object with info on local processing runs
+        offload (object): Object with info on offloading runs
+    """
     # General plot info
     plt.rcParams.update({"font.size": 22})
-    fig = plt.subplots(figsize=(12, 12))
+    plt.subplots(figsize=(12, 12))
 
     # X: Capacity
     # Y: Demand
@@ -464,8 +514,6 @@ def heatmap(local, offload):
     z = heatmap_truth(x2, y2, capacity_cutoff_endpoint, capacity_cutoff_edge)
     z = z[:-1, :-1]
     z_min, z_max = -np.abs(z).max(), np.abs(z).max()
-
-    from matplotlib import colors
 
     cmap = colors.ListedColormap(["#F8CECC", "#FFF2CC", "#DAE8FC", "#D5E8D4"])
     plt.pcolormesh(x2, y2, z, cmap=cmap, vmin=z_min, vmax=z_max)
@@ -513,17 +561,17 @@ def main(args, parser):
 
 
 if __name__ == "__main__":
-    """Get input arguments, and validate those arguments"""
-    parser = argparse.ArgumentParser()
+    # Get input arguments, and validate those arguments
+    parser_obj = argparse.ArgumentParser()
 
-    parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
-    parser.add_argument(
+    parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
+    parser_obj.add_argument(
         "-r",
         "--resume",
         type=lambda s: datetime.datetime.strptime(s, "%Y-%m-%d_%H:%M:%S"),
         help='Resume a previous figure replication from datetime "YYYY-MM-DD_HH:mm:ss"',
     )
-    args = parser.parse_args()
+    arguments = parser_obj.parse_args()
 
-    enable_logging(args.verbose)
-    main(args, parser)
+    enable_logging(arguments.verbose)
+    main(arguments, parser_obj)

@@ -2,6 +2,10 @@
 Select the correct resource manager, install required software and set them up.
 """
 
+from .kubeedge import start as edge
+from .kubernetes import start as cloud
+from .endpoint import start as endpoint
+
 
 def start(config, machines):
     """Create and manage resource managers
@@ -10,18 +14,13 @@ def start(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    from .endpoint import start as endpoint
-
+    # Install RM software on cloud/edge nodes
     if "resource_manager" in config["benchmark"]:
         if config["benchmark"]["resource_manager"] in ["kubeedge", "mist"]:
-            from .kubeedge import start
+            edge.start(config, machines)
         elif config["benchmark"]["resource_manager"] == "kubernetes":
-            from .kubernetes import start
+            cloud.start(config, machines)
 
-    # Install RM software on cloud/edge nodes
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        start.start(config, machines)
-
+    # Start RM software on endpoints
     if config["infrastructure"]["endpoint_nodes"]:
-        # Start RM software on endpoints
         endpoint.start(config, machines)

@@ -5,11 +5,14 @@
     - name: Create edge images
       shell: |
         for i in $(seq "{{ edge_start }}" "{{ edge_end }}"); do
-          qemu-img create -f qcow2 -F qcow2 -b "{{ base_path }}/.continuum/images/{{ base_edge }}.qcow2" "{{ base_path }}/.continuum/images/edge${i}_{{ username }}.qcow2"
+          qemu-img create -f qcow2 -F qcow2 \
+          -b "{{ base_path }}/.continuum/images/{{ base_edge }}.qcow2" \
+          "{{ base_path }}/.continuum/images/edge${i}_{{ username }}.qcow2"
         done
 
     - name: Add cloudinit disk
       shell: |
         for i in $(seq "{{ edge_start }}" "{{ edge_end }}"); do
-          cloud-localds "{{ base_path }}/.continuum/images/user_data_edge${i}_{{ username }}.img" "{{ base_path }}/.continuum/user_data_edge${i}_{{ username }}.yml"
+          cloud-localds "{{ base_path }}/.continuum/images/user_data_edge${i}_{{ username }}.img" \
+          "{{ base_path }}/.continuum/user_data_edge${i}_{{ username }}.yml"
         done

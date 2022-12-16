@@ -7,17 +7,20 @@ import logging
 import time
 import string
 import os
-import sys
+
+# pylint: disable=wrong-import-position
+
+sys.path.append(os.path.abspath("../.."))
+import main
+
+# pylint: enable=wrong-import-position
 
 from .. import start as infrastructure
 
-sys.path.append(os.path.abspath("../.."))
-
-import main
-
 
 def os_image(config, machines):
-    """Check if the os image with Ubuntu 20.04 already exists, and if not create the image (on all machines)
+    """Check if the os image with Ubuntu 20.04 already exists,
+    and if not create the image (on all machines)
 
     Args:
         config (dict): Parsed configuration
@@ -29,12 +32,13 @@ def os_image(config, machines):
         command = [
             "find",
             os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/images/ubuntu2004.qcow2"
+                config["infrastructure"]["base_path"],
+                ".continuum/images/ubuntu2004.qcow2",
             ),
         ]
         output, error = machine.process(config, command, ssh=machine.name)[0]
 
-        if error != [] or output == []:
+        if error or not output:
             need_image = True
             break
 
@@ -44,7 +48,10 @@ def os_image(config, machines):
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/os.yml"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/infrastructure/os.yml",
+            ),
         ]
         main.ansible_check_output(machines[0].process(config, command)[0])
     else:
@@ -86,7 +93,7 @@ def base_image(config, machines):
             ]
             output, error = machine.process(config, command, ssh=machine.name)[0]
 
-            if error != [] or output == []:
+            if error or not output:
                 base_name = base_name.rsplit("_", 1)[0].rstrip(string.digits)
                 need_images[base_names.index(base_name)] = True
 
@@ -98,7 +105,7 @@ def base_image(config, machines):
 
     # Create base images
     for base_name in base_names:
-        logging.info("Create base image %s" % (base_name))
+        logging.info("Create base image %s", base_name)
         if base_name == "base":
             command = [
                 "ansible-playbook",
@@ -150,7 +157,8 @@ def base_image(config, machines):
             base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
                 path = os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (base_name)
+                    config["infrastructure"]["base_path"],
+                    ".continuum/domain_%s.xml" % (base_name),
                 )
                 if machine.is_local:
                     command = "virsh --connect qemu:///system create %s" % (path)
@@ -168,13 +176,13 @@ def base_image(config, machines):
 
     # Check if VM launching went as expected
     for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for command [%s]" % (command))
+        logging.debug("Check output for command [%s]", command)
 
-        if error != [] and "Connection to " not in error[0]:
-            logging.error("ERROR: %s" % ("".join(error)))
+        if error and "Connection to " not in error[0]:
+            logging.error("ERROR: %s", "".join(error))
             sys.exit()
         elif "Domain " not in output[0] or " created from " not in output[0]:
-            logging.error("ERROR: %s" % ("".join(output)))
+            logging.error("ERROR: %s", "".join(output))
             sys.exit()
 
     # Fix SSH keys for each base image
@@ -190,7 +198,8 @@ def base_image(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"
+                    config["infrastructure"]["base_path"],
+                    ".continuum/cloud/base_install.yml",
                 ),
             ]
         elif "base_edge" in base_name:
@@ -199,7 +208,8 @@ def base_image(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"
+                    config["infrastructure"]["base_path"],
+                    ".continuum/edge/base_install.yml",
                 ),
             ]
         elif "base_endpoint" in base_name:
@@ -208,18 +218,19 @@ def base_image(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"
+                    config["infrastructure"]["base_path"],
+                    ".continuum/endpoint/base_install.yml",
                 ),
             ]
 
-        if command != []:
+        if command:
             commands.append(command)
 
-    if commands != []:
+    if commands:
         results = machines[0].process(config, commands)
 
         for command, (output, error) in zip(commands, results):
-            logging.debug("Check output for command [%s]" % (" ".join(command)))
+            logging.debug("Check output for command [%s]", " ".join(command))
             main.ansible_check_output((output, error))
 
     # Install netperf (always, because base images aren't updated)
@@ -228,7 +239,8 @@ def base_image(config, machines):
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(
-            config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
+            config["infrastructure"]["base_path"],
+            ".continuum/infrastructure/netperf.yml",
         ),
     ]
     main.ansible_check_output(machines[0].process(config, command)[0])
@@ -241,11 +253,11 @@ def base_image(config, machines):
     command = ["ls", "-alh", "/etc/localtime"]
     output, error = machines[0].process(config, command)[0]
 
-    if output == [] or "/etc/localtime" not in output[0]:
-        logging.error("Could not get host timezone: %s" % ("".join(output)))
+    if not output or "/etc/localtime" not in output[0]:
+        logging.error("Could not get host timezone: %s", "".join(output))
         sys.exit()
-    elif error != []:
-        logging.error("Could not get host timezone: %s" % ("".join(error)))
+    elif error:
+        logging.error("Could not get host timezone: %s", "".join(error))
         sys.exit()
 
     timezone = output[0].split("-> ")[1].strip()
@@ -263,11 +275,11 @@ def base_image(config, machines):
     results = machines[0].process(config, command, ssh=sshs)
 
     for output, error in results:
-        if output != []:
-            logging.error("Could not set VM timezone: %s" % ("".join(output)))
+        if output:
+            logging.error("Could not set VM timezone: %s", "".join(output))
             sys.exit()
-        elif error != []:
-            logging.error("Could not set VM timezone: %s" % ("".join(error)))
+        elif error:
+            logging.error("Could not set VM timezone: %s", "".join(error))
             sys.exit()
 
     # Clean the VM
@@ -286,7 +298,7 @@ def base_image(config, machines):
     results = machines[0].process(config, commands, shell=True)
 
     for command, (output, error) in zip(commands, results):
-        logging.info("Check output for command [%s]" % (command))
+        logging.info("Check output for command [%s]", command)
         main.ansible_check_output((output, error))
 
     # Shutdown VMs
@@ -308,11 +320,10 @@ def base_image(config, machines):
     results = machines[0].process(config, commands, shell=True)
 
     for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for command [%s]" % (command))
+        logging.debug("Check output for command [%s]", command)
 
-        if error != [] and not (
-            command.split(" ")[0] == "ssh"
-            and any(["Connection to " in e for e in error])
+        if error and not (
+            command.split(" ")[0] == "ssh" and any("Connection to " in e for e in error)
         ):
             logging.error("".join(error))
             sys.exit()
@@ -324,7 +335,7 @@ def base_image(config, machines):
     time.sleep(5)
 
 
-def launch_vms(config, machines, repeat=[]):
+def launch_vms(config, machines, repeat=None):
     """Launch VMs concurrently
     Moved into a function so it can be re-executed when a VM didn't start for some reason
 
@@ -339,12 +350,12 @@ def launch_vms(config, machines, repeat=[]):
     # Launch the VMs concurrently
     logging.info("Start VMs")
 
-    # Sometimes previous QEMU commands aren't finished yet, so it's safer to wait a bit to prevent lock errors
+    # Sometimes previous QEMU commands aren't finished yet,
+    # so it's safer to wait a bit to prevent lock errors
     time.sleep(5)
 
     commands = []
-    returns = []
-    if repeat == []:
+    if not repeat:
         for machine in machines:
             for name in (
                 machine.cloud_controller_names
@@ -353,7 +364,8 @@ def launch_vms(config, machines, repeat=[]):
                 + machine.endpoint_names
             ):
                 path = os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (name)
+                    config["infrastructure"]["base_path"],
+                    ".continuum/domain_%s.xml" % (name),
                 )
                 if machine.is_local:
                     command = "virsh --connect qemu:///system create %s" % (path)
@@ -373,17 +385,17 @@ def launch_vms(config, machines, repeat=[]):
 
     repeat = []
     for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for command [%s]" % (command))
+        logging.debug("Check output for command [%s]", command)
 
-        if error != [] and "kex_exchange_identification" in error[0]:
+        if error and "kex_exchange_identification" in error[0]:
             # Repeat execution if key exchange error, can be solved by executing again
-            logging.error("ERROR, REPEAT EXECUTION: %s" % ("".join(error)))
+            logging.error("ERROR, REPEAT EXECUTION: %s", "".join(error))
             repeat.append(command)
-        elif error != [] and "Connection to " not in error[0]:
-            logging.error("ERROR: %s" % ("".join(error)))
+        elif error and "Connection to " not in error[0]:
+            logging.error("ERROR: %s", "".join(error))
             sys.exit()
         elif "Domain " not in output[0] or " created from " not in output[0]:
-            logging.error("ERROR: %s" % ("".join(output)))
+            logging.error("ERROR: %s", "".join(output))
             sys.exit()
 
     return repeat
@@ -403,7 +415,10 @@ def start(config, machines):
         "ansible-playbook",
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/remove.yml"),
+        os.path.join(
+            config["infrastructure"]["base_path"],
+            ".continuum/infrastructure/remove.yml",
+        ),
     ]
     main.ansible_check_output(machines[0].process(config, command)[0])
 
@@ -418,7 +433,8 @@ def start(config, machines):
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
             os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"
+                config["infrastructure"]["base_path"],
+                ".continuum/infrastructure/cloud_start.yml",
             ),
         ]
         main.ansible_check_output(machines[0].process(config, command)[0])
@@ -430,7 +446,8 @@ def start(config, machines):
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
             os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"
+                config["infrastructure"]["base_path"],
+                ".continuum/infrastructure/edge_start.yml",
             ),
         ]
         main.ansible_check_output(machines[0].process(config, command)[0])
@@ -453,10 +470,11 @@ def start(config, machines):
     i = 0
     while True:
         repeat = launch_vms(config, machines, repeat)
-        if repeat == []:
+        if not repeat:
             break
-        elif i == 1:
-            logging.error("ERROR AFTER %i REPS: %s" % (i + 1, " | ".join(repeat)))
+
+        if i == 1:
+            logging.error("ERROR AFTER %i REPS: %s", i + 1, " | ".join(repeat))
             sys.exit()
 
         i += 1

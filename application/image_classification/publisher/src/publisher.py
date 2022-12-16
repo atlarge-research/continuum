@@ -2,9 +2,9 @@
 This is a publisher, sending local images over MQTT to a subscriber for further processing.
 """
 
-import paho.mqtt.client as mqtt
 import time
 import os
+import paho.mqtt.client as mqtt
 
 MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
 MQTT_REMOTE_IP = os.environ["MQTT_REMOTE_IP"]
@@ -17,38 +17,77 @@ DURATION = 300
 SEC_PER_FRAME = float(1 / FREQUENCY)
 MAX_IMGS = FREQUENCY * DURATION
 
-received = 0
+RECEIVED = 0
 
 
-def on_connect(local_client, userdata, flags, rc):
+def on_connect(local_client, _userdata, _flags, rc):
+    """Execute when connecting to MQTT broker
+
+    Args:
+        local_client (object): Client object
+        _userdata (_type_): _description_
+        _flags (_type_): _description_
+        rc (str): Result code
+    """
     print("Connected with result code " + str(rc) + "\n", end="")
     local_client.subscribe(MQTT_TOPIC)
 
 
-def on_subscribe(mqttc, obj, mid, granted_qos):
+def on_subscribe(_mqttc, _obj, _mid, _granted_qos):
+    """Execute when subscribing to a topic on a MQTT broker
+
+    Args:
+        _mqttc (_type_): _description_
+        _obj (_type_): _description_
+        _mid (_type_): _description_
+        _granted_qos (_type_): _description_
+    """
     print("Subscribed to topic\n", end="")
 
 
-def on_log(client, userdata, level, buff):
+def on_log(_client, _userdata, level, buff):
+    """Execute MQTT log on every MQTT event
+
+    Args:
+        _client (_type_): _description_
+        _userdata (_type_): _description_
+        level (str): Log level (error, warning, info, etc)
+        buff (str): Log message
+    """
     print("[ %s ] %s\n" % (str(level), buff), end="")
 
 
-def on_message(client, userdata, msg):
+def on_message(_client, _userdata, msg):
+    """Execute when receiving a message on a topic you are subscribed to
+
+    Args:
+        _client (_type_): _description_
+        _userdata (_type_): _description_
+        msg (str): Received message
+    """
     t_now = time.time_ns()
 
     t_old_bytes = msg.payload[-25:]
     t_old = int(t_old_bytes.decode("utf-8"))
 
     print("Latency (ns): %i" % (t_now - t_old))
-    global received
-    received += 1
+    global RECEIVED
+    RECEIVED += 1
 
 
-def on_publish(mqttc, obj, mid):
+def on_publish(_mqttc, _obj, _mid):
+    """Execute when publishing / sending data
+
+    Args:
+        _mqttc (_type_): _description_
+        _obj (_type_): _description_
+        _mid (_type_): _description_
+    """
     print("Published data")
 
 
 def connect():
+    """Execute when connecting to a MQTT broker"""
     print("Start connecting to the local MQTT broker")
     print("Broker ip: " + str(MQTT_LOCAL_IP))
     print("Topic: " + str(MQTT_TOPIC))
@@ -66,6 +105,7 @@ def connect():
 
 
 def send():
+    """Loop over local images, and send them one by one to a remote MQTT broker"""
     # Loop over the dataset of 60 images
     files = []
     for file in os.listdir("images"):
@@ -85,8 +125,9 @@ def send():
     # Send all frames over MQTT, one by one
     for i in range(MAX_IMGS):
         start_time = time.time_ns()
-        file = open("images/" + files[i % len(files)], "rb")
-        byte_arr = bytearray(file.read())
+        with open("images/" + files[i % len(files)], "rb") as f:
+            byte_arr = bytearray(f.read())
+            f.close()
 
         # Prepend 0's to the time to get a fixed length string
         t = time.time_ns()
@@ -128,8 +169,8 @@ if __name__ == "__main__":
     send()
 
     print("Wait for all images to be received back")
-    while received != MAX_IMGS:
-        print("Waiting progress: %i / %i" % (received, MAX_IMGS))
+    while RECEIVED != MAX_IMGS:
+        print("Waiting progress: %i / %i" % (RECEIVED, MAX_IMGS))
         time.sleep(10)
 
     print("All %i images have been received back" % (MAX_IMGS))

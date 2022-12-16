@@ -47,8 +47,11 @@
       shell: |
         for i in `seq 0 {{ replicas }}`
         do
-          cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" > "/home/{{ username }}/jobs/job-$i.yaml"
+          cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" \
+          > "/home/{{ username }}/jobs/job-$i.yaml"
         done
 
     - name: Launch jobs
-      command: kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f "/home/{{ username }}/jobs"
+      command: >
+        kubectl create --kubeconfig="/home/{{ username }}/.kube/config"
+        -f "/home/{{ username }}/jobs"

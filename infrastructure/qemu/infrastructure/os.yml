@@ -25,7 +25,9 @@
         dest: "{{ base_path }}/.continuum/images/ubuntu2004.img"
 
     - name: Convert image to qcow2 format
-      command: qemu-img convert -O qcow2 "{{ base_path }}/.continuum/images/ubuntu2004.img" "{{ base_path }}/.continuum/images/ubuntu2004.qcow2"
+      command: >
+        qemu-img convert -O qcow2 "{{ base_path }}/.continuum/images/ubuntu2004.img"
+        "{{ base_path }}/.continuum/images/ubuntu2004.qcow2"
 
     - name: Remove original image
       file:

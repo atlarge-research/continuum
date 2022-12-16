@@ -1,14 +1,15 @@
 """\
-This is a combination of a publisher and subscriber, modeling handling ML workload on the endpoint itself.
+This is a combination of a publisher and subscriber,
+modeling handling ML workload on the endpoint itself.
 """
 
-import PIL.Image as Image
-
-import tflite_runtime.interpreter as tflite
-import numpy as np
 import os
 import time
 import multiprocessing
+import numpy as np
+from PIL import Image
+import tflite_runtime.interpreter as tflite
+
 
 CPU_THREADS = int(os.environ["CPU_THREADS"])
 FREQUENCY = int(os.environ["FREQUENCY"])
@@ -20,6 +21,11 @@ MAX_IMGS = FREQUENCY * DURATION
 
 
 def generate(queue):
+    """Generate data to be processed
+
+    Args:
+        queue (object): Multiprocessing queue
+    """
     print("Start generating")
 
     # Loop over the dataset of 60 images
@@ -48,8 +54,13 @@ def generate(queue):
 
 
 def process(queue):
+    """Process generated data
+
+    Args:
+        queue (object): Multiprocessing queue
+    """
     # Load the labels
-    with open("labels.txt", "r") as f:
+    with open("labels.txt", "r", encoding="utf-8") as f:
         labels = [line.strip() for line in f.readlines()]
 
     # Load the model
@@ -101,6 +112,7 @@ def process(queue):
 
 
 def main():
+    """Create multiprocessing elements and start generator / processor functions."""
     # Start threads
     queue = multiprocessing.Queue()
     p2 = multiprocessing.Process(target=process, args=(queue,))
