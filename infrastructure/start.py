@@ -9,9 +9,9 @@ import json
 import string
 import numpy as np
 
-import machine as m
-import ansible
-import network
+from . import machine as m
+from . import ansible
+from . import network
 
 from .qemu import generate
 from .qemu import start as vm

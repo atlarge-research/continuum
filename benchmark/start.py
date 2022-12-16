@@ -7,14 +7,14 @@ import sys
 import time
 import os
 
-import output as out
-
 # pylint: disable=wrong-import-position
 
 sys.path.append(os.path.abspath(".."))
 import main
 
 # pylint: enable=wrong-import-position
+
+from . import output as out
 
 
 def cache_worker(config, machines):

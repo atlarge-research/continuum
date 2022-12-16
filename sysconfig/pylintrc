@@ -10,7 +10,8 @@ jobs=0
 # fixme:                     Don't crash when a TODO message is found.
 # relative-beyond-top-level: Continuum's package importing is a bit messy. Ignore this.
 # global-statement:          Sometimes you need to use the GLOBAL keyword in a function.
-disable=consider-using-f-string,trailing-whitespace,fixme,relative-beyond-top-level,global-statement
+# no-name-in-module:         Pylint doesn't understand relative pathing, so disable this error.
+disable=consider-using-f-string,trailing-whitespace,fixme,relative-beyond-top-level,global-statement,no-name-in-module
 init-hook='import sys; sys.path.append(".")'
 
 [BASIC]

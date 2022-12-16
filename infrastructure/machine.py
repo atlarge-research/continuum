@@ -188,19 +188,21 @@ BASE_NAMES              %s""" % (
 
         new_retries = []
 
+        # pylint: disable=consider-using-with
+
         for i in range(math.ceil(len(command) / batchsize)):
             processes = []
             for j, c in enumerate(command[i * batchsize : (i + 1) * batchsize]):
                 logging.debug("Start subprocess: %s", c)
-                with subprocess.Popen(
+                process = subprocess.Popen(
                     c,
                     shell=shell,
                     executable=executable,
                     env=env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                ) as process:
-                    processes.append(process)
+                )
+                processes.append(process)
 
             # Get outputs for this batch of commmands (blocking)
             for j, process in enumerate(processes):
@@ -225,15 +227,15 @@ BASE_NAMES              %s""" % (
 
             for i in retries:
                 logging.debug("Retry %i, subprocess %i: %s", t, i, command[i])
-                with subprocess.Popen(
+                process = subprocess.Popen(
                     command[i],
                     shell=shell,
                     executable=executable,
                     env=env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                ) as process:
-                    processes.append(process)
+                )
+                processes.append(process)
 
             # Get outputs for this batch of commmands (blocking)
             for i, process in zip(retries, processes):
@@ -243,6 +245,8 @@ BASE_NAMES              %s""" % (
 
                 if not output:
                     new_retries.append(i)
+
+        # pylint: enable=consider-using-with
 
         return outputs
 
