@@ -4,7 +4,7 @@ Continuum offers the following features:
 
 1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
 2. Users can freely configure the specifications of the virtual machines and the network connecting them through a single configuration file.
-3. Continuum automatically installs operating services, resource managers, and applicaitons inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
+3. Continuum automatically installs operating services, resource managers, and applications inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
 4. Continuum can automatically benchmark the resource managers and applications installed in the emulated cluster, and report metrics and logs back to the user.
 5. Continuum is easily extendable, allowing users to add support for more infrastructure providers, operating services, resource managers, and applications.
 
