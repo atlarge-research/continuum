@@ -7,14 +7,14 @@ import sys
 import time
 import os
 
+import output as out
+
 # pylint: disable=wrong-import-position
 
 sys.path.append(os.path.abspath(".."))
 import main
 
 # pylint: enable=wrong-import-position
-
-from . import output
 
 
 def cache_worker(config, machines):
@@ -35,7 +35,8 @@ def cache_worker(config, machines):
         cores = config["infrastructure"]["edge_cores"]
 
     # Global variables for each applications
-    # cores - 0.4 for other Kubernetes services that take up CPU, but still guarantee 1 pod per machine
+    # cpu_req = cores - 0.4
+    #   Kubernetes services take up some CPU space, and we do not want to oversubscribe
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
         "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
@@ -59,11 +60,11 @@ def cache_worker(config, machines):
         }
 
     # Merge the two var dicts
-    vars = {**global_vars, **app_vars}
+    all_vars = {**global_vars, **app_vars}
 
     # Parse to string
     vars_str = ""
-    for k, v in vars.items():
+    for k, v in all_vars.items():
         vars_str += str(k) + "=" + str(v) + " "
 
     # Launch applications on cloud/edge
@@ -76,7 +77,10 @@ def cache_worker(config, machines):
     main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
 
     # This only creates the file we need, now launch the benchmark
-    command = "kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml"
+    command = (
+        "kubectl apply --kubeconfig=/home/cloud_controller/.kube/config "
+        + "-f /home/cloud_controller/job-template.yaml"
+    )
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
     if not output or "job.batch/empty created" not in output[0]:
@@ -110,7 +114,8 @@ def cache_worker(config, machines):
                 time.sleep(5)
                 pending = True
                 continue
-            elif (error and not all("[CONTINUUM]" in l for l in error)) or not output:
+
+            if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
                 logging.error("".join(error))
                 sys.exit()
 
@@ -119,7 +124,7 @@ def cache_worker(config, machines):
         app_status = line[-1]
 
         # Check status of app
-        if app_status == "Pending" or app_status == "Running":
+        if app_status in ["Pending", "Running"]:
             time.sleep(5)
             pending = True
         elif app_status == "Succeeded":
@@ -127,7 +132,7 @@ def cache_worker(config, machines):
             pending = False
         else:
             logging.error(
-                'Container on cloud/edge %s has status %s, expected "Pending", "Running", or "Succeeded"',
+                "Container on cloud/edge %s has status %s, expected Pending, Running, or Succeeded",
                 app_name,
                 app_status,
             )
@@ -154,7 +159,7 @@ def cache_worker(config, machines):
 
 def start_worker(config, machines):
     """Start the MQTT subscriber application on cloud / edge workers.
-    Submit the job request to the cloud controller, which will automatically start it on the cluster.
+    Submit the job request to the cloud controller, which automatically starts it on the cluster.
     Every cloud / edge worker will only have 1 application running taking up all resources.
     Multiple subscribers per node won't work, they all read the same messages from the MQTT bus.
 
@@ -201,11 +206,11 @@ def start_worker(config, machines):
         }
 
     # Merge the two var dicts
-    vars = {**global_vars, **app_vars}
+    all_vars = {**global_vars, **app_vars}
 
     # Parse to string
     vars_str = ""
-    for k, v in vars.items():
+    for k, v in all_vars.items():
         vars_str += str(k) + "=" + str(v) + " "
 
     # Launch applications on cloud/edge
@@ -223,7 +228,10 @@ def start_worker(config, machines):
         # TODO: Move this application specific code properly to the app folders
         #       with classes etc.
         # This only creates the file we need, now launch the benchmark
-        command = "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config -f /home/cloud_controller/job-template.yaml\""
+        command = (
+            "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config "
+            + '-f /home/cloud_controller/job-template.yaml"'
+        )
         output, error = machines[0].process(
             config, command, shell=True, ssh=config["cloud_ssh"][0]
         )[0]
@@ -262,7 +270,8 @@ def start_worker(config, machines):
                 time.sleep(5)
                 pending = True
                 continue
-            elif (error and not all("[CONTINUUM]" in l for l in error)) or not output:
+
+            if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
                 # TODO: Application specific filter again, move to application code
                 logging.error("".join(error))
                 sys.exit()
@@ -370,7 +379,7 @@ def start_worker_mist(config, machines):
 
         while not deployed:
             command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
-            output, error = machines[0].process(config, command, shell=True, ssh=ssh)[0]
+            output, error = machines[0].process(config, command, shell=True, ssh=worker_ssh)[0]
 
             if error:
                 logging.error("".join(error))
@@ -386,7 +395,7 @@ def start_worker_mist(config, machines):
                     if cont_name in line:
                         status_line = line
 
-            if status_line == None:
+            if status_line is None:
                 logging.error(
                     "ERROR: Could not find the status of any container running in VM %s: %s",
                     worker_ssh.split("@")[0],
@@ -394,7 +403,7 @@ def start_worker_mist(config, machines):
                 )
                 sys.exit()
 
-            parsed = line.rstrip().split(" ")
+            parsed = status_line.rstrip().split(" ")
 
             # If not yet up, wait
             if parsed[1] == "Up":
@@ -536,7 +545,7 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                 if cont_name in line:
                     status_line = line
 
-            if status_line == None:
+            if status_line is None:
                 logging.error(
                     "ERROR: Could not find status of container %s running in VM %s: %s",
                     cont_name,
@@ -545,7 +554,7 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                 )
                 sys.exit()
 
-            parsed = line.rstrip().split(" ")
+            parsed = status_line.rstrip().split(" ")
 
             # Check status
             if parsed[1] == "Up":
@@ -611,7 +620,7 @@ def wait_worker_completion(config, machines):
             get_list = False
         else:
             logging.error(
-                'ERROR: Container on cloud/edge %s has status %s, expected "Running" or "Succeeded"',
+                "ERROR: Container on cloud/edge %s has status %s, expected Running or Succeeded",
                 app_name,
                 app_status,
             )
@@ -655,17 +664,17 @@ def start(config, machines):
     if config["infrastructure"]["endpoint_nodes"]:
         # TODO: Even this is specific right? Use endpoints or not? Or leave as general?
         logging.info("Benchmark has been finished, prepare results")
-        endpoint_output = output.get_endpoint_output(config, machines, container_names)
+        endpoint_output = out.get_endpoint_output(config, machines, container_names)
 
     worker_output = []
     if config["mode"] == "cloud" or config["mode"] == "edge":
         if config["benchmark"]["resource_manager"] != "mist":
-            worker_output = output.get_worker_output(config, machines)
+            worker_output = out.get_worker_output(config, machines)
         else:
-            worker_output = output.get_worker_output_mist(config, machines, container_names_mist)
+            worker_output = out.get_worker_output_mist(config, machines, container_names_mist)
 
     # Parse output into dicts, and print result
-    worker_metrics, endpoint_metrics = output.gather_metrics(
+    worker_metrics, endpoint_metrics = out.gather_metrics(
         machines, config, worker_output, endpoint_output, container_names, starttime
     )
-    output.format_output(config, worker_metrics, endpoint_metrics)
+    out.format_output(config, worker_metrics, endpoint_metrics)
