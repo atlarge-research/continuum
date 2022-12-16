@@ -75,7 +75,6 @@ Software versions tested:
 - Python 3.8.10
 - Ansible 2.13.2
 
-
 ### Part 1: Prepare the environment
 We prepare a virtual machine with Ubuntu 20.04 in this step.
 The only requirement for this part is installing QEMU/KVM and Libvirt.
