@@ -7,7 +7,6 @@ import logging
 import socket
 import string
 import os
-from inspect import cleandoc
 
 
 def create_inventory_machine(config, machines):
@@ -66,31 +65,27 @@ def create_inventory_machine(config, machines):
 
                 if machine.is_local:
                     f.write(
-                        cleandoc(
-                            """localhost ansible_connection=local cloud_controller=%i \
-                            cloud_start=%i cloud_end=%i base_cloud=%s\n"""
-                            % (
-                                machine.cloud_controller,
-                                clouds,
-                                clouds + machine.clouds - 1,
-                                base,
-                            )
+                        "localhost ansible_connection=local cloud_controller=%i \
+cloud_start=%i cloud_end=%i base_cloud=%s\n"
+                        % (
+                            machine.cloud_controller,
+                            clouds,
+                            clouds + machine.clouds - 1,
+                            base,
                         )
                     )
                 else:
                     f.write(
-                        cleandoc(
-                            """%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-                            cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n"""
-                            % (
-                                machine.name_sanitized,
-                                machine.ip,
-                                machine.user,
-                                machine.cloud_controller,
-                                clouds,
-                                clouds + machine.clouds - 1,
-                                base,
-                            )
+                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
+cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n"
+                        % (
+                            machine.name_sanitized,
+                            machine.ip,
+                            machine.user,
+                            machine.cloud_controller,
+                            clouds,
+                            clouds + machine.clouds - 1,
+                            base,
                         )
                     )
 
@@ -111,25 +106,21 @@ def create_inventory_machine(config, machines):
 
                 if machine.is_local:
                     f.write(
-                        cleandoc(
-                            """localhost ansible_connection=local edge_start=%i \
-                            edge_end=%i base_edge=%s\n"""
-                            % (edges, edges + machine.edges - 1, base)
-                        )
+                        "localhost ansible_connection=local edge_start=%i \
+edge_end=%i base_edge=%s\n"
+                        % (edges, edges + machine.edges - 1, base)
                     )
                 else:
                     f.write(
-                        cleandoc(
-                            """%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-                            edge_start=%i edge_end=%i base_edge=%s\n"""
-                            % (
-                                machine.name_sanitized,
-                                machine.ip,
-                                machine.user,
-                                edges,
-                                edges + machine.edges - 1,
-                                base,
-                            )
+                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
+edge_start=%i edge_end=%i base_edge=%s\n"
+                        % (
+                            machine.name_sanitized,
+                            machine.ip,
+                            machine.user,
+                            edges,
+                            edges + machine.edges - 1,
+                            base,
                         )
                     )
 
@@ -149,25 +140,21 @@ def create_inventory_machine(config, machines):
 
                 if machine.is_local:
                     f.write(
-                        cleandoc(
-                            """localhost ansible_connection=local endpoint_start=%i \
-                            endpoint_end=%i base_endpoint=%s\n"""
-                            % (endpoints, endpoints + machine.endpoints - 1, base)
-                        )
+                        "localhost ansible_connection=local endpoint_start=%i \
+endpoint_end=%i base_endpoint=%s\n"
+                        % (endpoints, endpoints + machine.endpoints - 1, base)
                     )
                 else:
                     f.write(
-                        cleandoc(
-                            """%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-                            endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"""
-                            % (
-                                machine.name_sanitized,
-                                machine.ip,
-                                machine.user,
-                                endpoints,
-                                endpoints + machine.endpoints - 1,
-                                base,
-                            )
+                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
+endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
+                        % (
+                            machine.name_sanitized,
+                            machine.ip,
+                            machine.user,
+                            endpoints,
+                            endpoints + machine.endpoints - 1,
+                            base,
                         )
                     )
 
@@ -214,16 +201,14 @@ def create_inventory_vm(config, machines):
                 # Cloud controller (is always on machine 0)
                 f.write("\n[cloudcontroller]\n")
                 f.write(
-                    cleandoc(
-                        """%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-                        username=%s cloud_mode=%i\n"""
-                        % (
-                            machines[0].cloud_controller_names[0],
-                            machines[0].cloud_controller_ips[0],
-                            machines[0].cloud_controller_names[0],
-                            machines[0].cloud_controller_names[0],
-                            config["mode"] == "cloud",
-                        )
+                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
+username=%s cloud_mode=%i\n"
+                    % (
+                        machines[0].cloud_controller_names[0],
+                        machines[0].cloud_controller_ips[0],
+                        machines[0].cloud_controller_names[0],
+                        machines[0].cloud_controller_names[0],
+                        config["mode"] == "cloud",
                     )
                 )
 
@@ -234,11 +219,9 @@ def create_inventory_vm(config, machines):
                 for machine in machines:
                     for name, ip in zip(machine.cloud_names, machine.cloud_ips):
                         f.write(
-                            cleandoc(
-                                """%s ansible_connection=ssh ansible_host=%s \
-                                ansible_user=%s username=%s\n"""
-                                % (name, ip, name, name)
-                            )
+                            "%s ansible_connection=ssh ansible_host=%s \
+ansible_user=%s username=%s\n"
+                            % (name, ip, name, name)
                         )
 
             # Edge VM group
@@ -248,11 +231,9 @@ def create_inventory_vm(config, machines):
                 for machine in machines:
                     for name, ip in zip(machine.edge_names, machine.edge_ips):
                         f.write(
-                            cleandoc(
-                                """%s ansible_connection=ssh ansible_host=%s \
-                                ansible_user=%s username=%s\n"""
-                                % (name, ip, name, name)
-                            )
+                            "%s ansible_connection=ssh ansible_host=%s \
+ansible_user=%s username=%s\n"
+                            % (name, ip, name, name)
                         )
 
             # Endpoint VM group
@@ -261,11 +242,9 @@ def create_inventory_vm(config, machines):
                 for machine in machines:
                     for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
                         f.write(
-                            cleandoc(
-                                """%s ansible_connection=ssh ansible_host=%s \
-                                ansible_user=%s username=%s\n"""
-                                % (name, ip, name, name)
-                            )
+                            "%s ansible_connection=ssh ansible_host=%s \
+ansible_user=%s username=%s\n"
+                            % (name, ip, name, name)
                         )
 
         # Make group with all base VMs for netperf installation
@@ -285,11 +264,9 @@ def create_inventory_vm(config, machines):
                     for name, ip in zip(machine.base_names, machine.base_ips):
                         if "base_cloud" in name.rstrip(string.digits):
                             f.write(
-                                cleandoc(
-                                    """%s ansible_connection=ssh ansible_host=%s \
-                                    ansible_user=%s username=%s\n"""
-                                    % (name, ip, name, name)
-                                )
+                                "%s ansible_connection=ssh ansible_host=%s \
+ansible_user=%s username=%s\n"
+                                % (name, ip, name, name)
                             )
 
             if config["mode"] == "edge":
@@ -298,11 +275,9 @@ def create_inventory_vm(config, machines):
                     for name, ip in zip(machine.base_names, machine.base_ips):
                         if "base_edge" in name.rstrip(string.digits):
                             f.write(
-                                cleandoc(
-                                    """%s ansible_connection=ssh ansible_host=%s \
-                                    ansible_user=%s username=%s\n"""
-                                    % (name, ip, name, name)
-                                )
+                                "%s ansible_connection=ssh ansible_host=%s \
+ansible_user=%s username=%s\n"
+                                % (name, ip, name, name)
                             )
 
             if config["infrastructure"]["endpoint_nodes"]:
@@ -311,11 +286,9 @@ def create_inventory_vm(config, machines):
                     for name, ip in zip(machine.base_names, machine.base_ips):
                         if "base_endpoint" in name.rstrip(string.digits):
                             f.write(
-                                cleandoc(
-                                    """%s ansible_connection=ssh ansible_host=%s \
-                                    ansible_user=%s username=%s\n"""
-                                    % (name, ip, name, name)
-                                )
+                                "%s ansible_connection=ssh ansible_host=%s \
+ansible_user=%s username=%s\n"
+                                % (name, ip, name, name)
                             )
 
         f.close()
