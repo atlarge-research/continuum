@@ -94,3 +94,11 @@
       with_items:
         - /tmp/keadm-v1.8.1-linux-amd64
         - /tmp/keadm-v1.8.1-linux-amd64.tar.gz
+
+    - name: Clone kube-prometheus
+      command: git clone https://github.com/prometheus-operator/kube-prometheus.git /kube-prometheus
+
+    - name: Git checkout
+      command: git checkout release-0.9
+      args:
+        chdir: /kube-prometheus

@@ -71,6 +71,7 @@ def start(config, machines):
         main.ansible_check_output((output, error))
 
     # Patch: Fix accessing KubeEdge logs from the cloud host
+    # Only start after the normal installation has finished
     logging.info("Enable KubeEdge logging feature")
     commands = []
     commands.append(
@@ -93,6 +94,23 @@ def start(config, machines):
         ]
     )
 
-    # Wait for the cloud to finish before starting the edge
     for command in commands:
         main.ansible_check_output(machines[0].process(config, command)[0])
+
+    # Install observability packages (Prometheus, Grafana) if configured by the user
+    # Only start after the previous KubeEdge fix has finished
+    if config["benchmark"]["observability"]:
+        command = [
+            "ansible-playbook",
+            "-i",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/cloud/observability.yml",
+            ),
+        ]
+
+        output, error = machines[0].process(config, command)[0]
+
+        logging.debug("Check output for Ansible command [%s]", " ".join(command))
+        main.ansible_check_output((output, error))
