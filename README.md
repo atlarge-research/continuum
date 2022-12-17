@@ -50,7 +50,7 @@ When using Continuum for research, please cite the work as follows:
 ### Acknowledgment
 This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
 
-### Observability
+## Observability
 Continuum has integrated support for Prometheus and Grafana on top of Kubernetes and OpenFaas.
 Continuum will automatically install these software packages and configure them when using `observability = True` in the configuration file, see `configuration/template.cfg`. 
 After Continuum has finished, you can use your browser to open the Grafana dashboard using `localhost:3000` and Prometheus using `localhost:9090`. 
