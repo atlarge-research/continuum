@@ -95,5 +95,12 @@
           MaxSessions 10000
           MaxStartups 10000
 
+    - name: Git checkout
+      git:
+        repo: https://github.com/prometheus-operator/kube-prometheus.git
+        dest: /tmp
+        version: release-0.9
+        clone: true
+
     - name: Reset SSH client
       command: systemctl restart sshd

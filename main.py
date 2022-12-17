@@ -810,6 +810,17 @@ def parse_config(parser, arg):
             default=False,
         )
 
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "observability",
+            bool,
+            lambda x: x in [True, False],
+            default=False,
+        )
+
     sec = "execution_model"
     if config.has_section(sec):
         new[sec] = {}
