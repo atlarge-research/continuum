@@ -66,7 +66,7 @@ def start(config, machines):
             ),
         ]
 
-        output, error = machines[0].process(config, command)
+        output, error = machines[0].process(config, command)[0]
 
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
         main.ansible_check_output((output, error))
