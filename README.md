@@ -50,6 +50,14 @@ When using Continuum for research, please cite the work as follows:
 ### Acknowledgment
 This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
 
+### Observability
+Continuum has integrated support for Prometheus and Grafana on top of Kubernetes and OpenFaas.
+Continuum will automatically install these software packages and configure them when using `observability = True` in the configuration file, see `configuration/template.cfg`. 
+After Continuum has finished, you can use your browser to open the Grafana dashboard using `localhost:3000` and Prometheus using `localhost:9090`. 
+The Grafana dashboard requires a username and password, both are `admin` by default.
+In case you run Continuum on a machine without a graphical user interface, connect to the machine from a device with one, and port-forward the 3000 and 9090 ports. 
+For example, to port-forward the 3000 port, use `ssh -L 3000:XXX.XXX.XXX.XXX:3000 username@address -i /path/to/ssh_key`, with XXX.XXX.XXX.XXX the IP of the cloud controller VM that is printed after Continuum has finished (typically 192.168.100.2), username@address the IP address of the server you can Continuum on and the username of your account on the server, and the corresponding SSH key.
+
 ## Demo
 This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
 The demo contains three parts:
