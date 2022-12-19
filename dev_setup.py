@@ -24,7 +24,7 @@ done
 echo "-------------------------------"
 echo "Yamllint"
 echo "-------------------------------"
-yamllint --strict -c ./sysconfig/yamllint.yaml ./
+yamllint --strict -c ./sysconfig/yamllint.yml ./
 
 echo "-------------------------------"
 echo "Ansible-lint"
