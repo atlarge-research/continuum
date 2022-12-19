@@ -13,8 +13,11 @@ from . import machine as m
 from . import ansible
 from . import network
 
-from .qemu import generate
-from .qemu import start as vm
+from .qemu import generate as qemu_generate
+from .qemu import start as qemu_vm
+
+from .terraform import generate as terraform_generate
+from .terraform import start as terraform_vm
 
 
 def schedule_equal(config, machines):
@@ -679,6 +682,7 @@ def start(config):
     ansible.create_inventory_machine(config, machines)
     ansible.create_inventory_vm(config, machines)
 
+    generate = "%s_generate" % (config["infrastructure"]["provider"])
     generate.start(config, machines)
     copy_files(config, machines)
 
@@ -686,6 +690,7 @@ def start(config):
     if not config["infrastructure"]["infra_only"]:
         docker_registry(config, machines)
 
+    vm = "%s_vm" % (config["infrastructure"]["provider"])
     vm.start(config, machines)
     add_ssh(config, machines)
 

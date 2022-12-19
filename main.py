@@ -168,7 +168,7 @@ def parse_config(parser, arg):
             sec,
             "provider",
             str,
-            lambda x: x in ["qemu"],
+            lambda x: x in ["qemu", "terraform"],
             mandatory=True,
         )
         option_check(
@@ -661,6 +661,62 @@ def parse_config(parser, arg):
             lambda x: x in [True, False],
             default=False,
         )
+
+        # Add Google Cloud Platform info when using Terraform
+        mandatory = False
+        if new["infrastructure"]["provider"] == "terraform":
+            mandatory = True
+
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "gcp_region",
+            str,
+            lambda _: True,
+            mandatory=mandatory,
+            default="",
+        )
+
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "gcp_zone",
+            str,
+            lambda x: new["infrastructure"]["gcp_region"] in x,
+            mandatory=mandatory,
+            default="",
+        )
+
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "gcp_project",
+            str,
+            lambda x: True,
+            mandatory=mandatory,
+            default="",
+        )
+
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "gcp_credentials",
+            str,
+            os.path.expanduser,
+            mandatory=mandatory,
+            default="",
+        )
+
+        if new[sec]["gcp_credentials"][-1] == "/":
+            new[sec]["gcp_credentials"] = new[sec]["base_pgcp_credentialsth"][:-1]
     else:
         parser.error("Config: infrastructure section missing")
 
