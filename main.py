@@ -715,7 +715,7 @@ def parse_config(parser, arg):
             default="",
         )
 
-        if new[sec]["gcp_credentials"][-1] == "/":
+        if len(new[sec]["gcp_credentials"]) > 0 and new[sec]["gcp_credentials"][-1] == "/":
             new[sec]["gcp_credentials"] = new[sec]["base_pgcp_credentialsth"][:-1]
     else:
         parser.error("Config: infrastructure section missing")

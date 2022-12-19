@@ -682,7 +682,7 @@ def start(config):
     ansible.create_inventory_machine(config, machines)
     ansible.create_inventory_vm(config, machines)
 
-    generate = "%s_generate" % (config["infrastructure"]["provider"])
+    generate = globals()["%s_generate" % (config["infrastructure"]["provider"])]
     generate.start(config, machines)
     copy_files(config, machines)
 
@@ -690,7 +690,7 @@ def start(config):
     if not config["infrastructure"]["infra_only"]:
         docker_registry(config, machines)
 
-    vm = "%s_vm" % (config["infrastructure"]["provider"])
+    vm = globals()["%s_vm" % (config["infrastructure"]["provider"])]
     vm.start(config, machines)
     add_ssh(config, machines)
 
