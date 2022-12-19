@@ -13,11 +13,14 @@ from . import machine as m
 from . import ansible
 from . import network
 
+# pylint: disable=unused-import
 from .qemu import generate as qemu_generate
 from .qemu import start as qemu_vm
 
 from .terraform import generate as terraform_generate
 from .terraform import start as terraform_vm
+
+# pylint: enable=unused-import
 
 
 def schedule_equal(config, machines):

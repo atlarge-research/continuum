@@ -1,7 +1,5 @@
 """Generate a Terraform configuration for GCP"""
 
-import logging
-import sys
 
 ###################################################################################################
 
@@ -28,6 +26,11 @@ provider "google" {
 
 
 def generate_header(config):
+    """Write the Terraform config header
+
+    Args:
+        config (dict): Parsed configuration
+    """
     with open("header.tf", mode="w", encoding="utf-8") as f:
         f.write(HEADER)
 
@@ -99,7 +102,12 @@ resource "google_compute_firewall" "allow_all_egress" {
 """
 
 
-def generate_network(config):
+def generate_network(_config):
+    """Write the Terraform config network
+
+    Args:
+        config (dict): Parsed configuration
+    """
     with open("network.tf", mode="w", encoding="utf-8") as f:
         f.write(MAIN_NETWORK)
         f.write(CLOUD_NETWORK)
@@ -188,6 +196,11 @@ resource "google_compute_instance" "k8s_worker" {
 
 
 def generate_cloud(config):
+    """Write the Terraform config cloud VM configuration
+
+    Args:
+        config (dict): Parsed configuration
+    """
     with open("cloud_vm.tf", mode="w", encoding="utf-8") as f:
         f.write(CLOUD_CONTROLLER_IP)
         f.write(CLOUD_WORKER_IP)
@@ -224,7 +237,12 @@ output "stattic_ip_worker" {
 # }
 
 
-def generate_output(config):
+def generate_output(_config):
+    """Write the Terraform config output definition
+
+    Args:
+        config (dict): Parsed configuration
+    """
     with open("outputs.tf", mode="w", encoding="utf-8") as f:
         f.write(OUTPUT)
 
@@ -232,7 +250,14 @@ def generate_output(config):
 ###################################################################################################
 
 
-def start(config, machines):
+def start(_config, _machines):
+    """Generate Terraform configuration files for the Continuum configuration
+    The configuration is spread over multiple files to make reading easier.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
     manual_config = {
         "region": "europe-west4",
         "zone": "europe-west4-a",
