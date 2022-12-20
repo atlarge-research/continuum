@@ -28,6 +28,6 @@ logging-modules=logging
 [DESIGN]
 max-locals=30
 max-args=10
-max-branches=30
-max-statements=100
+max-branches=50
+max-statements=120
 max-attributes=25

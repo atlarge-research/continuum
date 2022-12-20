@@ -687,7 +687,8 @@ def start(config):
         generate.start(config, machines)
 
         # TODO: Split copy files into vm infra / ansible / benchmark / mist
-        # copy_files(config, machines)  # TODO: ONLY COPY TERRAFORM FILES OVER, THE REST DOESNT EXIST
+        # TODO: ONLY COPY TERRAFORM FILES OVER, THE REST DOESNT EXIST
+        # copy_files(config, machines)
 
         # ------------------------------------------------------------------------------------------
         logging.info("Don't start VMs yet, still needs to be tested")
