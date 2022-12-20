@@ -153,42 +153,6 @@ using the --file option"""
     return machines_per_node
 
 
-def delete_vms(config, machines):
-    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
-    and possilby at the end if the run if configured by the user
-
-    Args:
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Start deleting VMs")
-
-    commands = []
-    sshs = []
-    for machine in machines:
-        if machine.is_local:
-            command = (
-                r'virsh list --all | grep -o -E "(\w*_%s)" | \
-xargs -I %% sh -c "virsh destroy %%"'
-                % (config["username"])
-            )
-        else:
-            comm = (
-                r"virsh list --all | grep -o -E \"(\w*_%s)\" | \
-xargs -I %% sh -c \"virsh destroy %%\""
-                % (config["username"])
-            )
-            command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
-
-        commands.append(command)
-        sshs.append(None)
-
-    results = machines[0].process(config, commands, shell=True, ssh=sshs, ssh_key=False)
-
-    # Wait for process to finish. Outcome of destroy command does not matter
-    for command, (_, _) in zip(commands, results):
-        logging.debug("Check output for command [%s]", command)
-
-
 def create_keypair(config, machines):
     """Create SSH keys to be used for ssh'ing into VMs, local and remote if needed.
     We use the SSH key of the local machine for all machines, so copy to all.
@@ -221,7 +185,7 @@ def create_keypair(config, machines):
             sys.exit()
 
 
-def create_dir(config, machines):
+def create_tmp_dir(config, machines):
     """Generate a temporary directory for generated files.
     This directory is located inside the benchmark git repository.
     Later, that data will be sent to each physical machine's
@@ -326,114 +290,125 @@ def create_continuum_dir(config, machines):
             sys.exit()
 
 
-def copy_files(config, machines):
-    """Copy Infrastructure and Ansible files to all machines with
-    directory config["infrastructure"]["base_path"]/.continuum
+# def copy_files_local(config, machines):
+#     """Copy files that are only needed on the local machine with
+#     directory config["infrastructure"]["base_path"]/.continuum
 
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Start copying files to all nodes")
+#     Args:
+#         config (dict): Parsed configuration
+#         machines (list(Machine object)): List of machine objects representing physical machines
+#     """
+#     logging.info("Start copying files that are only needed on the local machine")
+#     dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
 
-    # Delete old content
-    delete_old_content(config, machines)
+#     out = []
 
-    # Create a source directory on each machine
-    create_continuum_dir(config, machines)
+#     # For the local machine, copy the ansible inventory file and benchmark launch
+#     out.append(machines[0].copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest))
+#     out.append(
+#         machines[0].copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest)
+#     )
 
-    # Now copy the files over
-    for machine in machines:
-        if machine.is_local:
-            dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
-        else:
-            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
+#     if (
+#         not config["infrastructure"]["infra_only"]
+#         and (config["mode"] == "cloud" or config["mode"] == "edge")
+#         and config["benchmark"]["resource_manager"] != "mist"
+#     ):
+#         path = os.path.join(
+#             config["base"],
+#             "application",
+#             config["benchmark"]["application"],
+#             "launch_benchmark_%s.yml" % (config["benchmark"]["resource_manager"]),
+#         )
+#         d = dest + "launch_benchmark.yml"
+#         out.append(machines[0].copy_files(config, path, d))
 
-        out = []
+#     for output, error in out:
+#         if error:
+#             logging.error("".join(error))
+#             sys.exit()
+#         elif output:
+#             logging.error("".join(output))
+#             sys.exit()
 
-        # For the local machine, copy the ansible inventory file and benchmark launch
-        if machine.is_local:
-            out.append(
-                machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest)
-            )
-            out.append(
-                machine.copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest)
-            )
 
-            if (
-                not config["infrastructure"]["infra_only"]
-                and (config["mode"] == "cloud" or config["mode"] == "edge")
-                and config["benchmark"]["resource_manager"] != "mist"
-            ):
-                path = os.path.join(
-                    config["base"],
-                    "application",
-                    config["benchmark"]["application"],
-                    "launch_benchmark_%s.yml" % (config["benchmark"]["resource_manager"]),
-                )
-                d = dest + "launch_benchmark.yml"
-                out.append(machine.copy_files(config, path, d))
+# def copy_files(config, machines):
+#     """Copy Infrastructure and Ansible files to all machines with
+#     directory config["infrastructure"]["base_path"]/.continuum
 
-        # Copy VM creation files
-        for name in (
-            machine.cloud_controller_names
-            + machine.cloud_names
-            + machine.edge_names
-            + machine.endpoint_names
-            + machine.base_names
-        ):
-            out.append(
-                machine.copy_files(
-                    config,
-                    os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"),
-                    dest,
-                )
-            )
-            out.append(
-                machine.copy_files(
-                    config,
-                    os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"),
-                    dest,
-                )
-            )
+#     Args:
+#         config (dict): Parsed configuration
+#         machines (list(Machine object)): List of machine objects representing physical machines
+#     """
+#     logging.info("Start copying files to all nodes")
+#     for machine in machines:
+#         if machine.is_local:
+#             dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
+#         else:
+#             dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
 
-        # Copy Ansible files for infrastructure
-        path = os.path.join(
-            config["base"],
-            "infrastructure",
-            config["infrastructure"]["provider"],
-            "infrastructure",
-        )
-        out.append(machine.copy_files(config, path, dest, recursive=True))
+#         out = []
 
-        # For cloud/edge/endpoint specific
-        if not config["infrastructure"]["infra_only"]:
-            if config["mode"] == "cloud" or config["mode"] == "edge":
-                # Use Kubeedge setup code for mist computing
-                rm = config["benchmark"]["resource_manager"]
-                if config["benchmark"]["resource_manager"] == "mist":
-                    rm = "kubeedge"
+#         # Copy VM creation files
+#         for name in (
+#             machine.cloud_controller_names
+#             + machine.cloud_names
+#             + machine.edge_names
+#             + machine.endpoint_names
+#             + machine.base_names
+#         ):
+#             out.append(
+#                 machine.copy_files(
+#                     config,
+#                     os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"),
+#                     dest,
+#                 )
+#             )
+#             out.append(
+#                 machine.copy_files(
+#                     config,
+#                     os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"),
+#                     dest,
+#                 )
+#             )
 
-                path = os.path.join(config["base"], "resource_manager", rm, "cloud")
-                out.append(machine.copy_files(config, path, dest, recursive=True))
+#         # Copy Ansible files for infrastructure
+#         path = os.path.join(
+#             config["base"],
+#             "infrastructure",
+#             config["infrastructure"]["provider"],
+#             "infrastructure",
+#         )
+#         out.append(machine.copy_files(config, path, dest, recursive=True))
 
-                if config["mode"] == "edge":
-                    path = os.path.join(config["base"], "resource_manager", rm, "edge")
-                    out.append(machine.copy_files(config, path, dest, recursive=True))
-            if "execution_model" in config:
-                path = os.path.join(config["base"], "execution_model")
-                out.append(machine.copy_files(config, path, dest, recursive=True))
+#         # For cloud/edge/endpoint specific
+#         if not config["infrastructure"]["infra_only"]:
+#             if config["mode"] == "cloud" or config["mode"] == "edge":
+#                 # Use Kubeedge setup code for mist computing
+#                 rm = config["benchmark"]["resource_manager"]
+#                 if config["benchmark"]["resource_manager"] == "mist":
+#                     rm = "kubeedge"
 
-            path = os.path.join(config["base"], "resource_manager/endpoint/")
-            out.append(machine.copy_files(config, path, dest, recursive=True))
+#                 path = os.path.join(config["base"], "resource_manager", rm, "cloud")
+#                 out.append(machine.copy_files(config, path, dest, recursive=True))
 
-        for output, error in out:
-            if error:
-                logging.error("".join(error))
-                sys.exit()
-            elif output:
-                logging.error("".join(output))
-                sys.exit()
+#                 if config["mode"] == "edge":
+#                     path = os.path.join(config["base"], "resource_manager", rm, "edge")
+#                     out.append(machine.copy_files(config, path, dest, recursive=True))
+#             if "execution_model" in config:
+#                 path = os.path.join(config["base"], "execution_model")
+#                 out.append(machine.copy_files(config, path, dest, recursive=True))
+
+#             path = os.path.join(config["base"], "resource_manager/endpoint/")
+#             out.append(machine.copy_files(config, path, dest, recursive=True))
+
+#         for output, error in out:
+#             if error:
+#                 logging.error("".join(error))
+#                 sys.exit()
+#             elif output:
+#                 logging.error("".join(output))
+#                 sys.exit()
 
 
 def add_ssh(config, machines, base=None):
@@ -656,6 +631,9 @@ def start(config):
     Returns:
         list(Machine object): List of machine objects representing physical machines
     """
+    generate = globals()["%s_generate" % (config["infrastructure"]["provider"])]
+    vm = globals()["%s_vm" % (config["infrastructure"]["provider"])]
+
     machines = m.make_machine_objects(config)
 
     for machine in machines:
@@ -667,35 +645,67 @@ def start(config):
         nodes_per_machine = schedule_equal(config, machines)
 
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
-    m.set_ip_names(config, machines, nodes_per_machine)
 
-    m.gather_ips(config, machines)
-    m.gather_ssh(config, machines)
+    # Delete old resources
+    vm.delete_vms(config, machines)
 
-    delete_vms(config, machines)
+    # Prepare storage for Continuum files
+    create_tmp_dir(config, machines)
+    delete_old_content(config, machines)
+    create_continuum_dir(config, machines)
+
+    # Sets IPs and names for
+    vm.set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
-    for machine in machines:
-        logging.debug(machine)
-
-    logging.info("Generate configuration files for Infrastructure and Ansible")
-    create_keypair(config, machines)
-    create_dir(config, machines)
-
-    ansible.create_inventory_machine(config, machines)
-    ansible.create_inventory_vm(config, machines)
-
-    generate = globals()["%s_generate" % (config["infrastructure"]["provider"])]
-    generate.start(config, machines)
-    copy_files(config, machines)
-
-    logging.info("Setting up the infrastructure")
     if not config["infrastructure"]["infra_only"]:
         docker_registry(config, machines)
 
-    vm = globals()["%s_vm" % (config["infrastructure"]["provider"])]
-    vm.start(config, machines)
-    add_ssh(config, machines)
+    # TODO: This should be done better in the future
+    if config["infrastructure"]["provider"] == "qemu":
+        m.gather_ips(config, machines)
+        m.gather_ssh(config, machines)
+
+        for machine in machines:
+            logging.debug(machine)
+
+        logging.info("Generate configuration files for Infrastructure and Ansible")
+        create_keypair(config, machines)
+
+        ansible.create_inventory_machine(config, machines)
+        ansible.create_inventory_vm(config, machines)
+
+        generate.start(config, machines)
+        copy_files(config, machines)
+
+        logging.info("Setting up the infrastructure")
+        vm.start(config, machines)
+        add_ssh(config, machines)
+    elif config["infrastructure"]["provider"] == "terraform":
+        logging.info("Generate configuration files for Infrastructure and Ansible")
+        create_keypair(config, machines)
+        generate.start(config, machines)
+
+        # TODO: Split copy files into vm infra / ansible / benchmark / mist
+        # copy_files(config, machines)  # TODO: ONLY COPY TERRAFORM FILES OVER, THE REST DOESNT EXIST
+
+        # ------------------------------------------------------------------------------------------
+        logging.info("Don't start VMs yet, still needs to be tested")
+        sys.exit()
+        vm.start(config, machines)
+
+        # TODO: NOW FIX IPS FROM PREVIOUS M.SET_IP_NAMES FUNCTION
+        # THEN DO
+        m.gather_ips(config, machines)
+        m.gather_ssh(config, machines)
+        add_ssh(config, machines)
+
+        for machine in machines:
+            logging.debug(machine)
+
+        ansible.create_inventory_machine(config, machines)
+        ansible.create_inventory_vm(config, machines)
+        copy_files(config, machines)  # TODO: COPY THE OTHER FILES
 
     if config["infrastructure"]["network_emulation"]:
         network.start(config, machines)

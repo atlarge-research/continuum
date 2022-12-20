@@ -1,6 +1,5 @@
 """Generate a Terraform configuration for GCP"""
 
-
 ###################################################################################################
 
 HEADER = """
@@ -31,11 +30,17 @@ def generate_header(config):
     Args:
         config (dict): Parsed configuration
     """
-    with open("header.tf", mode="w", encoding="utf-8") as f:
+    with open(".tmp/header.tf", mode="w", encoding="utf-8") as f:
         f.write(HEADER)
 
         f.write(
-            PROVIDER % (config["credentials"], config["project"], config["region"], config["zone"])
+            PROVIDER
+            % (
+                config["infrastructure"]["gcp_credentials"],
+                config["infrastructure"]["gcp_project"],
+                config["infrastructure"]["gcp_region"],
+                config["infrastructure"]["gcp_zone"],
+            )
         )
 
 
@@ -57,13 +62,21 @@ resource "google_compute_subnetwork" "subnetwork_cloud" {
 }
 """
 
-# ENDPOINT_NETWORK = """
-# resource "google_compute_subnetwork" "subnetwork_edge" {
-#     name          = "subnetwork-edge"
-#     ip_cidr_range = "10.0.1.0/24"
-#     network       = google_compute_network.vpc_network.id
-# }
-# """
+EDGE_NETWORK = """
+resource "google_compute_subnetwork" "subnetwork_edge" {
+    name          = "subnetwork-edge"
+    ip_cidr_range = "10.0.1.0/24"
+    network       = google_compute_network.vpc_network.id
+}
+"""
+
+ENDPOINT_NETWORK = """
+resource "google_compute_subnetwork" "subnetwork_endpoint" {
+    name          = "subnetwork-endpoint"
+    ip_cidr_range = "10.0.2.0/24"
+    network       = google_compute_network.vpc_network.id
+}
+"""
 
 INGRESS = """
 resource "google_compute_firewall" "allow_all_ingress" {
@@ -102,70 +115,55 @@ resource "google_compute_firewall" "allow_all_egress" {
 """
 
 
-def generate_network(_config):
+def generate_network(config):
     """Write the Terraform config network
 
     Args:
         config (dict): Parsed configuration
     """
-    with open("network.tf", mode="w", encoding="utf-8") as f:
+    with open(".tmp/network.tf", mode="w", encoding="utf-8") as f:
         f.write(MAIN_NETWORK)
-        f.write(CLOUD_NETWORK)
-        # f.write(ENDPOINT_NETWORK % (config["region"]))
+
+        if config["infrastructure"]["cloud_nodes"] > 0:
+            f.write(CLOUD_NETWORK)
+
+        if config["infrastructure"]["edge_nodes"] > 0:
+            f.write(EDGE_NETWORK)
+
+        if config["infrastructure"]["endpoint_nodes"] > 0:
+            f.write(ENDPOINT_NETWORK)
+
         f.write(INGRESS)
         f.write(EGRESS)
 
 
 ###################################################################################################
 
-CLOUD_CONTROLLER_IP = """
-resource "google_compute_address" "k8s_controlplane_static_ip" {
-    name = "k8s-controlplane-static-ip"
+CLOUD_IP = """
+resource "google_compute_address" "cloud_static_ip" {
+    name = "cloud${count.index}-static-ip"
+    count = %i
 }
 """
 
-# NOTE: Create multiple when having count > 1
-CLOUD_WORKER_IP = """
-resource "google_compute_address" "k8s_worker_static_ip" {
-    name = "k8s-worker-static-ip"
+EDGE_IP = """
+resource "google_compute_address" "edge_static_ip" {
+    name = "edge${count.index}-static-ip"
+    count = %i
 }
 """
 
-CLOUD_CONTROLLER = """
-resource "google_compute_instance" "k8s_controlplane" {
-    name         = "k8s-controlplane"
-    machine_type = "e2-small"
-
-    boot_disk {
-        initialize_params {
-            size  = "30"
-            type  = "pd-standard"
-            image = "ubuntu-os-cloud/ubuntu-2004-lts"
-        }
-    }
-
-    network_interface {
-        network    = google_compute_network.vpc_network.name
-        subnetwork = google_compute_subnetwork.subnetwork_cloud.name
-        access_config {
-            nat_ip = google_compute_address.k8s_controlplane_static_ip.address
-        }
-    }
-
-    service_account {
-        scopes = ["cloud-platform"]
-    }
-
-    metadata = {
-        ssh-keys = "redplanet00:${file("~/.ssh/id_rsa_benchmark.pub")}"
-    }
+ENDPOINT_IP = """
+resource "google_compute_address" "endpoint_static_ip" {
+    name = "endpoint${count.index}-static-ip"
+    count = %i
 }
 """
 
-CLOUD_WORKER = """
-resource "google_compute_instance" "k8s_worker" {
-    name         = "k8s-worker"
-    machine_type = "e2-small"
+CLOUD = """
+resource "google_compute_instance" "cloud" {
+    name         = "cloud${count.index}"
+    machine_type = "%s"
     count        = %i
 
     boot_disk {
@@ -180,7 +178,7 @@ resource "google_compute_instance" "k8s_worker" {
         network    = google_compute_network.vpc_network.name
         subnetwork = google_compute_subnetwork.subnetwork_cloud.name
         access_config {
-            nat_ip = google_compute_address.k8s_worker_static_ip.address
+            nat_ip = element(google_compute_address.cloud_static_ip.*.address, count.index)
         }
     }
 
@@ -189,68 +187,175 @@ resource "google_compute_instance" "k8s_worker" {
     }
 
     metadata = {
-        ssh-keys = "redplanet00:${file("~/.ssh/id_rsa_benchmark.pub")}"
+        ssh-keys = "cloud%{count.index}:${file("%s")}"
+    }
+}
+"""
+
+EDGE = """
+resource "google_compute_instance" "edge" {
+    name         = "edge${count.index}"
+    machine_type = "%s"
+    count        = %i
+
+    boot_disk {
+        initialize_params {
+            size  = "30"
+            type  = "pd-standard"
+            image = "ubuntu-os-cloud/ubuntu-2004-lts"
+        }
+    }
+
+    network_interface {
+        network    = google_compute_network.vpc_network.name
+        subnetwork = google_compute_subnetwork.subnetwork_edge.name
+        access_config {
+            nat_ip = element(google_compute_address.edge_static_ip.*.address, count.index)
+        }
+    }
+
+    service_account {
+        scopes = ["cloud-platform"]
+    }
+
+    metadata = {
+        ssh-keys = "edge%{count.index}:${file("%s")}"
+    }
+}
+"""
+
+ENDPOINT = """
+resource "google_compute_instance" "endpoint" {
+    name         = "endpoint${count.index}"
+    machine_type = "%s"
+    count        = %i
+
+    boot_disk {
+        initialize_params {
+            size  = "30"
+            type  = "pd-standard"
+            image = "ubuntu-os-cloud/ubuntu-2004-lts"
+        }
+    }
+
+    network_interface {
+        network    = google_compute_network.vpc_network.name
+        subnetwork = google_compute_subnetwork.subnetwork_endpoint.name
+        access_config {
+            nat_ip = element(google_compute_address.endpoint_static_ip.*.address, count.index)
+        }
+    }
+
+    service_account {
+        scopes = ["cloud-platform"]
+    }
+
+    metadata = {
+        ssh-keys = "endpoint%{count.index}:${file("%s")}"
     }
 }
 """
 
 
-def generate_cloud(config):
+def generate_vm(config):
     """Write the Terraform config cloud VM configuration
 
     Args:
         config (dict): Parsed configuration
     """
-    with open("cloud_vm.tf", mode="w", encoding="utf-8") as f:
-        f.write(CLOUD_CONTROLLER_IP)
-        f.write(CLOUD_WORKER_IP)
-        f.write(CLOUD_CONTROLLER)
-        f.write(CLOUD_WORKER % (config["cloud_nodes"]))
+    if config["infrastructure"]["cloud_nodes"] > 0:
+        with open(".tmp/cloud_vm.tf", mode="w", encoding="utf-8") as f:
+            f.write(CLOUD_IP % (config["infrastructure"]["cloud_nodes"]))
+            f.write(
+                CLOUD
+                % (
+                    config["infrastructure"]["gcp_cloud"],
+                    config["infrastructure"]["cloud_nodes"],
+                    config["ssh_key"],
+                )
+            )
+
+    if config["infrastructure"]["edge_nodes"] > 0:
+        with open(".tmp/edge_vm.tf", mode="w", encoding="utf-8") as f:
+            f.write(EDGE_IP % (config["infrastructure"]["edge_nodes"]))
+            f.write(
+                EDGE
+                % (
+                    config["infrastructure"]["gcp_edge"],
+                    config["infrastructure"]["edge_nodes"],
+                    config["ssh_key"],
+                )
+            )
+
+    if config["infrastructure"]["endpoint_nodes"] > 0:
+        with open(".tmp/endpoint_vm.tf", mode="w", encoding="utf-8") as f:
+            f.write(ENDPOINT_IP % (config["infrastructure"]["endpoint_nodes"]))
+            f.write(
+                ENDPOINT
+                % (
+                    config["infrastructure"]["gcp_endpoint"],
+                    config["infrastructure"]["endpoint_nodes"],
+                    config["ssh_key"],
+                )
+            )
 
 
 ###################################################################################################
 
-OUTPUT = """
-output "subnetwork_1_name" {
-  value = google_compute_subnetwork.subnetwork_cloud.name
+OUTPUT_CLOUD = """
+output "cloud_ip_internal" {
+  value = ["${google_compute_instance.cloud.*.network_interface.0.network_ip}"]
 }
 
-output "ip_controller" {
-  value = google_compute_instance.k8s_controlplane.network_interface.0.network_ip
-}
-
-output "ip_worker" {
-  value = ["${google_compute_instance.k8s_worker.*.network_interface.0.network_ip}"]
-}
-
-output "stattic_ip_controller" {
-    value = google_compute_address.k8s_controlplane_static_ip.address
-}
-
-output "stattic_ip_worker" {
-    value = google_compute_address.k8s_worker_static_ip.address
+output "cloud_ip_external" {
+  value = ["${google_compute_address.cloud_static_ip.*.address}"]
 }
 """
 
-# output "subnetwork_2_name" {
-#   value = google_compute_subnetwork.subnetwork_edge.name
-# }
+OUTPUT_EDGE = """
+output "edge_ip_internal" {
+  value = ["${google_compute_instance.edge.*.network_interface.0.network_ip}"]
+}
+
+output "edge_ip_external" {
+  value = ["${google_compute_address.edge_static_ip.*.address}"]
+}
+"""
+
+OUTPUT_ENDPOINT = """
+output "endpoint_ip_internal" {
+  value = ["${google_compute_instance.endpoint.*.network_interface.0.network_ip}"]
+}
+
+output "endpoint_ip_external" {
+  value = ["${google_compute_address.endpoint_static_ip.*.address}"]
+}
+"""
 
 
-def generate_output(_config):
+def generate_output(config):
     """Write the Terraform config output definition
 
     Args:
         config (dict): Parsed configuration
     """
-    with open("outputs.tf", mode="w", encoding="utf-8") as f:
-        f.write(OUTPUT)
+    with open(".tmp/outputs.tf", mode="w", encoding="utf-8") as f:
+        f.write(MAIN_NETWORK)
+
+        if config["infrastructure"]["cloud_nodes"] > 0:
+            f.write(OUTPUT_CLOUD)
+
+        if config["infrastructure"]["edge_nodes"] > 0:
+            f.write(OUTPUT_EDGE)
+
+        if config["infrastructure"]["endpoint_nodes"] > 0:
+            f.write(OUTPUT_ENDPOINT)
 
 
 ###################################################################################################
 
 
-def start(_config, _machines):
+def start(config, _machines):
     """Generate Terraform configuration files for the Continuum configuration
     The configuration is spread over multiple files to make reading easier.
 
@@ -258,20 +363,10 @@ def start(_config, _machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    manual_config = {
-        "region": "europe-west4",
-        "zone": "europe-west4-a",
-        "project": "continuum-372108",
-        "credentials": "/home/redplanet00/.ssh/continuum-372108-9f6a709ba92c.json",
-        "cloud_nodes": 1,
-        "endpoint_nodes": 1,
-    }
-
-    generate_header(manual_config)
-    generate_network(manual_config)
-    generate_cloud(manual_config)
-    # generate_endpoint(config)
-    generate_output(manual_config)
+    generate_header(config)
+    generate_network(config)
+    generate_vm(config)
+    generate_output(config)
 
 
 # TODO

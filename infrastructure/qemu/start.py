@@ -18,6 +18,211 @@ import main
 from .. import start as infrastructure
 
 
+def delete_vms(config, machines):
+    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
+    and possilby at the end if the run if configured by the user
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Start deleting VMs")
+
+    commands = []
+    sshs = []
+    for machine in machines:
+        if machine.is_local:
+            command = (
+                r'virsh list --all | grep -o -E "(\w*_%s)" | \
+xargs -I %% sh -c "virsh destroy %%"'
+                % (config["username"])
+            )
+        else:
+            comm = (
+                r"virsh list --all | grep -o -E \"(\w*_%s)\" | \
+xargs -I %% sh -c \"virsh destroy %%\""
+                % (config["username"])
+            )
+            command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
+
+        commands.append(command)
+        sshs.append(None)
+
+    results = machines[0].process(config, commands, shell=True, ssh=sshs, ssh_key=False)
+
+    # Wait for process to finish. Outcome of destroy command does not matter
+    for command, (_, _) in zip(commands, results):
+        logging.debug("Check output for command [%s]", command)
+
+
+def update_ip(config, middle_ip, postfix_ip):
+    """Update IPs. Once the last number of the IP string (the zzz in www.xxx.yyy.zzz)
+    reaches the configured upperbound, reset this number to the lower bound and reset
+    the yyy number to += 1 to go to the next IP range.
+
+    Args:
+        config (dict): Parsed configuration
+        middle_ip (int): yyy part of IP in www.xxx.yyy.zzz
+        postfix_ip (int): zzz part of IP in www.xxx.yyy.zzz
+
+    Returns:
+        int, int: Updated middle_ip and postfix_ip
+    """
+    postfix_ip += 1
+    if postfix_ip == config["postfixIP_upper"]:
+        middle_ip += 1
+        postfix_ip = config["postfixIP_lower"]
+
+    return middle_ip, postfix_ip
+
+
+def set_ip_names(config, machines, nodes_per_machine):
+    """Set amount of cloud / edge / endpoints nodes per machine, and their IPs / hostnames.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        nodes_per_machine (list(set)): List of 'cloud', 'edge', 'endpoint' sets containing
+            the number of those machines per physical node
+    """
+    logging.info("Set the IPs and names of all VMs for each physical machine")
+    middle_ip = config["infrastructure"]["middleIP"]
+    postfix_ip = config["postfixIP_lower"]
+
+    middle_ip_base = config["infrastructure"]["middleIP_base"]
+    postfix_ip_base = config["postfixIP_lower"]
+
+    cloud_index = 0
+    edge_index = 0
+    endpoint_index = 0
+
+    for i, (machine, nodes) in enumerate(zip(machines, nodes_per_machine)):
+        # Set IP / name for controller (on first machine only)
+        if (
+            machine == machines[0]
+            and not config["infrastructure"]["infra_only"]
+            and not config["mode"] == "endpoint"
+            and not config["benchmark"]["resource_manager"] == "mist"
+        ):
+            machine.cloud_controller = int(nodes["cloud"] > 0)
+            machine.clouds = nodes["cloud"] - int(nodes["cloud"] > 0)
+
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
+            machine.cloud_controller_ips.append(ip)
+
+            name = "cloud_controller_%s" % (config["username"])
+            machine.cloud_controller_names.append(name)
+            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+        else:
+            machine.cloud_controller = 0
+            machine.clouds = nodes["cloud"]
+
+        machine.edges = nodes["edge"]
+        machine.endpoints = nodes["endpoint"]
+
+        # Set IP / name for cloud
+        for _ in range(machine.clouds):
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
+            machine.cloud_ips.append(ip)
+            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+
+            name = "cloud%i_%s" % (cloud_index, config["username"])
+            machine.cloud_names.append(name)
+            cloud_index += 1
+
+        # Set IP / name for edge
+        for _ in range(machine.edges):
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
+            machine.edge_ips.append(ip)
+            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+
+            name = "edge%i_%s" % (edge_index, config["username"])
+            machine.edge_names.append(name)
+            edge_index += 1
+
+        # Set IP / name for endpoint
+        for _ in range(machine.endpoints):
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip,
+                postfix_ip,
+            )
+            machine.endpoint_ips.append(ip)
+            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+
+            name = "endpoint%i_%s" % (endpoint_index, config["username"])
+            machine.endpoint_names.append(name)
+            endpoint_index += 1
+
+        # Set IP / name for base image(s)
+        if config["infrastructure"]["infra_only"]:
+            ip = "%s.%s.%s" % (
+                config["infrastructure"]["prefixIP"],
+                middle_ip_base,
+                postfix_ip_base,
+            )
+            machine.base_ips.append(ip)
+
+            name = "base%i_%s" % (i, config["username"])
+            machine.base_names.append(name)
+            middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+        else:
+            # Base images for resource manager images
+            if "resource_manager" in config["benchmark"]:
+                # Use Kubeedge setup code for mist computing
+                rm = config["benchmark"]["resource_manager"]
+                if config["benchmark"]["resource_manager"] == "mist":
+                    rm = "kubeedge"
+
+            if machine.cloud_controller + machine.clouds > 0:
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
+                )
+                machine.base_ips.append(ip)
+
+                name = "base_cloud_%s%i_%s" % (rm, i, config["username"])
+                machine.base_names.append(name)
+                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+
+            if machine.edges > 0:
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
+                )
+                machine.base_ips.append(ip)
+
+                name = "base_edge_%s%i_%s" % (rm, i, config["username"])
+                machine.base_names.append(name)
+                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+
+            if machine.endpoints > 0:
+                ip = "%s.%s.%s" % (
+                    config["infrastructure"]["prefixIP"],
+                    middle_ip_base,
+                    postfix_ip_base,
+                )
+                machine.base_ips.append(ip)
+
+                name = "base_endpoint%i_%s" % (i, config["username"])
+                machine.base_names.append(name)
+                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+
+
 def os_image(config, machines):
     """Check if the os image with Ubuntu 20.04 already exists,
     and if not create the image (on all machines)

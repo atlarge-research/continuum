@@ -20,7 +20,7 @@ good-names-rgxs=^[_a-zA-Z][_a-zA-Z0-9]?$
 
 [FORMAT]
 max-line-length=100
-max-module-line=1500
+max-module-line=1000
 
 [LOGGING]
 logging-modules=logging
@@ -28,6 +28,6 @@ logging-modules=logging
 [DESIGN]
 max-locals=30
 max-args=10
-max-branches=50
-max-statements=150
+max-branches=30
+max-statements=100
 max-attributes=25
