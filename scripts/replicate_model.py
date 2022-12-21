@@ -18,7 +18,7 @@ from matplotlib import colors
 # pylint: disable=wrong-import-position
 
 sys.path.append(os.path.abspath("../configuration_parser"))
-import start as parser
+import start as confparser
 
 # pylint: enable=wrong-import-position
 
@@ -153,7 +153,7 @@ class ModelLocal(Model):
 
     def __init__(self, args, parser):
         logging.info("Parse local config")
-        config = parser.parse_config(parser, "configuration/model/local.cfg")
+        config = confparser.parse_config(parser, "configuration/model/local.cfg")
         Model.__init__(self, args, config)
 
     def __repr__(self):
@@ -258,7 +258,7 @@ class ModelOffload(Model):
 
     def __init__(self, args, parser):
         logging.info("Parse offload config")
-        config = parser.parse_config(parser, "configuration/model/offload.cfg")
+        config = confparser.parse_config(parser, "configuration/model/offload.cfg")
         Model.__init__(self, args, config)
 
     def __repr__(self):
