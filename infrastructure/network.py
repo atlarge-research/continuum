@@ -6,10 +6,11 @@ import logging
 import sys
 
 
-def generate_tc_commands(values, ips, disk):
+def generate_tc_commands(config, values, ips, disk):
     """Generate TC commands
 
     Args:
+        config (dict): Parsed configuration
         values (list(float)): Avg latency, Var latency, throughput
         ips (list(str)): List of ips to filter TC for
         disk (int): Qdisc to attach to
@@ -20,6 +21,10 @@ def generate_tc_commands(values, ips, disk):
     latency_avg = values[0]
     latency_var = values[1]
     throughput = values[2]
+
+    network = "ens2"
+    if config["infrastructure"]["provider"] == "terraform":
+        network = "ens4"
 
     commands = []
 
@@ -32,7 +37,7 @@ def generate_tc_commands(values, ips, disk):
                 "qdisc",
                 "add",
                 "dev",
-                "ens2",
+                network,
                 "root",
                 "handle",
                 "1:",
@@ -48,7 +53,7 @@ def generate_tc_commands(values, ips, disk):
             "class",
             "add",
             "dev",
-            "ens2",
+            network,
             "parent",
             "1:",
             "classid",
@@ -68,7 +73,7 @@ def generate_tc_commands(values, ips, disk):
                 "filter",
                 "add",
                 "dev",
-                "ens2",
+                network,
                 "parent",
                 "1:",
                 "protocol",
@@ -94,7 +99,7 @@ def generate_tc_commands(values, ips, disk):
                 "qdisc",
                 "add",
                 "dev",
-                "ens2",
+                network,
                 "parent",
                 "1:%i" % (disk),
                 "handle",
@@ -188,19 +193,19 @@ def start(config, machines):
         # Between cloud and other cloud nodes
         targets = list(set(config["control_ips"] + config["cloud_ips"]) - set([ssh.split("@")[1]]))
         if targets:
-            command += generate_tc_commands(cloud, targets, disk)
+            command += generate_tc_commands(config, cloud, targets, disk)
             disk += 1
 
         # Between cloud and edge nodes
         targets = config["edge_ips"]
         if targets:
-            command += generate_tc_commands(cloud_edge, targets, disk)
+            command += generate_tc_commands(config, cloud_edge, targets, disk)
             disk += 1
 
         # Between cloud and endpoint nodes
         targets = config["endpoint_ips"]
         if targets:
-            command += generate_tc_commands(cloud_endpoint, targets, disk)
+            command += generate_tc_commands(config, cloud_endpoint, targets, disk)
 
         commands.append(command)
 
@@ -212,19 +217,19 @@ def start(config, machines):
         # Between edge and other edge nodes
         targets = list(set(config["edge_ips"]) - set([ssh.split("@")[1]]))
         if targets:
-            command += generate_tc_commands(edge, targets, disk)
+            command += generate_tc_commands(config, edge, targets, disk)
             disk += 1
 
         # Between edge and cloud nodes
         targets = config["control_ips"] + config["cloud_ips"]
         if targets:
-            command += generate_tc_commands(cloud_edge, targets, disk)
+            command += generate_tc_commands(config, cloud_edge, targets, disk)
             disk += 1
 
         # Between edge and endpoint nodes
         targets = config["endpoint_ips"]
         if targets:
-            command += generate_tc_commands(edge_endpoint, targets, disk)
+            command += generate_tc_commands(config, edge_endpoint, targets, disk)
 
         commands.append(command)
 
@@ -236,13 +241,13 @@ def start(config, machines):
         # Between endpoint and cloud nodes
         targets = config["control_ips"] + config["cloud_ips"]
         if targets:
-            command += generate_tc_commands(cloud_endpoint, targets, disk)
+            command += generate_tc_commands(config, cloud_endpoint, targets, disk)
             disk += 1
 
         # Between endpoint and edge nodes
         targets = config["edge_ips"]
         if targets:
-            command += generate_tc_commands(edge_endpoint, targets, disk)
+            command += generate_tc_commands(config, edge_endpoint, targets, disk)
 
         commands.append(command)
 

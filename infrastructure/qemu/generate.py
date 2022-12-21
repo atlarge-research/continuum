@@ -131,7 +131,7 @@ def start(config, machines):
     logging.info("Start writing QEMU config files for cloud / edge")
 
     # Get the SSH public key
-    with open("%s.pub" % (config["ssh_key"]), "r", encoding="utf-8") as f:
+    with open("%s" % (config["ssh_key"]), "r", encoding="utf-8") as f:
         ssh_key = f.read().rstrip()
         f.close()
 

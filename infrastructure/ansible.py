@@ -160,8 +160,6 @@ endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
 
                 endpoints += machine.endpoints
 
-        f.close()
-
 
 def create_inventory_vm(config, machines):
     """Create ansible inventory for setting up Kubernetes and KubeEdge, so ssh to all VMs is needed
@@ -191,61 +189,64 @@ def create_inventory_vm(config, machines):
             % (os.path.join(config["infrastructure"]["base_path"], ".continuum"))
         )
 
-        if not config["infrastructure"]["infra_only"]:
-            # Tier specific groups
-            if (config["mode"] == "cloud" or config["mode"] == "edge") and config["benchmark"][
-                "resource_manager"
-            ] != "mist":
-                f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips[0]))
+        # Tier specific groups
+        if (config["mode"] == "cloud" or config["mode"] == "edge") and (
+            "benchmark" in config and config["benchmark"]["resource_manager"] != "mist"
+        ):
+            f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips[0]))
 
-                # Cloud controller (is always on machine 0)
-                f.write("\n[cloudcontroller]\n")
-                f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
+            # Cloud controller (is always on machine 0)
+            f.write("\n[cloudcontroller]\n")
+            f.write(
+                "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
 username=%s cloud_mode=%i\n"
-                    % (
-                        machines[0].cloud_controller_names[0],
-                        machines[0].cloud_controller_ips[0],
-                        machines[0].cloud_controller_names[0],
-                        machines[0].cloud_controller_names[0],
-                        config["mode"] == "cloud",
-                    )
+                % (
+                    machines[0].cloud_controller_names[0],
+                    machines[0].cloud_controller_ips[0],
+                    machines[0].cloud_controller_names[0],
+                    machines[0].cloud_controller_names[0],
+                    config["mode"] == "cloud",
                 )
+            )
 
-            # Cloud worker VM group
-            if config["mode"] == "cloud":
-                f.write("\n[clouds]\n")
+        # Cloud worker VM group
+        if config["mode"] == "cloud":
+            f.write("\n[clouds]\n")
 
-                for machine in machines:
-                    for name, ip in zip(machine.cloud_names, machine.cloud_ips):
-                        f.write(
-                            "%s ansible_connection=ssh ansible_host=%s \
+            for machine in machines:
+                for name, ip in zip(machine.cloud_names, machine.cloud_ips):
+                    f.write(
+                        "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
-                            % (name, ip, name, name)
-                        )
+                        % (name, ip, name, name)
+                    )
 
-            # Edge VM group
-            if config["mode"] == "edge":
-                f.write("\n[edges]\n")
+        # Edge VM group
+        if config["mode"] == "edge":
+            f.write("\n[edges]\n")
 
-                for machine in machines:
-                    for name, ip in zip(machine.edge_names, machine.edge_ips):
-                        f.write(
-                            "%s ansible_connection=ssh ansible_host=%s \
+            for machine in machines:
+                for name, ip in zip(machine.edge_names, machine.edge_ips):
+                    f.write(
+                        "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
-                            % (name, ip, name, name)
-                        )
+                        % (name, ip, name, name)
+                    )
 
-            # Endpoint VM group
-            if config["infrastructure"]["endpoint_nodes"]:
-                f.write("\n[endpoints]\n")
-                for machine in machines:
-                    for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
-                        f.write(
-                            "%s ansible_connection=ssh ansible_host=%s \
+        # Endpoint VM group
+        if config["infrastructure"]["endpoint_nodes"]:
+            f.write("\n[endpoints]\n")
+            for machine in machines:
+                for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
+                    f.write(
+                        "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
-                            % (name, ip, name, name)
-                        )
+                        % (name, ip, name, name)
+                    )
+
+        # Only include base VM logic if there are base VMs
+        if not machines[0].base_ips:
+            return
 
         # Make group with all base VMs for netperf installation
         f.write("\n[base]\n")
@@ -291,4 +292,70 @@ ansible_user=%s username=%s\n"
                                 % (name, ip, name, name)
                             )
 
-        f.close()
+
+def copy(config, machines):
+    """Copy Ansible files to the local machine, base_path directory
+    Machines other than the local one don't need Ansible files, Ansible itself will make it work.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Start copying Ansible files to all nodes")
+
+    dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
+    out = []
+
+    # Copy inventory files
+    if machines[0].base_ips:
+        out.append(
+            machines[0].copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest)
+        )
+
+    out.append(
+        machines[0].copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest)
+    )
+
+    # Copy the benchmark file if needed
+    if (
+        not config["infrastructure"]["infra_only"]
+        and (config["mode"] == "cloud" or config["mode"] == "edge")
+        and config["benchmark"]["resource_manager"] != "mist"
+    ):
+        path = os.path.join(
+            config["base"],
+            "application",
+            config["benchmark"]["application"],
+            "launch_benchmark_%s.yml" % (config["benchmark"]["resource_manager"]),
+        )
+        d = dest + "launch_benchmark.yml"
+        out.append(machines[0].copy_files(config, path, d))
+
+    # Copy playbooks for installing resource managers and execution_models
+    if not config["infrastructure"]["infra_only"]:
+        if config["mode"] == "cloud" or config["mode"] == "edge":
+            # Use Kubeedge setup code for mist computing
+            rm = config["benchmark"]["resource_manager"]
+            if config["benchmark"]["resource_manager"] == "mist":
+                rm = "kubeedge"
+
+            path = os.path.join(config["base"], "resource_manager", rm, "cloud")
+            out.append(machines[0].copy_files(config, path, dest, recursive=True))
+
+            if config["mode"] == "edge":
+                path = os.path.join(config["base"], "resource_manager", rm, "edge")
+                out.append(machines[0].copy_files(config, path, dest, recursive=True))
+        if "execution_model" in config:
+            path = os.path.join(config["base"], "execution_model")
+            out.append(machines[0].copy_files(config, path, dest, recursive=True))
+
+        path = os.path.join(config["base"], "resource_manager/endpoint/endpoint/")
+        out.append(machines[0].copy_files(config, path, dest, recursive=True))
+
+    for output, error in out:
+        if error:
+            logging.error("".join(error))
+            sys.exit()
+        elif output:
+            logging.error("".join(output))
+            sys.exit()

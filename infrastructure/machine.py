@@ -53,6 +53,13 @@ class Machine:
         self.endpoint_ips = []
         self.base_ips = []
 
+        # Internal IPs, used for communication between VMs
+        # These IPs may differ from the external IPs, most notably for cloud providers
+        self.cloud_controller_ips_internal = []
+        self.cloud_ips_internal = []
+        self.edge_ips_internal = []
+        self.endpoint_ips_internal = []
+
         self.cloud_controller_names = []
         self.cloud_names = []
         self.edge_names = []
@@ -248,12 +255,6 @@ BASE_NAMES              %s""" % (
         """Get the amount of physical cores for this machine.
         This automatically functions as reachability check for this machine.
         """
-        if config["infrastructure"]["provider"] == "terraform":
-            # Terraform uses GCP, so counting local cores isn't relevant
-            # There is also just 1 machine, "the cloud"
-            self.cores = 1
-            return
-
         logging.info("Check hardware of node %s", self.name)
         command = "lscpu"
 

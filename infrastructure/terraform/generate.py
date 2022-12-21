@@ -16,10 +16,10 @@ terraform {
 
 PROVIDER = """
 provider "google" {
-  credentials = file("%s")
-  project     = "%s"
-  region      = "%s"
-  zone        = "%s"
+  credentials = file(%s)
+  project     = %s
+  region      = %s
+  zone        = %s
 }
 """
 
@@ -163,7 +163,7 @@ resource "google_compute_address" "endpoint_static_ip" {
 CLOUD = """
 resource "google_compute_instance" "cloud" {
     name         = "cloud${count.index}"
-    machine_type = "%s"
+    machine_type = %s
     count        = %i
 
     boot_disk {
@@ -187,7 +187,7 @@ resource "google_compute_instance" "cloud" {
     }
 
     metadata = {
-        ssh-keys = "cloud%{count.index}:${file("%s")}"
+        ssh-keys = "cloud${count.index}:${file("%s")}"
     }
 }
 """
@@ -195,7 +195,7 @@ resource "google_compute_instance" "cloud" {
 EDGE = """
 resource "google_compute_instance" "edge" {
     name         = "edge${count.index}"
-    machine_type = "%s"
+    machine_type = %s
     count        = %i
 
     boot_disk {
@@ -219,7 +219,7 @@ resource "google_compute_instance" "edge" {
     }
 
     metadata = {
-        ssh-keys = "edge%{count.index}:${file("%s")}"
+        ssh-keys = "edge${count.index}:${file("%s")}"
     }
 }
 """
@@ -227,7 +227,7 @@ resource "google_compute_instance" "edge" {
 ENDPOINT = """
 resource "google_compute_instance" "endpoint" {
     name         = "endpoint${count.index}"
-    machine_type = "%s"
+    machine_type = %s
     count        = %i
 
     boot_disk {
@@ -251,7 +251,7 @@ resource "google_compute_instance" "endpoint" {
     }
 
     metadata = {
-        ssh-keys = "endpoint%{count.index}:${file("%s")}"
+        ssh-keys = "endpoint${count.index}:${file("%s")}"
     }
 }
 """
@@ -340,8 +340,6 @@ def generate_output(config):
         config (dict): Parsed configuration
     """
     with open(".tmp/outputs.tf", mode="w", encoding="utf-8") as f:
-        f.write(MAIN_NETWORK)
-
         if config["infrastructure"]["cloud_nodes"] > 0:
             f.write(OUTPUT_CLOUD)
 

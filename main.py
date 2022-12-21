@@ -87,7 +87,7 @@ def add_constants(config):
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
     config["username"] = getpass.getuser()
-    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark")
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark.pub")
 
     if not config["infrastructure"]["infra_only"]:
         if config["benchmark"]["application"] == "image_classification":
@@ -193,6 +193,10 @@ def main(args):
         args (Namespace): Argparse object
     """
     machines = infrastructure.start(args.config)
+    # ------------------------------------------------------
+    logging.info("Dont do any RM and benchmarking for now")
+    args.config["infrastructure"]["infra_only"] = True
+    # ------------------------------------------------------
 
     if not args.config["infrastructure"]["infra_only"]:
         resource_manager.start(args.config, machines)

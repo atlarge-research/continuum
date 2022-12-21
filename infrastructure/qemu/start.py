@@ -113,6 +113,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                 postfix_ip,
             )
             machine.cloud_controller_ips.append(ip)
+            machine.cloud_controller_ips_internal.append(ip)
 
             name = "cloud_controller_%s" % (config["username"])
             machine.cloud_controller_names.append(name)
@@ -132,6 +133,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                 postfix_ip,
             )
             machine.cloud_ips.append(ip)
+            machine.cloud_ips_internal.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
             name = "cloud%i_%s" % (cloud_index, config["username"])
@@ -146,6 +148,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                 postfix_ip,
             )
             machine.edge_ips.append(ip)
+            machine.edge_ips_internal.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
             name = "edge%i_%s" % (edge_index, config["username"])
@@ -160,6 +163,7 @@ def set_ip_names(config, machines, nodes_per_machine):
                 postfix_ip,
             )
             machine.endpoint_ips.append(ip)
+            machine.endpoint_ips_internal.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
             name = "endpoint%i_%s" % (endpoint_index, config["username"])
@@ -221,6 +225,65 @@ def set_ip_names(config, machines, nodes_per_machine):
                 name = "base_endpoint%i_%s" % (i, config["username"])
                 machine.base_names.append(name)
                 middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+
+
+def copy(config, machines):
+    """Copy Infrastructure files to all machines
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Start copying infrastructure files to all nodes")
+
+    # Now copy the files over
+    for machine in machines:
+        if machine.is_local:
+            dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
+        else:
+            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
+
+        out = []
+
+        # Copy VM creation files
+        for name in (
+            machine.cloud_controller_names
+            + machine.cloud_names
+            + machine.edge_names
+            + machine.endpoint_names
+            + machine.base_names
+        ):
+            out.append(
+                machine.copy_files(
+                    config,
+                    os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"),
+                    dest,
+                )
+            )
+            out.append(
+                machine.copy_files(
+                    config,
+                    os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"),
+                    dest,
+                )
+            )
+
+        # Copy Ansible files for infrastructure
+        path = os.path.join(
+            config["base"],
+            "infrastructure",
+            config["infrastructure"]["provider"],
+            "infrastructure",
+        )
+        out.append(machine.copy_files(config, path, dest, recursive=True))
+
+        for output, error in out:
+            if error:
+                logging.error("".join(error))
+                sys.exit()
+            elif output:
+                logging.error("".join(output))
+                sys.exit()
 
 
 def os_image(config, machines):
