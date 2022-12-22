@@ -179,6 +179,9 @@ def create_inventory_vm(config, machines):
         sys.exit()
 
     with open(".tmp/inventory_vms", "w", encoding="utf-8") as f:
+        # TODO: When using Terraform with GCP, host_ip needs to be accessible from the VMs
+        #       This is not the case when you use a cluster with a headnode and worker nodes
+        #       that get internet access via the headnode.
         f.write("[all:vars]\n")
         f.write("ansible_python_interpreter=/usr/bin/python3\n")
         f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")

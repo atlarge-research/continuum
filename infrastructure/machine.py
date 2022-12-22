@@ -70,25 +70,25 @@ class Machine:
         """Returns this string when called as print(machine_object)"""
         return """
 [ MACHINE NAME: %20s ]
-IS_LOCAL                %s
-NAME_SANITIZED          %s
-USER                    %s
-IP                      %s
-CORES                   %i
-CLOUD_CONTROLLER        %i
-CLOUDS                  %i
-EDGES                   %i
-ENDPOINTS               %i
-CLOUD_CONTROLLER_IPS    %s
-CLOUD_IPS               %s
-EDGE_IPS                %s
-ENDPOINT_IPS            %s
-BASE_IPS                %s
-CLOUD_CONTROLLER_NAMES  %s
-CLOUD_NAMES             %s
-EDGE_NAMES              %s
-ENDPOINT_NAMES          %s
-BASE_NAMES              %s""" % (
+IS_LOCAL                    %s
+NAME_SANITIZED              %s
+USER                        %s
+IP                          %s
+CORES                       %i
+CLOUD_CONTROLLER            %i
+CLOUDS                      %i
+EDGES                       %i
+ENDPOINTS                   %i
+CLOUD_CONTROLLER_IPS (int)  %s (%s)
+CLOUD_IPS (int)             %s (%s)
+EDGE_IPS (int)              %s (%s)
+ENDPOINT_IPS (int)          %s (%s)
+BASE_IPS                    %s
+CLOUD_CONTROLLER_NAMES      %s
+CLOUD_NAMES                 %s
+EDGE_NAMES                  %s
+ENDPOINT_NAMES              %s
+BASE_NAMES                  %s""" % (
             self.name,
             str(self.is_local),
             self.name_sanitized,
@@ -100,9 +100,13 @@ BASE_NAMES              %s""" % (
             self.edges,
             self.endpoints,
             ", ".join(self.cloud_controller_ips),
+            ", ".join(self.cloud_controller_ips_internal),
             ", ".join(self.cloud_ips),
+            ", ".join(self.cloud_ips_internal),
             ", ".join(self.edge_ips),
+            ", ".join(self.edge_ips_internal),
             ", ".join(self.endpoint_ips),
+            ", ".join(self.endpoint_ips_internal),
             ", ".join(self.base_ips),
             ", ".join(self.cloud_controller_names),
             ", ".join(self.cloud_names),
@@ -402,24 +406,20 @@ def gather_ips(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.debug("Get ips of controllers/workers")
-    control_ips = []
-    cloud_ips = []
-    edge_ips = []
-    endpoint_ips = []
-    base_ips = []
+    config["control_ips"] = [ip for machine in machines for ip in machine.cloud_controller_ips]
+    config["cloud_ips"] = [ip for machine in machines for ip in machine.cloud_ips]
+    config["edge_ips"] = [ip for machine in machines for ip in machine.edge_ips]
+    config["endpoint_ips"] = [ip for machine in machines for ip in machine.endpoint_ips]
+    config["base_ips"] = [ip for machine in machines for ip in machine.base_ips]
 
-    for machine in machines:
-        control_ips += machine.cloud_controller_ips
-        cloud_ips += machine.cloud_ips
-        edge_ips += machine.edge_ips
-        endpoint_ips += machine.endpoint_ips
-        base_ips += machine.base_ips
-
-    config["control_ips"] = control_ips
-    config["cloud_ips"] = cloud_ips
-    config["edge_ips"] = edge_ips
-    config["endpoint_ips"] = endpoint_ips
-    config["base_ips"] = base_ips
+    config["control_ips_internal"] = [
+        ip for machine in machines for ip in machine.cloud_controller_ips_internal
+    ]
+    config["cloud_ips_internal"] = [ip for machine in machines for ip in machine.cloud_ips_internal]
+    config["edge_ips_internal"] = [ip for machine in machines for ip in machine.edge_ips_internal]
+    config["endpoint_ips_internal"] = [
+        ip for machine in machines for ip in machine.endpoint_ips_internal
+    ]
 
     logging.debug("Control IPs: %s", ", ".join(config["control_ips"]))
     logging.debug("Cloud IPs: %s", ", ".join(config["cloud_ips"]))
