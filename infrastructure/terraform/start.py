@@ -3,7 +3,6 @@
 import os
 import sys
 import logging
-import string
 
 # pylint: disable=wrong-import-position
 
