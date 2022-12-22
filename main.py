@@ -193,10 +193,6 @@ def main(args):
         args (Namespace): Argparse object
     """
     machines = infrastructure.start(args.config)
-    # ------------------------------------------------------
-    logging.info("Dont do any RM and benchmarking for now")
-    args.config["infrastructure"]["infra_only"] = True
-    # ------------------------------------------------------
 
     if not args.config["infrastructure"]["infra_only"]:
         resource_manager.start(args.config, machines)

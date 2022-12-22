@@ -1,5 +1,5 @@
 ---
-- hosts: all
+- hosts: base
   become: true
   tasks:
     - name: Install packages that allow apt to be used over HTTPS

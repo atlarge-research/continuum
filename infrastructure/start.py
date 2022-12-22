@@ -484,7 +484,7 @@ def docker_registry(config, machines):
             "registry",
             "registry:2",
         ]
-        output, error = machines[0].process(config, command)[0]
+        _, error = machines[0].process(config, command)[0]
 
         if error and not (
             any("Unable to find image" in line for line in error)
@@ -560,17 +560,26 @@ def docker_pull(config, machines, base_names):
         commands = []
         sshs = []
         for name, ip in zip(machine.base_names, machine.base_ips):
-            name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
+            name_r = name
+            if "_" in name:
+                name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
+
             if name_r in base_names:
                 images = []
 
-                if "_cloud_" in name or "_edge_" in name:
+                if "cloud" in name or "edge" in name:
                     # Load worker application (always in base image for mist deployment)
                     images.append(config["images"]["worker"].split(":")[1])
-                elif "_endpoint" in name:
+                elif "endpoint" in name:
                     # Load endpoint and combined applications
                     images.append(config["images"]["endpoint"].split(":")[1])
-                    images.append(config["images"]["combined"].split(":")[1])
+
+                    # Only load combined if there are no cloud or edge nodes
+                    if not (
+                        config["infrastructure"]["cloud_nodes"]
+                        + config["infrastructure"]["edge_nodes"]
+                    ):
+                        images.append(config["images"]["combined"].split(":")[1])
 
                 for image in images:
                     command = [
@@ -646,11 +655,11 @@ def start(config):
     vm.set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
-    if not config["infrastructure"]["infra_only"]:
-        docker_registry(config, machines)
-
     # TODO: Replace this if/else with something better, more uniform
     if config["infrastructure"]["provider"] == "qemu":
+        if not config["infrastructure"]["infra_only"]:
+            docker_registry(config, machines)
+
         m.gather_ips(config, machines)
         m.gather_ssh(config, machines)
 
@@ -689,13 +698,12 @@ def start(config):
         ansible.create_inventory_vm(config, machines)
         ansible.copy(config, machines)
 
+        vm.base_install(config, machines)
+
     if config["infrastructure"]["network_emulation"]:
         network.start(config, machines)
 
     if config["infrastructure"]["netperf"]:
-        if config["infrastructure"]["provider"] == "terraform":
-            vm.netperf(config, machines)
-
         network.benchmark(config, machines)
 
     return machines

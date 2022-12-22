@@ -4,7 +4,6 @@ Generate Ansible inventory files
 
 import sys
 import logging
-import socket
 import string
 import os
 
@@ -170,14 +169,6 @@ def create_inventory_vm(config, machines):
     """
     logging.info("Generate Ansible inventory file for VMs")
 
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        host_ip = s.getsockname()[0]
-    except socket.gaierror as e:
-        logging.error("Could not get host ip with error: %s", e)
-        sys.exit()
-
     with open(".tmp/inventory_vms", "w", encoding="utf-8") as f:
         # TODO: When using Terraform with GCP, host_ip needs to be accessible from the VMs
         #       This is not the case when you use a cluster with a headnode and worker nodes
@@ -186,7 +177,7 @@ def create_inventory_vm(config, machines):
         f.write("ansible_python_interpreter=/usr/bin/python3\n")
         f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
         f.write("ansible_ssh_private_key_file=%s\n" % (config["ssh_key"]))
-        f.write("registry_ip=%s:%i\n" % (host_ip, 5000))
+        f.write("registry_ip=%s\n" % (config["registry"]))
         f.write(
             "continuum_home=%s\n"
             % (os.path.join(config["infrastructure"]["base_path"], ".continuum"))
@@ -196,7 +187,8 @@ def create_inventory_vm(config, machines):
         if (config["mode"] == "cloud" or config["mode"] == "edge") and (
             "benchmark" in config and config["benchmark"]["resource_manager"] != "mist"
         ):
-            f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips[0]))
+            f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips_internal[0]))
+            f.write("cloud_ip_external=%s\n" % (machines[0].cloud_controller_ips[0]))
 
             # Cloud controller (is always on machine 0)
             f.write("\n[cloudcontroller]\n")
@@ -266,7 +258,7 @@ ansible_user=%s username=%s\n"
                 f.write("\n[base_cloud]\n")
                 for machine in machines:
                     for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "base_cloud" in name.rstrip(string.digits):
+                        if "cloud" in name.rstrip(string.digits):
                             f.write(
                                 "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
@@ -277,7 +269,7 @@ ansible_user=%s username=%s\n"
                 f.write("\n[base_edge]\n")
                 for machine in machines:
                     for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "base_edge" in name.rstrip(string.digits):
+                        if "edge" in name.rstrip(string.digits):
                             f.write(
                                 "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
@@ -288,7 +280,7 @@ ansible_user=%s username=%s\n"
                 f.write("\n[base_endpoint]\n")
                 for machine in machines:
                     for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "base_endpoint" in name.rstrip(string.digits):
+                        if "endpoint" in name.rstrip(string.digits):
                             f.write(
                                 "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
@@ -310,7 +302,7 @@ def copy(config, machines):
     out = []
 
     # Copy inventory files
-    if machines[0].base_ips:
+    if any("base" in base_name for base_name in machines[0].base_names):
         out.append(
             machines[0].copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest)
         )

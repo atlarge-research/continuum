@@ -127,7 +127,7 @@ def infrastructure(parser, config, new):
     # Set specs of VMs
     mandatory = False
     default = 0
-    if new[sec]["cloud_nodes"] > 0 and new[sec]["provider"] in ["qemu"]:
+    if new[sec]["cloud_nodes"] > 0:
         mandatory = True
         default = "default"
 
@@ -167,7 +167,7 @@ def infrastructure(parser, config, new):
 
     mandatory = False
     default = 0
-    if new[sec]["edge_nodes"] > 0 and new[sec]["provider"] in ["qemu"]:
+    if new[sec]["edge_nodes"] > 0:
         mandatory = True
         default = "default"
 
@@ -207,7 +207,7 @@ def infrastructure(parser, config, new):
 
     mandatory = False
     default = 0
-    if new[sec]["endpoint_nodes"] > 0 and new[sec]["provider"] in ["qemu"]:
+    if new[sec]["endpoint_nodes"] > 0:
         mandatory = True
         default = "default"
 
@@ -629,7 +629,7 @@ def infrastructure_terraform(parser, config, new):
         "gcp_cloud",
         str,
         lambda _: True,
-        mandatory=True,
+        mandatory=new["infrastructure"]["cloud_nodes"] > 0,
     )
 
     option_check(
@@ -640,7 +640,7 @@ def infrastructure_terraform(parser, config, new):
         "gcp_edge",
         str,
         lambda _: True,
-        mandatory=True,
+        mandatory=new["infrastructure"]["edge_nodes"] > 0,
     )
 
     option_check(
@@ -651,7 +651,7 @@ def infrastructure_terraform(parser, config, new):
         "gcp_endpoint",
         str,
         lambda _: True,
-        mandatory=True,
+        mandatory=new["infrastructure"]["endpoint_nodes"] > 0,
     )
 
     option_check(

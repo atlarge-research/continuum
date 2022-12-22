@@ -438,7 +438,7 @@ def start_endpoint(config, machines):
             workers -= 1
 
         end_per_work = int(config["infrastructure"]["endpoint_nodes"] / workers)
-        worker_ips = config["cloud_ips"] + config["edge_ips"]
+        worker_ips = config["cloud_ips_internal"] + config["edge_ips_internal"]
         off = 1
     else:
         end_per_work = 1
