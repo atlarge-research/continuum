@@ -655,11 +655,11 @@ def start(config):
     vm.set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
+    if not config["infrastructure"]["infra_only"]:
+        docker_registry(config, machines)
+
     # TODO: Replace this if/else with something better, more uniform
     if config["infrastructure"]["provider"] == "qemu":
-        if not config["infrastructure"]["infra_only"]:
-            docker_registry(config, machines)
-
         m.gather_ips(config, machines)
         m.gather_ssh(config, machines)
 

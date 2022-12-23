@@ -341,6 +341,13 @@ def move_registry(config, machines):
         image_name = image.split(":")[1]
         full_image = os.path.join(config["old_registry"], image_name)
 
+        # Pull the image from the local registry to the local machine
+        command = ["docker", "pull", full_image]
+        _, error = machines[0].process(config, command)[0]
+
+        if error:
+            logging.error("ERROR: Docker save on image %s failed with error: %s", full_image, error)
+
         # Save the image as tar
         source = os.path.join(
             config["infrastructure"]["base_path"], ".continuum", "%s.tar" % (image_name)
