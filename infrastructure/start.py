@@ -181,6 +181,21 @@ def create_keypair(config, machines):
             logging.error("".join(output))
             sys.exit()
 
+        # Set correct key permissions to be sure
+        if machine.is_local:
+            commands = [
+                ["chmod", "600", config["ssh_key"]],
+                ["chmod", "600", config["ssh_key"][:-4]],
+            ]
+            results = machine.process(config, commands)
+            for result in results:
+                if error:
+                    logging.error("".join(error))
+                    sys.exit()
+                elif output:
+                    logging.error("".join(output))
+                    sys.exit()
+
 
 def create_tmp_dir(config, machines):
     """Generate a temporary directory for generated files.
