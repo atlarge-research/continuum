@@ -188,7 +188,7 @@ def create_keypair(config, machines):
                 ["chmod", "600", config["ssh_key"][:-4]],
             ]
             results = machine.process(config, commands)
-            for result in results:
+            for output, error in results:
                 if error:
                     logging.error("".join(error))
                     sys.exit()
