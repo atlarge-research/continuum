@@ -87,7 +87,7 @@ def add_constants(config):
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
     config["username"] = getpass.getuser()
-    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark.pub")
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark")
 
     if not config["infrastructure"]["infra_only"]:
         if config["benchmark"]["application"] == "image_classification":

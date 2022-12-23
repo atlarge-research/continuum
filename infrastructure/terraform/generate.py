@@ -271,7 +271,7 @@ def generate_vm(config):
                 % (
                     config["infrastructure"]["gcp_cloud"],
                     config["infrastructure"]["cloud_nodes"],
-                    config["ssh_key"],
+                    "%s.pub" % (config["ssh_key"]),
                 )
             )
 
@@ -283,7 +283,7 @@ def generate_vm(config):
                 % (
                     config["infrastructure"]["gcp_edge"],
                     config["infrastructure"]["edge_nodes"],
-                    config["ssh_key"],
+                    "%s.pub" % (config["ssh_key"]),
                 )
             )
 
@@ -295,7 +295,7 @@ def generate_vm(config):
                 % (
                     config["infrastructure"]["gcp_endpoint"],
                     config["infrastructure"]["endpoint_nodes"],
-                    config["ssh_key"],
+                    "%s.pub" % (config["ssh_key"]),
                 )
             )
 

@@ -164,9 +164,9 @@ def create_keypair(config, machines):
     logging.info("Create SSH keys to be used with VMs")
     for machine in machines:
         if machine.is_local:
-            command = "[[ ! -f %s ]] && ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q" % (
+            command = "[[ ! -f %s ]] && ssh-keygen -t rsa -b 4096 -f %s -N '' -q" % (
                 config["ssh_key"],
-                os.path.join(".ssh", config["ssh_key"].split("/")[-1]),
+                config["ssh_key"],
             )
             output, error = machine.process(config, command, shell=True)[0]
         else:
@@ -185,7 +185,7 @@ def create_keypair(config, machines):
         if machine.is_local:
             commands = [
                 ["chmod", "600", config["ssh_key"]],
-                ["chmod", "600", config["ssh_key"][:-4]],
+                ["chmod", "600", "%s.pub" % (config["ssh_key"])],
             ]
             results = machine.process(config, commands)
             for output, error in results:
