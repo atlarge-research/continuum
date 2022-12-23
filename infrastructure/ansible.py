@@ -4,8 +4,8 @@ Generate Ansible inventory files
 
 import sys
 import logging
-import string
 import os
+import re
 
 
 def create_inventory_machine(config, machines):
@@ -258,7 +258,7 @@ ansible_user=%s username=%s\n"
                 f.write("\n[base_cloud]\n")
                 for machine in machines:
                     for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "cloud" in name.rstrip(string.digits):
+                        if "cloud" in name:
                             f.write(
                                 "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
@@ -269,7 +269,16 @@ ansible_user=%s username=%s\n"
                 f.write("\n[base_edge]\n")
                 for machine in machines:
                     for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "edge" in name.rstrip(string.digits):
+                        # The resource manager "kubeedge" has "edge" in the name,
+                        # so cloud_kubeedge may be caught as "edge", filter this out.
+                        # Only occurs for Qemu, because Terraform doesn't really use base images.
+                        occurences = len([i.start() for i in re.finditer("edge", name)])
+                        is_qemu_kubeedge = int(
+                            config["infrastructure"]["provider"] == "qemu"
+                            and config["benchmark"]["resource_manager"] == "kubeedge"
+                        )
+
+                        if occurences == 1 + is_qemu_kubeedge:
                             f.write(
                                 "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
@@ -280,7 +289,7 @@ ansible_user=%s username=%s\n"
                 f.write("\n[base_endpoint]\n")
                 for machine in machines:
                     for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "endpoint" in name.rstrip(string.digits):
+                        if "endpoint" in name:
                             f.write(
                                 "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"

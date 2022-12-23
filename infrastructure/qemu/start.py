@@ -456,7 +456,7 @@ def base_image(config, machines):
     # Fix SSH keys for each base image
     infrastructure.add_ssh(config, machines, base=base_ips)
 
-    # Install software concurrently (ignore infra_only)
+    # Install software concurrently (infra_only won't get anything installed)
     commands = []
     for base_name in base_names:
         command = []

@@ -95,9 +95,14 @@ def set_ips(machines, output):
 
     # Search where the output part starts in the terraform apply command
     line_nr = 100000000
+    apply_complete = False
     for i, line in enumerate(output):
-        if "Outputs:" in line:
+        if "Apply complete!" in line:
+            apply_complete = True
+
+        if apply_complete and "Outputs:" in line:
             line_nr = i + offset_between_categories
+            break
 
     # Cloud external
     for i in range(machines[0].cloud_controller):
@@ -110,8 +115,8 @@ def set_ips(machines, output):
         machines[0].cloud_ips.append(ip)
         line_nr += 1
 
-        if i == machines[0].clouds - 1:
-            line_nr += offset_between_categories
+    if machines[0].cloud_controller + machines[0].clouds > 0:
+        line_nr += offset_between_categories
 
     # Cloud internal
     for i in range(machines[0].cloud_controller):
@@ -124,8 +129,8 @@ def set_ips(machines, output):
         machines[0].cloud_ips_internal.append(ip)
         line_nr += 1
 
-        if i == machines[0].clouds - 1:
-            line_nr += offset_between_categories
+    if machines[0].cloud_controller + machines[0].clouds > 0:
+        line_nr += offset_between_categories
 
     # Edge external
     for i in range(machines[0].edges):
@@ -133,8 +138,8 @@ def set_ips(machines, output):
         machines[0].edge_ips.append(ip)
         line_nr += 1
 
-        if i == machines[0].edges - 1:
-            line_nr += offset_between_categories
+    if machines[0].edges > 0:
+        line_nr += offset_between_categories
 
     # Edge internal
     for i in range(machines[0].edges):
@@ -142,8 +147,8 @@ def set_ips(machines, output):
         machines[0].edge_ips_internal.append(ip)
         line_nr += 1
 
-        if i == machines[0].edges - 1:
-            line_nr += offset_between_categories
+    if machines[0].edges > 0:
+        line_nr += offset_between_categories
 
     # Endpoint external
     for i in range(machines[0].endpoints):
@@ -151,17 +156,14 @@ def set_ips(machines, output):
         machines[0].endpoint_ips.append(ip)
         line_nr += 1
 
-        if i == machines[0].endpoints - 1:
-            line_nr += offset_between_categories
+    if machines[0].endpoints > 0:
+        line_nr += offset_between_categories
 
     # Endpoint internal
     for i in range(machines[0].endpoints):
         ip = output[line_nr].split('"')[1]
         machines[0].endpoint_ips_internal.append(ip)
         line_nr += 1
-
-        if i == machines[0].endpoints - 1:
-            line_nr += offset_between_categories
 
     machines[0].base_ips = (
         machines[0].cloud_controller_ips
@@ -428,48 +430,49 @@ def base_install(config, machines):
     logging.info("Install software in the VMs")
     commands = []
 
-    if any("cloud" in base_name for base_name in machines[0].base_names):
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/cloud/base_install.yml",
-            ),
-        ]
-        commands.append(command)
+    if not config["infrastructure"]["infra_only"]:
+        if any("cloud" in base_name for base_name in machines[0].base_names):
+            command = [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/cloud/base_install.yml",
+                ),
+            ]
+            commands.append(command)
 
-    if any("edge" in base_name for base_name in machines[0].base_names):
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/edge/base_install.yml",
-            ),
-        ]
-        commands.append(command)
+        if any("edge" in base_name for base_name in machines[0].base_names):
+            command = [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/edge/base_install.yml",
+                ),
+            ]
+            commands.append(command)
 
-    if any("endpoint" in base_name for base_name in machines[0].base_names):
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/endpoint/base_install.yml",
-            ),
-        ]
-        commands.append(command)
+        if any("endpoint" in base_name for base_name in machines[0].base_names):
+            command = [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/endpoint/base_install.yml",
+                ),
+            ]
+            commands.append(command)
 
-    if commands:
-        results = machines[0].process(config, commands)
+        if commands:
+            results = machines[0].process(config, commands)
 
-        for command, (output, error) in zip(commands, results):
-            logging.debug("Check output for command [%s]", " ".join(command))
-            main.ansible_check_output((output, error))
+            for command, (output, error) in zip(commands, results):
+                logging.debug("Check output for command [%s]", " ".join(command))
+                main.ansible_check_output((output, error))
 
     # Install netperf (only if netperf=True)
     if config["infrastructure"]["netperf"]:
@@ -537,4 +540,6 @@ def start(config, machines):
             sys.exit()
 
     set_ips(machines, output)
-    set_registry(config, machines)
+
+    if not config["infrastructure"]["infra_only"]:
+        set_registry(config, machines)

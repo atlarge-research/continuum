@@ -39,13 +39,13 @@ class Machine:
             self.ip = name.split("@")[1]
 
         # Cores on this machine
-        self.cores = -1
+        self.cores = 0
 
         # VM info
-        self.cloud_controller = -1
-        self.clouds = -1
-        self.edges = -1
-        self.endpoints = -1
+        self.cloud_controller = 0
+        self.clouds = 0
+        self.edges = 0
+        self.endpoints = 0
 
         self.cloud_controller_ips = []
         self.cloud_ips = []
