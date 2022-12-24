@@ -25,9 +25,11 @@
     - name: Enable Grafana port-forwarding
       shell: |
         nohup kubectl port-forward --kubeconfig="/home/{{ username }}/.kube/config" \
-          -n monitoring --address {{ cloud_ip }} svc/grafana 3000:3000 > /dev/null 2>&1 &
+          -namespace=monitoring --address={{ cloud_ip }},{{ cloud_ip_external }} \
+          svc/grafana 3000:3000 > /dev/null 2>&1 &
 
     - name: Enable Prometheus port-forwarding
       shell: |
         nohup kubectl port-forward --kubeconfig="/home/{{ username }}/.kube/config" \
-          -n monitoring --address {{ cloud_ip }} svc/prometheus-k8s 9090:9090 > /dev/null 2>&1 &
+          -namespace=monitoring --address={{ cloud_ip }},{{ cloud_ip_external }} \
+          svc/prometheus-k8s 9090:9090 > /dev/null 2>&1 &

@@ -1,0 +1,47 @@
+---
+- hosts: base
+  become: true
+  tasks:
+    - name: Install packages that allow apt to be used over HTTPS
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - software-properties-common
+
+    - name: Get Netperf and unarchive it
+      unarchive:
+        src: https://github.com/HewlettPackard/netperf/archive/refs/tags/netperf-2.7.0.tar.gz
+        dest: "/tmp"
+        remote_src: true
+
+    - name: Remove unneeded Netperf files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "/tmp/netperf-2.7.0.tar.gz"
+
+    - name: Install netperf dependencies
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - gcc
+          - make
+
+    - name: Install NetPerf
+      shell: |
+        ./configure --enable-spin
+        make
+        make install
+      args:
+        chdir: "/tmp/netperf-netperf-2.7.0/"

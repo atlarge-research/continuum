@@ -24,7 +24,7 @@ done
 echo "-------------------------------"
 echo "Yamllint"
 echo "-------------------------------"
-yamllint --strict --config-data "{extends: default, rules: {line-length: {max: 110}}}" ./
+yamllint --strict -c ./sysconfig/yamllint.yml ./
 
 echo "-------------------------------"
 echo "Ansible-lint"

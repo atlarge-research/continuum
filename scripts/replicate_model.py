@@ -15,12 +15,12 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 
 
-# pylint: disable=wrong-import-position
+# pylint: disable=wrong-import-position,import-error
 
-sys.path.append(os.path.abspath("../"))
-import main as cont_main
+sys.path.append(os.path.abspath("../configuration_parser"))
+import start as confparser
 
-# pylint: enable=wrong-import-position
+# pylint: enable=wrong-import-position,import-error
 
 
 # Home dir should be continuum/
@@ -153,7 +153,7 @@ class ModelLocal(Model):
 
     def __init__(self, args, parser):
         logging.info("Parse local config")
-        config = cont_main.parse_config(parser, "configuration/model/local.cfg")
+        config = confparser.start(parser, "configuration/model/local.cfg")
         Model.__init__(self, args, config)
 
     def __repr__(self):
@@ -258,7 +258,7 @@ class ModelOffload(Model):
 
     def __init__(self, args, parser):
         logging.info("Parse offload config")
-        config = cont_main.parse_config(parser, "configuration/model/offload.cfg")
+        config = confparser.start(parser, "configuration/model/offload.cfg")
         Model.__init__(self, args, config)
 
     def __repr__(self):

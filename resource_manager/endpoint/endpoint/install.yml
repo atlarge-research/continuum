@@ -10,7 +10,8 @@
     - name: Add edge user to docker group
       user:
         name: "{{ username }}"
-        groups: docker, systemd-journal
+        groups: docker,systemd-journal
+        append: true
 
     - name: Restart docker service
       command: systemctl restart docker

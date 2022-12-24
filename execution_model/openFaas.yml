@@ -7,13 +7,21 @@
     - name: Install Arkade
       shell: curl -SLsf https://get.arkade.dev/ | sudo sh
 
+    - name: Create openfaas namespace
+      command: kubectl create --kubeconfig="/home/{{ username }}/.kube/config" ns openfaas
+
+    - name: Create openfaas-fn namespace
+      command: kubectl create --kubeconfig="/home/{{ username }}/.kube/config" ns openfaas-fn
+
     - name: Install OpenFaaS through Arkade
-      become_user: "{{ username }}"
-      shell: arkade install openfaas --set openfaasPRO=False
+      command: >
+        arkade install openfaas --kubeconfig="/home/{{ username }}/.kube/config"
+          --set openfaasPRO=False
 
     - name: Install OpenFaaS CLI
       shell: curl -SLsf https://cli.openfaas.com | sudo sh
 
     - name: kubectl - gateway
-      become_user: "{{ username }}"
-      shell: kubectl rollout status -n openfaas deploy/gateway
+      command: >
+        kubectl rollout status --kubeconfig="/home/{{ username }}/.kube/config"
+          -n openfaas deploy/gateway

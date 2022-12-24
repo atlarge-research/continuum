@@ -13,8 +13,14 @@ from . import machine as m
 from . import ansible
 from . import network
 
-from .qemu import generate
-from .qemu import start as vm
+# pylint: disable=unused-import
+from .qemu import generate as qemu_generate
+from .qemu import start as qemu_vm
+
+from .terraform import generate as terraform_generate
+from .terraform import start as terraform_vm
+
+# pylint: enable=unused-import
 
 
 def schedule_equal(config, machines):
@@ -147,42 +153,6 @@ using the --file option"""
     return machines_per_node
 
 
-def delete_vms(config, machines):
-    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
-    and possilby at the end if the run if configured by the user
-
-    Args:
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Start deleting VMs")
-
-    commands = []
-    sshs = []
-    for machine in machines:
-        if machine.is_local:
-            command = (
-                r'virsh list --all | grep -o -E "(\w*_%s)" | \
-xargs -I %% sh -c "virsh destroy %%"'
-                % (config["username"])
-            )
-        else:
-            comm = (
-                r"virsh list --all | grep -o -E \"(\w*_%s)\" | \
-xargs -I %% sh -c \"virsh destroy %%\""
-                % (config["username"])
-            )
-            command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
-
-        commands.append(command)
-        sshs.append(None)
-
-    results = machines[0].process(config, commands, shell=True, ssh=sshs, ssh_key=False)
-
-    # Wait for process to finish. Outcome of destroy command does not matter
-    for command, (_, _) in zip(commands, results):
-        logging.debug("Check output for command [%s]", command)
-
-
 def create_keypair(config, machines):
     """Create SSH keys to be used for ssh'ing into VMs, local and remote if needed.
     We use the SSH key of the local machine for all machines, so copy to all.
@@ -194,12 +164,9 @@ def create_keypair(config, machines):
     logging.info("Create SSH keys to be used with VMs")
     for machine in machines:
         if machine.is_local:
-            command = (
-                "[[ ! -f %s.pub ]] && ssh-keygen -t rsa -b 4096 -f %s -C KubeEdge -N '' -q"
-                % (
-                    config["ssh_key"],
-                    os.path.join(".ssh", config["ssh_key"].split("/")[-1]),
-                )
+            command = "[[ ! -f %s ]] && ssh-keygen -t rsa -b 4096 -f %s -N '' -q" % (
+                config["ssh_key"],
+                config["ssh_key"],
             )
             output, error = machine.process(config, command, shell=True)[0]
         else:
@@ -214,8 +181,23 @@ def create_keypair(config, machines):
             logging.error("".join(output))
             sys.exit()
 
+        # Set correct key permissions to be sure
+        if machine.is_local:
+            commands = [
+                ["chmod", "600", config["ssh_key"]],
+                ["chmod", "600", "%s.pub" % (config["ssh_key"])],
+            ]
+            results = machine.process(config, commands)
+            for output, error in results:
+                if error:
+                    logging.error("".join(error))
+                    sys.exit()
+                elif output:
+                    logging.error("".join(output))
+                    sys.exit()
 
-def create_dir(config, machines):
+
+def create_tmp_dir(config, machines):
     """Generate a temporary directory for generated files.
     This directory is located inside the benchmark git repository.
     Later, that data will be sent to each physical machine's
@@ -251,13 +233,16 @@ def delete_old_content(config, machines):
     for machine in machines:
         if machine.is_local:
             command = """\
+rm -rf %s/.continuum/images/*terraform* && \
+rm -rf %s/.continuum/images/.terraform* && \
+rm -rf %s/.continuum/images/*.tf && \
 rm -rf %s/.continuum/cloud && \
 rm -rf %s/.continuum/edge && \
 rm -rf %s/.continuum/endpoint && \
 rm -rf %s/.continuum/execution_model && \
 rm -rf %s/.continuum/infrastructure && \
 find %s/.continuum -maxdepth 1 -type f -delete""" % (
-                (config["infrastructure"]["base_path"],) * 6
+                (config["infrastructure"]["base_path"],) * 9
             )
         else:
             command = """\
@@ -323,7 +308,6 @@ def create_continuum_dir(config, machines):
 def copy_files(config, machines):
     """Copy Infrastructure and Ansible files to all machines with
     directory config["infrastructure"]["base_path"]/.continuum
-
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
@@ -515,7 +499,7 @@ def docker_registry(config, machines):
             "registry",
             "registry:2",
         ]
-        output, error = machines[0].process(config, command)[0]
+        _, error = machines[0].process(config, command)[0]
 
         if error and not (
             any("Unable to find image" in line for line in error)
@@ -591,14 +575,17 @@ def docker_pull(config, machines, base_names):
         commands = []
         sshs = []
         for name, ip in zip(machine.base_names, machine.base_ips):
-            name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
+            name_r = name
+            if "_" in name:
+                name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
+
             if name_r in base_names:
                 images = []
 
-                if "_cloud_" in name or "_edge_" in name:
+                if "cloud" in name or "edge" in name:
                     # Load worker application (always in base image for mist deployment)
                     images.append(config["images"]["worker"].split(":")[1])
-                elif "_endpoint" in name:
+                elif "endpoint" in name:
                     # Load endpoint and combined applications
                     images.append(config["images"]["endpoint"].split(":")[1])
                     images.append(config["images"]["combined"].split(":")[1])
@@ -650,6 +637,9 @@ def start(config):
     Returns:
         list(Machine object): List of machine objects representing physical machines
     """
+    generate = globals()["%s_generate" % (config["infrastructure"]["provider"])]
+    vm = globals()["%s_vm" % (config["infrastructure"]["provider"])]
+
     machines = m.make_machine_objects(config)
 
     for machine in machines:
@@ -661,33 +651,63 @@ def start(config):
         nodes_per_machine = schedule_equal(config, machines)
 
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
-    m.set_ip_names(config, machines, nodes_per_machine)
 
-    m.gather_ips(config, machines)
-    m.gather_ssh(config, machines)
+    # Delete old resources
+    vm.delete_vms(config, machines)
 
-    delete_vms(config, machines)
+    # Prepare storage for Continuum files
+    create_tmp_dir(config, machines)
+    delete_old_content(config, machines)
+    create_continuum_dir(config, machines)
+
+    # Sets IPs and names for
+    vm.set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
-    for machine in machines:
-        logging.debug(machine)
-
-    logging.info("Generate configuration files for Infrastructure and Ansible")
-    create_keypair(config, machines)
-    create_dir(config, machines)
-
-    ansible.create_inventory_machine(config, machines)
-    ansible.create_inventory_vm(config, machines)
-
-    generate.start(config, machines)
-    copy_files(config, machines)
-
-    logging.info("Setting up the infrastructure")
     if not config["infrastructure"]["infra_only"]:
         docker_registry(config, machines)
 
-    vm.start(config, machines)
-    add_ssh(config, machines)
+    # TODO: Replace this if/else with something better, more uniform
+    if config["infrastructure"]["provider"] == "qemu":
+        m.gather_ips(config, machines)
+        m.gather_ssh(config, machines)
+
+        for machine in machines:
+            logging.debug(machine)
+
+        logging.info("Generate configuration files for Infrastructure and Ansible")
+        create_keypair(config, machines)
+
+        ansible.create_inventory_machine(config, machines)
+        ansible.create_inventory_vm(config, machines)
+        ansible.copy(config, machines)
+
+        generate.start(config, machines)
+        vm.copy(config, machines)
+
+        logging.info("Setting up the infrastructure")
+        vm.start(config, machines)
+        add_ssh(config, machines)
+    elif config["infrastructure"]["provider"] == "terraform":
+        logging.info("Generate configuration files for Infrastructure and Ansible")
+        create_keypair(config, machines)
+        generate.start(config, machines)
+
+        vm.copy(config, machines)
+        vm.start(config, machines)
+
+        # TODO: Do something with the internal ips (networking between VMs)
+        m.gather_ips(config, machines)
+        m.gather_ssh(config, machines)
+        add_ssh(config, machines)
+
+        for machine in machines:
+            logging.debug(machine)
+
+        ansible.create_inventory_vm(config, machines)
+        ansible.copy(config, machines)
+
+        vm.base_install(config, machines)
 
     if config["infrastructure"]["network_emulation"]:
         network.start(config, machines)
