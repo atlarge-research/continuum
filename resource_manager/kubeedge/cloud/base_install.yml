@@ -23,7 +23,8 @@
     - name: Add cloud user to docker group
       user:
         name: "{{ username }}"
-        group: docker
+        groups: docker
+        append: true
 
     - name: Allow HTTP pulling from private docker registry
       shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json

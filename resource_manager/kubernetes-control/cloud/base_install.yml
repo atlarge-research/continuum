@@ -23,7 +23,8 @@
     - name: Add cloud user to docker group
       user:
         name: "{{ username }}"
-        group: docker
+        groups: docker
+        append: true
 
     - name: Restart docker service
       command: systemctl restart docker
