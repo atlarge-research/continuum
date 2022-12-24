@@ -10,4 +10,5 @@ done
 A run is successful if it prints one or multiple `ssh vm_name@ip_address -i path/to/ssh/key` at the end.
 You can also check the log files in `/logs` to validate the runs.
 
-The tests are currently split up per provider, with `qemu` covering local execution, and `terraform` covering execution in the cloud using Google Cloud Platform. The latter requires extra configuration, most notably, defining your GCP project name and service key location.
+The tests are currently split up per provider, with `qemu` covering local execution, and `terraform` covering execution in the cloud using Google Cloud Platform. 
+The latter requires extra configuration, most notably, defining your GCP project name and service key location.
