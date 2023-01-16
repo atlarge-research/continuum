@@ -808,9 +808,13 @@ QUOTA                   %s""" % (
 
     def print_result(self):
         """Print results of runs as text"""
-        for network_latency, latency in zip(self.latency, self.y):
+        for run, latency in zip(self.runs, self.y):
             logging.info(
-                "Network Latency: %5i ms | End-to-end Latency: %5i ms", network_latency, latency
+                "CPU Cores: %3i | Memory: %3i GB | Quota: %5f | End-to-end Latency: %8i ms",
+                run["cpu"],
+                run["memory"],
+                run["quota"],
+                latency,
             )
 
 
