@@ -589,6 +589,109 @@ CONFIGS                 %s""" % (
             )
 
 
+class LatencyVariation(Experiment):
+    """Experiment:
+    Deploy 1 cloud worker and 1 endpoint, and vary latency from 0ms to 100ms in steps of 10
+
+    So:
+    - Run with minimal cloud deployment
+    - Change latency from 0ms to 100ms between cloud and endpoint in steps of 10ms
+    """
+
+    def __init__(self, resume):
+        Experiment.__init__(self, resume)
+
+        self.latency = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        self.y = None
+
+    def __repr__(self):
+        """Returns this string when called as print(object)"""
+        return """
+APP                     image-classification
+LATENCY                 %s""" % (
+            ",".join(self.latency),
+        )
+
+    def generate(self):
+        """Generate commands to run the benchmark based on the current settings"""
+        # Differ in deployment modes
+        for latency in self.latency:
+            config = "cloud_%ims.cfg" % (latency)
+            command = [
+                "python3",
+                "main.py",
+                "-v",
+                "configuration/experiment_latency_variation/" + config,
+            ]
+            command = [str(c) for c in command]
+
+            run = {
+                "network_latency": latency,
+                "command": command,
+                "output": None,
+                "latency": None,
+            }
+            self.runs.append(run)
+
+    def parse_output(self):
+        """For all runs, get the worker runtime"""
+        for run in self.runs:
+            # Get the line containing the metrics
+            i = -10
+            for i, line in enumerate(run["output"]):
+                if "Output in csv format" in line:
+                    break
+
+            # Get output based on type of run
+            endpoint = run["output"][i + 2][1:-4]
+
+            # Get endpoint output, parse into dataframe
+            e1 = [x.split(",") for x in endpoint.split("\\n")]
+            e2 = [sub[1:] for sub in e1]
+            edf = pd.DataFrame(e2[1:], columns=e2[0])
+            edf["latency_avg (ms)"] = pd.to_numeric(edf["latency_avg (ms)"], downcast="float")
+
+            # For endpoint, report the average end-to-end latency
+            run["latency"] = int(edf["latency_avg (ms)"].mean())
+
+    def plot(self):
+        """Plot the results from executed runs"""
+        # set width of bar
+        plt.rcParams.update({"font.size": 22})
+        _, ax1 = plt.subplots(figsize=(12, 6))
+
+        x = [run["network_latency"] for run in self.runs]
+        y = [run["latency"] for run in self.runs]
+        self.y = y
+
+        ax1.plot(
+            x,
+            y,
+            color="midnightblue",
+            linewidth=3.0,
+            marker="o",
+            markersize=12,
+        )
+
+        # Set y axis: latency
+        ax1.set_ylabel("End-to-end latency (ms)")
+        ax1.set_yscale("log")
+        ax1.set_ylim(0, 1000)
+        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
+
+        # Save
+        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+        plt.savefig("./logs/LatencyVariation_%s.pdf" % (t), bbox_inches="tight")
+
+    def print_result(self):
+        """Print results of runs as text"""
+        i = 0
+        for network_latency, latency in zip(self.latency, self.y):
+            logging.info(
+                "Network Latency: %5i ms | End-to-end Latency: %5i ms", network_latency, latency
+            )
+
+
 def main(args):
     """Main function
 
@@ -601,6 +704,9 @@ def main(args):
     elif args.experiment == "Deployments":
         logging.info("Experiment: Change deployments between cloud, edge, and local")
         exp = Deployments(args.resume)
+    elif args.experiment == "LatencyVariation":
+        logging.info("Experiment: Vary latency between cloud and endpoint")
+        exp = LatencyVariaton(args.resume)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
         sys.exit()
@@ -620,7 +726,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "experiment",
-        choices=["EndpointScaling", "Deployments"],
+        choices=["EndpointScaling", "Deployments", "LatencyVariation"],
         help="Experiment to replicate",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
