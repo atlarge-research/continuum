@@ -685,7 +685,6 @@ LATENCY                 %s""" % (
 
     def print_result(self):
         """Print results of runs as text"""
-        i = 0
         for network_latency, latency in zip(self.latency, self.y):
             logging.info(
                 "Network Latency: %5i ms | End-to-end Latency: %5i ms", network_latency, latency
@@ -706,7 +705,7 @@ def main(args):
         exp = Deployments(args.resume)
     elif args.experiment == "LatencyVariation":
         logging.info("Experiment: Vary latency between cloud and endpoint")
-        exp = LatencyVariaton(args.resume)
+        exp = LatencyVariation(args.resume)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
         sys.exit()
