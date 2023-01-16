@@ -119,7 +119,7 @@ class Experiment:
             logging.debug("------------------------------------")
 
             # Get output from log file
-            logpath = output[0].rstrip().split("and file at ")[-1]
+            logpath = output[0].rstrip().split("and file ")[-1]
             with open(logpath, "r", encoding="utf-8") as f:
                 output = f.readlines()
                 run["output"] = output
