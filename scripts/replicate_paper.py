@@ -835,6 +835,134 @@ QUOTA                   %s""" % (
             )
 
 
+class Provider(Experiment):
+    """Experiment:
+    Deploy a simple cloud experiment on QEMU and GCP
+
+    So:
+    - Run with minimal cloud deployment
+    - Deploy on QEMU and GCP (and eventually bare-metal locally)
+    """
+
+    def __init__(self, resume):
+        Experiment.__init__(self, resume)
+
+        # CPU x quota: 0.25 | 0.5 | 1.0 | 2.0 | 4.0 | 8.0
+        self.providers = ["QEMU", "GCP"]
+
+        self.y = None
+
+    def __repr__(self):
+        """Returns this string when called as print(object)"""
+        return """
+APP                     image-classification
+PROVIDER                %s""" % (
+            ",".join(self.providers),
+        )
+
+    # def generate(self):
+    #     """Generate commands to run the benchmark based on the current settings"""
+    #     # Differ in deployment modes
+    #     for cpu, memory, quota in zip(self.cpu, self.memory, self.quota):
+    #         cpu_quota = cpu * quota
+    #         if cpu_quota != memory:
+    #             logging.error("ERROR: cpu x quota (%f) != memory (%f)", cpu_quota, memory)
+    #             sys.exit()
+
+    #         if cpu_quota >= 1:
+    #             cpu_str = "%s00" % (int(cpu_quota))
+    #         elif cpu_quota < 1:
+    #             cpu_str = "0%s" % (int(cpu_quota * 100))
+
+    #         config = "cloud_cpu%s.cfg" % (cpu_str)
+    #         command = [
+    #             "python3",
+    #             "main.py",
+    #             "-v",
+    #             "configuration/experiment_cpu_variation/" + config,
+    #         ]
+    #         command = [str(c) for c in command]
+
+    #         run = {
+    #             "cpu_quota_memory": cpu_quota,
+    #             "command": command,
+    #             "output": None,
+    #             "latency": None,
+    #         }
+    #         self.runs.append(run)
+
+    # def parse_output(self):
+    #     """For all runs, get the worker runtime"""
+    #     for run in self.runs:
+    #         # Get the line containing the metrics
+    #         i = -10
+    #         for i, line in enumerate(run["output"]):
+    #             if "Output in csv format" in line:
+    #                 break
+
+    #         # Get output based on type of run
+    #         endpoint = run["output"][i + 2][1:-4]
+
+    #         # Get endpoint output, parse into dataframe
+    #         e1 = [x.split(",") for x in endpoint.split("\\n")]
+    #         e2 = [sub[1:] for sub in e1]
+    #         edf = pd.DataFrame(e2[1:], columns=e2[0])
+    #         edf["latency_avg (ms)"] = pd.to_numeric(edf["latency_avg (ms)"], downcast="float")
+
+    #         # For endpoint, report the average end-to-end latency
+    #         run["latency"] = int(edf["latency_avg (ms)"].mean())
+
+    # def plot(self):
+    #     """Plot the results from executed runs"""
+    #     # set width of bar
+    #     plt.rcParams.update({"font.size": 22})
+    #     _, ax1 = plt.subplots(figsize=(12, 6))
+
+    #     x = [run["cpu_quota_memory"] for run in self.runs]
+    #     y = [run["latency"] for run in self.runs]
+    #     self.y = y
+
+    #     ax1.plot(
+    #         x,
+    #         y,
+    #         color="midnightblue",
+    #         linewidth=3.0,
+    #         marker="o",
+    #         markersize=12,
+    #     )
+
+    #     # Set y axis: latency
+    #     ax1.set_ylabel("End-to-end latency (ms)")
+    #     ax1.set_yscale("log")
+    #     ax1.set_ylim(100, 1000000)
+    #     ax1.set_yticks([100, 1000, 10000, 100000, 1000000])
+
+    #     ax1.set_xlabel("CPU cores and Memory (GB) used by application")
+    #     ax1.set_xscale("log", base=2)
+    #     ax1.set_xlim(0.25, 8)
+    #     ax1.set_xticks([0.25, 0.5, 1, 2, 4, 8])
+    #     ax1.xaxis.set_major_formatter(ScalarFormatter())
+
+    #     ax1.legend(["End-to-end latency"], loc="upper right", framealpha=1.0)
+
+    #     ax1.axhline(y=1000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+    #     ax1.axhline(y=10000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+    #     ax1.axhline(y=100000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+
+    #     # Save
+    #     t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+    #     plt.savefig("./logs/CPUVariation_%s.pdf" % (t), bbox_inches="tight")
+
+    # def print_result(self):
+    #     """Print results of runs as text"""
+    #     for run, latency in zip(self.runs, self.y):
+    #         logging.info(
+    #             "CPU Cores x Quota == Memory: %5f| End-to-end Latency: %8i ms",
+    #             run["cpu_quota_memory"],
+    #             latency,
+    #         )
+
+
 def main(args):
     """Main function
 
@@ -853,6 +981,9 @@ def main(args):
     elif args.experiment == "CPUVariation":
         logging.info("Experiment: Vary processing power of cloud worker connected to endpoint")
         exp = CPUVariation(args.resume)
+    elif args.experiment == "CPUVariation":
+        logging.info("Experiment: Vary infrastructure providers")
+        exp = Provider(args.resume)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
         sys.exit()
@@ -872,7 +1003,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "experiment",
-        choices=["EndpointScaling", "Deployments", "LatencyVariation", "CPUVariation"],
+        choices=["EndpointScaling", "Deployments", "LatencyVariation", "CPUVariation", "Provider"],
         help="Experiment to replicate",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")

@@ -643,21 +643,33 @@ def start(config, machines):
             if config["benchmark"]["cache_worker"]:
                 cache_worker(config, machines)
 
-            starttime = start_worker(config, machines)
+            if config["infrastructure"]["provider"] == "baremetal":
+                starttime = start_worker_baremetal(config, machines)
+            else:
+                starttime = start_worker(config, machines)
         else:
             container_names_mist = start_worker_mist(config, machines)
 
     container_names = []
     if config["infrastructure"]["endpoint_nodes"]:
-        container_names = start_endpoint(config, machines)
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+        if config["infrastructure"]["provider"] == "baremetal":
+            container_names = start_endpoint_baremetal(config, machines)
+            wait_endpoint_completion_baremetal(
+                config, machines, config["endpoint_ssh"], container_names
+            )
+        else:
+            container_names = start_endpoint(config, machines)
+            wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["benchmark"]["resource_manager"] != "mist":
-            wait_worker_completion(config, machines)
+        if config["infrastructure"]["provider"] == "baremetal":
+            wait_worker_completion_baremetal(config, machines)
         else:
-            wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_mist)
+            if config["benchmark"]["resource_manager"] != "mist":
+                wait_worker_completion(config, machines)
+            else:
+                wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_mist)
 
     # Now get raw output
     endpoint_output = []
@@ -678,3 +690,30 @@ def start(config, machines):
         machines, config, worker_output, endpoint_output, container_names, starttime
     )
     out.format_output(config, worker_metrics, endpoint_metrics)
+
+
+"""
+TODO
+
+Create functions to support bare-metal deployment, which uses docker on bare-metal
+- Create new functions if too many code changes are required
+    - Example: 
+        - Launch cloud/edge app, as we no longer use Kubernetes
+        - Get output from cloud/edge app, as we no longer have Kubernetes
+            - Mimic the endpoint function instead, that one uses Docker
+- Add if/else if only little changes are required
+    - Endpoint deployment, but just without the ssh (just execute natively)
+
+Files that need to be changed
+- start.py (this file)
+- output.py
+- config files in /experiment_provider
+- replicate_paper.py
+
+
+Instructions for starting/stopping/installing mosquitto on bare-metal (only requirement)
+- sudo apt install mosquitto=1.6.9-1
+- mosquitto -d -p 1883
+- sudo systemctl start mosquitto.service
+- sudo systemctl stop mosquitto.service
+"""

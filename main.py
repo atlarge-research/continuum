@@ -20,12 +20,6 @@ import resource_manager.start as resource_manager
 import benchmark.start as benchmark
 import execution_model.start as execution_model
 
-# pylint: disable=unused-import
-from infrastructure.qemu import start as qemu_vm
-from infrastructure.terraform import start as terraform_vm
-
-# pylint: enable=unused-import
-
 
 def ansible_check_output(out):
     """Check if an Ansible Playbook succeeded or failed
@@ -195,9 +189,11 @@ def main(args):
     machines = infrastructure.start(args.config)
 
     if not args.config["infrastructure"]["infra_only"]:
-        resource_manager.start(args.config, machines)
-        if "execution_model" in args.config:
-            execution_model.start(args.config, machines)
+        # The baremetal provider doesn't install anything - it only deploys and benchmarks apps
+        if not args.config["infrastructure"]["provider"] == "baremetal":
+            resource_manager.start(args.config, machines)
+            if "execution_model" in args.config:
+                execution_model.start(args.config, machines)
 
         if not args.config["benchmark"]["resource_manager_only"]:
             benchmark.start(args.config, machines)
@@ -206,7 +202,7 @@ def main(args):
         vm = globals()["%s_vm" % (args.config["infrastructure"]["provider"])]
         vm.delete_vms(args.config, machines)
         logging.info("Finished\n")
-    else:
+    elif not args.config["infrastructure"]["infra_only"]:
         s = []
         for ssh in args.config["cloud_ssh"] + args.config["edge_ssh"] + args.config["endpoint_ssh"]:
             s.append("ssh %s -i %s" % (ssh, args.config["ssh_key"]))

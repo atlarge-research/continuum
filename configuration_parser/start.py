@@ -94,7 +94,7 @@ def infrastructure(parser, config, new):
         sec,
         "provider",
         str,
-        lambda x: x in ["qemu", "terraform"],
+        lambda x: x in ["qemu", "terraform", "baremetal"],
         mandatory=True,
     )
     option_check(
