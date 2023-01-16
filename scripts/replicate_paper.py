@@ -16,6 +16,8 @@ import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 
+from matplotlib.ticker import ScalarFormatter
+
 # Home dir should be continuum/
 os.chdir("../")
 
@@ -675,9 +677,17 @@ LATENCY                 %s""" % (
 
         # Set y axis: latency
         ax1.set_ylabel("End-to-end latency (ms)")
-        ax1.set_yscale("log")
-        ax1.set_ylim(0, 1000)
+        ax1.set_xlabel("Network latency between cloud and endpoint (ms)")
+        ax1.set_ylim(0, 500)
+        ax1.set_xlim(0, 100)
+        ax1.set_yticks(np.arange(0, 600, 100))
+        ax1.set_xticks(np.arange(0, 110, 10))
         ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
+
+        ax1.axhline(y=100, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=400, color="k", linestyle="-", linewidth=1, alpha=0.5)
 
         # Save
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
@@ -796,8 +806,20 @@ QUOTA                   %s""" % (
         # Set y axis: latency
         ax1.set_ylabel("End-to-end latency (ms)")
         ax1.set_yscale("log")
-        ax1.set_ylim(0, 1000000)
-        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
+        ax1.set_ylim(100, 1000000)
+        ax1.set_yticks([100, 1000, 10000, 100000, 1000000])
+
+        ax1.set_xlabel("CPU cores and Memory (GB) used by application")
+        ax1.set_xscale("log", base=2)
+        ax1.set_xlim(0.25, 8)
+        ax1.set_xticks([0.25, 0.5, 1, 2, 4, 8])
+        ax1.xaxis.set_major_formatter(ScalarFormatter())
+
+        ax1.legend(["End-to-end latency"], loc="upper right", framealpha=1.0)
+
+        ax1.axhline(y=1000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=10000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=100000, color="k", linestyle="-", linewidth=1, alpha=0.5)
 
         # Save
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
