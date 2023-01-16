@@ -609,7 +609,7 @@ class LatencyVariation(Experiment):
         return """
 APP                     image-classification
 LATENCY                 %s""" % (
-            ",".join(self.latency),
+            ",".join(str(latency) for latency in self.latency),
         )
 
     def generate(self):
@@ -691,6 +691,129 @@ LATENCY                 %s""" % (
             )
 
 
+class CPUVariation(Experiment):
+    """Experiment:
+    Deploy 1 cloud worker and 1 endpoint, and very the CPU/memory capacity of the worker
+
+    So:
+    - Run with minimal cloud deployment
+    - Change cloud deployment resources from 0.25 cores to 4 cores
+    """
+
+    def __init__(self, resume):
+        Experiment.__init__(self, resume)
+
+        # CPU x quota: 0.25 | 0.5 | 1.0 | 2.0 | 4.0 | 8.0
+        # Memory:      1    | 1   | 1   | 2   | 4   | 8
+        self.cpu = [1, 1, 1, 2, 4, 8]
+        self.memory = [1, 1, 1, 2, 4, 8]
+        self.quota = [0.25, 0.5, 1.0, 1.0, 1.0, 1.0]
+
+        self.y = None
+
+    def __repr__(self):
+        """Returns this string when called as print(object)"""
+        return """
+APP                     image-classification
+CPU CORES               %s
+MEMORY (GB)             %s
+QUOTA                   %s""" % (
+            ",".join(str(cpu) for cpu in self.cpu),
+            ",".join(str(memory) for memory in self.memory),
+            ",".join(str(quota) for quota in self.quota),
+        )
+
+    def generate(self):
+        """Generate commands to run the benchmark based on the current settings"""
+        # Differ in deployment modes
+        for cpu, memory, quota in zip(self.cpu, self.memory, self.quota):
+            cpu_quota = cpu * quota
+            if cpu_quota >= 1:
+                cpu_str = "%s00" % (int(cpu_quota))
+            elif cpu_quota < 1:
+                cpu_str = "0%s" % (int(cpu_quota * 100))
+
+            config = "cloud_cpu%s.cfg" % (cpu_str)
+            command = [
+                "python3",
+                "main.py",
+                "-v",
+                "configuration/experiment_cpu_variation/" + config,
+            ]
+            command = [str(c) for c in command]
+
+            run = {
+                "cpu": cpu,
+                "memory": memory,
+                "quota": quota,
+                "command": command,
+                "output": None,
+                "latency": None,
+            }
+            self.runs.append(run)
+
+    def parse_output(self):
+        """For all runs, get the worker runtime"""
+        for run in self.runs:
+            # Get the line containing the metrics
+            i = -10
+            for i, line in enumerate(run["output"]):
+                if "Output in csv format" in line:
+                    break
+
+            # Get output based on type of run
+            endpoint = run["output"][i + 2][1:-4]
+
+            # Get endpoint output, parse into dataframe
+            e1 = [x.split(",") for x in endpoint.split("\\n")]
+            e2 = [sub[1:] for sub in e1]
+            edf = pd.DataFrame(e2[1:], columns=e2[0])
+            edf["latency_avg (ms)"] = pd.to_numeric(edf["latency_avg (ms)"], downcast="float")
+
+            # For endpoint, report the average end-to-end latency
+            run["latency"] = int(edf["latency_avg (ms)"].mean())
+
+    def plot(self):
+        """Plot the results from executed runs"""
+        # set width of bar
+        plt.rcParams.update({"font.size": 22})
+        _, ax1 = plt.subplots(figsize=(12, 6))
+
+        configs = []
+        for run in self.runs:
+            configs.append((run["cpu"], run["memory"], run["quota"]))
+
+        x = [str(config) for config in configs]
+        y = [run["latency"] for run in self.runs]
+        self.y = y
+
+        ax1.plot(
+            x,
+            y,
+            color="midnightblue",
+            linewidth=3.0,
+            marker="o",
+            markersize=12,
+        )
+
+        # Set y axis: latency
+        ax1.set_ylabel("End-to-end latency (ms)")
+        ax1.set_yscale("log")
+        ax1.set_ylim(0, 1000000)
+        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
+
+        # Save
+        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+        plt.savefig("./logs/CPUVariation_%s.pdf" % (t), bbox_inches="tight")
+
+    def print_result(self):
+        """Print results of runs as text"""
+        for network_latency, latency in zip(self.latency, self.y):
+            logging.info(
+                "Network Latency: %5i ms | End-to-end Latency: %5i ms", network_latency, latency
+            )
+
+
 def main(args):
     """Main function
 
@@ -706,6 +829,9 @@ def main(args):
     elif args.experiment == "LatencyVariation":
         logging.info("Experiment: Vary latency between cloud and endpoint")
         exp = LatencyVariation(args.resume)
+    elif args.experiment == "CPUVariation":
+        logging.info("Experiment: Vary processing power of cloud worker connected to endpoint")
+        exp = CPUVariation(args.resume)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
         sys.exit()
@@ -725,7 +851,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "experiment",
-        choices=["EndpointScaling", "Deployments", "LatencyVariation"],
+        choices=["EndpointScaling", "Deployments", "LatencyVariation", "CPUVariation"],
         help="Experiment to replicate",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
