@@ -511,7 +511,9 @@ def start_endpoint(config, machines):
     for ssh, (output, error) in zip(sshs, results):
         logging.debug("Check output of endpoint start in ssh [%s]", ssh)
 
-        if error and not any("Your kernel does not support swap limit capabilities" in line for line in error):
+        if error and not any(
+            "Your kernel does not support swap limit capabilities" in line for line in error
+        ):
             logging.error("".join(error))
             sys.exit()
         elif not output:
@@ -664,7 +666,9 @@ def start(config, machines):
         wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
-    if (config["mode"] == "cloud" or config["mode"] == "edge") and config["benchmark"]["application"] != "minecraft":
+    if (config["mode"] == "cloud" or config["mode"] == "edge") and config["benchmark"][
+        "application"
+    ] != "minecraft":
         if config["benchmark"]["resource_manager"] != "mist":
             wait_worker_completion(config, machines)
         else:
