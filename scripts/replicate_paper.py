@@ -704,9 +704,8 @@ class CPUVariation(Experiment):
         Experiment.__init__(self, resume)
 
         # CPU x quota: 0.25 | 0.5 | 1.0 | 2.0 | 4.0 | 8.0
-        # Memory:      1    | 1   | 1   | 2   | 4   | 8
         self.cpu = [1, 1, 1, 2, 4, 8]
-        self.memory = [1, 1, 1, 2, 4, 8]
+        self.memory = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
         self.quota = [0.25, 0.5, 1.0, 1.0, 1.0, 1.0]
 
         self.y = None
@@ -728,6 +727,10 @@ QUOTA                   %s""" % (
         # Differ in deployment modes
         for cpu, memory, quota in zip(self.cpu, self.memory, self.quota):
             cpu_quota = cpu * quota
+            if cpu_quota != memory:
+                logging.error("ERROR: cpu x quota (%f) != memory (%f)", cpu_quota, memory)
+                sys.exit()
+
             if cpu_quota >= 1:
                 cpu_str = "%s00" % (int(cpu_quota))
             elif cpu_quota < 1:
@@ -743,9 +746,7 @@ QUOTA                   %s""" % (
             command = [str(c) for c in command]
 
             run = {
-                "cpu": cpu,
-                "memory": memory,
-                "quota": quota,
+                "cpu_quota_memory": cpu_quota,
                 "command": command,
                 "output": None,
                 "latency": None,
@@ -779,11 +780,7 @@ QUOTA                   %s""" % (
         plt.rcParams.update({"font.size": 22})
         _, ax1 = plt.subplots(figsize=(12, 6))
 
-        configs = []
-        for run in self.runs:
-            configs.append((run["cpu"], run["memory"], run["quota"]))
-
-        x = [str(config) for config in configs]
+        x = [run["cpu_quota_memory"] for run in self.runs]
         y = [run["latency"] for run in self.runs]
         self.y = y
 
@@ -810,10 +807,8 @@ QUOTA                   %s""" % (
         """Print results of runs as text"""
         for run, latency in zip(self.runs, self.y):
             logging.info(
-                "CPU Cores: %3i | Memory: %3i GB | Quota: %5f | End-to-end Latency: %8i ms",
-                run["cpu"],
-                run["memory"],
-                run["quota"],
+                "CPU Cores x Quota == Memory: %5f| End-to-end Latency: %8i ms",
+                run["cpu_quota_memory"],
                 latency,
             )
 
