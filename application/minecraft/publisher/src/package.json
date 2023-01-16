@@ -1,0 +1,7 @@
+{
+    "dependencies": {
+      "mineflayer": "4.6.0",
+      "mineflayer-pathfinder": "2.4.2",
+      "vec3": "0.1.7"
+    }
+}

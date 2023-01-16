@@ -759,7 +759,7 @@ def benchmark(parser, config, new):
         sec,
         "application",
         str,
-        lambda x: x in ["image_classification", "empty"],
+        lambda x: x in ["image_classification", "minecraft", "empty"],
         mandatory=True,
     )
 
@@ -846,6 +846,17 @@ def benchmark(parser, config, new):
             new,
             sec,
             "sleep_time",
+            int,
+            lambda x: x >= 1,
+            mandatory=True,
+        )
+    elif new[sec]["application"] == "minecraft":
+        option_check(
+            parser,
+            config,
+            new,
+            sec,
+            "steps_bot",
             int,
             lambda x: x >= 1,
             mandatory=True,

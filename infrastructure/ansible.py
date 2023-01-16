@@ -335,6 +335,16 @@ def copy(config, machines):
         d = dest + "launch_benchmark.yml"
         out.append(machines[0].copy_files(config, path, d))
 
+        # copy minecraft template file as well, it uses an extra template file
+        path = os.path.join(
+            config["base"],
+            "application",
+            config["benchmark"]["application"],
+            "template_server.yml.j2",
+        )
+        d = dest + "template_server.yml.j2"
+        out.append(machines[0].copy_files(config, path, d))
+
     # Copy playbooks for installing resource managers and execution_models
     if not config["infrastructure"]["infra_only"]:
         if config["mode"] == "cloud" or config["mode"] == "edge":

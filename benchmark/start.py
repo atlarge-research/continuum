@@ -204,6 +204,9 @@ def start_worker(config, machines):
         app_vars = {
             "sleep_time": config["benchmark"]["sleep_time"],
         }
+    # no extra variables are needed for the minecraft server
+    elif config["benchmark"]["application"] == "minecraft":
+        app_vars = {}
 
     # Merge the two var dicts
     all_vars = {**global_vars, **app_vars}
@@ -452,7 +455,15 @@ def start_endpoint(config, machines):
         ):
             # Docker container name and variables depends on deployment mode
             cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
-            env = ["FREQUENCY=%i" % (config["benchmark"]["frequency"])]
+            env = []
+            if config["benchmark"]["application"] == "image_classification":
+                env.append("FREQUENCY=%i" % (config["benchmark"]["frequency"]))
+            elif config["benchmark"]["application"] == "minecraft":
+                env.append(f"HOST={worker_ip}")
+                env.append(f"PORT={30000 + worker_i}")
+                env.append(f"USERNAME=endpointX{worker_i}X{endpoint_i}")
+                env.append("BOX_WIDTH=20")
+                env.append(f"NUMBER_STEPS={config['benchmark']['steps_bot']}")
 
             if config["mode"] == "cloud" or config["mode"] == "edge":
                 cont_name = "%s%i_" % (config["mode"], worker_i) + cont_name
@@ -500,7 +511,7 @@ def start_endpoint(config, machines):
     for ssh, (output, error) in zip(sshs, results):
         logging.debug("Check output of endpoint start in ssh [%s]", ssh)
 
-        if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+        if error and not any("Your kernel does not support swap limit capabilities" in line for line in error):
             logging.error("".join(error))
             sys.exit()
         elif not output:
@@ -653,7 +664,7 @@ def start(config, machines):
         wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
-    if config["mode"] == "cloud" or config["mode"] == "edge":
+    if (config["mode"] == "cloud" or config["mode"] == "edge") and config["benchmark"]["application"] != "minecraft":
         if config["benchmark"]["resource_manager"] != "mist":
             wait_worker_completion(config, machines)
         else:
