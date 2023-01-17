@@ -27,7 +27,11 @@ def get_endpoint_output(config, machines, container_names):
     # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
     commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-    results = machines[0].process(config, commands, ssh=config["endpoint_ssh"])
+    ssh_entry = config["endpoint_ssh"]
+    if config["infrastructure"]["provider"] == "baremetal":
+        ssh_entry = None
+
+    results = machines[0].process(config, commands, ssh=ssh_entry)
 
     endpoint_output = []
     for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
@@ -123,10 +127,14 @@ def get_worker_output_mist(config, machines, container_names):
     # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
     commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
-    results = machines[0].process(config, commands, ssh=config["edge_ssh"])
+    ssh_entry = config["edge_ssh"]
+    if config["infrastructure"]["provider"] == "baremetal":
+        ssh_entry = None
+
+    results = machines[0].process(config, commands, ssh=ssh_entry)
 
     worker_output = []
-    for container, ssh, (output, error) in zip(container_names, config["endpoint_ssh"], results):
+    for container, ssh, (output, error) in zip(container_names, config["edge_ssh"], results):
         logging.info("Get output from mist worker %s on VM %s", container, ssh)
 
         if error:

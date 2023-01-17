@@ -20,6 +20,12 @@ import resource_manager.start as resource_manager
 import benchmark.start as benchmark
 import execution_model.start as execution_model
 
+# pylint: disable=unused-import
+from infrastructure.qemu import start as qemu_vm
+from infrastructure.terraform import start as terraform_vm
+
+# pylint: enable=unused-import
+
 
 def ansible_check_output(out):
     """Check if an Ansible Playbook succeeded or failed

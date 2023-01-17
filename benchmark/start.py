@@ -298,6 +298,126 @@ def start_worker(config, machines):
     return starttime
 
 
+def start_worker_baremetal(config, machines):
+    """Start running the endpoint containers using Docker.
+
+    Assumptions for now:
+    - You can only have one worker
+    - The worker is a cloud node
+
+    Instructions for starting/stopping/installing mosquitto on bare-metal (only requirement)
+    - sudo apt install mosquitto=1.6.9-1
+    - mosquitto -d -p 1883
+    - sudo systemctl start mosquitto.service
+    - sudo systemctl stop mosquitto.service
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+
+    Returns:
+        list(list(str)): Names of docker containers launched per machine
+    """
+    logging.info("Deploy Docker containers on endpoints with publisher application")
+
+    if config["infrastructure"]["provider"] != "baremetal":
+        logging.error("ERROR: Provider should be baremetal in this part of the framework")
+        sys.exit()
+
+    if config["infrastructure"]["cloud_nodes"] != 1 and config["infrastructure"]["edge_nodes"] != 0:
+        logging.error("ERROR: Baremetal currently only works with #clouds==1 and #edges==0")
+        sys.exit()
+
+    # Set variables for the application
+    env = [
+        "MQTT_LOCAL_IP=%s" % (config["registry"].split(":")[0]),
+        "MQTT_LOGS=True",
+        "CPU_THREADS=%i" % (config["infrastructure"]["cloud_cores"]),
+        "ENDPOINT_CONNECTED=%i"
+        % (
+            int(
+                config["infrastructure"]["endpoint_nodes"] / config["infrastructure"]["cloud_nodes"]
+            )
+        ),
+    ]
+
+    period = 100000
+    cont_name = config["cloud_ssh"].split("@")[0]
+
+    command = (
+        [
+            "docker",
+            "container",
+            "run",
+            "--detach",
+            "--cpus=%i" % (config["infrastructure"]["cloud_cores"]),
+            "--memory=%ig" % (config["infrastructure"]["cloud_memory"]),
+            "--cpu-period=%i" % (period),
+            "--cpu-quota=%i" % (int(period * config["infrastructure"]["cloud_quota"])),
+            "--network=host",
+        ]
+        + ["--env %s" % (e) for e in env]
+        + [
+            "--name",
+            cont_name,
+            os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        ]
+    )
+
+    output, error = machines[0].process(config, command)[0]
+
+    logging.debug("Check output of worker container")
+    if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+        logging.error("".join(error))
+        sys.exit()
+    elif not output:
+        logging.error("No output from docker container")
+        sys.exit()
+
+    # Wait for containers to be succesfully deployed
+    logging.info("Wait for Mist appilcations to be deployed")
+    time.sleep(10)
+
+    for worker_ssh in config["cloud_ssh"]:
+        deployed = False
+
+        while not deployed:
+            command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
+            output, error = machines[0].process(config, command, shell=True)[0]
+
+            if error:
+                logging.error("".join(error))
+                sys.exit()
+            elif not output:
+                logging.error("No output from docker container")
+                sys.exit()
+
+            # Get status of docker container
+            status_line = None
+            for line in output:
+                for cont_name in [cont_name]:
+                    if cont_name in line:
+                        status_line = line
+
+            if status_line is None:
+                logging.error(
+                    "ERROR: Could not find the status of any container running in VM %s: %s",
+                    worker_ssh.split("@")[0],
+                    "".join(output),
+                )
+                sys.exit()
+
+            parsed = status_line.rstrip().split(" ")
+
+            # If not yet up, wait
+            if parsed[1] == "Up":
+                deployed = True
+            else:
+                time.sleep(5)
+
+    return [cont_name]
+
+
 def start_worker_mist(config, machines):
     """Start running the mist worker subscriber containers using Docker.
     Wait for them to finish, and get their output.
@@ -510,6 +630,83 @@ def start_endpoint(config, machines):
     return container_names
 
 
+def start_endpoint_baremetal(config, machines):
+    """Start running the endpoint containers using Docker.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+
+    Returns:
+        list(list(str)): Names of docker containers launched per machine
+    """
+    logging.info("Deploy Docker containers on endpoints with publisher application as baremetal")
+
+    commands = []
+    sshs = []
+    container_names = []
+
+    period = 100000
+
+    worker_ip = config["registry"].split(":")[0]
+    config["infrastructure"]["endpoint_nodes"]
+
+    for endpoint_i, endpoint_ssh in enumerate(config["endpoint_ssh"]):
+        # Docker container name and variables depends on deployment mode
+        cont_name = "endpoint%i" % (endpoint_i)
+        cont_name = "%s0_" % (config["mode"]) + cont_name
+
+        env = ["FREQUENCY=%i" % (config["benchmark"]["frequency"])]
+        env.append("MQTT_LOCAL_IP=%s" % (worker_ip))
+        env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
+        env.append("MQTT_LOGS=True")
+
+        logging.info("Launch %s", cont_name)
+
+        # Decide wether to use the endpoint or combined image
+        command = (
+            [
+                "docker",
+                "container",
+                "run",
+                "--detach",
+                "--cpus=%i" % (config["benchmark"]["endpoint_cores"]),
+                "--memory=%ig" % (config["benchmark"]["endpoint_memory"]),
+                "--cpu-period=%i" % (period),
+                "--cpu-quota=%i" % (int(period * config["infrastructure"]["cloud_quota"])),
+                "--network=host",
+            ]
+            + ["--env %s" % (e) for e in env]
+            + [
+                "--name",
+                cont_name,
+                os.path.join(
+                    config["registry"],
+                    config["images"]["endpoint"].split(":")[1],
+                ),
+            ]
+        )
+
+        commands.append(command)
+        sshs.append(endpoint_ssh)
+        container_names.append(cont_name)
+
+    results = machines[0].process(config, commands, ssh=sshs)
+
+    # Checkout process output
+    for ssh, (output, error) in zip(sshs, results):
+        logging.debug("Check output of endpoint baremetal")
+
+        if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+            logging.error("".join(error))
+            sys.exit()
+        elif not output:
+            logging.error("No output from docker container")
+            sys.exit()
+
+    return container_names
+
+
 def wait_endpoint_completion(config, machines, sshs, container_names):
     """Wait for all containers to be finished running the benchmark on endpoints
     OR for all mist containers, which also use docker so this function can be reused
@@ -530,7 +727,12 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
         while not finished:
             # Get list of docker containers
             command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
-            output, error = machines[0].process(config, command, shell=True, ssh=ssh)[0]
+
+            ssh_entry = ssh
+            if config["infrastructure"]["provider"] == "baremetal":
+                ssh_entry = None
+
+            output, error = machines[0].process(config, command, shell=True, ssh=ssh_entry)[0]
 
             if error:
                 logging.error("".join(error))
@@ -644,7 +846,7 @@ def start(config, machines):
                 cache_worker(config, machines)
 
             if config["infrastructure"]["provider"] == "baremetal":
-                starttime = start_worker_baremetal(config, machines)
+                container_names_baremetal = start_worker_baremetal(config, machines)
             else:
                 starttime = start_worker(config, machines)
         else:
@@ -654,22 +856,21 @@ def start(config, machines):
     if config["infrastructure"]["endpoint_nodes"]:
         if config["infrastructure"]["provider"] == "baremetal":
             container_names = start_endpoint_baremetal(config, machines)
-            wait_endpoint_completion_baremetal(
-                config, machines, config["endpoint_ssh"], container_names
-            )
         else:
             container_names = start_endpoint(config, machines)
-            wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+
+        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
     if config["mode"] == "cloud" or config["mode"] == "edge":
         if config["infrastructure"]["provider"] == "baremetal":
-            wait_worker_completion_baremetal(config, machines)
+            wait_endpoint_completion(
+                config, machines, config["cloud_ssh"], container_names_baremetal
+            )
+        elif config["benchmark"]["resource_manager"] != "mist":
+            wait_worker_completion(config, machines)
         else:
-            if config["benchmark"]["resource_manager"] != "mist":
-                wait_worker_completion(config, machines)
-            else:
-                wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_mist)
+            wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_mist)
 
     # Now get raw output
     endpoint_output = []
@@ -680,7 +881,10 @@ def start(config, machines):
 
     worker_output = []
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["benchmark"]["resource_manager"] != "mist":
+        if (
+            config["benchmark"]["resource_manager"] != "mist"
+            and config["infrastructure"]["provider"] != "baremetal"
+        ):
             worker_output = out.get_worker_output(config, machines)
         else:
             worker_output = out.get_worker_output_mist(config, machines, container_names_mist)
@@ -690,30 +894,3 @@ def start(config, machines):
         machines, config, worker_output, endpoint_output, container_names, starttime
     )
     out.format_output(config, worker_metrics, endpoint_metrics)
-
-
-"""
-TODO
-
-Create functions to support bare-metal deployment, which uses docker on bare-metal
-- Create new functions if too many code changes are required
-    - Example: 
-        - Launch cloud/edge app, as we no longer use Kubernetes
-        - Get output from cloud/edge app, as we no longer have Kubernetes
-            - Mimic the endpoint function instead, that one uses Docker
-- Add if/else if only little changes are required
-    - Endpoint deployment, but just without the ssh (just execute natively)
-
-Files that need to be changed
-- start.py (this file)
-- output.py
-- config files in /experiment_provider
-- replicate_paper.py
-
-
-Instructions for starting/stopping/installing mosquitto on bare-metal (only requirement)
-- sudo apt install mosquitto=1.6.9-1
-- mosquitto -d -p 1883
-- sudo systemctl start mosquitto.service
-- sudo systemctl stop mosquitto.service
-"""
