@@ -847,7 +847,7 @@ class Provider(Experiment):
     def __init__(self, resume):
         Experiment.__init__(self, resume)
 
-        self.providers = ["qemu", "gcp"]
+        self.providers = ["baremetal", "qemu", "gcp"]
 
         self.y = None
 
@@ -926,14 +926,13 @@ PROVIDER                %s""" % (
         ax1.set_yticks([100, 200, 300])
 
         ax1.set_xlabel("Infrastructure provider")
-        # ax1.set_xlim(0.25, 8)
         ax1.set_xticks(np.arange(len(self.runs)), labels=[run["provider"] for run in self.runs])
 
         ax1.legend(["End-to-end latency"], loc="upper right", framealpha=1.0)
 
-        ax1.axhline(y=1000, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=10000, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=100000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=100, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
 
         # Save
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())

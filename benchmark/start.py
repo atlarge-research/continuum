@@ -891,13 +891,12 @@ def start(config, machines):
 
     worker_output = []
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        if (
-            config["benchmark"]["resource_manager"] != "mist"
-            and config["infrastructure"]["provider"] != "baremetal"
-        ):
-            worker_output = out.get_worker_output(config, machines)
-        else:
+        if config["benchmark"]["resource_manager"] == "mist":
             worker_output = out.get_worker_output_mist(config, machines, container_names_mist)
+        elif config["infrastructure"]["provider"] == "baremetal":
+            worker_output = out.get_worker_output_mist(config, machines, container_names_baremetal)
+        else:
+            worker_output = out.get_worker_output(config, machines)
 
     # Parse output into dicts, and print result
     worker_metrics, endpoint_metrics = out.gather_metrics(

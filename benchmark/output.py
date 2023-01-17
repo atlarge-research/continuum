@@ -130,11 +130,12 @@ def get_worker_output_mist(config, machines, container_names):
     ssh_entry = config["edge_ssh"]
     if config["infrastructure"]["provider"] == "baremetal":
         ssh_entry = None
+        ssh_entry2 = config["cloud_ssh"]
 
     results = machines[0].process(config, commands, ssh=ssh_entry)
 
     worker_output = []
-    for container, ssh, (output, error) in zip(container_names, config["edge_ssh"], results):
+    for container, ssh, (output, error) in zip(container_names, ssh_entry2, results):
         logging.info("Get output from mist worker %s on VM %s", container, ssh)
 
         if error:
