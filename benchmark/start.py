@@ -649,7 +649,6 @@ def start_endpoint_baremetal(config, machines):
     period = 100000
 
     worker_ip = config["registry"].split(":")[0]
-    config["infrastructure"]["endpoint_nodes"]
 
     for endpoint_i, endpoint_ssh in enumerate(config["endpoint_ssh"]):
         # Docker container name and variables depends on deployment mode
@@ -694,7 +693,7 @@ def start_endpoint_baremetal(config, machines):
     results = machines[0].process(config, commands, ssh=sshs)
 
     # Checkout process output
-    for ssh, (output, error) in zip(sshs, results):
+    for output, error in results:
         logging.debug("Check output of endpoint baremetal")
 
         if error and "Your kernel does not support swap limit capabilities" not in error[0]:
