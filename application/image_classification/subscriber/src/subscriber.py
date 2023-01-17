@@ -153,7 +153,7 @@ def do_tflite(queue):
                     end="",
                 )
                 continue
-        except AttributeError:
+        except (AttributeError, UnicodeDecodeError):
             print("[%s] Read image and apply ML\n" % (current.name), end="")
 
         # Read the image, do ML on it
