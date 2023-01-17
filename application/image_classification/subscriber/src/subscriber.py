@@ -16,7 +16,8 @@ MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
 MQTT_LOGS = os.environ["MQTT_LOGS"]
 CPU_THREADS = int(os.environ["CPU_THREADS"])
 ENDPOINT_CONNECTED = int(os.environ["ENDPOINT_CONNECTED"])
-MQTT_TOPIC = "kubeedge-image-classification"
+MQTT_TOPIC_PUB = "image-classification-pub"
+MQTT_TOPIC_SUB = "image-classification-sub"
 
 work_queue = multiprocessing.Queue()
 endpoints_connected = multiprocessing.Value("i", ENDPOINT_CONNECTED)
@@ -33,7 +34,7 @@ def on_connect(client, _userdata, _flags, rc):
         rc (str): Result code
     """
     print("Connected with result code " + str(rc) + "\n", end="")
-    client.subscribe(MQTT_TOPIC)
+    client.subscribe(MQTT_TOPIC_SUB)
 
 
 def on_subscribe(_mqttc, _obj, _mid, _granted_qos):
@@ -207,14 +208,14 @@ def do_tflite(queue):
         if ip not in remote_clients:
             remote_clients[ip] = connect_remote_client(current, ip)
 
-        _ = remote_clients[ip].publish(MQTT_TOPIC, t_bytes, qos=0)
+        _ = remote_clients[ip].publish(MQTT_TOPIC_PUB, t_bytes, qos=0)
 
 
 def main():
     """Create multiprocessing elements and start generator / processor functions."""
     print("Start connecting to the local MQTT broker")
     print("Broker ip: " + str(MQTT_LOCAL_IP))
-    print("Topic: " + str(MQTT_TOPIC))
+    print("Topic: " + str(MQTT_TOPIC_SUB))
 
     with multiprocessing.Pool(CPU_THREADS, do_tflite, (work_queue,)):
         local_client = mqtt.Client()

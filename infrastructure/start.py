@@ -637,8 +637,15 @@ def start(config):
     Returns:
         list(Machine object): List of machine objects representing physical machines
     """
-    generate = globals()["%s_generate" % (config["infrastructure"]["provider"])]
-    vm = globals()["%s_vm" % (config["infrastructure"]["provider"])]
+    generate = None
+    vm = None
+    if config["infrastructure"]["provider"] == "baremetal":
+        # Do as if you're QEMU to get some required metadata
+        generate = globals()["%s_generate" % ("qemu")]
+        vm = globals()["%s_vm" % ("qemu")]
+    else:
+        generate = globals()["%s_generate" % (config["infrastructure"]["provider"])]
+        vm = globals()["%s_vm" % (config["infrastructure"]["provider"])]
 
     machines = m.make_machine_objects(config)
 
@@ -708,6 +715,31 @@ def start(config):
         ansible.copy(config, machines)
 
         vm.base_install(config, machines)
+    elif config["infrastructure"]["provider"] == "baremetal":
+        # There are no cloud controller for baremetal
+        # We only support 1 cloud node at the moment, with 1 or more endpoints
+        machines[0].clouds = machines[0].cloud_controller
+        machines[0].cloud_controller = 0
+
+        machines[0].cloud_ips = machines[0].cloud_controller_ips
+        machines[0].cloud_controller_ips = []
+
+        machines[0].cloud_ips_internal = machines[0].cloud_controller_ips_internal
+        machines[0].cloud_controller_ips_internal = []
+
+        if len(machines[0].cloud_controller_names) != 1:
+            logging.error("ERROR: Baremetal only supports #clouds=1, #edges=0, @#endpoints>=0")
+            sys.exit()
+
+        name_split = machines[0].cloud_controller_names[0].split("_")
+        machines[0].cloud_names = ["%s0_%s" % (name_split[0], name_split[2])]
+        machines[0].cloud_controller_names = []
+
+        m.gather_ips(config, machines)
+        m.gather_ssh(config, machines)
+
+        for machine in machines:
+            logging.debug(machine)
 
     if config["infrastructure"]["network_emulation"]:
         network.start(config, machines)

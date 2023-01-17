@@ -341,8 +341,16 @@ def start_worker_baremetal(config, machines):
         ),
     ]
 
-    period = 100000
-    cont_name = config["cloud_ssh"].split("@")[0]
+    period_scaler = 100000
+    period = int(config["infrastructure"]["cloud_cores"] * period_scaler)
+    quota = int(period * config["infrastructure"]["cloud_quota"])
+
+    cont_name = config["cloud_ssh"][0].split("@")[0]
+
+    env_list = []
+    for e in env:
+        env_list.append("--env")
+        env_list.append(e)
 
     command = (
         [
@@ -350,13 +358,12 @@ def start_worker_baremetal(config, machines):
             "container",
             "run",
             "--detach",
-            "--cpus=%i" % (config["infrastructure"]["cloud_cores"]),
             "--memory=%ig" % (config["infrastructure"]["cloud_memory"]),
             "--cpu-period=%i" % (period),
-            "--cpu-quota=%i" % (int(period * config["infrastructure"]["cloud_quota"])),
+            "--cpu-quota=%i" % (quota),
             "--network=host",
         ]
-        + ["--env %s" % (e) for e in env]
+        + env_list
         + [
             "--name",
             cont_name,
@@ -375,14 +382,14 @@ def start_worker_baremetal(config, machines):
         sys.exit()
 
     # Wait for containers to be succesfully deployed
-    logging.info("Wait for Mist appilcations to be deployed")
+    logging.info("Wait for baremetal worker applications to be deployed")
     time.sleep(10)
 
     for worker_ssh in config["cloud_ssh"]:
         deployed = False
 
         while not deployed:
-            command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
+            command = 'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"'
             output, error = machines[0].process(config, command, shell=True)[0]
 
             if error:
@@ -491,7 +498,7 @@ def start_worker_mist(config, machines):
             sys.exit()
 
     # Wait for containers to be succesfully deployed
-    logging.info("Wait for Mist appilcations to be deployed")
+    logging.info("Wait for Mist applications to be deployed")
     time.sleep(10)
 
     for worker_ssh in config["edge_ssh"]:
@@ -643,14 +650,15 @@ def start_endpoint_baremetal(config, machines):
     logging.info("Deploy Docker containers on endpoints with publisher application as baremetal")
 
     commands = []
-    sshs = []
     container_names = []
 
-    period = 100000
+    period_scaler = 100000
+    period = int(config["infrastructure"]["endpoint_cores"] * period_scaler)
+    quota = int(period * config["infrastructure"]["endpoint_quota"])
 
     worker_ip = config["registry"].split(":")[0]
 
-    for endpoint_i, endpoint_ssh in enumerate(config["endpoint_ssh"]):
+    for endpoint_i, _ in enumerate(config["endpoint_ssh"]):
         # Docker container name and variables depends on deployment mode
         cont_name = "endpoint%i" % (endpoint_i)
         cont_name = "%s0_" % (config["mode"]) + cont_name
@@ -659,6 +667,11 @@ def start_endpoint_baremetal(config, machines):
         env.append("MQTT_LOCAL_IP=%s" % (worker_ip))
         env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
         env.append("MQTT_LOGS=True")
+
+        env_list = []
+        for e in env:
+            env_list.append("--env")
+            env_list.append(e)
 
         logging.info("Launch %s", cont_name)
 
@@ -669,13 +682,12 @@ def start_endpoint_baremetal(config, machines):
                 "container",
                 "run",
                 "--detach",
-                "--cpus=%i" % (config["benchmark"]["endpoint_cores"]),
-                "--memory=%ig" % (config["benchmark"]["endpoint_memory"]),
+                "--memory=%ig" % (config["infrastructure"]["endpoint_memory"]),
                 "--cpu-period=%i" % (period),
-                "--cpu-quota=%i" % (int(period * config["infrastructure"]["cloud_quota"])),
+                "--cpu-quota=%i" % (quota),
                 "--network=host",
             ]
-            + ["--env %s" % (e) for e in env]
+            + env_list
             + [
                 "--name",
                 cont_name,
@@ -687,10 +699,9 @@ def start_endpoint_baremetal(config, machines):
         )
 
         commands.append(command)
-        sshs.append(endpoint_ssh)
         container_names.append(cont_name)
 
-    results = machines[0].process(config, commands, ssh=sshs)
+    results = machines[0].process(config, commands)
 
     # Checkout process output
     for output, error in results:
@@ -726,9 +737,9 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
         while not finished:
             # Get list of docker containers
             command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
-
             ssh_entry = ssh
             if config["infrastructure"]["provider"] == "baremetal":
+                command = 'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"'
                 ssh_entry = None
 
             output, error = machines[0].process(config, command, shell=True, ssh=ssh_entry)[0]

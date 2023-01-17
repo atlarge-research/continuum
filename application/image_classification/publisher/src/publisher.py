@@ -10,7 +10,8 @@ MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
 MQTT_REMOTE_IP = os.environ["MQTT_REMOTE_IP"]
 MQTT_LOGS = os.environ["MQTT_LOGS"]
 FREQUENCY = int(os.environ["FREQUENCY"])
-MQTT_TOPIC = "kubeedge-image-classification"
+MQTT_TOPIC_PUB = "image-classification-pub"
+MQTT_TOPIC_SUB = "image-classification-sub"
 
 # Set how many imgs to send, and how often
 DURATION = 300
@@ -30,7 +31,7 @@ def on_connect(local_client, _userdata, _flags, rc):
         rc (str): Result code
     """
     print("Connected with result code " + str(rc) + "\n", end="")
-    local_client.subscribe(MQTT_TOPIC)
+    local_client.subscribe(MQTT_TOPIC_PUB)
 
 
 def on_subscribe(_mqttc, _obj, _mid, _granted_qos):
@@ -90,7 +91,7 @@ def connect():
     """Execute when connecting to a MQTT broker"""
     print("Start connecting to the local MQTT broker")
     print("Broker ip: " + str(MQTT_LOCAL_IP))
-    print("Topic: " + str(MQTT_TOPIC))
+    print("Topic: " + str(MQTT_TOPIC_PUB))
 
     local_client = mqtt.Client()
     local_client.on_connect = on_connect
@@ -114,7 +115,7 @@ def send():
 
     print("Start connecting to the remote MQTT broker")
     print("Broker ip: " + str(MQTT_REMOTE_IP))
-    print("Topic: " + str(MQTT_TOPIC))
+    print("Topic: " + str(MQTT_TOPIC_SUB))
 
     remote_client = mqtt.Client()
     remote_client.on_publish = on_publish
@@ -139,7 +140,7 @@ def send():
         byte_arr.extend(ip_bytes.encode("utf-8"))
 
         print("Sending data (bytes): %i" % (len(byte_arr)))
-        _ = remote_client.publish(MQTT_TOPIC, byte_arr, qos=0)
+        _ = remote_client.publish(MQTT_TOPIC_SUB, byte_arr, qos=0)
 
         # Try to keep a frame rate of X
         sec_frame = time.time_ns() - start_time
@@ -157,7 +158,7 @@ def send():
 
     # Make sure the finish message arrives
     remote_client.loop_start()
-    remote_client.publish(MQTT_TOPIC, "1", qos=2)
+    remote_client.publish(MQTT_TOPIC_SUB, "1", qos=2)
     remote_client.loop_stop()
 
     remote_client.disconnect()
