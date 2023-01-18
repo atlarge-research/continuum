@@ -36,7 +36,9 @@ def send():
 
         print("Sending data (bytes): %i" % (len(byte_arr)))
         t_before_send = time.time_ns()
-        response = requests.post("%s:8080/function/subscriber_serverless", data=byte_arr)
+        response = requests.post(
+            "%s:8080/function/subscriber_serverless", data=byte_arr, timeout=100000
+        )
 
         t_old = int(response.decode("utf-8"))
         t_respone = time.time_ns()
