@@ -43,7 +43,7 @@ def send():
             timeout=100000,
         )
 
-        t_old = int(response.decode("utf-8"))
+        t_old = int(response.content.decode("utf-8"))
         t_respone = time.time_ns()
         print("Latency (ns): %i" % (t_respone - t_old))
 

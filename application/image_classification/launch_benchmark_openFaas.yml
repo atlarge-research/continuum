@@ -20,7 +20,8 @@
         EOF
 
     - name: Forward incoming 8080 traffic to localhost
-      command: iptables -t nat -A PREROUTING -i ens2 -p tcp --dport 1883 -j REDIRECT --to-port 8080
+      command: |
+        iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 127.0.0.1:8080
 
     - name: Launch jobs
       command: faas-cli deploy --yaml "/home/{{ username }}/function.yml"

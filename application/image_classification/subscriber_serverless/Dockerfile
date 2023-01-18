@@ -1,8 +1,5 @@
-# Define custom function directory
-ARG FUNCTION_DIR="/function"
-
 #------------------------------------------------------------------------
-FROM python:3.8.7-slim-buster as build_image
+FROM --platform=${TARGETPLATFORM:-linux/amd64} python:3.8.7-slim-buster as build_image
 
 # Install packages needed for TFlite
 RUN apt update
@@ -30,27 +27,59 @@ RUN bash ./tensorflow-2.3.4/tensorflow/lite/tools/pip_package/build_pip_package.
 
 
 #------------------------------------------------------------------------
-FROM python:3.8.7-slim-buster as runtime_image
+FROM --platform=${TARGETPLATFORM:-linux/amd64} ghcr.io/openfaas/classic-watchdog:0.2.1 as watchdog
+FROM --platform=${TARGETPLATFORM:-linux/amd64} python:3.8.7-slim-buster
 
-# Include global arg in this stage of the build
-ARG FUNCTION_DIR
+COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
+RUN chmod +x /usr/bin/fwatchdog
+RUN apt-get update \
+    && apt-get install -y ca-certificates \
+    && rm -rf /var/lib/apt/lists/
 
-# Copy function source code
-RUN mkdir -p ${FUNCTION_DIR}
-COPY src/* ${FUNCTION_DIR}/
+# Add non root user
+RUN groupadd app && useradd -r -g app app
+
+WORKDIR /home/app/
+
+COPY index.py           .
+COPY requirements.txt   .
+
+RUN chown -R app /home/app && \
+    mkdir -p /home/app/python && chown -R app /home/app
+USER app
+ENV PATH=$PATH:/home/app/.local/bin:/home/app/python/bin/
+ENV PYTHONPATH=$PYTHONPATH:/home/app/python
+
+RUN pip install -r requirements.txt --target=/home/app/python
+
+RUN mkdir -p function
+RUN touch ./function/__init__.py
+
+WORKDIR /home/app/function/
+COPY function/requirements.txt	.
+
+RUN pip install -r requirements.txt --target=/home/app/python
 
 # Copy TFlite wheel
 # NOTE: IF TENSORFLOW UPDATES, THIS DOCKERFILE MAY CRASH HERE. UPDATE THE NAMES IN THAT CASE
 COPY --from=build_image tensorflow-2.3.4/tensorflow/lite/tools/pip_package/gen/tflite_pip/python3/dist/*.whl ./
-RUN pip3 install *.whl
+RUN pip install *.whl --target=/home/app/python
 
-# Install app specific packages
-RUN pip3 install -r ${FUNCTION_DIR}/requirements.txt
+WORKDIR /home/app/
 
-# Set working directory to function root directory
-WORKDIR ${FUNCTION_DIR}
+USER root
 
-# Open port to the MQTT broker
+COPY function           function
+
+# Allow any user-id for OpenShift users.
+RUN chown -R app:app ./ && \
+    chmod -R 777 /home/app/python
+
+USER app
+
+ENV fprocess="python3 index.py"
 EXPOSE 8080
 
-CMD [ "python3", "-u", "subscriber.py"]
+HEALTHCHECK --interval=3s CMD [ -e /tmp/.lock ] || exit 1
+
+CMD ["fwatchdog"]

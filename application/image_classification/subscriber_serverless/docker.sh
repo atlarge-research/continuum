@@ -1,4 +1,5 @@
 #!/bin/bash
-cp ../model/* ./src/
-docker buildx build --platform linux/amd64,linux/arm64 -t redplanet00/kubeedge-applications:image_classification_subscriber_serverless --push .
-rm src/labels.txt src/model.tflite
+cp ../model/* ./function/
+docker build -t redplanet00/kubeedge-applications:image_classification_subscriber_serverless .
+docker push redplanet00/kubeedge-applications:image_classification_subscriber_serverless
+rm function/labels.txt function/model.tflite
