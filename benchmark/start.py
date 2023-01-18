@@ -315,12 +315,15 @@ def start_worker_serverless(config, machines):
         sys.exit()
 
     # Global variables for each applications
+    memory = min(1000, int(config["benchmark"]["application_worker_memory"] * 1000))
+    cpu = min(1, config["benchmark"]["application_worker_cpu"])
+
     global_vars = {
         "app_name": config["benchmark"]["application"].split("_")[0],
         "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
-        "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
-        "cpu_req": config["benchmark"]["application_worker_cpu"],
-        "cpu_threads": max(1, int(config["benchmark"]["application_worker_cpu"])),
+        "memory_req": memory,
+        "cpu_req": cpu,
+        "cpu_threads": max(1, cpu),
     }
 
     # Merge the two var dicts
@@ -339,14 +342,7 @@ def start_worker_serverless(config, machines):
     )
 
     main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
-
-    # Waiting for the applications to fully initialize (includes scheduling)
-    time.sleep(10)
     logging.info("Deployed %s serverless application", config["mode"])
-
-    # Check if serverless function is properly deployed (it isnt running)
-    logging.error("STOP FOR NOW")
-    sys.exit()
 
 
 def start_worker_baremetal(config, machines):
@@ -903,9 +899,10 @@ def start(config, machines):
     is_mist = config["benchmark"]["resource_manager"] == "mist"
     is_baremetal = config["infrastructure"]["provider"] == "baremetal"
     is_serverless = False
-    if "execution_model" in config and config["execution_model"] == "openFaas":
+    if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
         is_serverless = True
 
+    # Start the worker
     starttime = 0.0
     if config["mode"] == "cloud" or config["mode"] == "edge":
         if not is_mist:
@@ -921,6 +918,7 @@ def start(config, machines):
         else:
             container_names_mist = start_worker_mist(config, machines)
 
+    # Start the endpoint
     container_names = []
     if config["infrastructure"]["endpoint_nodes"]:
         if is_baremetal:
@@ -931,7 +929,7 @@ def start(config, machines):
         wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
-    if config["mode"] == "cloud" or config["mode"] == "edge":
+    if (config["mode"] == "cloud" or config["mode"] == "edge") and not is_serverless:
         if is_baremetal:
             wait_endpoint_completion(
                 config, machines, config["cloud_ssh"], container_names_baremetal

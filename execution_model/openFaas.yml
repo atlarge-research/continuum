@@ -33,10 +33,13 @@
         line: "export OPENFAAS_PREFIX=redplanet00"
 
     - name: Enable OpenFaaS port forwarding
-      shell: nohup kubectl port-forward -n openfaas svc/gateway 8080:8080 > /dev/null 2>&1 &
+      shell: |
+        nohup kubectl port-forward --kubeconfig="/home/{{ username }}/.kube/config" \
+          -n openfaas svc/gateway 8080:8080 > /dev/null 2>&1 &
 
     - name: Login to OpenFaaS
-      shell: >
-        kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" |
-          base64 --decode |
+      shell: |
+        kubectl get secret --kubeconfig="/home/{{ username }}/.kube/config" \
+          -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | \
+          base64 --decode | \
           faas-cli login --username admin --password-stdin
