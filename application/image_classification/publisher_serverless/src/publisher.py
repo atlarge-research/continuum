@@ -7,6 +7,7 @@ import os
 import requests
 
 FREQUENCY = int(os.environ["FREQUENCY"])
+CLOUD_CONTROLLER_IP = os.environ["CLOUD_CONTROLLER_IP"]
 
 # Set how many imgs to send, and how often
 DURATION = 300
@@ -37,7 +38,9 @@ def send():
         print("Sending data (bytes): %i" % (len(byte_arr)))
         t_before_send = time.time_ns()
         response = requests.post(
-            "%s:8080/function/subscriber_serverless", data=byte_arr, timeout=100000
+            "%s:8080/function/subscriber_serverless" % (CLOUD_CONTROLLER_IP),
+            data=byte_arr,
+            timeout=100000,
         )
 
         t_old = int(response.decode("utf-8"))

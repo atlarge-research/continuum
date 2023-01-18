@@ -633,6 +633,7 @@ def start_endpoint(config, machines):
                 env.append("MQTT_LOCAL_IP=%s" % (endpoint_ssh.split("@")[1]))
                 env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
                 env.append("MQTT_LOGS=True")
+                env.append("CLOUD_CONTROLLER_IP=%s" % (config["control_ips"][0]))
             else:
                 env.append("CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"]))
 
