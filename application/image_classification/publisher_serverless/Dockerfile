@@ -18,6 +18,6 @@ RUN pip3 install -r ${FUNCTION_DIR}/requirements.txt
 WORKDIR ${FUNCTION_DIR}
 
 # Open port to the MQTT broker
-EXPOSE 1883
+EXPOSE 8080
 
 CMD [ "python3", "-u", "publisher.py"]
