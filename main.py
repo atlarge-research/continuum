@@ -89,15 +89,23 @@ def add_constants(config):
     config["username"] = getpass.getuser()
     config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark")
 
+    source = "redplanet00/kubeedge-applications"
     if not config["infrastructure"]["infra_only"]:
         if config["benchmark"]["application"] == "image_classification":
-            config["images"] = {
-                "worker": "redplanet00/kubeedge-applications:image_classification_subscriber",
-                "endpoint": "redplanet00/kubeedge-applications:image_classification_publisher",
-                "combined": "redplanet00/kubeedge-applications:image_classification_combined",
-            }
+            if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
+                config["images"] = {
+                    "worker": "%s:image_classification_subscriber_serverless" % (source),
+                    "endpoint": "%s:image_classification_publisher_serverless" % (source),
+                    "combined": "%s:image_classification_combined" % (source),
+                }
+            else:
+                config["images"] = {
+                    "worker": "%s:image_classification_subscriber" % (source),
+                    "endpoint": "%s:image_classification_publisher" % (source),
+                    "combined": "%s:image_classification_combined" % (source),
+                }
         elif config["benchmark"]["application"] == "empty":
-            config["images"] = {"worker": "redplanet00/kubeedge-applications:empty"}
+            config["images"] = {"worker": "%s:empty" % (source)}
 
     # 100.100.100.100
     # Prefix .Mid.Post

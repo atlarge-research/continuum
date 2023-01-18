@@ -343,11 +343,15 @@ def copy_files(config, machines):
                 and (config["mode"] == "cloud" or config["mode"] == "edge")
                 and config["benchmark"]["resource_manager"] != "mist"
             ):
+                suffix = config["benchmark"]["resource_manager"]
+                if "execution_model" in config:
+                    suffix = config["execution_model"]["model"]
+
                 path = os.path.join(
                     config["base"],
                     "application",
                     config["benchmark"]["application"],
-                    "launch_benchmark_%s.yml" % (config["benchmark"]["resource_manager"]),
+                    "launch_benchmark_%s.yml" % (suffix),
                 )
                 d = dest + "launch_benchmark.yml"
                 out.append(machine.copy_files(config, path, d))

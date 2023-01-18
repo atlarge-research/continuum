@@ -25,3 +25,12 @@
       command: >
         kubectl rollout status --kubeconfig="/home/{{ username }}/.kube/config"
           -n openfaas deploy/gateway
+
+    - name: Add OpenFaaS Prefix to bashrc
+      lineinfile:
+        dest: "/home/{{ username }}/.bashrc"
+        state: present
+        line: "export OPENFAAS_PREFIX=redplanet00"
+
+    - name: Source the bash_profile file
+      command: source "/home/{{ username }}/.bashrc"

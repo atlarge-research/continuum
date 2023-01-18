@@ -298,6 +298,57 @@ def start_worker(config, machines):
     return starttime
 
 
+def start_worker_serverless(config, machines):
+    """Start the serverless function on OpenFaaS
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Deploy serverless functions on %s", config["mode"])
+
+    if config["mode"] != "cloud":
+        logging.error("ERROR: Serverless only works in cloud mode at the moment")
+        sys.exit()
+    elif config["benchmark"]["application"] != "image_classification":
+        logging.error("ERROR: Serverless only works with the image_classification app")
+        sys.exit()
+
+    # Global variables for each applications
+    global_vars = {
+        "app_name": config["benchmark"]["application"].replace("_", "-"),
+        "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
+        "cpu_req": config["benchmark"]["application_worker_cpu"],
+        "cpu_threads": max(1, int(config["benchmark"]["application_worker_cpu"])),
+    }
+
+    # Merge the two var dicts
+    all_vars = {**global_vars}
+
+    # Parse to string
+    vars_str = ""
+    for k, v in all_vars.items():
+        vars_str += str(k) + "=" + str(v) + " "
+
+    # Launch applications on cloud/edge
+    command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        vars_str[:-1],
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
+    )
+
+    main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
+
+    # Waiting for the applications to fully initialize (includes scheduling)
+    time.sleep(10)
+    logging.info("Deployed %s serverless application", config["mode"])
+
+    # Check if serverless function is properly deployed (it isnt running)
+    logging.error("STOP FOR NOW")
+    sys.exit()
+
+
 def start_worker_baremetal(config, machines):
     """Start running the endpoint containers using Docker.
 
@@ -849,14 +900,22 @@ def start(config, machines):
     Returns:
         list(str): Raw output from the benchmark
     """
+    is_mist = config["benchmark"]["resource_manager"] == "mist"
+    is_baremetal = config["infrastructure"]["provider"] == "baremetal"
+    is_serverless = False
+    if "execution_model" in config and config["execution_model"] == "openFaas":
+        is_serverless = True
+
     starttime = 0.0
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["benchmark"]["resource_manager"] != "mist":
+        if not is_mist:
             if config["benchmark"]["cache_worker"]:
                 cache_worker(config, machines)
 
-            if config["infrastructure"]["provider"] == "baremetal":
+            if is_baremetal:
                 container_names_baremetal = start_worker_baremetal(config, machines)
+            elif is_serverless:
+                start_worker_serverless(config, machines)
             else:
                 starttime = start_worker(config, machines)
         else:
@@ -864,7 +923,7 @@ def start(config, machines):
 
     container_names = []
     if config["infrastructure"]["endpoint_nodes"]:
-        if config["infrastructure"]["provider"] == "baremetal":
+        if is_baremetal:
             container_names = start_endpoint_baremetal(config, machines)
         else:
             container_names = start_endpoint(config, machines)
@@ -873,11 +932,11 @@ def start(config, machines):
 
     # Wait for benchmark to finish
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["infrastructure"]["provider"] == "baremetal":
+        if is_baremetal:
             wait_endpoint_completion(
                 config, machines, config["cloud_ssh"], container_names_baremetal
             )
-        elif config["benchmark"]["resource_manager"] != "mist":
+        elif not is_mist:
             wait_worker_completion(config, machines)
         else:
             wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_mist)
@@ -891,9 +950,9 @@ def start(config, machines):
 
     worker_output = []
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["benchmark"]["resource_manager"] == "mist":
+        if is_mist:
             worker_output = out.get_worker_output_mist(config, machines, container_names_mist)
-        elif config["infrastructure"]["provider"] == "baremetal":
+        elif is_baremetal:
             worker_output = out.get_worker_output_mist(config, machines, container_names_baremetal)
         else:
             worker_output = out.get_worker_output(config, machines)
