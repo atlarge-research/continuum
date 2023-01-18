@@ -953,7 +953,7 @@ def start(config, machines):
             worker_output = out.get_worker_output_mist(config, machines, container_names_mist)
         elif is_baremetal:
             worker_output = out.get_worker_output_mist(config, machines, container_names_baremetal)
-        else:
+        elif not is_serverless:
             worker_output = out.get_worker_output(config, machines)
 
     # Parse output into dicts, and print result

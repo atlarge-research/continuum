@@ -38,7 +38,7 @@ def send():
         print("Sending data (bytes): %i" % (len(byte_arr)))
         t_before_send = time.time_ns()
         response = requests.post(
-            "%s:8080/function/subscriber_serverless" % (CLOUD_CONTROLLER_IP),
+            "%s:8080/function/subscriber" % (CLOUD_CONTROLLER_IP),
             data=byte_arr,
             timeout=100000,
         )

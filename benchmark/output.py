@@ -471,7 +471,7 @@ def gather_metrics(machines, config, worker_output, endpoint_output, container_n
         2x list(dict): Metrics of worker nodes and endpoints
     """
     logging.debug("Print raw output from subscribers and publishers")
-    if config["mode"] == "cloud" or config["mode"] == "edge":
+    if (config["mode"] == "cloud" or config["mode"] == "edge") and worker_output:
         logging.debug("------------------------------------")
         logging.debug("%s OUTPUT", config["mode"].upper())
         logging.debug("------------------------------------")
@@ -491,7 +491,11 @@ def gather_metrics(machines, config, worker_output, endpoint_output, container_n
 
             logging.debug("------------------------------------")
 
-    if config["benchmark"]["application"] == "image_classification":
+    is_serverless = False
+    if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
+        is_serverless = True
+
+    if config["benchmark"]["application"] == "image_classification" and not is_serverless:
         worker_metrics = gather_worker_metrics_image(worker_output)
     elif config["benchmark"]["application"] == "empty":
         worker_metrics = gather_worker_metrics_empty(config, machines, worker_output, starttime)
@@ -536,7 +540,7 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
         endpoint_metrics (list(dict)): Metrics per endpoint
     """
     df1 = None
-    if config["mode"] == "cloud" or config["mode"] == "edge":
+    if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:
         logging.info("------------------------------------")
         logging.info("%s OUTPUT", config["mode"].upper())
         logging.info("------------------------------------")
@@ -596,7 +600,7 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
         logging.info("\n%s", df2_no_indices)
 
     # Print ouput in csv format
-    if config["mode"] == "cloud" or config["mode"] == "edge":
+    if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:
         logging.debug("Output in csv format\n%s\n%s", repr(df1.to_csv()), repr(df2.to_csv()))
     else:
         logging.debug("Output in csv format\n%s", repr(df2.to_csv()))
