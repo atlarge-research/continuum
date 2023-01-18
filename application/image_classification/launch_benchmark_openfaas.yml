@@ -4,7 +4,7 @@
   tasks:
     - name: Create OpenFaaS deployment file
       shell: |
-        cat > "/home/{{ username }}/function.yaml" <<EOF
+        cat > "/home/{{ username }}/function.yml" <<EOF
         provider:
           name: openfaas
           gateway: http://127.0.0.1:8080
@@ -20,4 +20,4 @@
         EOF
 
     - name: Launch jobs
-      command: faas-cli deploy --yaml "/home/{{ username }}/function.yaml"
+      command: faas-cli deploy --yaml "/home/{{ username }}/function.yml"

@@ -316,7 +316,7 @@ def start_worker_serverless(config, machines):
 
     # Global variables for each applications
     global_vars = {
-        "app_name": config["benchmark"]["application"].replace("_", "-"),
+        "app_name": config["benchmark"]["application"].split("_")[0],
         "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
