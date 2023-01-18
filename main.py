@@ -216,7 +216,7 @@ def main(args):
         vm = globals()["%s_vm" % (args.config["infrastructure"]["provider"])]
         vm.delete_vms(args.config, machines)
         logging.info("Finished\n")
-    elif not args.config["infrastructure"]["infra_only"]:
+    else:
         s = []
         for ssh in args.config["cloud_ssh"] + args.config["edge_ssh"] + args.config["endpoint_ssh"]:
             s.append("ssh %s -i %s" % (ssh, args.config["ssh_key"]))
