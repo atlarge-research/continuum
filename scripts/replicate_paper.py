@@ -589,13 +589,15 @@ CONFIGS                 %s""" % (
             )
 
 
-class LatencyVariation(Experiment):
+class LatencyCPUVariation(Experiment):
     """Experiment:
     Deploy 1 cloud worker and 1 endpoint, and vary latency from 0ms to 100ms in steps of 10
+    Also vary the CPU cores / memory from 0.5 (GB) to 8.0 (GB)
 
     So:
     - Run with minimal cloud deployment
     - Change latency from 0ms to 100ms between cloud and endpoint in steps of 10ms
+    - Change application CPU and memory from 0.5 to 8.0 in power of 2 steps
     """
 
     def __init__(self, resume):
@@ -722,14 +724,14 @@ QUOTA                   %s""" % (
 
     def print_result(self):
         """Print results of runs as text"""
-        for network_latency, latency, run in zip(self.latency, self.y, self.runs):
+        for run in self.runs:
             logging.info(
                 "Network Latency: %5i ms | \
 CPU Cores x Quota == Memory: %5f | \
 End-to-end Latency: %5i ms",
-                network_latency,
+                run["network_latency"],
                 run["cpu_quota_memory"],
-                latency,
+                run["latency"],
             )
 
 
@@ -747,9 +749,6 @@ class Provider(Experiment):
 
         self.providers = ["qemu", "gcp"]
         self.modes = ["cloud", "edge", "mist", "endpoint"]
-
-        self.y_qemu = None
-        self.y_gcp = None
 
     def __repr__(self):
         """Returns this string when called as print(object)"""
@@ -874,6 +873,128 @@ MODES                   %s""" % (
                 )
 
 
+class Serverless(Experiment):
+    """Experiment:
+    Change #endpoints and CPU/mem per worker to test serverless
+
+    So:
+    - Scale #endpoints per (always 1) worker from 1 to 8
+    - Scale #cpu_cores and memory (GB) from 2 to 8
+    """
+
+    def __init__(self, resume):
+        Experiment.__init__(self, resume)
+
+        self.cpu = [2, 4, 8]
+        self.endpoints = [1, 2, 4, 8]
+
+        self.y = None
+
+    def __repr__(self):
+        """Returns this string when called as print(object)"""
+        return """
+APP                     image-classification
+WORKERS                 1
+CLOUD_CORES             %i
+ENDPOINTS/WORKER        %s""" % (
+            ",".join(self.modes),
+            ",".join([str(endpoint) for endpoint in self.endpoints]),
+            ",".join([str(endpoint) for endpoint in self.endpoints]),
+        )
+
+    def generate(self):
+        """Generate commands to run the benchmark based on the current settings"""
+        for cores in self.cpu:
+            for endpoints in self.endpoints:
+                config = "openfaas_endpoint%s_cpu%s.cfg" % (endpoints, cores)
+
+                command = [
+                    "python3",
+                    "main.py",
+                    "-v",
+                    "configuration/experiment_serverless/" + config,
+                ]
+                command = [str(c) for c in command]
+
+                run = {
+                    "cpu": cores,
+                    "endpoints": endpoints,
+                    "command": command,
+                    "output": None,
+                    "latency": None,
+                }
+                self.runs.append(run)
+
+    def parse_output(self):
+        """For all runs, get the worker runtime"""
+        for run in self.runs:
+            # Get the line containing the metrics
+            i = -10
+            for i, line in enumerate(run["output"]):
+                if "Output in csv format" in line:
+                    break
+
+            # Get output based on type of run
+            endpoint = run["output"][i + 2][1:-4]
+
+            # Get endpoint output, parse into dataframe
+            e1 = [x.split(",") for x in endpoint.split("\\n")]
+            e2 = [sub[1:] for sub in e1]
+            edf = pd.DataFrame(e2[1:], columns=e2[0])
+            edf["latency_avg (ms)"] = pd.to_numeric(edf["latency_avg (ms)"], downcast="float")
+
+            # For endpoint, report the average end-to-end latency
+            run["latency"] = int(edf["latency_avg (ms)"].mean())
+
+    def plot(self):
+        """Plot the results from executed runs"""
+        # set width of bar
+        plt.rcParams.update({"font.size": 22})
+        _, ax1 = plt.subplots(figsize=(12, 6))
+
+        x = self.endpoints
+
+        for cpu in zip(self.cpu, self.quota):
+            y = [run["latency"] for run in self.runs if run["cpu"] == cpu]
+            self.y = y
+
+            ax1.plot(
+                x,
+                y,
+                linewidth=3.0,
+                marker="o",
+                markersize=12,
+                label="CPU Cores/Memory (GB): %s" % (str(cpu)),
+            )
+
+        # Set y axis: latency
+        ax1.set_ylabel("End-to-end latency (ms)")
+        ax1.set_yscale("log")
+        ax1.set_ylim(100, 1000000)
+        ax1.set_yticks([100, 1000, 10000, 100000, 1000000])
+
+        ax1.set_xlabel("Endpoints connected per worker")
+        ax1.set_xlim(1, 8)
+
+        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
+
+        ax1.axhline(y=1000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=10000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=100000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+
+        # Save
+        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+        plt.savefig("./logs/Serverless_%s.pdf" % (t), bbox_inches="tight")
+
+    def print_result(self):
+        """Print results of runs as text"""
+        for run in self.runs:
+            logging.info(
+                "#Endpoints: %5i | CPU Cores / Memory (GB): %s | End-to-end Latency: %5i ms"
+                % (run["endpoints"], run["cpu"], run["latency"])
+            )
+
+
 def main(args):
     """Main function
 
@@ -886,12 +1007,15 @@ def main(args):
     elif args.experiment == "Deployments":
         logging.info("Experiment: Change deployments between cloud, edge, and local")
         exp = Deployments(args.resume)
-    elif args.experiment == "LatencyVariation":
+    elif args.experiment == "LatencyCPUVariation":
         logging.info("Experiment: Vary latency between cloud and endpoint")
-        exp = LatencyVariation(args.resume)
+        exp = LatencyCPUVariation(args.resume)
     elif args.experiment == "Provider":
         logging.info("Experiment: Vary infrastructure providers")
         exp = Provider(args.resume)
+    elif args.experiment == "Serverless":
+        logging.info("Experiment: Vary #endpoints and CPU/Memory per worker for Serverless")
+        exp = Serverless(args.resume)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
         sys.exit()
@@ -911,7 +1035,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "experiment",
-        choices=["EndpointScaling", "Deployments", "LatencyVariation", "Provider"],
+        choices=["EndpointScaling", "Deployments", "LatencyCPUVariation", "Provider", "Serverless"],
         help="Experiment to replicate",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
