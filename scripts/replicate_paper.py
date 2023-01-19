@@ -16,8 +16,6 @@ import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 
-from matplotlib.ticker import ScalarFormatter
-
 # Home dir should be continuum/
 os.chdir("../")
 
@@ -604,114 +602,6 @@ class LatencyVariation(Experiment):
         Experiment.__init__(self, resume)
 
         self.latency = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-        self.y = None
-
-    def __repr__(self):
-        """Returns this string when called as print(object)"""
-        return """
-APP                     image-classification
-LATENCY                 %s""" % (
-            ",".join(str(latency) for latency in self.latency),
-        )
-
-    def generate(self):
-        """Generate commands to run the benchmark based on the current settings"""
-        # Differ in deployment modes
-        for latency in self.latency:
-            config = "cloud_%ims.cfg" % (latency)
-            command = [
-                "python3",
-                "main.py",
-                "-v",
-                "configuration/experiment_latency_variation/" + config,
-            ]
-            command = [str(c) for c in command]
-
-            run = {
-                "network_latency": latency,
-                "command": command,
-                "output": None,
-                "latency": None,
-            }
-            self.runs.append(run)
-
-    def parse_output(self):
-        """For all runs, get the worker runtime"""
-        for run in self.runs:
-            # Get the line containing the metrics
-            i = -10
-            for i, line in enumerate(run["output"]):
-                if "Output in csv format" in line:
-                    break
-
-            # Get output based on type of run
-            endpoint = run["output"][i + 2][1:-4]
-
-            # Get endpoint output, parse into dataframe
-            e1 = [x.split(",") for x in endpoint.split("\\n")]
-            e2 = [sub[1:] for sub in e1]
-            edf = pd.DataFrame(e2[1:], columns=e2[0])
-            edf["latency_avg (ms)"] = pd.to_numeric(edf["latency_avg (ms)"], downcast="float")
-
-            # For endpoint, report the average end-to-end latency
-            run["latency"] = int(edf["latency_avg (ms)"].mean())
-
-    def plot(self):
-        """Plot the results from executed runs"""
-        # set width of bar
-        plt.rcParams.update({"font.size": 22})
-        _, ax1 = plt.subplots(figsize=(12, 6))
-
-        x = [run["network_latency"] for run in self.runs]
-        y = [run["latency"] for run in self.runs]
-        self.y = y
-
-        ax1.plot(
-            x,
-            y,
-            color="midnightblue",
-            linewidth=3.0,
-            marker="o",
-            markersize=12,
-        )
-
-        # Set y axis: latency
-        ax1.set_ylabel("End-to-end latency (ms)")
-        ax1.set_xlabel("Network latency between cloud and endpoint (ms)")
-        ax1.set_ylim(0, 500)
-        ax1.set_xlim(0, 100)
-        ax1.set_yticks(np.arange(0, 600, 100))
-        ax1.set_xticks(np.arange(0, 110, 10))
-        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
-
-        ax1.axhline(y=100, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=400, color="k", linestyle="-", linewidth=1, alpha=0.5)
-
-        # Save
-        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        plt.savefig("./logs/LatencyVariation_%s.pdf" % (t), bbox_inches="tight")
-
-    def print_result(self):
-        """Print results of runs as text"""
-        for network_latency, latency in zip(self.latency, self.y):
-            logging.info(
-                "Network Latency: %5i ms | End-to-end Latency: %5i ms", network_latency, latency
-            )
-
-
-class CPUVariation(Experiment):
-    """Experiment:
-    Deploy 1 cloud worker and 1 endpoint, and very the CPU/memory capacity of the worker
-
-    So:
-    - Run with minimal cloud deployment
-    - Change cloud deployment resources from 0.25 cores to 4 cores
-    """
-
-    def __init__(self, resume):
-        Experiment.__init__(self, resume)
 
         # CPU x quota: 0.25 | 0.5 | 1.0 | 2.0 | 4.0 | 8.0
         self.cpu = [1, 1, 1, 2, 4, 8]
@@ -724,9 +614,11 @@ class CPUVariation(Experiment):
         """Returns this string when called as print(object)"""
         return """
 APP                     image-classification
+LATENCY                 %s
 CPU CORES               %s
 MEMORY (GB)             %s
 QUOTA                   %s""" % (
+            ",".join(str(latency) for latency in self.latency),
             ",".join(str(cpu) for cpu in self.cpu),
             ",".join(str(memory) for memory in self.memory),
             ",".join(str(quota) for quota in self.quota),
@@ -735,33 +627,35 @@ QUOTA                   %s""" % (
     def generate(self):
         """Generate commands to run the benchmark based on the current settings"""
         # Differ in deployment modes
-        for cpu, memory, quota in zip(self.cpu, self.memory, self.quota):
-            cpu_quota = cpu * quota
-            if cpu_quota != memory:
-                logging.error("ERROR: cpu x quota (%f) != memory (%f)", cpu_quota, memory)
-                sys.exit()
+        for latency in self.latency:
+            for cpu, memory, quota in zip(self.cpu, self.memory, self.quota):
+                cpu_quota = cpu * quota
+                if cpu_quota != memory:
+                    logging.error("ERROR: cpu x quota (%f) != memory (%f)", cpu_quota, memory)
+                    sys.exit()
 
-            if cpu_quota >= 1:
-                cpu_str = "%s00" % (int(cpu_quota))
-            elif cpu_quota < 1:
-                cpu_str = "0%s" % (int(cpu_quota * 100))
+                if cpu_quota >= 1:
+                    cpu_str = "%s00" % (int(cpu_quota))
+                elif cpu_quota < 1:
+                    cpu_str = "0%s" % (int(cpu_quota * 100))
 
-            config = "cloud_cpu%s.cfg" % (cpu_str)
-            command = [
-                "python3",
-                "main.py",
-                "-v",
-                "configuration/experiment_cpu_variation/" + config,
-            ]
-            command = [str(c) for c in command]
+                config = "cloud_%ims_cpu%s.cfg" % (latency, cpu_str)
+                command = [
+                    "python3",
+                    "main.py",
+                    "-v",
+                    "configuration/experiment_latency_variation/" + config,
+                ]
+                command = [str(c) for c in command]
 
-            run = {
-                "cpu_quota_memory": cpu_quota,
-                "command": command,
-                "output": None,
-                "latency": None,
-            }
-            self.runs.append(run)
+                run = {
+                    "cpu_quota_memory": cpu_quota,
+                    "network_latency": latency,
+                    "command": command,
+                    "output": None,
+                    "latency": None,
+                }
+                self.runs.append(run)
 
     def parse_output(self):
         """For all runs, get the worker runtime"""
@@ -790,18 +684,21 @@ QUOTA                   %s""" % (
         plt.rcParams.update({"font.size": 22})
         _, ax1 = plt.subplots(figsize=(12, 6))
 
-        x = [run["cpu_quota_memory"] for run in self.runs]
-        y = [run["latency"] for run in self.runs]
-        self.y = y
+        x = [run["network_latency"] for run in self.runs if run["cpu_quota_memory"] == 0.25]
 
-        ax1.plot(
-            x,
-            y,
-            color="midnightblue",
-            linewidth=3.0,
-            marker="o",
-            markersize=12,
-        )
+        for cpu, quota in zip(self.cpu, self.quota):
+            cpu_quota = cpu * quota
+            y = [run["latency"] for run in self.runs if run["cpu_quota_memory"] == cpu_quota]
+            self.y = y
+
+            ax1.plot(
+                x,
+                y,
+                linewidth=3.0,
+                marker="o",
+                markersize=12,
+                label="CPU Cores/Memory (GB): %s" % (str(cpu_quota)),
+            )
 
         # Set y axis: latency
         ax1.set_ylabel("End-to-end latency (ms)")
@@ -809,13 +706,11 @@ QUOTA                   %s""" % (
         ax1.set_ylim(100, 1000000)
         ax1.set_yticks([100, 1000, 10000, 100000, 1000000])
 
-        ax1.set_xlabel("CPU cores and Memory (GB) used by application")
-        ax1.set_xscale("log", base=2)
-        ax1.set_xlim(0.25, 8)
-        ax1.set_xticks([0.25, 0.5, 1, 2, 4, 8])
-        ax1.xaxis.set_major_formatter(ScalarFormatter())
+        ax1.set_xlabel("Network latency between cloud and endpoint (ms)")
+        ax1.set_xlim(0, 100)
+        ax1.set_xticks(np.arange(0, 110, 10))
 
-        ax1.legend(["End-to-end latency"], loc="upper right", framealpha=1.0)
+        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
 
         ax1.axhline(y=1000, color="k", linestyle="-", linewidth=1, alpha=0.5)
         ax1.axhline(y=10000, color="k", linestyle="-", linewidth=1, alpha=0.5)
@@ -823,13 +718,16 @@ QUOTA                   %s""" % (
 
         # Save
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        plt.savefig("./logs/CPUVariation_%s.pdf" % (t), bbox_inches="tight")
+        plt.savefig("./logs/LatencyCPUVariation_%s.pdf" % (t), bbox_inches="tight")
 
     def print_result(self):
         """Print results of runs as text"""
-        for run, latency in zip(self.runs, self.y):
+        for network_latency, latency, run in zip(self.latency, self.y, self.runs):
             logging.info(
-                "CPU Cores x Quota == Memory: %5f| End-to-end Latency: %8i ms",
+                "Network Latency: %5i ms | \
+CPU Cores x Quota == Memory: %5f | \
+End-to-end Latency: %5i ms",
+                network_latency,
                 run["cpu_quota_memory"],
                 latency,
             )
@@ -847,38 +745,44 @@ class Provider(Experiment):
     def __init__(self, resume):
         Experiment.__init__(self, resume)
 
-        self.providers = ["baremetal", "qemu", "gcp"]
+        self.providers = ["qemu", "gcp"]
+        self.modes = ["cloud", "edge", "mist", "endpoint"]
 
-        self.y = None
+        self.y_qemu = None
+        self.y_gcp = None
 
     def __repr__(self):
         """Returns this string when called as print(object)"""
         return """
 APP                     image-classification
-PROVIDER                %s""" % (
+PROVIDERS               %s
+MODES                   %s""" % (
             ",".join(self.providers),
+            ",".join(self.modes),
         )
 
     def generate(self):
         """Generate commands to run the benchmark based on the current settings"""
         # Differ in deployment modes
         for provider in self.providers:
-            config = "%s.cfg" % (provider)
-            command = [
-                "python3",
-                "main.py",
-                "-v",
-                "configuration/experiment_provider/" + config,
-            ]
-            command = [str(c) for c in command]
+            for mode in self.modes:
+                config = "%s_%s.cfg" % (provider, mode)
+                command = [
+                    "python3",
+                    "main.py",
+                    "-v",
+                    "configuration/experiment_provider/" + config,
+                ]
+                command = [str(c) for c in command]
 
-            run = {
-                "provider": provider,
-                "command": command,
-                "output": None,
-                "latency": None,
-            }
-            self.runs.append(run)
+                run = {
+                    "provider": provider,
+                    "mode": mode,
+                    "command": command,
+                    "output": None,
+                    "latency_breakdown": None,
+                }
+                self.runs.append(run)
 
     def parse_output(self):
         """For all runs, get the worker runtime"""
@@ -889,63 +793,85 @@ PROVIDER                %s""" % (
                 if "Output in csv format" in line:
                     break
 
-            # Get output based on type of run
+            worker = run["output"][i + 1][1:-4]
             endpoint = run["output"][i + 2][1:-4]
+
+            # Get worker output, parse into dataframe
+            w1 = [x.split(",") for x in worker.split("\\n")]
+            w2 = [sub[1:] for sub in w1]
+            wdf = pd.DataFrame(w2[1:], columns=w2[0])
+            wdf["proc_time/data (ms)"] = pd.to_numeric(wdf["proc_time/data (ms)"], downcast="float")
+            wdf["delay_avg (ms)"] = pd.to_numeric(wdf["delay_avg (ms)"], downcast="float")
 
             # Get endpoint output, parse into dataframe
             e1 = [x.split(",") for x in endpoint.split("\\n")]
             e2 = [sub[1:] for sub in e1]
             edf = pd.DataFrame(e2[1:], columns=e2[0])
             edf["latency_avg (ms)"] = pd.to_numeric(edf["latency_avg (ms)"], downcast="float")
+            edf["preproc_time/data (ms)"] = pd.to_numeric(
+                edf["preproc_time/data (ms)"], downcast="float"
+            )
 
-            # For endpoint, report the average end-to-end latency
-            run["latency"] = int(edf["latency_avg (ms)"].mean())
+            # Save breakdown of latency
+            run["latency_breakdown"] = [
+                int(wdf["proc_time/data (ms)"].min()),
+                int(
+                    edf["latency_avg (ms)"].min()
+                    - edf["preproc_time/data (ms)"].min()
+                    - wdf["proc_time/data (ms)"].min()
+                ),
+            ]
 
     def plot(self):
-        """Plot the results from executed runs"""
-        # set width of bar
-        plt.rcParams.update({"font.size": 22})
-        _, ax1 = plt.subplots(figsize=(12, 6))
+        """Plot the results from executed runs - breakdown in computation vs communication"""
+        _, ax = plt.subplots(figsize=(12, 6))
 
-        x = []
-        x = [i for i, _ in enumerate(self.runs)]
-        y = [run["latency"] for run in self.runs]
-        self.y = y
+        x = [i for i in range(len(self.modes))]
+        offset = 0.2
 
-        ax1.bar(
-            x,
-            y,
-            color="midnightblue",
-            width=0.5,
-            label="End-to-end latency (ms)",
+        colors = ["dimgray", "lightgray"]
+        stacks = ["Processing", "Communication"]
+
+        raw_vals = [run["latency_breakdown"] for run in self.runs]
+        ax.bar(
+            x - offset,
+            list(list(zip(*raw_vals))[0]),
+            color=colors[0],
+            label=stacks[0],
+            width=2 * offset,
+        )
+        ax.bar(
+            x + offset,
+            list(list(zip(*raw_vals))[1]),
+            color=colors[1],
+            label=stacks[1],
+            bottom=list(list(zip(*raw_vals))[0]),
+            width=2 * offset,
         )
 
-        # Set y axis: latency
-        ax1.set_ylabel("End-to-end latency (ms)")
-        ax1.set_ylim(0, 400)
-        ax1.set_yticks([100, 200, 300])
+        ax.set_ylabel("Time (ms)")
+        ax.set_ylim(0, 400)
 
-        ax1.set_xlabel("Infrastructure provider")
-        ax1.set_xticks(np.arange(len(self.runs)), labels=[run["provider"] for run in self.runs])
+        ax.set_xlabel("Deployment")
+        bars = ["Cloud", "Edge-Small", "Mist", "Endpoint"]
+        ax.set_xticks(np.arange(len(self.runs)), labels=bars * len(self.providers))
 
-        ax1.legend(["End-to-end latency"], loc="upper right", framealpha=1.0)
-
-        ax1.axhline(y=100, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
-
-        # Save
+        ax.legend(loc="upper left", framealpha=1.0)
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
         plt.savefig("./logs/Providers_%s.pdf" % (t), bbox_inches="tight")
 
     def print_result(self):
         """Print results of runs as text"""
-        for run, latency in zip(self.runs, self.y):
-            logging.info(
-                "Provider: %10s| End-to-end Latency: %8i ms",
-                run["provider"],
-                latency,
-            )
+        for i, provider in enumerate(self.providers):
+            for j, mode in enumerate(self.modes):
+                index = (i * len(self.providers)) + j
+                logging.info(
+                    "Provider: %10s| Mode: %8s | Comp: %10i ms | Comm: %10i ms",
+                    provider,
+                    mode,
+                    self.runs[index]["latency_breakdown"][0],
+                    self.runs[index]["latency_breakdown"][1],
+                )
 
 
 def main(args):
@@ -963,9 +889,6 @@ def main(args):
     elif args.experiment == "LatencyVariation":
         logging.info("Experiment: Vary latency between cloud and endpoint")
         exp = LatencyVariation(args.resume)
-    elif args.experiment == "CPUVariation":
-        logging.info("Experiment: Vary processing power of cloud worker connected to endpoint")
-        exp = CPUVariation(args.resume)
     elif args.experiment == "Provider":
         logging.info("Experiment: Vary infrastructure providers")
         exp = Provider(args.resume)
@@ -988,7 +911,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "experiment",
-        choices=["EndpointScaling", "Deployments", "LatencyVariation", "CPUVariation", "Provider"],
+        choices=["EndpointScaling", "Deployments", "LatencyVariation", "Provider"],
         help="Experiment to replicate",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
