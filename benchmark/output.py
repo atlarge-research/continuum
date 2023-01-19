@@ -128,6 +128,7 @@ def get_worker_output_mist(config, machines, container_names):
     commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
 
     ssh_entry = config["edge_ssh"]
+    ssh_entry2 = config["edge_ssh"]
     if config["infrastructure"]["provider"] == "baremetal":
         ssh_entry = None
         ssh_entry2 = config["cloud_ssh"]
