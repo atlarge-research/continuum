@@ -605,10 +605,10 @@ class LatencyCPUVariation(Experiment):
 
         self.latency = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
-        # CPU x quota: 0.25 | 0.5 | 1.0 | 2.0 | 4.0 | 8.0
-        self.cpu = [1, 1, 1, 2, 4, 8]
-        self.memory = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
-        self.quota = [0.25, 0.5, 1.0, 1.0, 1.0, 1.0]
+        # CPU x quota: 0.5 | 1.0 | 2.0 | 4.0 | 8.0
+        self.cpu = [1, 1, 2, 4, 8]
+        self.memory = [0.5, 1.0, 2.0, 4.0, 8.0]
+        self.quota = [0.5, 1.0, 1.0, 1.0, 1.0]
 
         self.y = None
 
