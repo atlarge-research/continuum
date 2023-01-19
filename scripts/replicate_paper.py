@@ -825,7 +825,7 @@ MODES                   %s""" % (
         """Plot the results from executed runs - breakdown in computation vs communication"""
         _, ax = plt.subplots(figsize=(12, 6))
 
-        x = [i for i in range(len(self.modes))]
+        x = list(range(len(self.modes)))
         offset = 0.2
 
         colors = ["dimgray", "lightgray"]
@@ -895,10 +895,9 @@ class Serverless(Experiment):
         return """
 APP                     image-classification
 WORKERS                 1
-CLOUD_CORES             %i
+CLOUD_CORES             %s
 ENDPOINTS/WORKER        %s""" % (
-            ",".join(self.modes),
-            ",".join([str(endpoint) for endpoint in self.endpoints]),
+            ",".join([str(c) for c in self.cpu]),
             ",".join([str(endpoint) for endpoint in self.endpoints]),
         )
 
@@ -954,7 +953,7 @@ ENDPOINTS/WORKER        %s""" % (
 
         x = self.endpoints
 
-        for cpu in zip(self.cpu, self.quota):
+        for cpu in self.cpu:
             y = [run["latency"] for run in self.runs if run["cpu"] == cpu]
             self.y = y
 
@@ -990,8 +989,10 @@ ENDPOINTS/WORKER        %s""" % (
         """Print results of runs as text"""
         for run in self.runs:
             logging.info(
-                "#Endpoints: %5i | CPU Cores / Memory (GB): %s | End-to-end Latency: %5i ms"
-                % (run["endpoints"], run["cpu"], run["latency"])
+                "#Endpoints: %5i | CPU Cores / Memory (GB): %s | End-to-end Latency: %5i ms",
+                run["endpoints"],
+                run["cpu"],
+                run["latency"],
             )
 
 
