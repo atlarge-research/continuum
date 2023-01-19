@@ -495,6 +495,7 @@ def gather_metrics(machines, config, worker_output, endpoint_output, container_n
     if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
         is_serverless = True
 
+    worker_metrics = []
     if config["benchmark"]["application"] == "image_classification" and not is_serverless:
         worker_metrics = gather_worker_metrics_image(worker_output)
     elif config["benchmark"]["application"] == "empty":
