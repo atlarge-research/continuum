@@ -5,9 +5,9 @@ This is a publisher, sending local images over HTTP to a subscriber for further 
 import time
 import os
 import sys
-import requests
 import base64
 import json
+import requests
 
 FREQUENCY = int(os.environ["FREQUENCY"])
 CLOUD_CONTROLLER_IP = os.environ["CLOUD_CONTROLLER_IP"]
@@ -57,7 +57,7 @@ def send():
             return_dict_str = return_line.replace("'", '"')
             return_dict = json.loads(return_dict_str)
             t_old = int(return_dict["time"])
-        except:
+        except Exception:
             print("ERROR: Can't decode the output, something went wrong")
             print(response.text)
             sys.exit()
