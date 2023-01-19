@@ -4,7 +4,10 @@ This is a publisher, sending local images over HTTP to a subscriber for further 
 
 import time
 import os
+import sys
 import requests
+import base64
+import json
 
 FREQUENCY = int(os.environ["FREQUENCY"])
 CLOUD_CONTROLLER_IP = os.environ["CLOUD_CONTROLLER_IP"]
@@ -27,23 +30,38 @@ def send():
     for i in range(MAX_IMGS):
         start_time = time.time_ns()
         with open("images/" + files[i % len(files)], "rb") as f:
-            byte_arr = bytearray(f.read())
-            f.close()
+            im_bytes = f.read()
+
+        im_b64 = base64.b64encode(im_bytes).decode("utf-8")
 
         # Prepend 0's to the time to get a fixed length string
         t = time.time_ns()
-        t = (20 - len(str(t))) * "0" + str(t)
-        byte_arr.extend(t.encode("utf-8"))
+        t_str = str(t)
 
-        print("Sending data (bytes): %i" % (len(byte_arr)))
+        # In JSON
+        headers = {"Content-type": "application/json", "Accept": "text/plain"}
+        payload = json.dumps({"image": im_b64, "time": t_str})
+
+        print("Sending data (bytes): %i" % (len(payload)))
         t_before_send = time.time_ns()
         response = requests.post(
             "http://%s:8080/function/image" % (CLOUD_CONTROLLER_IP),
-            data=byte_arr,
+            data=payload,
+            headers=headers,
             timeout=100000,
         )
 
-        t_old = int(response.content.decode("utf-8"))
+        try:
+            response = response.text
+            return_line = response.split("\n")[-2]
+            return_dict_str = return_line.replace("'", '"')
+            return_dict = json.loads(return_dict_str)
+            t_old = int(return_dict["time"])
+        except:
+            print("ERROR: Can't decode the output, something went wrong")
+            print(response.text)
+            sys.exit()
+
         t_respone = time.time_ns()
         print("Latency (ns): %i" % (t_respone - t_old))
 

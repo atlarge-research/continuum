@@ -6,6 +6,8 @@ processing them using image classification from TFLite.
 import io
 import os
 import time
+import base64
+import json
 from PIL import Image
 import numpy as np
 import tflite_runtime.interpreter as tflite
@@ -24,12 +26,14 @@ def handle(req):
     print("Start\n")
 
     # Load the labels
-    with open("labels.txt", "r", encoding="utf-8") as f:
+    with open("/home/app/function/labels.txt", "r", encoding="utf-8") as f:
         labels = [line.strip() for line in f.readlines()]
 
     # Load the model
     threads = max(1, CPU_THREADS)
-    interpreter = tflite.Interpreter(model_path="model.tflite", num_threads=threads)
+    interpreter = tflite.Interpreter(
+        model_path="/home/app/function/model.tflite", num_threads=threads
+    )
     interpreter.allocate_tensors()
 
     # Get model input details and resize image
@@ -41,18 +45,18 @@ def handle(req):
 
     print("Preparations finished")
 
-    # Get the input data
-    data = bytearray(req)
+    request = json.loads(req)
 
     # Get timestamp to calculate latency.
     # We prepended 0's to the time to make it a fixed length
-    t_bytes = data[-20:]
-    t_old = int(t_bytes.decode("utf-8"))
+    t_str = request["time"]
+    t_old = int(t_str)
     print("Latency (ns): %s\n" % (str(t_now - t_old)), end="")
 
     # Get data to process
-    data = data[:-20]
-    image = Image.open(io.BytesIO(data))
+    im_b64 = request["image"]
+    img_bytes = base64.b64decode(im_b64.encode("utf-8"))
+    image = Image.open(io.BytesIO(img_bytes))
     image = image.resize((iw, ih)).convert(mode="RGB")
 
     input_data = np.expand_dims(image, axis=0)
@@ -81,4 +85,4 @@ def handle(req):
     sec_frame = time.time_ns() - t_now
     print("Processing (ns): %i\n" % (sec_frame), end="")
 
-    return t_bytes
+    return {"time": t_old}
