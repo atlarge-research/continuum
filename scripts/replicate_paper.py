@@ -289,6 +289,7 @@ ENDPOINTS/WORKER        %s""" % (
                     y,
                     color=color,
                     width=bar_width * 0.9,
+                    label="System Load"
                 )
 
             y_total_load += y
@@ -308,6 +309,7 @@ ENDPOINTS/WORKER        %s""" % (
             linewidth=3.0,
             marker="o",
             markersize=12,
+            label="End-to-end latency",
         )
         ax2.plot(
             xs[4:8],
@@ -316,6 +318,7 @@ ENDPOINTS/WORKER        %s""" % (
             linewidth=3.0,
             marker="o",
             markersize=12,
+            label="End-to-end latency",
         )
         ax2.plot(
             xs[8],
@@ -324,13 +327,13 @@ ENDPOINTS/WORKER        %s""" % (
             linewidth=3.0,
             marker="o",
             markersize=12,
+            label="End-to-end latency",
         )
 
         # Add horizontal lines every 100 percent
         ax1.axhline(y=100, color="k", linestyle="-", linewidth=3)
         ax1.axhline(y=200, color="k", linestyle="-", linewidth=1, alpha=0.5)
         ax1.axhline(y=300, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=400, color="k", linestyle="-", linewidth=1, alpha=0.5)
 
         label_ticks = [
             i + j * bar_width
@@ -349,17 +352,19 @@ ENDPOINTS/WORKER        %s""" % (
         ax1.set_xticks(label_ticks, ["1", "2", "4", "8", "1", "2", "4", "8", "1"])
 
         # Set y axis 1: load
+        h1, l1 = ax1.get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        ax1.legend([h1[0]] + [h2[0]], [l1[0]] + [l2[0]], loc="upper left", framealpha=1.0)
+
         ax1.set_ylabel("System Load")
-        ax1.legend(loc="upper left", framealpha=1.0)
         ax1.yaxis.set_major_formatter(mtick.PercentFormatter())
-        ax1.set_ylim(0, 500)
-        ax1.set_yticks(np.arange(0, 600, 100))
+        ax1.set_ylim(0, 400)
+        ax1.set_yticks(np.arange(0, 500, 100))
 
         # Set y axis 2: latency
         ax2.set_ylabel("End-to-end latency (ms)")
         ax2.set_yscale("log")
-        ax2.set_ylim(100, 10000000)
-        ax2.legend(["End-to-end latency"], loc="upper right", framealpha=1.0)
+        ax2.set_ylim(100, 1000000)
 
         # Save
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
