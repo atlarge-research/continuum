@@ -284,13 +284,7 @@ ENDPOINTS/WORKER        %s""" % (
                     label="System Load",
                 )
             else:
-                ax1.bar(
-                    x,
-                    y,
-                    color=color,
-                    width=bar_width * 0.9,
-                    label="System Load"
-                )
+                ax1.bar(x, y, color=color, width=bar_width * 0.9, label="System Load")
 
             y_total_load += y
 
@@ -978,8 +972,8 @@ ENDPOINTS/WORKER        %s""" % (
 
         # Set y axis: latency
         ax1.set_ylabel("End-to-end latency (ms)")
-        ax1.set_ylim(0, 3000)
-        ax1.set_yticks([0, 500, 1000, 1500, 2000, 2500, 3000])
+        ax1.set_ylim(900, 2600)
+        ax1.set_yticks([1000, 1500, 2000, 2500])
 
         ax1.set_xlabel("Endpoints connected per worker")
         ax1.set_xscale("log")
