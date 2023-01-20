@@ -793,68 +793,97 @@ MODES                   %s""" % (
                 if "Output in csv format" in line:
                     break
 
-            worker = run["output"][i + 1][1:-4]
-            endpoint = run["output"][i + 2][1:-4]
+            # Get output based on type of run
+            if run["mode"] != "endpoint":
+                worker = run["output"][i + 1][1:-4]
+                endpoint = run["output"][i + 2][1:-4]
+            else:
+                worker = run["output"][i + 1][1:-4]
+                endpoint = run["output"][i + 1][1:-4]
 
             # Get worker output, parse into dataframe
             w1 = [x.split(",") for x in worker.split("\\n")]
             w2 = [sub[1:] for sub in w1]
             wdf = pd.DataFrame(w2[1:], columns=w2[0])
             wdf["proc_time/data (ms)"] = pd.to_numeric(wdf["proc_time/data (ms)"], downcast="float")
-            wdf["delay_avg (ms)"] = pd.to_numeric(wdf["delay_avg (ms)"], downcast="float")
 
             # Get endpoint output, parse into dataframe
             e1 = [x.split(",") for x in endpoint.split("\\n")]
             e2 = [sub[1:] for sub in e1]
             edf = pd.DataFrame(e2[1:], columns=e2[0])
             edf["latency_avg (ms)"] = pd.to_numeric(edf["latency_avg (ms)"], downcast="float")
-            edf["preproc_time/data (ms)"] = pd.to_numeric(
-                edf["preproc_time/data (ms)"], downcast="float"
-            )
+
+            if run["mode"] != "endpoint":
+                edf["preproc_time/data (ms)"] = pd.to_numeric(
+                    edf["preproc_time/data (ms)"], downcast="float"
+                )
 
             # Save breakdown of latency
-            run["latency_breakdown"] = [
-                int(wdf["proc_time/data (ms)"].min()),
-                int(
-                    edf["latency_avg (ms)"].min()
-                    - edf["preproc_time/data (ms)"].min()
-                    - wdf["proc_time/data (ms)"].min()
-                ),
-            ]
+            if run["mode"] != "endpoint":
+                run["latency_breakdown"] = [
+                    int(wdf["proc_time/data (ms)"].min()),
+                    int(
+                        edf["latency_avg (ms)"].min()
+                        - edf["preproc_time/data (ms)"].min()
+                        - wdf["proc_time/data (ms)"].min()
+                    ),
+                ]
+            else:
+                run["latency_breakdown"] = [
+                    int(wdf["proc_time/data (ms)"].min()),
+                    int(edf["latency_avg (ms)"].min() - wdf["proc_time/data (ms)"].min()),
+                ]
 
     def plot(self):
         """Plot the results from executed runs - breakdown in computation vs communication"""
         _, ax = plt.subplots(figsize=(12, 6))
 
-        x = list(range(len(self.modes)))
         offset = 0.2
+        xmin = [i - offset for i in range(len(self.modes))]
+        xplus = [i + offset for i in range(len(self.modes))]
 
         colors = ["dimgray", "lightgray"]
-        stacks = ["Processing", "Communication"]
 
-        raw_vals = [run["latency_breakdown"] for run in self.runs]
+        raw_vals_qemu = [run["latency_breakdown"] for run in self.runs if run["provider"] == "qemu"]
         ax.bar(
-            x - offset,
-            list(list(zip(*raw_vals))[0]),
+            xmin,
+            list(list(zip(*raw_vals_qemu))[0]),
             color=colors[0],
-            label=stacks[0],
             width=2 * offset,
+            label="QEMU processing",
         )
         ax.bar(
-            x + offset,
-            list(list(zip(*raw_vals))[1]),
+            xmin,
+            list(list(zip(*raw_vals_qemu))[1]),
             color=colors[1],
-            label=stacks[1],
-            bottom=list(list(zip(*raw_vals))[0]),
+            bottom=list(list(zip(*raw_vals_qemu))[0]),
             width=2 * offset,
+            label="QEMU communication",
+        )
+
+        raw_vals_gcp = [run["latency_breakdown"] for run in self.runs if run["provider"] == "gcp"]
+        ax.bar(
+            xplus,
+            list(list(zip(*raw_vals_gcp))[0]),
+            color=colors[0],
+            width=2 * offset,
+            label="GCP processing",
+        )
+        ax.bar(
+            xplus,
+            list(list(zip(*raw_vals_gcp))[1]),
+            color=colors[1],
+            bottom=list(list(zip(*raw_vals_gcp))[0]),
+            width=2 * offset,
+            label="GCP communication",
         )
 
         ax.set_ylabel("Time (ms)")
-        ax.set_ylim(0, 400)
+        ax.set_ylim(0, 50000)
 
         ax.set_xlabel("Deployment")
-        bars = ["Cloud", "Edge-Small", "Mist", "Endpoint"]
-        ax.set_xticks(np.arange(len(self.runs)), labels=bars * len(self.providers))
+        bars = ["Cloud", "Edge", "Mist", "Endpoint"]
+        ax.set_xticks(np.arange(len(bars)), labels=bars)
 
         ax.legend(loc="upper left", framealpha=1.0)
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
