@@ -272,10 +272,14 @@ ansible_user=%s username=%s\n"
                         # The resource manager "kubeedge" has "edge" in the name,
                         # so cloud_kubeedge may be caught as "edge", filter this out.
                         # Only occurs for Qemu, because Terraform doesn't really use base images.
+                        # And: Mist computing uses kubeedge base images
                         occurences = len([i.start() for i in re.finditer("edge", name)])
                         is_qemu_kubeedge = int(
                             config["infrastructure"]["provider"] == "qemu"
-                            and config["benchmark"]["resource_manager"] == "kubeedge"
+                            and (
+                                config["benchmark"]["resource_manager"] == "kubeedge"
+                                or config["benchmark"]["resource_manager"] == "mist"
+                            )
                         )
 
                         if occurences == 1 + is_qemu_kubeedge:
