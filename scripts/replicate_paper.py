@@ -16,6 +16,9 @@ import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 
+from matplotlib.ticker import ScalarFormatter
+from matplotlib.ticker import NullFormatter
+
 # Home dir should be continuum/
 os.chdir("../")
 
@@ -686,12 +689,11 @@ QUOTA                   %s""" % (
         plt.rcParams.update({"font.size": 22})
         _, ax1 = plt.subplots(figsize=(12, 6))
 
-        x = [run["network_latency"] for run in self.runs if run["cpu_quota_memory"] == 0.25]
+        x = [run["network_latency"] for run in self.runs if run["cpu_quota_memory"] == 0.5]
 
         for cpu, quota in zip(self.cpu, self.quota):
             cpu_quota = cpu * quota
             y = [run["latency"] for run in self.runs if run["cpu_quota_memory"] == cpu_quota]
-            self.y = y
 
             ax1.plot(
                 x,
@@ -699,7 +701,7 @@ QUOTA                   %s""" % (
                 linewidth=3.0,
                 marker="o",
                 markersize=12,
-                label="CPU Cores/Memory (GB): %s" % (str(cpu_quota)),
+                label="CPUs: %s" % (str(cpu_quota)),
             )
 
         # Set y axis: latency
@@ -712,7 +714,7 @@ QUOTA                   %s""" % (
         ax1.set_xlim(0, 100)
         ax1.set_xticks(np.arange(0, 110, 10))
 
-        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
+        ax1.legend(loc="center", framealpha=1.0, ncol=3, bbox_to_anchor=[0.5, 0.37])
 
         ax1.axhline(y=1000, color="k", linestyle="-", linewidth=1, alpha=0.5)
         ax1.axhline(y=10000, color="k", linestyle="-", linewidth=1, alpha=0.5)
@@ -953,7 +955,9 @@ ENDPOINTS/WORKER        %s""" % (
 
         x = self.endpoints
 
-        for cpu in self.cpu:
+        colors = ["green", "red", "purple"]
+
+        for cpu, color in zip(self.cpu, colors):
             y = [run["latency"] for run in self.runs if run["cpu"] == cpu]
             self.y = y
 
@@ -963,23 +967,29 @@ ENDPOINTS/WORKER        %s""" % (
                 linewidth=3.0,
                 marker="o",
                 markersize=12,
-                label="CPU Cores/Memory (GB): %s" % (str(cpu)),
+                color=color,
+                label="CPUs: %s" % (str(cpu)),
             )
 
         # Set y axis: latency
         ax1.set_ylabel("End-to-end latency (ms)")
-        ax1.set_yscale("log")
-        ax1.set_ylim(100, 1000000)
-        ax1.set_yticks([100, 1000, 10000, 100000, 1000000])
+        ax1.set_ylim(0, 3000)
+        ax1.set_yticks([0, 500, 1000, 1500, 2000, 2500, 3000])
 
         ax1.set_xlabel("Endpoints connected per worker")
+        ax1.set_xscale("log")
         ax1.set_xlim(1, 8)
+        ax1.set_xticks([1, 2, 4, 8])
+        ax1.xaxis.set_major_formatter(ScalarFormatter())
+        ax1.xaxis.set_minor_formatter(NullFormatter())
 
-        ax1.legend(["End-to-end latency"], loc="upper left", framealpha=1.0)
+        ax1.legend(loc="upper left", framealpha=1.0)
 
+        ax1.axhline(y=500, color="k", linestyle="-", linewidth=1, alpha=0.5)
         ax1.axhline(y=1000, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=10000, color="k", linestyle="-", linewidth=1, alpha=0.5)
-        ax1.axhline(y=100000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=1500, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=2000, color="k", linestyle="-", linewidth=1, alpha=0.5)
+        ax1.axhline(y=2500, color="k", linestyle="-", linewidth=1, alpha=0.5)
 
         # Save
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
