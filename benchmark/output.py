@@ -341,9 +341,12 @@ def gather_worker_metrics_image(worker_output):
             int(len(processing) * lower_percentile) : int(len(processing) * upper_percentile)
         ]
 
-        worker_metrics[-1]["comm_delay_avg"] = round(np.mean(delays_perc), 2)
+        # worker_metrics[-1]["comm_delay_avg"] = round(np.mean(delays_perc), 2)
+        # worker_metrics[-1]["comm_delay_stdev"] = round(np.std(delays_perc), 2)
+        # worker_metrics[-1]["proc_avg"] = round(np.mean(processing_perc), 2)
+        worker_metrics[-1]["comm_delay_avg"] = round(np.median(delays_perc), 2)
         worker_metrics[-1]["comm_delay_stdev"] = round(np.std(delays_perc), 2)
-        worker_metrics[-1]["proc_avg"] = round(np.mean(processing_perc), 2)
+        worker_metrics[-1]["proc_avg"] = round(np.median(processing_perc), 2)
 
     return sorted(worker_metrics, key=lambda x: x["worker_id"])
 
@@ -446,12 +449,16 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
             int(len(latency) * lower_percentile) : int(len(latency) * upper_percentile)
         ]
 
-        endpoint_metrics[-1]["proc_avg"] = round(np.mean(processing_perc), 2)
-        endpoint_metrics[-1]["latency_avg"] = round(np.mean(latency_perc), 2)
+        # endpoint_metrics[-1]["proc_avg"] = round(np.mean(processing_perc), 2)
+        # endpoint_metrics[-1]["latency_avg"] = round(np.mean(latency_perc), 2)
+        # endpoint_metrics[-1]["latency_stdev"] = round(np.std(latency_perc), 2)
+        endpoint_metrics[-1]["proc_avg"] = round(np.median(processing_perc), 2)
+        endpoint_metrics[-1]["latency_avg"] = round(np.median(latency_perc), 2)
         endpoint_metrics[-1]["latency_stdev"] = round(np.std(latency_perc), 2)
 
         if data_size:
-            endpoint_metrics[-1]["data_avg"] = round(np.mean(data_size), 2)
+            # endpoint_metrics[-1]["data_avg"] = round(np.mean(data_size), 2)
+            endpoint_metrics[-1]["data_avg"] = round(np.median(data_size), 2)
 
     endpoint_metrics = sorted(endpoint_metrics, key=lambda x: x["worker_id"])
 

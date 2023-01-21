@@ -807,6 +807,9 @@ MODES                   %s""" % (
             wdf = pd.DataFrame(w2[1:], columns=w2[0])
             wdf["proc_time/data (ms)"] = pd.to_numeric(wdf["proc_time/data (ms)"], downcast="float")
 
+            if run["mode"] != "endpoint":
+                wdf["delay_avg (ms)"] = pd.to_numeric(wdf["delay_avg (ms)"], downcast="float")
+
             # Get endpoint output, parse into dataframe
             e1 = [x.split(",") for x in endpoint.split("\\n")]
             e2 = [sub[1:] for sub in e1]
@@ -820,19 +823,31 @@ MODES                   %s""" % (
 
             # Save breakdown of latency
             if run["mode"] != "endpoint":
+                # 1. Preprocessing (ignored because too small)
+                # 2. Endpoint -> Offload target
+                # 3. Queue
+                # 4. Processing
+                # 5. Offload target -> Endpoint
+                processing = wdf["proc_time/data (ms)"].min()
+                network_to_end = (
+                    edf["latency_avg (ms)"].min()
+                    - edf["preproc_time/data (ms)"].min()
+                    - wdf["proc_time/data (ms)"].min()
+                    - wdf["delay_avg (ms)"].min()
+                )
+                queue = wdf["delay_avg (ms)"].min() - network_to_end
+
                 run["latency_breakdown"] = [
-                    int(wdf["proc_time/data (ms)"].min()),
-                    int(
-                        edf["latency_avg (ms)"].min()
-                        - edf["preproc_time/data (ms)"].min()
-                        - wdf["proc_time/data (ms)"].min()
-                    ),
+                    int(network_to_end * 2),
+                    int(queue),
+                    int(processing),
                 ]
             else:
-                run["latency_breakdown"] = [
-                    int(wdf["proc_time/data (ms)"].min()),
-                    int(edf["latency_avg (ms)"].min() - wdf["proc_time/data (ms)"].min()),
-                ]
+                # 1. Queue
+                # 2. Processing
+                queue = edf["latency_avg (ms)"].min() - wdf["proc_time/data (ms)"].min()
+                processing = wdf["proc_time/data (ms)"].min()
+                run["latency_breakdown"] = [0, int(queue), int(processing)]
 
     def plot(self):
         """Plot the results from executed runs - breakdown in computation vs communication"""
@@ -842,65 +857,110 @@ MODES                   %s""" % (
         xmin = [i - offset for i in range(len(self.modes))]
         xplus = [i + offset for i in range(len(self.modes))]
 
-        colors = ["dimgray", "lightgray"]
+        colors = ["black", "dimgrey", "lightgrey"]
 
         raw_vals_qemu = [run["latency_breakdown"] for run in self.runs if run["provider"] == "qemu"]
+        q_comm = list(list(zip(*raw_vals_qemu))[0])
+        q_queue = list(list(zip(*raw_vals_qemu))[1])
+        q_proc = list(list(zip(*raw_vals_qemu))[2])
         ax.bar(
             xmin,
-            list(list(zip(*raw_vals_qemu))[0]),
+            q_comm,
             color=colors[0],
             width=2 * offset,
-            label="QEMU processing",
+            label="QEMU communication",
+            edgecolor="midnightblue",
         )
         ax.bar(
             xmin,
-            list(list(zip(*raw_vals_qemu))[1]),
+            q_queue,
             color=colors[1],
-            bottom=list(list(zip(*raw_vals_qemu))[0]),
+            bottom=q_comm,
             width=2 * offset,
-            label="QEMU communication",
+            label="QEMU queue",
+            edgecolor="midnightblue",
+        )
+        ax.bar(
+            xmin,
+            q_proc,
+            color=colors[2],
+            bottom=[c + q for c, q in zip(q_comm, q_queue)],
+            width=2 * offset,
+            label="QEMU processing",
+            edgecolor="midnightblue",
         )
 
         raw_vals_gcp = [run["latency_breakdown"] for run in self.runs if run["provider"] == "gcp"]
+        g_comm = list(list(zip(*raw_vals_gcp))[0])
+        g_queue = list(list(zip(*raw_vals_gcp))[1])
+        g_proc = list(list(zip(*raw_vals_gcp))[2])
+
+        # TMP bugfix
+        g_comm = [q + g for q, g in zip(q_comm, g_comm)]
+
         ax.bar(
             xplus,
-            list(list(zip(*raw_vals_gcp))[0]),
+            g_comm,
             color=colors[0],
             width=2 * offset,
-            label="GCP processing",
+            label="GCP communication",
+            hatch="/",
+            edgecolor="midnightblue",
         )
         ax.bar(
             xplus,
-            list(list(zip(*raw_vals_gcp))[1]),
+            g_queue,
             color=colors[1],
-            bottom=list(list(zip(*raw_vals_gcp))[0]),
+            bottom=g_comm,
             width=2 * offset,
-            label="GCP communication",
+            label="GCP queue",
+            hatch="/",
+            edgecolor="midnightblue",
+        )
+        ax.bar(
+            xplus,
+            g_proc,
+            color=colors[2],
+            bottom=[c + q for c, q in zip(g_comm, g_queue)],
+            width=2 * offset,
+            label="GCP processing",
+            hatch="/",
+            edgecolor="midnightblue",
         )
 
-        ax.set_ylabel("Time (ms)")
-        ax.set_ylim(0, 50000)
+        ax.set_ylabel("End-to-end latency (ms)")
+        ax.set_ylim(0, 300)
 
         ax.set_xlabel("Deployment")
         bars = ["Cloud", "Edge", "Mist", "Endpoint"]
         ax.set_xticks(np.arange(len(bars)), labels=bars)
 
-        ax.legend(loc="upper left", framealpha=1.0)
+        ax.legend(loc="upper right", ncol=2, framealpha=1.0)
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
         plt.savefig("./logs/Providers_%s.pdf" % (t), bbox_inches="tight")
 
     def print_result(self):
         """Print results of runs as text"""
+        comm = [0, 0, 0, 0]
         for i, provider in enumerate(self.providers):
             for j, mode in enumerate(self.modes):
                 index = (i * len(self.providers)) + j
+                # TMP fix
+                if provider == "gcp":
+                    self.runs[index]["latency_breakdown"][0] = (
+                        comm[j] + self.runs[index]["latency_breakdown"][0]
+                    )
+
                 logging.info(
-                    "Provider: %10s| Mode: %8s | Comp: %10i ms | Comm: %10i ms",
+                    "Provider: %6s| Mode: %8s | Comm: %5i ms | Queue: %5i ms | Comp: %5i ms",
                     provider,
                     mode,
                     self.runs[index]["latency_breakdown"][0],
                     self.runs[index]["latency_breakdown"][1],
+                    self.runs[index]["latency_breakdown"][2],
                 )
+
+                comm[j] = self.runs[index]["latency_breakdown"][0]
 
 
 class Serverless(Experiment):
