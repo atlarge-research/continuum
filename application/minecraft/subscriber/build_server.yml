@@ -1,19 +1,26 @@
 ---
 - hosts: localhost
   connection: local
-  become: true
   tasks:
     - name: Checkout Opencraft
       git:
-        repo: 'https://github.com/atlarge-research/opencraft-dev.git'
+        repo: 'git@github.com:atlarge-research/opencraft-dev.git'
         version: '27-building-dockerfile-fails' # TODO: once merged, change to dev
         dest: '/tmp/opencraft'
 
+    - name: Copy configuration file to server directory
+      copy:
+        src: './opencraft.yml'
+        dest: '/tmp/opencraft/opencraft.yml'
+        remote_src: true
+
     - name: Add configuration file to dockerfile
       blockinfile:
-        path: 'tmp/opencraft/Dockerfile'
-        inserbefore: 'CMD ["java", "-jar", "opencraft.jar"]'
+        path: '/tmp/opencraft/Dockerfile'
+        insertbefore: 'CMD ["java", "-jar", "opencraft.jar"]'
         block: 'COPY ./opencraft.yml /config/opencraft.yml'
 
     - name: Build and push image
-      shell: 'docker buildx build --platform linux/amd64,linux/arm64 -t lwagner1/minecraft_benchmark:minecraft_server --push .'
+      shell:
+        cmd: 'docker buildx build --platform linux/amd64,linux/arm64 -t lwagner1/minecraft_benchmark:minecraft_server --push .'
+        chdir: '/tmp/opencraft'
