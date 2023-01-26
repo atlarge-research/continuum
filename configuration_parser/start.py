@@ -13,8 +13,8 @@ def option_check(
     option,
     intype,
     condition,
-    mandatory=False,
-    default="default",
+    mandatory,
+    default,
 ):
     """Check if each config option is present, if the type is correct, and if the value is correct.
 
@@ -25,16 +25,17 @@ def option_check(
         option (str): Option in a section of the config file
         intype (type): Option should be type
         condition (lambda): Option should have these values
-        mandatory (bool, optional): Is option mandatory. Defaults to True.
+        mandatory (bool): Is option mandatory
+        default (bool): Default value if none is set
     """
     if config.has_option(section, option):
         # If option is empty, but not mandatory, remove option
         if config[section][option] == "":
             if mandatory:
                 parser.error("Config: Missing option %s->%s" % (section, option))
-            elif default != "default":
-                # Set default value if the user didnt set any
-                new[section][option] = intype(default)
+
+            # Set default value if the user didnt set any
+            new[section][option] = intype(default)
 
             return
 
@@ -87,30 +88,17 @@ def infrastructure(parser, config, new):
 
     new[sec] = {}
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "provider",
-        str,
-        lambda x: x in ["qemu", "terraform", "baremetal"],
-        mandatory=True,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "infra_only",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["provider", str, lambda x: x in ["qemu", "terraform", "baremetal"], True, None],
+        ["infra_only", bool, lambda x: x in [True, False], False, False],
+        ["cloud_nodes", int, lambda x: x >= 0, False, 0],
+        ["edge_nodes", int, lambda x: x >= 0, False, 0],
+        ["endpoint_nodes", int, lambda x: x >= 0, False, 0],
+    ]
 
-    option_check(parser, config, new, sec, "cloud_nodes", int, lambda x: x >= 0, default=0)
-    option_check(parser, config, new, sec, "edge_nodes", int, lambda x: x >= 0, default=0)
-    option_check(parser, config, new, sec, "endpoint_nodes", int, lambda x: x >= 0, default=0)
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     if new[sec]["cloud_nodes"] + new[sec]["edge_nodes"] + new[sec]["endpoint_nodes"] == 0:
         parser.error("Config: cloud_nodes + edge_nodes + endpoint_nodes should be > 0")
@@ -129,288 +117,78 @@ def infrastructure(parser, config, new):
     default = 0
     if new[sec]["cloud_nodes"] > 0:
         mandatory = True
-        default = "default"
+        default = None
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_cores",
-        int,
-        lambda x: x >= 2,
-        mandatory=mandatory,
-        default=default,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_memory",
-        int,
-        lambda x: x >= 1,
-        mandatory=mandatory,
-        default=default,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_quota",
-        float,
-        lambda x: 0.1 <= x <= 1.0,
-        mandatory=mandatory,
-        default=default,
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["cloud_cores", int, lambda x: x > 0, mandatory, default],
+        ["cloud_memory", int, lambda x: x > 0, mandatory, default],
+        ["cloud_quota", int, lambda x: 0.1 <= x <= 1.0, mandatory, default],
+    ]
+
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     mandatory = False
     default = 0
     if new[sec]["edge_nodes"] > 0:
         mandatory = True
-        default = "default"
+        default = None
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_cores",
-        int,
-        lambda x: x >= 1,
-        mandatory=mandatory,
-        default=default,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_memory",
-        int,
-        lambda x: x >= 1,
-        mandatory=mandatory,
-        default=default,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_quota",
-        float,
-        lambda x: 0.1 <= x <= 1.0,
-        mandatory=mandatory,
-        default=default,
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["edge_cores", int, lambda x: x > 0, mandatory, default],
+        ["edge_memory", int, lambda x: x > 0, mandatory, default],
+        ["edge_quota", int, lambda x: 0.1 <= x <= 1.0, mandatory, default],
+    ]
+
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     mandatory = False
     default = 0
     if new[sec]["endpoint_nodes"] > 0:
         mandatory = True
-        default = "default"
+        default = None
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "endpoint_cores",
-        int,
-        lambda x: x >= 1,
-        mandatory=mandatory,
-        default=default,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "endpoint_memory",
-        int,
-        lambda x: x >= 1,
-        mandatory=mandatory,
-        default=default,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "endpoint_quota",
-        float,
-        lambda x: 0.1 <= x <= 1.0,
-        mandatory=mandatory,
-        default=default,
+    l_prefixip = (
+        lambda x: len(x.split(".")) == 2
+        and int(x.split(".")[0]) > 0
+        and int(x.split(".")[0]) < 255
+        and int(x.split(".")[1]) > 0
+        and int(x.split(".")[1]) < 255
     )
 
-    # Now set disk speed
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_read_speed",
-        int,
-        lambda x: x >= 0,
-        default=0,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_read_speed",
-        int,
-        lambda x: x >= 0,
-        default=0,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "endpoint_read_speed",
-        int,
-        lambda x: x >= 0,
-        default=0,
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["endpoint_cores", int, lambda x: x > 0, mandatory, default],
+        ["endpoint_memory", int, lambda x: x > 0, mandatory, default],
+        ["endpoint_quota", int, lambda x: 0.1 <= x <= 1.0, mandatory, default],
+        ["cloud_read_speed", int, lambda x: x >= 0, False, 0],
+        ["edge_read_speed", int, lambda x: x >= 0, False, 0],
+        ["endpoint_read_speed", int, lambda x: x >= 0, False, 0],
+        ["cloud_write_speed", int, lambda x: x >= 0, False, 0],
+        ["edge_write_speed", int, lambda x: x >= 0, False, 0],
+        ["endpoint_write_speed", int, lambda x: x >= 0, False, 0],
+        ["cpu_pin", bool, lambda x: x in [True, False], False, False],
+        ["external_physical_machines", list, lambda x: True, False, []],
+        ["netperf", bool, lambda x: x in [True, False], False, False],
+        ["base_path", str, os.path.expanduser, False, os.getenv("HOME")],
+        ["prefixIP", str, l_prefixip, False, "192.168"],
+        ["middleIP", int, lambda x: 0 < x < 255, False, "100"],
+        ["middleIP_base", int, lambda x: 0 < x < 255, False, "90"],
+        ["delete", bool, lambda x: x in [True, False], False, False],
+    ]
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_write_speed",
-        int,
-        lambda x: x >= 0,
-        default=0,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_write_speed",
-        int,
-        lambda x: x >= 0,
-        default=0,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "endpoint_write_speed",
-        int,
-        lambda x: x >= 0,
-        default=0,
-    )
-
-    # Pin VM cores in physical CPU cores
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cpu_pin",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
-
-    # Use multiple physical machines for the framework
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "external_physical_machines",
-        list,
-        lambda x: True,
-        default=[],
-    )
-
-    # Benchmark the network between the VMs
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "netperf",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
-
-    # Set the location where the continuum framework files are stored, including VMs
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "base_path",
-        str,
-        os.path.expanduser,
-        default=os.getenv("HOME"),
-    )
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     new[sec]["base_path"] = os.path.expanduser(new[sec]["base_path"])
     if new[sec]["base_path"][-1] == "/":
         new[sec]["base_path"] = new[sec]["base_path"][:-1]
 
-    # Set default IP range of created VMs
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "prefixIP",
-        str,
-        lambda x: len(x.split(".")) == 2
-        and int(x.split(".")[0]) > 0
-        and int(x.split(".")[0]) < 255
-        and int(x.split(".")[1]) > 0
-        and int(x.split(".")[1]) < 255,
-        default="192.168",
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "middleIP",
-        int,
-        lambda x: 0 < x < 255,
-        default="100",
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "middleIP_base",
-        int,
-        lambda x: 0 < x < 255,
-        default="90",
-    )
-
     if new[sec]["middleIP"] == new[sec]["middleIP_base"]:
         parser.error("Config: middleIP == middleIP_base")
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "delete",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
 
 
 def infrastructure_network(parser, config, new):
@@ -441,167 +219,28 @@ def infrastructure_network(parser, config, new):
     if not new[sec]["network_emulation"]:
         return
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "wireless_network_preset",
-        str,
-        lambda x: x in ["4g", "5g"],
-        default="4g",
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["wireless_network_preset", str, lambda x: x in ["4g", "5g"], False, "4g"],
+        ["cloud_latency_avg", float, lambda x: x >= 0.0, False, -1],
+        ["cloud_latency_var", float, lambda x: x >= 0.0, False, -1],
+        ["cloud_throughput", float, lambda x: x >= 1.0, False, -1],
+        ["edge_latency_avg", float, lambda x: x >= 0.0, False, -1],
+        ["edge_latency_var", float, lambda x: x >= 0.0, False, -1],
+        ["edge_throughput", float, lambda x: x >= 1.0, False, -1],
+        ["cloud_edge_latency_avg", float, lambda x: x >= 0.0, False, -1],
+        ["cloud_edge_latency_var", float, lambda x: x >= 0.0, False, -1],
+        ["cloud_edge_throughput", float, lambda x: x >= 1.0, False, -1],
+        ["cloud_endpoint_latency_avg", float, lambda x: x >= 0.0, False, -1],
+        ["cloud_endpoint_latency_var", float, lambda x: x >= 0.0, False, -1],
+        ["cloud_endpoint_throughput", float, lambda x: x >= 1.0, False, -1],
+        ["edge_endpoint_latency_avg", float, lambda x: x >= 0.0, False, -1],
+        ["edge_endpoint_latency_var", float, lambda x: x >= 0.0, False, -1],
+        ["edge_endpoint_throughput", float, lambda x: x >= 1.0, False, -1],
+    ]
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_latency_avg",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_latency_var",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_throughput",
-        float,
-        lambda x: x >= 1.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_latency_avg",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_latency_var",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_throughput",
-        float,
-        lambda x: x >= 1.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_edge_latency_avg",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_edge_latency_var",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_edge_throughput",
-        float,
-        lambda x: x >= 1.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_endpoint_latency_avg",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_endpoint_latency_var",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cloud_endpoint_throughput",
-        float,
-        lambda x: x >= 1.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_endpoint_latency_avg",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_endpoint_latency_var",
-        float,
-        lambda x: x >= 0.0,
-        default=-1,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "edge_endpoint_throughput",
-        float,
-        lambda x: x >= 1.0,
-        default=-1,
-    )
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
 
 def infrastructure_terraform(parser, config, new):
@@ -621,82 +260,19 @@ def infrastructure_terraform(parser, config, new):
     if new["infrastructure"]["provider"] != "terraform":
         return
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "gcp_cloud",
-        str,
-        lambda _: True,
-        mandatory=new["infrastructure"]["cloud_nodes"] > 0,
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["gcp_cloud", str, lambda _: True, new["infrastructure"]["cloud_nodes"] > 0, None],
+        ["gcp_edge", str, lambda _: True, new["infrastructure"]["edge_nodes"] > 0, None],
+        ["gcp_endpoint", str, lambda _: True, new["infrastructure"]["endpoint_nodes"] > 0, None],
+        ["gcp_region", str, lambda _: True, True, None],
+        ["gcp_zone", str, lambda _: True, True, None],
+        ["gcp_project", str, lambda _: True, True, None],
+        ["gcp_credentials", str, os.path.expanduser, True, None],
+    ]
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "gcp_edge",
-        str,
-        lambda _: True,
-        mandatory=new["infrastructure"]["edge_nodes"] > 0,
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "gcp_endpoint",
-        str,
-        lambda _: True,
-        mandatory=new["infrastructure"]["endpoint_nodes"] > 0,
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "gcp_region",
-        str,
-        lambda _: True,
-        mandatory=True,
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "gcp_zone",
-        str,
-        lambda _: True,
-        mandatory=True,
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "gcp_project",
-        str,
-        lambda x: True,
-        mandatory=True,
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "gcp_credentials",
-        str,
-        os.path.expanduser,
-        mandatory=True,
-    )
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     if len(new[sec]["gcp_credentials"]) > 0 and new[sec]["gcp_credentials"][-1] == "/":
         new[sec]["gcp_credentials"] = new[sec]["base_pgcp_credentialsth"][:-1]
@@ -720,48 +296,24 @@ def benchmark(parser, config, new):
 
     new[sec] = {}
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "resource_manager",
-        str,
-        lambda x: x in ["kubernetes", "kubeedge", "mist", "none", "kubernetes-control"],
-        mandatory=True,
-    )
+    l_resource_manager = lambda x: x in [
+        "kubernetes",
+        "kubeedge",
+        "mist",
+        "none",
+        "kubernetes-control",
+    ]
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "resource_manager_only",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["resource_manager", str, l_resource_manager, True, None],
+        ["resource_manager_only", bool, lambda x: x in [True, False], False, None],
+        ["docker_pull", bool, lambda x: x in [True, False], False, None],
+        ["application", str, lambda x: x in ["image_classification", "empty"], True, None],
+    ]
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "docker_pull",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "application",
-        str,
-        lambda x: x in ["image_classification", "empty"],
-        mandatory=True,
-    )
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     # Set default values first
     default_cpu = 0.0
@@ -773,60 +325,22 @@ def benchmark(parser, config, new):
         default_cpu = new["infrastructure"]["edge_cores"] - 0.5
         default_mem = new["infrastructure"]["edge_memory"] - 0.5
 
-    # Set specs of applications
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "application_worker_cpu",
-        float,
-        lambda x: x >= 0.1,
-        default=default_cpu,
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "application_worker_memory",
-        float,
-        lambda x: x >= 0.1,
-        default=default_mem,
-    )
+    ec = new["infrastructure"]["endpoint_cores"]
+    em = new["infrastructure"]["endpoint_memory"]
 
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "application_endpoint_cpu",
-        float,
-        lambda x: x >= 0.1,
-        default=new["infrastructure"]["endpoint_cores"],
-    )
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "application_endpoint_memory",
-        float,
-        lambda x: x >= 0.1,
-        default=new["infrastructure"]["endpoint_memory"],
-    )
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["application_worker_cpu", float, lambda x: x >= 0.1, False, default_cpu],
+        ["application_worker_memory", float, lambda x: x >= 0.1, False, default_mem],
+        ["application_endpoint_cpu", float, lambda x: x >= 0.1, False, ec],
+        ["application_endpoint_memory", float, lambda x: x >= 0.1, False, em],
+        ["applications_per_worker", int, lambda x: x >= 1, False, 1],
+        ["cache_worker", bool, lambda x: x in [True, False], False, False],
+        ["observability", bool, lambda x: x in [True, False], False, False],
+    ]
 
-    # Number of applications per worker
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "applications_per_worker",
-        int,
-        lambda x: x >= 1,
-        default=1,
-    )
+    for s in settings:
+        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     if new[sec]["application"] == "image_classification":
         option_check(
@@ -850,28 +364,6 @@ def benchmark(parser, config, new):
             lambda x: x >= 1,
             mandatory=True,
         )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "cache_worker",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
-
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "observability",
-        bool,
-        lambda x: x in [True, False],
-        default=False,
-    )
 
 
 def execution_model(parser, config, new):
