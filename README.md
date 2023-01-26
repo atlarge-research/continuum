@@ -227,7 +227,7 @@ For the moment, we only allow OpenFaaS to be installed outside of the framework.
 
 2. From your host-system ssh onto the `cloud_controller` node, for example:
    ```bash
-   ssh cloud_controller@192.168.100.2 -i ~/.ssh/id_rsa_benchmark
+   ssh cloud_controller@192.168.100.2 -i ~/.ssh/id_rsa_continuum
    ```
 
 3. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:

@@ -9,7 +9,7 @@ We generate different files during execution, and store them in various places o
 | VM images           | /var/lib/libvirt/images/ | Virtual machine images and configuration files |
 | Configuration files | ~/.continuum/            | All configuration files used for the framework |
 | Logs                | continuum/logs/          | Saves a log file for each time you use the framework |
-| SSH key             | ~/.ssh/id_rsa_benchmark  | SSH key used to access the VMs
+| SSH key             | ~/.ssh/id_rsa_continuum  | SSH key used to access the VMs
 
 ## Containers
 A Docker registry is created, listening at ip ${host_ip} and port 5000. All required application docker images are pulled to this Docker registry once, and can be updated using the "docker_pull" option in the configuration file. All VMs get the application's images from this registry. This is done because pulling images across possible 100s of VMs is expensive, and will most likely result in a block from the docker registry such as DockerHub (they have a pull limited per X hours).

@@ -87,7 +87,7 @@ def add_constants(config):
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
     config["username"] = getpass.getuser()
-    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_benchmark")
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
 
     source = "redplanet00/kubeedge-applications"
     if not config["infrastructure"]["infra_only"]:
