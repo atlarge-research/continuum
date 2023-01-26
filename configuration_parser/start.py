@@ -212,7 +212,8 @@ def infrastructure_network(parser, config, new):
         "network_emulation",
         bool,
         lambda x: x in [True, False],
-        default=False,
+        False,
+        False,
     )
 
     # Only set detailed values if network_emulation = True
@@ -343,27 +344,9 @@ def benchmark(parser, config, new):
         option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
 
     if new[sec]["application"] == "image_classification":
-        option_check(
-            parser,
-            config,
-            new,
-            sec,
-            "frequency",
-            int,
-            lambda x: x >= 1,
-            mandatory=True,
-        )
+        option_check(parser, config, new, sec, "frequency", int, lambda x: x >= 1, True, None)
     elif new[sec]["application"] == "empty":
-        option_check(
-            parser,
-            config,
-            new,
-            sec,
-            "sleep_time",
-            int,
-            lambda x: x >= 1,
-            mandatory=True,
-        )
+        option_check(parser, config, new, sec, "sleep_time", int, lambda x: x >= 1, True, False)
 
 
 def execution_model(parser, config, new):
@@ -379,16 +362,7 @@ def execution_model(parser, config, new):
         return
 
     new[sec] = {}
-    option_check(
-        parser,
-        config,
-        new,
-        sec,
-        "model",
-        str,
-        lambda x: x in ["openFaas"],
-        mandatory=True,
-    )
+    option_check(parser, config, new, sec, "model", str, lambda x: x in ["openFaas"], True, None)
 
 
 def start(parser, arg):
