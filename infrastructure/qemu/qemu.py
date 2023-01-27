@@ -10,7 +10,7 @@ import os
 
 from infrastructure import infrastructure
 from infrastructure import ansible
-from infrastructure import machines as m
+from infrastructure import machine as m
 
 from . import generate
 

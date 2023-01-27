@@ -3,7 +3,7 @@
 import logging
 import sys
 
-from infrastructure import machines as m
+from infrastructure import machine as m
 
 
 def delete_vms(_config, _machines):

@@ -63,6 +63,7 @@ def dynamic_import(parser, config):
         config (dict): Parsed configuration
     """
     sys.path.append(os.path.abspath(".."))
+    print(sys.path)
 
     config["module"] = {
         "provider": False,
@@ -279,7 +280,7 @@ def parse_infrastructure(parser, input_config, config):
         # Option | Type | Condition | Mandatory | Default
         ["cloud_cores", int, lambda x: x > 0, mandatory, default],
         ["cloud_memory", int, lambda x: x > 0, mandatory, default],
-        ["cloud_quota", int, lambda x: 0.1 <= x <= 1.0, mandatory, default],
+        ["cloud_quota", float, lambda x: 0.1 <= x <= 1.0, mandatory, default],
     ]
 
     for s in settings:
@@ -295,7 +296,7 @@ def parse_infrastructure(parser, input_config, config):
         # Option | Type | Condition | Mandatory | Default
         ["edge_cores", int, lambda x: x > 0, mandatory, default],
         ["edge_memory", int, lambda x: x > 0, mandatory, default],
-        ["edge_quota", int, lambda x: 0.1 <= x <= 1.0, mandatory, default],
+        ["edge_quota", float, lambda x: 0.1 <= x <= 1.0, mandatory, default],
     ]
 
     for s in settings:
@@ -319,7 +320,7 @@ def parse_infrastructure(parser, input_config, config):
         # Option | Type | Condition | Mandatory | Default
         ["endpoint_cores", int, lambda x: x > 0, mandatory, default],
         ["endpoint_memory", int, lambda x: x > 0, mandatory, default],
-        ["endpoint_quota", int, lambda x: 0.1 <= x <= 1.0, mandatory, default],
+        ["endpoint_quota", float, lambda x: 0.1 <= x <= 1.0, mandatory, default],
         ["cloud_read_speed", int, lambda x: x >= 0, False, 0],
         ["edge_read_speed", int, lambda x: x >= 0, False, 0],
         ["endpoint_read_speed", int, lambda x: x >= 0, False, 0],
