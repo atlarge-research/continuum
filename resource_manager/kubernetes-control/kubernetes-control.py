@@ -4,14 +4,8 @@ Setup Kubernetes on cloud
 
 import logging
 import os
-import sys
 
-# pylint: disable=wrong-import-position
-
-sys.path.append(os.path.abspath("../.."))
-import main
-
-# pylint: enable=wrong-import-position
+from infrastructure import ansible
 
 
 def start(config, machines):
@@ -52,21 +46,4 @@ def start(config, machines):
     # Check playbooks
     for command, (output, error) in zip(commands, results):
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
-        main.ansible_check_output((output, error))
-
-    # Install observability packages (Prometheus, Grafana) if configured by the user
-    if config["benchmark"]["observability"]:
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/cloud/observability.yml",
-            ),
-        ]
-
-        output, error = machines[0].process(config, command)[0]
-
-        logging.debug("Check output for Ansible command [%s]", " ".join(command))
-        main.ansible_check_output((output, error))
+        ansible.check_output((output, error))

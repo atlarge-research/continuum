@@ -7,13 +7,7 @@ import sys
 import time
 import os
 
-# pylint: disable=wrong-import-position
-
-sys.path.append(os.path.abspath(".."))
-import main
-
-# pylint: enable=wrong-import-position
-
+from infrastructure import ansible
 from . import output as out
 
 
@@ -74,7 +68,7 @@ def cache_worker(config, machines):
         os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
     )
 
-    main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
+    ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
     # This only creates the file we need, now launch the benchmark
     command = (
@@ -220,7 +214,7 @@ def start_worker(config, machines):
         os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
     )
 
-    main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
+    ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
     starttime = 0.0
     if config["benchmark"]["application"] == "empty":
@@ -341,7 +335,7 @@ def start_worker_serverless(config, machines):
         os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
     )
 
-    main.ansible_check_output(machines[0].process(config, command, shell=True)[0])
+    ansible.check_output(machines[0].process(config, command, shell=True)[0])
     logging.info("Deployed %s serverless application", config["mode"])
 
 

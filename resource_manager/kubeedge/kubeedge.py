@@ -4,14 +4,8 @@ Setup KubeEdge on cloud/edge
 
 import logging
 import os
-import sys
 
-# pylint: disable=wrong-import-position
-
-sys.path.append(os.path.abspath("../.."))
-import main
-
-# pylint: enable=wrong-import-position
+from infrastructure import ansible
 
 
 def start(config, machines):
@@ -35,7 +29,7 @@ def start(config, machines):
             ),
         ]
 
-        main.ansible_check_output(machines[0].process(config, command)[0])
+        ansible.check_output(machines[0].process(config, command)[0])
         return
 
     commands = []
@@ -68,7 +62,7 @@ def start(config, machines):
     # Check playbooks
     for command, (output, error) in zip(commands, results):
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
-        main.ansible_check_output((output, error))
+        ansible.check_output((output, error))
 
     # Patch: Fix accessing KubeEdge logs from the cloud host
     # Only start after the normal installation has finished
@@ -95,4 +89,4 @@ def start(config, machines):
     )
 
     for command in commands:
-        main.ansible_check_output(machines[0].process(config, command)[0])
+        ansible.check_output(machines[0].process(config, command)[0])

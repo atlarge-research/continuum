@@ -8,14 +8,11 @@ import time
 import string
 import os
 
-# pylint: disable=wrong-import-position
+from infrastructure import infrastructure
+from infrastructure import ansible
+from infrastructure import machines as m
 
-sys.path.append(os.path.abspath("../.."))
-import main
-
-# pylint: enable=wrong-import-position
-
-from .. import start as infrastructure
+from . import generate
 
 
 def delete_vms(config, machines):
@@ -321,7 +318,7 @@ def os_image(config, machines):
                 ".continuum/infrastructure/os.yml",
             ),
         ]
-        main.ansible_check_output(machines[0].process(config, command)[0])
+        ansible.check_output(machines[0].process(config, command)[0])
     else:
         logging.info("OS image is already there")
 
@@ -415,7 +412,7 @@ def base_image(config, machines):
                 ),
             ]
 
-        main.ansible_check_output(machines[0].process(config, command)[0])
+        ansible.check_output(machines[0].process(config, command)[0])
 
     # Create commands to launch the base VMs concurrently
     commands = []
@@ -499,7 +496,7 @@ def base_image(config, machines):
 
         for command, (output, error) in zip(commands, results):
             logging.debug("Check output for command [%s]", " ".join(command))
-            main.ansible_check_output((output, error))
+            ansible.check_output((output, error))
 
     # Install netperf (always, because base images aren't updated)
     command = [
@@ -511,7 +508,7 @@ def base_image(config, machines):
             ".continuum/infrastructure/netperf.yml",
         ),
     ]
-    main.ansible_check_output(machines[0].process(config, command)[0])
+    ansible.check_output(machines[0].process(config, command)[0])
 
     # Install docker containers if required
     if not config["infrastructure"]["infra_only"]:
@@ -567,7 +564,7 @@ def base_image(config, machines):
 
     for command, (output, error) in zip(commands, results):
         logging.info("Check output for command [%s]", command)
-        main.ansible_check_output((output, error))
+        ansible.check_output((output, error))
 
     # Shutdown VMs
     commands = []
@@ -669,7 +666,7 @@ def launch_vms(config, machines, repeat=None):
     return repeat
 
 
-def start(config, machines):
+def start_vms(config, machines):
     """Create and launch QEMU cloud and edge VMs
 
     Args:
@@ -688,7 +685,7 @@ def start(config, machines):
             ".continuum/infrastructure/remove.yml",
         ),
     ]
-    main.ansible_check_output(machines[0].process(config, command)[0])
+    ansible.check_output(machines[0].process(config, command)[0])
 
     # Check if os and base image need to be created, and if so do create them
     os_image(config, machines)
@@ -705,7 +702,7 @@ def start(config, machines):
                 ".continuum/infrastructure/cloud_start.yml",
             ),
         ]
-        main.ansible_check_output(machines[0].process(config, command)[0])
+        ansible.check_output(machines[0].process(config, command)[0])
 
     # Create edge images
     if config["infrastructure"]["edge_nodes"]:
@@ -718,7 +715,7 @@ def start(config, machines):
                 ".continuum/infrastructure/edge_start.yml",
             ),
         ]
-        main.ansible_check_output(machines[0].process(config, command)[0])
+        ansible.check_output(machines[0].process(config, command)[0])
 
     # Create endpoint images
     if config["infrastructure"]["endpoint_nodes"]:
@@ -731,7 +728,7 @@ def start(config, machines):
                 ".continuum/infrastructure/endpoint_start.yml",
             ),
         ]
-        main.ansible_check_output(machines[0].process(config, command)[0])
+        ansible.check_output(machines[0].process(config, command)[0])
 
     # Start VMs
     repeat = []
@@ -746,3 +743,32 @@ def start(config, machines):
             sys.exit()
 
         i += 1
+
+
+def start(config, machines):
+    """Manage infrastructure provider QEMU
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Set up QEMU")
+    m.gather_ips(config, machines)
+    m.gather_ssh(config, machines)
+
+    for machine in machines:
+        logging.debug(machine)
+
+    logging.info("Generate configuration files for Infrastructure and Ansible")
+    infrastructure.create_keypair(config, machines)
+
+    ansible.create_inventory_machine(config, machines)
+    ansible.create_inventory_vm(config, machines)
+    ansible.copy(config, machines)
+
+    generate.start(config, machines)
+    copy(config, machines)
+
+    logging.info("Setting up the infrastructure")
+    start_vms(config, machines)
+    infrastructure.add_ssh(config, machines)

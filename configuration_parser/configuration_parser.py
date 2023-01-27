@@ -3,6 +3,40 @@
 import configparser
 import os
 import sys
+import logging
+
+
+def print_config(config):
+    """Print the current configuration
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    logging.debug("Current config:")
+    s = []
+    header = True
+    for key, value in config.items():
+        if isinstance(value, dict):
+            s.append("[" + key + "]")
+            category = dict(config[key])
+            for k, v in category.items():
+                s.append("%-30s = %s" % (k, v))
+
+            s.append("")
+        else:
+            if header:
+                s.append("[constants]")
+                header = False
+
+            if isinstance(value, list):
+                s.append("%-30s = %s" % (key, value[0]))
+                if len(value) > 1:
+                    for v in value[1:]:
+                        s.append("%-30s   %s" % ("", v))
+            else:
+                s.append("%-30s = %s" % (key, value))
+
+    logging.debug("\n%s", "\n".join(s))
 
 
 def option_check(
@@ -363,6 +397,13 @@ def execution_model(parser, config, new):
 
     new[sec] = {}
     option_check(parser, config, new, sec, "model", str, lambda x: x in ["openFaas"], True, None)
+
+    if (
+        config[sec]["model"] == "openFaas"
+        and config["benchmark"]["resource_manager"] != "kubernetes"
+    ):
+        parser.error("Config: execution_model openFaas requires resource_manager Kubernetes")
+        sys.exit()
 
 
 def start(parser, arg):

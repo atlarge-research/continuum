@@ -8,6 +8,37 @@ import os
 import re
 
 
+def check_output(out):
+    """Check if an Ansible Playbook succeeded or failed
+    Shared by all files launching Ansible playbooks
+
+    Args:
+        output (list(str), list(str)): List of process stdout and stderr
+    """
+    output, error = out
+
+    # Print summary of executioo times
+    summary = False
+    lines = [""]
+    for line in output:
+        if summary:
+            lines.append(line.rstrip())
+
+        if "==========" in line:
+            summary = True
+
+    if lines != [""]:
+        logging.debug("\n".join(lines))
+
+    # Check if executino was succesful
+    if error != []:
+        logging.error("".join(error))
+        sys.exit()
+    elif any("FAILED!" in out for out in output):
+        logging.error("".join(output))
+        sys.exit()
+
+
 def create_inventory_machine(config, machines):
     """Create ansible inventory for creating VMs, so ssh to all physical machines is needed
 

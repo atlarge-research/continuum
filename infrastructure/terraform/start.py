@@ -4,14 +4,11 @@ import os
 import sys
 import logging
 
-# pylint: disable=wrong-import-position
+from infrastructure import infrastructure
+from infrastructure import ansible
+from infrastructure import machines as m
 
-sys.path.append(os.path.abspath("../.."))
-import main
-
-# pylint: enable=wrong-import-position
-
-from .. import start as infrastructure
+from . import generate
 
 
 def delete_vms(config, machines):
@@ -247,7 +244,7 @@ def netperf_install(config, machines):
             ".continuum/infrastructure/netperf.yml",
         ),
     ]
-    main.ansible_check_output(machines[0].process(config, command)[0])
+    ansible.check_output(machines[0].process(config, command)[0])
 
 
 def set_timezone(config, machines):
@@ -472,7 +469,7 @@ def base_install(config, machines):
 
             for command, (output, error) in zip(commands, results):
                 logging.debug("Check output for command [%s]", " ".join(command))
-                main.ansible_check_output((output, error))
+                ansible.check_output((output, error))
 
     # Install netperf (only if netperf=True)
     if config["infrastructure"]["netperf"]:
@@ -501,7 +498,7 @@ def base_install(config, machines):
     set_timezone(config, machines)
 
 
-def start(config, machines):
+def start_vms(config, machines):
     """Create and launch GCP VMs using Terraform
 
     Args:
@@ -543,3 +540,32 @@ def start(config, machines):
 
     if not config["infrastructure"]["infra_only"]:
         set_registry(config, machines)
+
+
+def start(config, machines):
+    """Manage infrastructure provider GCP / Terraform
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Set up QEMU")
+    logging.info("Generate configuration files for Infrastructure and Ansible")
+    infrastructure.create_keypair(config, machines)
+    generate.start(config, machines)
+
+    copy(config, machines)
+    start_vms(config, machines)
+
+    # TODO: Do something with the internal ips (networking between VMs)
+    m.gather_ips(config, machines)
+    m.gather_ssh(config, machines)
+    infrastructure.add_ssh(config, machines)
+
+    for machine in machines:
+        logging.debug(machine)
+
+    ansible.create_inventory_vm(config, machines)
+    ansible.copy(config, machines)
+
+    base_install(config, machines)

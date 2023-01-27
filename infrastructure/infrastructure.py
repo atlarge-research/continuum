@@ -13,14 +13,37 @@ from . import machine as m
 from . import ansible
 from . import network
 
-# pylint: disable=unused-import
-from .qemu import generate as qemu_generate
-from .qemu import start as qemu_vm
 
-from .terraform import generate as terraform_generate
-from .terraform import start as terraform_vm
+def delete_vms(config, machines):
+    """[INTERFACE] Delete VM infrastructure
 
-# pylint: enable=unused-import
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    config["module"]["provider"].delete_vms(config, machines)
+
+
+def set_ip_names(config, machines, nodes_per_machine):
+    """[INTERFACE] Set the number of VMs per tier, and their IP/hostname
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        nodes_per_machine (list(set)): List of 'cloud', 'edge', 'endpoint' sets containing
+            the number of those machines per physical node
+    """
+    config["module"]["provider"].set_ip_names(config, machines, nodes_per_machine)
+
+
+def start_provider(config, machines):
+    """[INTERFACE] Manage the infrastructure deployment
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    config["module"]["provider"].start(config, machines)
 
 
 def schedule_equal(config, machines):
@@ -528,16 +551,6 @@ def start(config):
     Returns:
         list(Machine object): List of machine objects representing physical machines
     """
-    generate = None
-    vm = None
-    if config["infrastructure"]["provider"] == "baremetal":
-        # Do as if you're QEMU to get some required metadata
-        generate = globals()["%s_generate" % ("qemu")]
-        vm = globals()["%s_vm" % ("qemu")]
-    else:
-        generate = globals()["%s_generate" % (config["infrastructure"]["provider"])]
-        vm = globals()["%s_vm" % (config["infrastructure"]["provider"])]
-
     machines = m.make_machine_objects(config)
 
     for machine in machines:
@@ -551,7 +564,7 @@ def start(config):
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
 
     # Delete old resources
-    vm.delete_vms(config, machines)
+    delete_vms(config, machines)
 
     # Prepare storage for Continuum files
     create_tmp_dir(config, machines)
@@ -559,78 +572,13 @@ def start(config):
     create_continuum_dir(config, machines)
 
     # Sets IPs and names for
-    vm.set_ip_names(config, machines, nodes_per_machine)
+    set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
     if not config["infrastructure"]["infra_only"]:
         docker_registry(config, machines)
 
-    # TODO: Replace this if/else with something better, more uniform
-    if config["infrastructure"]["provider"] == "qemu":
-        m.gather_ips(config, machines)
-        m.gather_ssh(config, machines)
-
-        for machine in machines:
-            logging.debug(machine)
-
-        logging.info("Generate configuration files for Infrastructure and Ansible")
-        create_keypair(config, machines)
-
-        ansible.create_inventory_machine(config, machines)
-        ansible.create_inventory_vm(config, machines)
-        ansible.copy(config, machines)
-
-        generate.start(config, machines)
-        vm.copy(config, machines)
-
-        logging.info("Setting up the infrastructure")
-        vm.start(config, machines)
-        add_ssh(config, machines)
-    elif config["infrastructure"]["provider"] == "terraform":
-        logging.info("Generate configuration files for Infrastructure and Ansible")
-        create_keypair(config, machines)
-        generate.start(config, machines)
-
-        vm.copy(config, machines)
-        vm.start(config, machines)
-
-        # TODO: Do something with the internal ips (networking between VMs)
-        m.gather_ips(config, machines)
-        m.gather_ssh(config, machines)
-        add_ssh(config, machines)
-
-        for machine in machines:
-            logging.debug(machine)
-
-        ansible.create_inventory_vm(config, machines)
-        ansible.copy(config, machines)
-
-        vm.base_install(config, machines)
-    elif config["infrastructure"]["provider"] == "baremetal":
-        # There are no cloud controller for baremetal
-        # We only support 1 cloud node at the moment, with 1 or more endpoints
-        machines[0].clouds = machines[0].cloud_controller
-        machines[0].cloud_controller = 0
-
-        machines[0].cloud_ips = machines[0].cloud_controller_ips
-        machines[0].cloud_controller_ips = []
-
-        machines[0].cloud_ips_internal = machines[0].cloud_controller_ips_internal
-        machines[0].cloud_controller_ips_internal = []
-
-        if len(machines[0].cloud_controller_names) != 1:
-            logging.error("ERROR: Baremetal only supports #clouds=1, #edges=0, @#endpoints>=0")
-            sys.exit()
-
-        name_split = machines[0].cloud_controller_names[0].split("_")
-        machines[0].cloud_names = ["%s0_%s" % (name_split[0], name_split[2])]
-        machines[0].cloud_controller_names = []
-
-        m.gather_ips(config, machines)
-        m.gather_ssh(config, machines)
-
-        for machine in machines:
-            logging.debug(machine)
+    start_provider(config, machines)
 
     if config["infrastructure"]["network_emulation"]:
         network.start(config, machines)
