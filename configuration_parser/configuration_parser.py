@@ -1,9 +1,20 @@
-"""Parse the imput configuration"""
+"""\
+Parse the imput configuration
+Handle everything on initializing the config
+"""
 
 import configparser
 import os
 import sys
 import logging
+import socket
+import getpass
+import importlib
+
+from application import application
+from execution_model import execution_model
+from infrastructure import infrastructure
+from resource_manager import resource_manager
 
 
 def print_config(config):
@@ -39,10 +50,121 @@ def print_config(config):
     logging.debug("\n%s", "\n".join(s))
 
 
+def dynamic_import(parser, config):
+    """Perform magic and dynamic imports to solve project dependencies
+    Find an implementation for every used project component:
+    - Infrastructure provider
+    - Resource manager
+    - Execution model
+    - Application
+
+    Args:
+        parser (ArgumentParser): Argparse object
+        config (dict): Parsed configuration
+    """
+    sys.path.append(os.path.abspath(".."))
+
+    config["module"] = {
+        "provider": False,
+        "resource_manager": False,
+        "execution_model": False,
+        "application": False,
+    }
+
+    # Check if infrastructure provider directory exists
+    dirs = list(os.walk("infrastructure"))[0][1]
+    dirs = [d for d in dirs if d[0] != "_"]
+    if config["infrastructure"]["provider"] in dirs:
+        config["module"]["provider"] = importlib.import_module(
+            "infrastructure.%s.%s" % ((config["infrastructure"]["provider"],) * 2)
+        )
+    else:
+        parser.error(
+            "ERROR: Given provider %s does not have an implementation",
+            config["infrastructure"]["provider"],
+        )
+        sys.exit()
+
+    if not config["infrastructure"]["infra_only"]:
+        # Check if resource manager directory exists
+        # Not all RM have modules (e.g., mist, none)
+        dirs = list(os.walk("resource_manager"))[0][1]
+        dirs = [d for d in dirs if d[0] != "_"]
+        if config["benchmark"]["resource_manager"] in dirs:
+            config["module"]["resource_manager"] = importlib.import_module(
+                "resource_manager.%s.%s" % ((config["benchmark"]["resource_manager"],) * 2)
+            )
+        elif config["benchmark"]["resource_manager"] == "mist":
+            # Mist provider uses KubeEdge
+            # TODO: Make a separate Mist provider
+            #       Mist already has its own Ansible file, should be easy
+            config["module"]["resource_manager"] = importlib.import_module(
+                "resource_manager.%s.%s" % (("kubeedge",) * 2)
+            )
+
+        if "execution_model" in config:
+            # Check if resource manager directory exists
+            dirs = list(os.walk("execution_model"))[0][1]
+            dirs = [d for d in dirs if d[0] != "_"]
+            if config["execution_model"]["model"] in dirs:
+                config["module"]["execution_model"] = importlib.import_module(
+                    "execution_model.%s.%s" % ((config["execution_model"]["model"],) * 2)
+                )
+            else:
+                parser.error(
+                    "ERROR: Given execution model %s does not have an implementation",
+                    config["execution_model"]["model"],
+                )
+                sys.exit()
+
+        # Check if infrastructure provider directory exists
+        dirs = list(os.walk("application"))[0][1]
+        dirs = [d for d in dirs if d[0] != "_"]
+        if config["benchmark"]["application"] in dirs:
+            config["module"]["application"] = importlib.import_module(
+                "application.%s.%s" % ((config["benchmark"]["application"],) * 2)
+            )
+        else:
+            parser.error(
+                "ERROR: Given application %s does not have an implementation",
+                config["benchmark"]["application"],
+            )
+            sys.exit()
+
+
+def add_constants(parser, config):
+    """Add some constants to the config dict
+
+    Args:
+        parser (ArgumentParser): Argparse object
+        config (dict): Parsed configuration
+    """
+    config["home"] = str(os.getenv("HOME"))
+    config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
+    config["username"] = getpass.getuser()
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
+
+    # 100.100.100.100
+    # Prefix .Mid.Post
+    config["postfixIP_lower"] = 2
+    config["postfixIP_upper"] = 252
+
+    # Get Docker registry IP
+    if not config["infrastructure"]["infra_only"]:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            host_ip = s.getsockname()[0]
+        except socket.gaierror as e:
+            parser.error("Could not get host ip with error: %s", e)
+
+        config["registry"] = host_ip + ":5000"
+
+
 def option_check(
     parser,
+    input_config,
     config,
-    new,
     section,
     option,
     intype,
@@ -53,8 +175,9 @@ def option_check(
     """Check if each config option is present, if the type is correct, and if the value is correct.
 
     Args:
-        config (ConfigParser): ConfigParser object
-        new (dict): Parsed configuration
+        parser (ArgumentParser): Argparse object
+        input_config (ConfigParser): ConfigParser object
+        config (dict): Parsed configuration
         section (str): Section in the config file
         option (str): Option in a section of the config file
         intype (type): Option should be type
@@ -62,29 +185,29 @@ def option_check(
         mandatory (bool): Is option mandatory
         default (bool): Default value if none is set
     """
-    if config.has_option(section, option):
+    if input_config.has_option(section, option):
         # If option is empty, but not mandatory, remove option
-        if config[section][option] == "":
+        if input_config[section][option] == "":
             if mandatory:
                 parser.error("Config: Missing option %s->%s" % (section, option))
 
             # Set default value if the user didnt set any
-            new[section][option] = intype(default)
+            config[section][option] = intype(default)
 
             return
 
         # Check type
         try:
             if intype == int:
-                val = config[section].getint(option)
+                val = input_config[section].getint(option)
             elif intype == float:
-                val = config[section].getfloat(option)
+                val = input_config[section].getfloat(option)
             elif intype == bool:
-                val = config[section].getboolean(option)
+                val = input_config[section].getboolean(option)
             elif intype == str:
-                val = config[section][option]
+                val = input_config[section][option]
             elif intype == list:
-                val = config[section][option].split(",")
+                val = input_config[section][option].split(",")
                 val = [s for s in val if s.strip()]
                 if val == []:
                     return
@@ -99,28 +222,27 @@ def option_check(
         if not condition(val):
             parser.error("Config: Invalid value for option %s->%s" % (section, option))
 
-        new[section][option] = val
+        config[section][option] = val
     elif mandatory:
         parser.error("Config: Missing option %s->%s" % (section, option))
     else:
         # Set default value if the user didnt set any
-        new[section][option] = intype(default)
+        config[section][option] = intype(default)
 
 
-def infrastructure(parser, config, new):
+def parse_infrastructure(parser, input_config, config):
     """Parse config file, section infrastructure
 
     Args:
         parser (ArgumentParser): Argparse object
-        config (configparser obj): Parsed configuration from the configparser library
-        new (dict): Parsed configuration for Continuum
+        input_config (configparser obj): Parsed configuration from the configparser library
+        config (dict): Parsed configuration for Continuum
     """
     sec = "infrastructure"
-    if not config.has_section(sec):
+    if not input_config.has_section(sec):
         parser.error("Config: infrastructure section missing")
-        sys.exit()
 
-    new[sec] = {}
+    config[sec] = {}
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
@@ -132,24 +254,24 @@ def infrastructure(parser, config, new):
     ]
 
     for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
+        option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
-    if new[sec]["cloud_nodes"] + new[sec]["edge_nodes"] + new[sec]["endpoint_nodes"] == 0:
+    if config[sec]["cloud_nodes"] + config[sec]["edge_nodes"] + config[sec]["endpoint_nodes"] == 0:
         parser.error("Config: cloud_nodes + edge_nodes + endpoint_nodes should be > 0")
 
     # Set mode
     mode = "endpoint"
-    if new[sec]["edge_nodes"]:
+    if config[sec]["edge_nodes"]:
         mode = "edge"
-    elif new[sec]["cloud_nodes"]:
+    elif config[sec]["cloud_nodes"]:
         mode = "cloud"
 
-    new["mode"] = mode
+    config["mode"] = mode
 
     # Set specs of VMs
     mandatory = False
     default = 0
-    if new[sec]["cloud_nodes"] > 0:
+    if config[sec]["cloud_nodes"] > 0:
         mandatory = True
         default = None
 
@@ -161,11 +283,11 @@ def infrastructure(parser, config, new):
     ]
 
     for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
+        option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
     mandatory = False
     default = 0
-    if new[sec]["edge_nodes"] > 0:
+    if config[sec]["edge_nodes"] > 0:
         mandatory = True
         default = None
 
@@ -177,11 +299,11 @@ def infrastructure(parser, config, new):
     ]
 
     for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
+        option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
     mandatory = False
     default = 0
-    if new[sec]["endpoint_nodes"] > 0:
+    if config[sec]["endpoint_nodes"] > 0:
         mandatory = True
         default = None
 
@@ -215,33 +337,32 @@ def infrastructure(parser, config, new):
     ]
 
     for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
+        option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
-    new[sec]["base_path"] = os.path.expanduser(new[sec]["base_path"])
-    if new[sec]["base_path"][-1] == "/":
-        new[sec]["base_path"] = new[sec]["base_path"][:-1]
+    config[sec]["base_path"] = os.path.expanduser(config[sec]["base_path"])
+    if config[sec]["base_path"][-1] == "/":
+        config[sec]["base_path"] = config[sec]["base_path"][:-1]
 
-    if new[sec]["middleIP"] == new[sec]["middleIP_base"]:
+    if config[sec]["middleIP"] == config[sec]["middleIP_base"]:
         parser.error("Config: middleIP == middleIP_base")
 
 
-def infrastructure_network(parser, config, new):
+def parse_infrastructure_network(parser, input_config, config):
     """Parse config file, section infrastructure, network part
 
     Args:
         parser (ArgumentParser): Argparse object
         config (configparser obj): Parsed configuration from the configparser library
-        new (dict): Parsed configuration for Continuum
+        config (dict): Parsed configuration for Continuum
     """
     sec = "infrastructure"
-    if not config.has_section(sec):
+    if not input_config.has_section(sec):
         parser.error("Config: infrastructure section missing")
-        sys.exit()
 
     option_check(
         parser,
+        input_config,
         config,
-        new,
         sec,
         "network_emulation",
         bool,
@@ -251,7 +372,7 @@ def infrastructure_network(parser, config, new):
     )
 
     # Only set detailed values if network_emulation = True
-    if not new[sec]["network_emulation"]:
+    if not config[sec]["network_emulation"]:
         return
 
     settings = [
@@ -275,61 +396,25 @@ def infrastructure_network(parser, config, new):
     ]
 
     for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
+        option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
 
-def infrastructure_terraform(parser, config, new):
-    """Parse config file, section infrastructure, Terraform part
-
-    Args:
-        parser (ArgumentParser): Argparse object
-        config (configparser obj): Parsed configuration from the configparser library
-        new (dict): Parsed configuration for Continuum
-    """
-    sec = "infrastructure"
-    if not config.has_section(sec):
-        parser.error("Config: infrastructure section missing")
-        sys.exit()
-
-    # Only set GCP values if Terraform is the provider
-    if new["infrastructure"]["provider"] != "terraform":
-        return
-
-    settings = [
-        # Option | Type | Condition | Mandatory | Default
-        ["gcp_cloud", str, lambda _: True, new["infrastructure"]["cloud_nodes"] > 0, None],
-        ["gcp_edge", str, lambda _: True, new["infrastructure"]["edge_nodes"] > 0, None],
-        ["gcp_endpoint", str, lambda _: True, new["infrastructure"]["endpoint_nodes"] > 0, None],
-        ["gcp_region", str, lambda _: True, True, None],
-        ["gcp_zone", str, lambda _: True, True, None],
-        ["gcp_project", str, lambda _: True, True, None],
-        ["gcp_credentials", str, os.path.expanduser, True, None],
-    ]
-
-    for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
-
-    if len(new[sec]["gcp_credentials"]) > 0 and new[sec]["gcp_credentials"][-1] == "/":
-        new[sec]["gcp_credentials"] = new[sec]["base_pgcp_credentialsth"][:-1]
-
-
-def benchmark(parser, config, new):
+def parse_benchmark(parser, input_config, config):
     """Parse config file, section benchmark
 
     Args:
         parser (ArgumentParser): Argparse object
         config (configparser obj): Parsed configuration from the configparser library
-        new (dict): Parsed configuration for Continuum
+        config (dict): Parsed configuration for Continuum
     """
-    if new["infrastructure"]["infra_only"]:
+    if config["infrastructure"]["infra_only"]:
         return
 
     sec = "benchmark"
-    if not config.has_section(sec):
+    if not input_config.has_section(sec):
         parser.error("Config: benchmark section missing while infra_only=False")
-        sys.exit()
 
-    new[sec] = {}
+    config[sec] = {}
 
     l_resource_manager = lambda x: x in [
         "kubernetes",
@@ -348,20 +433,20 @@ def benchmark(parser, config, new):
     ]
 
     for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
+        option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
     # Set default values first
     default_cpu = 0.0
     default_mem = 0.0
-    if new["mode"] == "cloud":
-        default_cpu = new["infrastructure"]["cloud_cores"] - 0.5
-        default_mem = new["infrastructure"]["cloud_memory"] - 0.5
-    elif new["mode"] == "edge":
-        default_cpu = new["infrastructure"]["edge_cores"] - 0.5
-        default_mem = new["infrastructure"]["edge_memory"] - 0.5
+    if config["mode"] == "cloud":
+        default_cpu = config["infrastructure"]["cloud_cores"] - 0.5
+        default_mem = config["infrastructure"]["cloud_memory"] - 0.5
+    elif config["mode"] == "edge":
+        default_cpu = config["infrastructure"]["edge_cores"] - 0.5
+        default_mem = config["infrastructure"]["edge_memory"] - 0.5
 
-    ec = new["infrastructure"]["endpoint_cores"]
-    em = new["infrastructure"]["endpoint_memory"]
+    ec = config["infrastructure"]["endpoint_cores"]
+    em = config["infrastructure"]["endpoint_memory"]
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
@@ -375,35 +460,25 @@ def benchmark(parser, config, new):
     ]
 
     for s in settings:
-        option_check(parser, config, new, sec, s[0], s[1], s[2], s[3], s[4])
-
-    if new[sec]["application"] == "image_classification":
-        option_check(parser, config, new, sec, "frequency", int, lambda x: x >= 1, True, None)
-    elif new[sec]["application"] == "empty":
-        option_check(parser, config, new, sec, "sleep_time", int, lambda x: x >= 1, True, False)
+        option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
 
-def execution_model(parser, config, new):
+def parse_execution_model(parser, input_config, config):
     """Parse config file, section execution_model
 
     Args:
         parser (ArgumentParser): Argparse object
         config (configparser obj): Parsed configuration from the configparser library
-        new (dict): Parsed configuration for Continuum
+        config (dict): Parsed configuration for Continuum
     """
     sec = "execution_model"
-    if not config.has_section(sec):
+    if not input_config.has_section(sec):
         return
 
-    new[sec] = {}
-    option_check(parser, config, new, sec, "model", str, lambda x: x in ["openFaas"], True, None)
-
-    if (
-        config[sec]["model"] == "openFaas"
-        and config["benchmark"]["resource_manager"] != "kubernetes"
-    ):
-        parser.error("Config: execution_model openFaas requires resource_manager Kubernetes")
-        sys.exit()
+    config[sec] = {}
+    option_check(
+        parser, input_config, config, sec, "model", str, lambda x: x in ["openFaas"], True, None
+    )
 
 
 def start(parser, arg):
@@ -419,16 +494,75 @@ def start(parser, arg):
     if not (os.path.exists(arg) and os.path.isfile(arg)):
         parser.error("The given config file does not exist: %s" % (arg))
 
-    config = configparser.ConfigParser()
-    config.read(arg)
+    input_config = configparser.ConfigParser()
+    input_config.read(arg)
 
     # Parsed values will be saved in a dict because ConfigParser can only hold strings
-    new = {}
+    config = {}
 
-    infrastructure(parser, config, new)
-    infrastructure_network(parser, config, new)
-    infrastructure_terraform(parser, config, new)
-    benchmark(parser, config, new)
-    execution_model(parser, config, new)
+    # Parse the input config
+    parse_infrastructure(parser, input_config, config)
+    parse_infrastructure_network(parser, input_config, config)
+    parse_benchmark(parser, input_config, config)
+    parse_execution_model(parser, input_config, config)
 
-    return new
+    # Add stuff based on the parsed config
+    dynamic_import(parser, config)
+    add_constants(parser, config)
+
+    # Add and verify options for each module
+    add_options(parser, input_config, config)
+    verify_options(parser, input_config, config)
+
+    return config
+
+
+def add_options(parser, input_config, config):
+    """Add config options for a particular module
+
+    Args:
+        parser (ArgumentParser): Argparse object
+        input_config (configparser obj): Parsed configuration from the configparser library
+        config (dict): Parsed configuration for Continuum
+    """
+    settings = []
+
+    # Get the options from each module
+    if config["module"]["application"]:
+        set = application.add_options(config)
+        set.append("benchmark")
+        settings.append(set)
+    if config["module"]["execution_model"]:
+        set = execution_model.add_options(config)
+        set.append("execution_model")
+        settings.append(set)
+    if config["module"]["provider"]:
+        set = infrastructure.add_options(config)
+        set.append("infrastructure")
+        settings.append(set)
+    if config["module"]["resource_manager"]:
+        set = resource_manager.add_options(config)
+        set.append("benchmark")
+        settings.append(set)
+
+    # Parse / verify the options, and add to config
+    for s in settings:
+        option_check(parser, input_config, config, s[5], s[0], s[1], s[2], s[3], s[4])
+
+
+def verify_options(config):
+    """Verify the config from the module's requirements
+
+    Args:
+        parser (ArgumentParser): Argparse object
+        config (dict): Parsed configuration for Continuum
+    """
+    # Get the options from each module
+    if config["module"]["application"]:
+        application.verify_options(config)
+    if config["module"]["execution_model"]:
+        execution_model.verify_options(config)
+    if config["module"]["provider"]:
+        infrastructure.verify_options(config)
+    if config["module"]["resource_manager"]:
+        resource_manager.verify_options(config)

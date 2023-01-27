@@ -45,6 +45,24 @@ def start_provider(config, machines):
     config["module"]["provider"].start(config, machines)
 
 
+def add_options(config):
+    """[INTERFACE] Add config options for a particular module
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    return config["module"]["provider"].add_options(config)
+
+
+def verify_options(config):
+    """[INTERFACE] Verify the config from the module's requirements
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    config["module"]["provider"].verify_options(config)
+
+
 def schedule_equal(config, machines):
     """Distribute the VMs equally over the available machines, based on utilization
 

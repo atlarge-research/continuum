@@ -18,3 +18,21 @@ def start(config, machines):
     # Start RM software on endpoints
     if config["infrastructure"]["endpoint_nodes"]:
         endpoint.start(config, machines)
+
+
+def add_options(config):
+    """[INTERFACE] Add config options for a particular module
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    return config["module"]["resource_manager"].add_options(config)
+
+
+def verify_options(config):
+    """[INTERFACE] Verify the config from the module's requirements
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    config["module"]["resource_manager"].verify_options(config)

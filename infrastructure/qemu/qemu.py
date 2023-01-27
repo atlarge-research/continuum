@@ -52,6 +52,31 @@ xargs -I %% sh -c \"virsh destroy %%\""
         logging.debug("Check output for command [%s]", command)
 
 
+def add_options(_config):
+    """Add config options for a particular module
+
+    Args:
+        config (ConfigParser): ConfigParser object
+
+    Returns:
+        list(list()): Options to add
+    """
+    # TODO: Move base_ip and related logic to here - that's not generic
+    #       (that is, GCP doesnt use it)
+    return []
+
+
+def verify_options(config):
+    """Verify the config from the module's requirements
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    if config["infrastructure"]["provider"] != "qemu":
+        logging.error("ERROR: Infrastructure provider should be qemu")
+        sys.exit()
+
+
 def update_ip(config, middle_ip, postfix_ip):
     """Update IPs. Once the last number of the IP string (the zzz in www.xxx.yyy.zzz)
     reaches the configured upperbound, reset this number to the lower bound and reset

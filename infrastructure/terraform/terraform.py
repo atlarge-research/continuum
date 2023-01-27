@@ -33,6 +33,44 @@ def delete_vms(config, machines):
         logging.warning("Could not destroy the old Terraform configuration: %s", "".join(output))
 
 
+def add_options(config):
+    """Add config options for a particular module
+
+    Args:
+        config (ConfigParser): ConfigParser object
+
+    Returns:
+        list(list()): Options to add
+    """
+    settings = [
+        # Option | Type | Condition | Mandatory | Default
+        ["gcp_cloud", str, lambda _: True, config["infrastructure"]["cloud_nodes"] > 0, None],
+        ["gcp_edge", str, lambda _: True, config["infrastructure"]["edge_nodes"] > 0, None],
+        ["gcp_endpoint", str, lambda _: True, config["infrastructure"]["endpoint_nodes"] > 0, None],
+        ["gcp_region", str, lambda _: True, True, None],
+        ["gcp_zone", str, lambda _: True, True, None],
+        ["gcp_project", str, lambda _: True, True, None],
+        ["gcp_credentials", str, os.path.expanduser, True, None],
+    ]
+
+    return settings
+
+
+def verify_options(config):
+    """Verify the config from the module's requirements
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    if config["infrastructure"]["provider"] != "terraform":
+        logging.error("ERROR: Infrastructure provider should be terraform")
+        sys.exit()
+
+    sec = "infrastructure"
+    if len(config[sec]["gcp_credentials"]) > 0 and config[sec]["gcp_credentials"][-1] == "/":
+        config[sec]["gcp_credentials"] = config[sec]["base_pgcp_credentialsth"][:-1]
+
+
 def set_ip_names(_config, machines, nodes_per_machine):
     """Set amount of cloud / edge / endpoints nodes per machine, and their usernames.
     For Terraform with GCP, there is only 1 machine.

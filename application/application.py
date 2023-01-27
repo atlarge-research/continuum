@@ -9,3 +9,21 @@ def set_container_location(config):
         config (dict): Parsed configuration
     """
     config["module"]["application"].set_container_location(config)
+
+
+def add_options(config):
+    """[INTERFACE] Add config options for a particular module
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    return config["module"]["application"].add_options(config)
+
+
+def verify_options(config):
+    """[INTERFACE] Verify the config from the module's requirements
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    config["module"]["application"].verify_options(config)

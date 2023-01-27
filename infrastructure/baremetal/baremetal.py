@@ -6,6 +6,38 @@ import sys
 from infrastructure import machines as m
 
 
+def delete_vms(_config, _machines):
+    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
+    and possilby at the end if the run if configured by the user
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Baremetal doesn't have anything to delete")
+
+
+def add_options(_config):
+    """Add config options for a particular module
+
+    Args:
+        config (ConfigParser): ConfigParser object
+
+    Returns:
+        list(list()): Options to add
+    """
+    return []
+
+
+def verify_options(_config):
+    """Verify the config from the module's requirements
+
+    Args:
+        config (ConfigParser): ConfigParser object
+    """
+    pass
+
+
 def update_ip(config, middle_ip, postfix_ip):
     """Update IPs. Once the last number of the IP string (the zzz in www.xxx.yyy.zzz)
     reaches the configured upperbound, reset this number to the lower bound and reset
