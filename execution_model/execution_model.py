@@ -24,10 +24,11 @@ def add_options(config):
     return config["module"]["execution_model"].add_options(config)
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """[INTERFACE] Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    config["module"]["execution_model"].verify_options(config)
+    config["module"]["execution_model"].verify_options(parser, config)

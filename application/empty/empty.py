@@ -1,10 +1,5 @@
 """Manage the empty application"""
 
-import logging
-import sys
-
-from configuration_parser import configuration_parser
-
 
 def set_container_location(config):
     """Set registry location/path of containerized applications
@@ -29,15 +24,14 @@ def add_options(_config):
     return settings
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
     if config["benchmark"]["application"] != "empty":
-        logging.error("ERROR: Application should be empty")
-        sys.exit()
+        parser.error("ERROR: Application should be empty")
     elif config["benchmark"]["resource_manager"] != "kubernetes_control":
-        logging.error("ERROR: Application empty requires resource_manager Kubernetes_control")
-        sys.exit()
+        parser.error("ERROR: Application empty requires resource_manager Kubernetes_control")

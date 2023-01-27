@@ -1,8 +1,5 @@
 """Manage the image_classification application"""
 
-import logging
-import sys
-
 
 def set_container_location(config):
     """Set registry location/path of containerized applications
@@ -40,12 +37,12 @@ def add_options(_config):
     return settings
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
     if config["benchmark"]["application"] != "image_classification":
-        logging.error("ERROR: Application should be image_classification")
-        sys.exit()
+        parser.error("ERROR: Application should be image_classification")

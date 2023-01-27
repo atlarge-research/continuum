@@ -29,10 +29,11 @@ def add_options(config):
     return config["module"]["resource_manager"].add_options(config)
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """[INTERFACE] Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    config["module"]["resource_manager"].verify_options(config)
+    config["module"]["resource_manager"].verify_options(parser, config)

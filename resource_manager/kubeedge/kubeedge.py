@@ -4,7 +4,6 @@ Setup KubeEdge on cloud/edge
 
 import logging
 import os
-import sys
 
 from infrastructure import ansible
 
@@ -21,10 +20,11 @@ def add_options(_config):
     return []
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
     if (
@@ -32,13 +32,9 @@ def verify_options(config):
         or config["infrastructure"]["edge_nodes"] == 0
         or config["infrastructure"]["endpoint_nodes"] < 1
     ):
-        logging.error("ERROR: KubeEdge requires #clouds=1, #edges>=1, #endpoints>=1")
-        sys.exit()
+        parser.error("ERROR: KubeEdge requires #clouds=1, #edges>=1, #endpoints>=1")
     elif config["infrastructure"]["edge_nodes"] % config["infrastructure"]["endpoint_nodes"] != 0:
-        logging.error("ERROR: KubeEdge requires #edges %% #endpoints == 0")
-        sys.exit()
-    elif config["infrastructure"]["cloud_cores"] < 2:
-        logging.warning("WARNING: KubeEdge controlplane requires >= 2 cores to function optimally")
+        parser.error("ERROR: KubeEdge requires #edges %% #endpoints == 0")
 
 
 def start(config, machines):

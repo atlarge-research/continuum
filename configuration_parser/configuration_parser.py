@@ -512,7 +512,7 @@ def start(parser, arg):
 
     # Add and verify options for each module
     add_options(parser, input_config, config)
-    verify_options(parser, input_config, config)
+    verify_options(parser, config)
 
     return config
 
@@ -550,7 +550,7 @@ def add_options(parser, input_config, config):
         option_check(parser, input_config, config, s[5], s[0], s[1], s[2], s[3], s[4])
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
@@ -559,10 +559,10 @@ def verify_options(config):
     """
     # Get the options from each module
     if config["module"]["application"]:
-        application.verify_options(config)
+        application.verify_options(parser, config)
     if config["module"]["execution_model"]:
-        execution_model.verify_options(config)
+        execution_model.verify_options(parser, config)
     if config["module"]["provider"]:
-        infrastructure.verify_options(config)
+        infrastructure.verify_options(parser, config)
     if config["module"]["resource_manager"]:
-        resource_manager.verify_options(config)
+        resource_manager.verify_options(parser, config)

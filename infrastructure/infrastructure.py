@@ -54,13 +54,14 @@ def add_options(config):
     return config["module"]["provider"].add_options(config)
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """[INTERFACE] Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    config["module"]["provider"].verify_options(config)
+    config["module"]["provider"].verify_options(parser, config)
 
 
 def schedule_equal(config, machines):

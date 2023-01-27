@@ -29,13 +29,13 @@ def add_options(_config):
     return []
 
 
-def verify_options(_config):
+def verify_options(_parser, _config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    pass
 
 
 def update_ip(config, middle_ip, postfix_ip):

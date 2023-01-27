@@ -56,15 +56,15 @@ def add_options(config):
     return settings
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
     if config["infrastructure"]["provider"] != "terraform":
-        logging.error("ERROR: Infrastructure provider should be terraform")
-        sys.exit()
+        parser.error("ERROR: Infrastructure provider should be terraform")
 
     sec = "infrastructure"
     if len(config[sec]["gcp_credentials"]) > 0 and config[sec]["gcp_credentials"][-1] == "/":

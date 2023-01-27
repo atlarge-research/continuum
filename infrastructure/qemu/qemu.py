@@ -66,15 +66,15 @@ def add_options(_config):
     return []
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
     if config["infrastructure"]["provider"] != "qemu":
-        logging.error("ERROR: Infrastructure provider should be qemu")
-        sys.exit()
+        parser.error("ERROR: Infrastructure provider should be qemu")
 
 
 def update_ip(config, middle_ip, postfix_ip):

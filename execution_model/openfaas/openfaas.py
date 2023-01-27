@@ -19,18 +19,17 @@ def add_options(_config):
     return []
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (dict): Parsed Configuration
     """
     if config["execution_model"]["model"] != "openFaas":
-        logging.error("ERROR: Execution model should be openFaas")
-        sys.exit()
+        parser.error("ERROR: Execution model should be openFaas")
     elif config["benchmark"]["resource_manager"] != "kubernetes":
-        logging.error("ERROR: Execution_model openFaas requires resource_manager Kubernetes")
-        sys.exit()
+        parser.error("ERROR: Execution_model openFaas requires resource_manager Kubernetes")
 
 
 def start(config, machines):

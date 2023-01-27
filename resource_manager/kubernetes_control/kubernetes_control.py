@@ -4,7 +4,6 @@ Setup Kubernetes on cloud
 
 import logging
 import os
-import sys
 
 from infrastructure import ansible
 
@@ -21,10 +20,11 @@ def add_options(_config):
     return []
 
 
-def verify_options(config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
+        parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
     if (
@@ -32,17 +32,11 @@ def verify_options(config):
         or config["infrastructure"]["edge_nodes"] != 0
         or config["infrastructure"]["endpoint_nodes"] < 1
     ):
-        logging.error("ERROR: Kubernetes requires #clouds>=2, #edges=0, #endpoints>=1")
-        sys.exit()
+        parser.error("ERROR: Kubernetes requires #clouds>=2, #edges=0, #endpoints>=1")
     elif (config["infrastructure"]["cloud_nodes"] - 1) % config["infrastructure"][
         "endpoint_nodes"
     ] != 0:
-        logging.error("ERROR: Kubernetes requires (#clouds-1) %% #endpoints == 0 (-1 for control)")
-        sys.exit()
-    elif config["infrastructure"]["cloud_cores"] < 2:
-        logging.warning(
-            "WARNING: Kubernetes controlplane requires >= 2 cores to function optimally"
-        )
+        parser.error("ERROR: Kubernetes requires (#clouds-1) %% #endpoints == 0 (-1 for control)")
 
 
 def start(config, machines):
