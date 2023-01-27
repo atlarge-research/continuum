@@ -63,7 +63,6 @@ def dynamic_import(parser, config):
         config (dict): Parsed configuration
     """
     sys.path.append(os.path.abspath(".."))
-    print(sys.path)
 
     config["module"] = {
         "provider": False,
@@ -142,6 +141,7 @@ def add_constants(parser, config):
     """
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
+    config["base"] = config["base"].rsplit("/", 1)[0]  # We're nested 1 deep currently, remove that
     config["username"] = getpass.getuser()
     config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
 
@@ -515,6 +515,11 @@ def start(parser, arg):
     add_options(parser, input_config, config)
     verify_options(parser, config)
 
+    if config["module"]["application"]:
+        # Add the location of the application container image
+        # Required here, for possible integration during infrastructure phase
+        application.set_container_location(config)
+
     return config
 
 
@@ -531,24 +536,25 @@ def add_options(parser, input_config, config):
     # Get the options from each module
     if config["module"]["application"]:
         setting = application.add_options(config)
-        setting.append("benchmark")
+        [s.append("benchmark") for s in setting]
         settings.append(setting)
     if config["module"]["execution_model"]:
         setting = execution_model.add_options(config)
-        setting.append("execution_model")
+        [s.append("execution_model") for s in setting]
         settings.append(setting)
     if config["module"]["provider"]:
         setting = infrastructure.add_options(config)
-        setting.append("infrastructure")
+        [s.append("infrastructure") for s in setting]
         settings.append(setting)
     if config["module"]["resource_manager"]:
         setting = resource_manager.add_options(config)
-        setting.append("benchmark")
+        [s.append("benchmark") for s in setting]
         settings.append(setting)
 
     # Parse / verify the options, and add to config
-    for s in settings:
-        option_check(parser, input_config, config, s[5], s[0], s[1], s[2], s[3], s[4])
+    for per_module_settings in settings:
+        for s in per_module_settings:
+            option_check(parser, input_config, config, s[5], s[0], s[1], s[2], s[3], s[4])
 
 
 def verify_options(parser, config):

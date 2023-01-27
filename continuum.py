@@ -91,13 +91,6 @@ def main(args):
     Args:
         args (Namespace): Argparse object
     """
-    # TODO: Integrate this into add_options?
-    if args.config["module"]["application"]:
-        application.set_container_location(arguments.config)
-
-    # TODO: Integrate this into the configuration_parser.py workflow
-    configuration_parser.print_config(args.config)
-
     machines = infrastructure.start(args.config)
 
     if args.config["module"]["resource_manager"]:
@@ -138,7 +131,8 @@ if __name__ == "__main__":
 
     arguments = parser_obj.parse_args()
 
-    # Set loggers
+    # Set loggers, print current config
     set_logging(arguments)
+    configuration_parser.print_config(arguments.config)
 
     main(arguments)
