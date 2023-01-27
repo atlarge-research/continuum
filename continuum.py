@@ -15,11 +15,12 @@ import socket
 import getpass
 import importlib
 
+from application import application
+from benchmark import benchmark
 from configuration_parser import configuration_parser
+from execution_model import execution_model
 from infrastructure import infrastructure
 from resource_manager import resource_manager
-from benchmark import benchmark
-from execution_model import execution_model
 
 
 def make_wide(formatter, w=120, h=36):
@@ -108,7 +109,7 @@ def dynamic_import(config):
     }
 
     # Check if infrastructure provider directory exists
-    dirs = [d for d in os.walk("infrastructure")][0][1]
+    dirs = list(os.walk("infrastructure"))[0][1]
     dirs = [d for d in dirs if d[0] != "_"]
     if config["infrastructure"]["provider"] in dirs:
         config["module"]["provider"] = importlib.import_module(
@@ -124,7 +125,7 @@ def dynamic_import(config):
     if not config["infrastructure"]["infra_only"]:
         # Check if resource manager directory exists
         # Not all RM have modules (e.g., mist, none)
-        dirs = [d for d in os.walk("resource_manager")][0][1]
+        dirs = list(os.walk("resource_manager"))[0][1]
         dirs = [d for d in dirs if d[0] != "_"]
         if config["benchmark"]["resource_manager"] in dirs:
             config["module"]["resource_manager"] = importlib.import_module(
@@ -140,7 +141,7 @@ def dynamic_import(config):
 
         if "execution_model" in config:
             # Check if resource manager directory exists
-            dirs = [d for d in os.walk("execution_model")][0][1]
+            dirs = list(os.walk("execution_model"))[0][1]
             dirs = [d for d in dirs if d[0] != "_"]
             if config["execution_model"]["model"] in dirs:
                 config["module"]["execution_model"] = importlib.import_module(
@@ -154,7 +155,7 @@ def dynamic_import(config):
                 sys.exit()
 
         # Check if infrastructure provider directory exists
-        dirs = [d for d in os.walk("application")][0][1]
+        dirs = list(os.walk("application"))[0][1]
         dirs = [d for d in dirs if d[0] != "_"]
         if config["benchmark"]["application"] in dirs:
             config["module"]["application"] = importlib.import_module(
@@ -204,22 +205,26 @@ def main(args):
         args (Namespace): Argparse object
     """
     dynamic_import(arguments.config)
-
     add_constants(arguments.config)
-    benchmark.set_container_location(arguments.config)
+
+    if args.config["module"]["application"]:
+        application.set_container_location(arguments.config)
+
     configuration_parser.print_config(args.config)
 
     machines = infrastructure.start(args.config)
 
-    if not args.config["infrastructure"]["infra_only"]:
-        if args.config["module"]["resource_manager"]:
-            resource_manager.start(args.config, machines)
+    if args.config["module"]["resource_manager"]:
+        resource_manager.start(args.config, machines)
 
-        if args.config["module"]["execution_model"]:
-            execution_model.start(args.config, machines)
+    if args.config["module"]["execution_model"]:
+        execution_model.start(args.config, machines)
 
-        if not args.config["benchmark"]["resource_manager_only"]:
-            benchmark.start(args.config, machines)
+    if (
+        not args.config["infrastructure"]["infra_only"]
+        and not args.config["benchmark"]["resource_manager_only"]
+    ):
+        benchmark.start(args.config, machines)
 
     if args.config["infrastructure"]["delete"]:
         infrastructure.delete_vms(args.config, machines)

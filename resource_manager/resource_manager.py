@@ -2,8 +2,6 @@
 Select the correct resource manager, install required software and set them up.
 """
 
-from .kubeedge import kubeedge
-from .kubernetes import kubernetes
 from .endpoint import endpoint
 
 

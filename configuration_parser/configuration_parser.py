@@ -336,7 +336,7 @@ def benchmark(parser, config, new):
         "kubeedge",
         "mist",
         "none",
-        "kubernetes-control",
+        "kubernetes_control",
     ]
 
     settings = [

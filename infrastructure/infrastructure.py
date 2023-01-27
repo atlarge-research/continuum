@@ -10,7 +10,6 @@ import string
 import numpy as np
 
 from . import machine as m
-from . import ansible
 from . import network
 
 
@@ -436,7 +435,8 @@ def docker_registry(config, machines):
     images = list(config["images"].values())
 
     # TODO This is RM specific, move this to the RM code
-    if config["benchmark"]["resource_manager"] == "kubernetes-control":
+    #      Move this to the provider via interface call
+    if config["benchmark"]["resource_manager"] == "kubernetes_control":
         images_kube = [
             "redplanet00/kube-proxy:v1.25.3",
             "redplanet00/kube-controller-manager:v1.25.3",

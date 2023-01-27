@@ -300,7 +300,7 @@ def move_registry(config, machines):
     """
     # Determine to new location of the registry
     ssh = None
-    if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubernetes-control"]:
+    if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubernetes_control"]:
         ssh = config["cloud_ssh"][0]
     elif config["benchmark"]["resource_manager"] in ["mist"]:
         ssh = config["edge_ssh"][0]
@@ -404,7 +404,7 @@ def set_registry(config, machines):
 
     # Determine to new location of the registry
     registry = None
-    if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubernetes-control"]:
+    if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubernetes_control"]:
         registry = machines[0].cloud_controller_ips_internal[0] + ":5000"
     elif config["benchmark"]["resource_manager"] in ["mist"]:
         registry = machines[0].edge_ips_internal[0] + ":5000"
@@ -486,7 +486,7 @@ def base_install(config, machines):
         # so we still have to pull automatically for them.
         if (
             config["benchmark"]["resource_manager"]
-            in ["kubernetes", "kubeedge", "kubernetes-control"]
+            in ["kubernetes", "kubeedge", "kubernetes_control"]
             and config["infrastructure"]["endpoint_nodes"] > 0
         ):
             base_names = [
