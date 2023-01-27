@@ -536,19 +536,23 @@ def add_options(parser, input_config, config):
     # Get the options from each module
     if config["module"]["application"]:
         setting = application.add_options(config)
-        [s.append("benchmark") for s in setting]
+        for s in setting:
+            s.append("benchmark")
         settings.append(setting)
     if config["module"]["execution_model"]:
         setting = execution_model.add_options(config)
-        [s.append("execution_model") for s in setting]
+        for s in setting:
+            s.append("execution_model")
         settings.append(setting)
     if config["module"]["provider"]:
         setting = infrastructure.add_options(config)
-        [s.append("infrastructure") for s in setting]
+        for s in setting:
+            s.append("infrastructure")
         settings.append(setting)
     if config["module"]["resource_manager"]:
         setting = resource_manager.add_options(config)
-        [s.append("benchmark") for s in setting]
+        for s in setting:
+            s.append("benchmark")
         settings.append(setting)
 
     # Parse / verify the options, and add to config
