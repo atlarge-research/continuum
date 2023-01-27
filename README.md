@@ -191,7 +191,7 @@ We assume the operating system is Ubuntu 20.04, either natively or via a VM.
         
     3. Enforce this new network policy with `sudo netplan generate` and `sudo netplan apply`
     4. Use `brctl show` to check that bridge br0 now exists, and `ip a` to check that ens3 does not have a listed ip anymore, but br0 does instead.
-    5. If your ip listed under “addresses” does not start with 192.168, one change in the framework is required: Edit main.py (vim main.py), search for the “add_constants” function and change config[”prefixIP”] to your prefix (e.g., for this example “10.0”
+    5. If your ip listed under “addresses” does not start with 192.168, one change in the framework is required: Edit continuum.py (vim continuum.py), search for the “add_constants” function and change config[”prefixIP”] to your prefix (e.g., for this example “10.0”
     6. Enable IP forwarding from VMs to the bridge
         
         ```bash
@@ -211,9 +211,9 @@ We assume the operating system is Ubuntu 20.04, either natively or via a VM.
 ### Part 3: Use the framework
 Inside the continuum framework:
 
-1. Check the input parameters of the framework: `python3 main.py -h`.
+1. Check the input parameters of the framework: `python3 continuum.py -h`.
 2. The configuration files are stored in /configuration. Check /configuration/template.cfg for the template that these configuration files follow.
-3. Run one of these configurations, such as a simple edge computing benchmark: `python3 main.py -v configuration/bench_edge.cfg`
+3. Run one of these configurations, such as a simple edge computing benchmark: `python3 continuum.py -v configuration/bench_edge.cfg`
 4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
 
 ### Part 4: Install OpenFaaS
@@ -222,7 +222,7 @@ For the moment, we only allow OpenFaaS to be installed outside of the framework.
 
 1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag and `model = openFaas` in section `execution_model` is critical here.
     ```bash
-    python3 main.py configuration/bench_openfaas.cfg
+    python3 continuum.py configuration/bench_openfaas.cfg
     ```
 
 2. From your host-system ssh onto the `cloud_controller` node, for example:

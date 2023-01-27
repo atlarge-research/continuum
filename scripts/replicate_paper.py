@@ -188,7 +188,7 @@ ENDPOINTS/WORKER        %s""" % (
 
                 command = [
                     "python3",
-                    "main.py",
+                    "continuum.py",
                     "-v",
                     "configuration/experiment_endpoint_scaling/" + config + str(endpoint) + ".cfg",
                 ]
@@ -421,7 +421,7 @@ CONFIGS                 %s""" % (
         for config, mode, core, endpoint in zip(
             self.configs, self.modes, self.cores, self.endpoints
         ):
-            command = ["python3", "main.py", "-v", self.config_path + config]
+            command = ["python3", "continuum.py", "-v", self.config_path + config]
             command = [str(c) for c in command]
 
             run = {
@@ -646,7 +646,7 @@ QUOTA                   %s""" % (
                 config = "cloud_%ims_cpu%s.cfg" % (latency, cpu_str)
                 command = [
                     "python3",
-                    "main.py",
+                    "continuum.py",
                     "-v",
                     "configuration/experiment_latency_variation/" + config,
                 ]
@@ -769,7 +769,7 @@ MODES                   %s""" % (
                 config = "%s_%s.cfg" % (provider, mode)
                 command = [
                     "python3",
-                    "main.py",
+                    "continuum.py",
                     "-v",
                     "configuration/experiment_provider/" + config,
                 ]
@@ -999,7 +999,7 @@ ENDPOINTS/WORKER        %s""" % (
 
                 command = [
                     "python3",
-                    "main.py",
+                    "continuum.py",
                     "-v",
                     "configuration/experiment_serverless/" + config,
                 ]

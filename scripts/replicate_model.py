@@ -17,8 +17,8 @@ from matplotlib import colors
 
 # pylint: disable=wrong-import-position,import-error
 
-sys.path.append(os.path.abspath("../configuration_parser"))
-import start as confparser
+sys.path.append(os.path.abspath(".."))
+from configuration_parser import configuration_parser
 
 # pylint: enable=wrong-import-position,import-error
 
@@ -153,7 +153,7 @@ class ModelLocal(Model):
 
     def __init__(self, args, parser):
         logging.info("Parse local config")
-        config = confparser.start(parser, "configuration/model/local.cfg")
+        config = configuration_parser.start(parser, "configuration/model/local.cfg")
         Model.__init__(self, args, config)
 
     def __repr__(self):
@@ -184,7 +184,7 @@ T_proc      norm. processing time   %.2f sec
         if output == []:
             command = [
                 "python3",
-                "main.py",
+                "continuum.py",
                 "-v",
                 "configuration/model/local_normalize.cfg",
             ]
@@ -245,7 +245,7 @@ To satisfy: (T_proc * R) < (C_e * Q_e)
             output, _ = self.check_resume(local=True)
 
         if output == []:
-            command = ["python3", "main.py", "-v", "configuration/model/local.cfg"]
+            command = ["python3", "continuum.py", "-v", "configuration/model/local.cfg"]
             output, _ = self.execute(command)
 
         # Parse output of endpoint to dataframe
@@ -258,7 +258,7 @@ class ModelOffload(Model):
 
     def __init__(self, args, parser):
         logging.info("Parse offload config")
-        config = confparser.start(parser, "configuration/model/offload.cfg")
+        config = configuration_parser.start(parser, "configuration/model/offload.cfg")
         Model.__init__(self, args, config)
 
     def __repr__(self):
@@ -303,7 +303,7 @@ T_pre       norm. preproc time      %.2f sec
         if output == []:
             command = [
                 "python3",
-                "main.py",
+                "continuum.py",
                 "-v",
                 "configuration/model/offload_normalize.cfg",
             ]
@@ -428,7 +428,7 @@ To satisfy: D < B
             output, _ = self.check_resume(local=False)
 
         if output == []:
-            command = ["python3", "main.py", "-v", "configuration/model/offload.cfg"]
+            command = ["python3", "continuum.py", "-v", "configuration/model/offload.cfg"]
             output, _ = self.execute(command)
 
         # Parse output of worker to dataframe

@@ -4,7 +4,7 @@ You can run Continuum with all these configurations using the following command:
 
 ```bash
 for i in configuration/tests/<qemu OR terraform>/*.cfg; do
-    python3 main.py $i || break
+    python3 continuum.py $i || break
 done
 ```
 A run is successful if it prints one or multiple `ssh vm_name@ip_address -i path/to/ssh/key` at the end.

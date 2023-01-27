@@ -63,5 +63,6 @@ sysctl -p /etc/sysctl.conf
 ```
 
 ## Updating network configuration
-Finally, update the framework to reflect your network bridge settings. In `KubeEdge/main.py`, update the `prefixIP` constant at the top if the created VMs should have a different IP range. 
-In `KubeEdge/qemu_generate.py`, search for `path: /etc/netplan/new-config.yaml` and update the nameserver addresses if needed. If network errors still occur, check the `NOTE` comment in this same file. We assume the network bridge is called `br0`, otherwise in this file change all occurences into the name of your network bridge.
+Finally, use the correct configuration parameters to reflect your network settings using settings "prefixIP", "middleIP", and "middleIP_base". 
+Here, if your IP range is AAA.BBB.CCC.DDD, prefixIP=AAA.BBB, and middleIP(_base)=CCC. DDD is set between 2 and 252 for all subranges.
+We assume the network bridge is called `br0`, otherwise change all occurences of `br0` in the framework (e.g., using grep).
