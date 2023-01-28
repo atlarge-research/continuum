@@ -98,6 +98,8 @@ def main(args):
     if args.config["module"]["execution_model"]:
         execution_model.start(args.config, machines)
 
+    # TODO: Change this do just 'if benchmark in config'
+    #       All this not not is too difficult
     if (
         not args.config["infrastructure"]["infra_only"]
         and not args.config["benchmark"]["resource_manager_only"]

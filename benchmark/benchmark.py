@@ -893,37 +893,37 @@ def start(config, machines):
     Returns:
         list(str): Raw output from the benchmark
     """
-    is_mist = config["benchmark"]["resource_manager"] == "mist"
-    is_baremetal = config["infrastructure"]["provider"] == "baremetal"
-    is_serverless = False
-    if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
-        is_serverless = True
+    # is_mist = config["benchmark"]["resource_manager"] == "mist"
+    # is_baremetal = config["infrastructure"]["provider"] == "baremetal"
+    # is_serverless = False
+    # if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
+    #     is_serverless = True
 
-    # Start the worker
-    starttime = 0.0
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        if not is_mist:
-            if config["benchmark"]["cache_worker"]:
-                cache_worker(config, machines)
+    # # Start the worker
+    # starttime = 0.0
+    # if config["mode"] == "cloud" or config["mode"] == "edge":
+    #     if not is_mist:
+    #         if config["benchmark"]["cache_worker"]:
+    #             cache_worker(config, machines)
 
-            if is_baremetal:
-                container_names_baremetal = start_worker_baremetal(config, machines)
-            elif is_serverless:
-                start_worker_serverless(config, machines)
-            else:
-                starttime = start_worker(config, machines)
-        else:
-            container_names_mist = start_worker_mist(config, machines)
+    #         if is_baremetal:
+    #             container_names_baremetal = start_worker_baremetal(config, machines)
+    #         elif is_serverless:
+    #             start_worker_serverless(config, machines)
+    #         else:
+    #             starttime = start_worker(config, machines)
+    #     else:
+    #         container_names_mist = start_worker_mist(config, machines)
 
-    # Start the endpoint
-    container_names = []
-    if config["infrastructure"]["endpoint_nodes"]:
-        if is_baremetal:
-            container_names = start_endpoint_baremetal(config, machines)
-        else:
-            container_names = start_endpoint(config, machines)
+    # # Start the endpoint
+    # container_names = []
+    # if config["infrastructure"]["endpoint_nodes"]:
+    #     if is_baremetal:
+    #         container_names = start_endpoint_baremetal(config, machines)
+    #     else:
+    #         container_names = start_endpoint(config, machines)
 
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+    #     wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
     if (config["mode"] == "cloud" or config["mode"] == "edge") and not is_serverless:
