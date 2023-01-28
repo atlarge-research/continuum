@@ -72,7 +72,7 @@ def dynamic_import(parser, config):
     }
 
     # Check if infrastructure provider directory exists
-    dirs = list(os.walk("infrastructure"))[0][1]
+    dirs = list(os.walk("../infrastructure"))[0][1]
     dirs = [d for d in dirs if d[0] != "_"]
     if config["infrastructure"]["provider"] in dirs:
         config["module"]["provider"] = importlib.import_module(
@@ -88,7 +88,7 @@ def dynamic_import(parser, config):
     if not config["infrastructure"]["infra_only"]:
         # Check if resource manager directory exists
         # Not all RM have modules (e.g., mist, none)
-        dirs = list(os.walk("resource_manager"))[0][1]
+        dirs = list(os.walk("../resource_manager"))[0][1]
         dirs = [d for d in dirs if d[0] != "_"]
         if config["benchmark"]["resource_manager"] in dirs:
             config["module"]["resource_manager"] = importlib.import_module(
@@ -104,7 +104,7 @@ def dynamic_import(parser, config):
 
         if "execution_model" in config:
             # Check if resource manager directory exists
-            dirs = list(os.walk("execution_model"))[0][1]
+            dirs = list(os.walk("../execution_model"))[0][1]
             dirs = [d for d in dirs if d[0] != "_"]
             if config["execution_model"]["model"] in dirs:
                 config["module"]["execution_model"] = importlib.import_module(
@@ -118,7 +118,7 @@ def dynamic_import(parser, config):
                 sys.exit()
 
         # Check if infrastructure provider directory exists
-        dirs = list(os.walk("application"))[0][1]
+        dirs = list(os.walk("../application"))[0][1]
         dirs = [d for d in dirs if d[0] != "_"]
         if config["benchmark"]["application"] in dirs:
             config["module"]["application"] = importlib.import_module(
@@ -245,9 +245,13 @@ def parse_infrastructure(parser, input_config, config):
 
     config[sec] = {}
 
+    # Get a list of all providers
+    providers = list(os.walk("../infrastructure"))[0][1]
+    providers = [d for d in providers if d[0] != "_"]
+
     settings = [
         # Option | Type | Condition | Mandatory | Default
-        ["provider", str, lambda x: x in ["qemu", "gcp", "baremetal"], True, None],
+        ["provider", str, lambda x: x in providers, True, None],
         ["infra_only", bool, lambda x: x in [True, False], False, False],
         ["cloud_nodes", int, lambda x: x >= 0, False, 0],
         ["edge_nodes", int, lambda x: x >= 0, False, 0],
@@ -417,20 +421,24 @@ def parse_benchmark(parser, input_config, config):
 
     config[sec] = {}
 
-    l_resource_manager = lambda x: x in [
-        "kubernetes",
-        "kubeedge",
-        "mist",
-        "none",
-        "kubernetes_control",
-    ]
+    # Get a list of all resource managers
+    rms = list(os.walk("../resource_manager"))[0][1]
+    rms = [d for d in rms if d[0] != "_"]
+    rms.append("mist")
+    rms.append("none")
+    if "endpoint" in rms:
+        rms.remove("endpoint")
+
+    # Get a list of all apps
+    apps = list(os.walk("../application"))[0][1]
+    apps = [d for d in apps if d[0] != "_"]
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
-        ["resource_manager", str, l_resource_manager, True, None],
+        ["resource_manager", str, lambda x: x in rms, True, None],
         ["resource_manager_only", bool, lambda x: x in [True, False], False, None],
         ["docker_pull", bool, lambda x: x in [True, False], False, None],
-        ["application", str, lambda x: x in ["image_classification", "empty"], True, None],
+        ["application", str, lambda x: x in apps, True, None],
     ]
 
     for s in settings:
@@ -476,10 +484,12 @@ def parse_execution_model(parser, input_config, config):
     if not input_config.has_section(sec):
         return
 
+    # Get a list of all execution models
+    models = list(os.walk("../execution_model"))[0][1]
+    models = [d for d in models if d[0] != "_"]
+
     config[sec] = {}
-    option_check(
-        parser, input_config, config, sec, "model", str, lambda x: x in ["openFaas"], True, None
-    )
+    option_check(parser, input_config, config, sec, "model", str, lambda x: x in models, True, None)
 
 
 def start(parser, arg):
