@@ -3,6 +3,7 @@
 
 [MASTER]
 jobs=0
+fail-under=10
 
 # consider-using-f-string:   We are not using f strings
 # trailing-whitespace:       These are handled by black. 

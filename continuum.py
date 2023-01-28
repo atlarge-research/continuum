@@ -12,7 +12,6 @@ import sys
 import logging
 import time
 
-from application import application
 from benchmark import benchmark
 from configuration_parser import configuration_parser
 from execution_model import execution_model

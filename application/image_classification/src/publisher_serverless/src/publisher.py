@@ -51,6 +51,7 @@ def send():
             timeout=100000,
         )
 
+        # pylint: disable=broad-except
         try:
             response = response.text
             return_line = response.split("\n")[-2]
@@ -61,6 +62,7 @@ def send():
             print("ERROR: Can't decode the output, something went wrong")
             print(response.text)
             sys.exit()
+        # pylint: enable=broad-except
 
         t_respone = time.time_ns()
         print("Latency (ns): %i" % (t_respone - t_old))
