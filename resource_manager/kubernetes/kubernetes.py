@@ -17,7 +17,8 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    return []
+    settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
+    return settings
 
 
 def verify_options(parser, config):

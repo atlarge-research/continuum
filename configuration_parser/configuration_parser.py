@@ -464,7 +464,6 @@ def parse_benchmark(parser, input_config, config):
         ["application_endpoint_cpu", float, lambda x: x >= 0.1, False, ec],
         ["application_endpoint_memory", float, lambda x: x >= 0.1, False, em],
         ["applications_per_worker", int, lambda x: x >= 1, False, 1],
-        ["cache_worker", bool, lambda x: x in [True, False], False, False],
         ["observability", bool, lambda x: x in [True, False], False, False],
     ]
 
