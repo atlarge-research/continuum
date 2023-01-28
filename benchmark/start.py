@@ -666,19 +666,13 @@ def start(config, machines):
         wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
-    if (config["mode"] == "cloud" or config["mode"] == "edge") and config["benchmark"][
-        "application"
-    ] != "minecraft":
+    if config["mode"] == "cloud" or config["mode"] == "edge":
+        if config["benchmark"]["application"] == "minecraft":
+            stop_opencraft(config, machines)
         if config["benchmark"]["resource_manager"] != "mist":
             wait_worker_completion(config, machines)
         else:
             wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_mist)
-
-    # TODO: properly embed into logic
-    stop_opencraft(config, machines)
-    logs = get_logs_opencraft(config, machines)
-    process_logs_opencraft(logs, ["tick"])
-    sys.exit()
 
     # Now get raw output
     endpoint_output = []
@@ -736,49 +730,3 @@ def stop_opencraft(config, machines):
         if any(["input is not a terminal or the right kind of file" not in e for e in error]):
             logging.error(error)
             sys.exit()
-
-
-def get_logs_opencraft(config, machines) -> dict:
-    # retrieve logs from pod
-    num_clouds = (
-        config["infrastructure"]["cloud_nodes"] - 1
-    )  # there is always a cloud controller on which no server is deployed
-    num_edges = config["infrastructure"]["edge_nodes"]
-    if num_clouds > 0 and num_edges > 0:
-        logging.error("Minecraft currently only handles setups with servers in cloud xor edge")
-        sys.exit()
-
-    number_server = max(num_clouds, num_edges)
-    app_name = config["benchmark"]["application"].replace("_", "-")
-
-    logs = {}
-    for i in range(number_server):
-        command = f"kubectl logs {app_name}-{i}"
-        output, error = machines[0].process(
-            config, (command), shell=True, ssh=config["cloud_ssh"][0]
-        )[0]
-        if error:
-            logging.error(error)
-            sys.exit()
-        logs[f"{app_name}-{i}"] = output
-    return logs
-
-
-def process_logs_opencraft(logs: dict, metrics: list) -> None:
-    ret = {}
-
-    # filter output by metrics
-    for k, v in logs.items():
-        idx = 0
-        # skip forward to header, which contains the labels of the columns (timestamp, key, value)
-        # the first rows are only the logs of the server console which we don't care about :O
-        while "timestamp" not in v[idx]:
-            idx += 1
-        filtered_res = f"{v[idx]}"
-        for i in range(idx + 1, len(v)):
-            a = v[i].split()
-            if a[1] in metrics:
-                filtered_res += f"{v[i]}"
-        ret[k] = filtered_res
-    # put into csv file
-    return filtered_res

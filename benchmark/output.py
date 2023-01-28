@@ -88,6 +88,8 @@ def get_worker_output(config, machines):
             machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
 
             command = ["kubectl", "get", "pod", container, "-o", "yaml"]
+        elif config["benchmark"]["application"] == "minecraft":
+            command = ["kubectl", "logs", container]
 
         commands.append(command)
 
@@ -447,6 +449,45 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
 
     return endpoint_metrics
 
+def gather_worker_metrics_minecraft(worker_output):
+    worker_metrics = []
+    if worker_output == []:
+        return worker_metrics
+
+    worker_set = {
+        "worker_id": None,
+        "ticks_avg": None,
+        "ticks_stdev": None,
+    }
+
+    for i, out in enumerate(worker_output):
+        logging.info("Parse output from worker node %i", i)
+        w_metrics = copy.deepcopy(worker_set)
+        w_metrics["worker_id"] = i
+
+        # skip forward to header, which contains the labels of the columns (timestamp, key, value)
+        # the first rows are only the logs of the server console which we don't care about :O
+        idx = 0
+        while "timestamp" not in out[idx]:
+            idx += 1
+
+        # filter data based on tick
+        filtered_data = [out[idx].split()]
+        for j in range(idx+1, len(out)):
+            # change the following line to get more metrics captured
+            row_split = out[j].split()
+            if "tick" == row_split[1]:
+                filtered_data.append(row_split)
+
+        # calculate metrics
+        df = pd.DataFrame(filtered_data[1:], columns=filtered_data[0])
+        df["value"] = pd.to_numeric(df["value"])
+        w_metrics["ticks_avg"] = df["value"].mean()
+        w_metrics["ticks_stdev"] = df["value"].std()
+
+        worker_metrics.append(w_metrics)
+
+    return sorted(worker_metrics, key=lambda x: x["worker_id"])
 
 def gather_metrics(machines, config, worker_output, endpoint_output, container_names, starttime):
     """Process the raw output to lists of dicts
@@ -486,9 +527,12 @@ def gather_metrics(machines, config, worker_output, endpoint_output, container_n
         worker_metrics = gather_worker_metrics_image(worker_output)
     elif config["benchmark"]["application"] == "empty":
         worker_metrics = gather_worker_metrics_empty(config, machines, worker_output, starttime)
+    elif config["benchmark"]["application"] == "minecraft":
+        worker_metrics = gather_worker_metrics_minecraft(worker_output)
 
     endpoint_metrics = []
-    if config["infrastructure"]["endpoint_nodes"]:
+    # endpoints do not deliver metrics for Minecraft
+    if config["infrastructure"]["endpoint_nodes"] and config["benchmark"]["application"] != "minecraft":
         endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
 
     return worker_metrics, endpoint_metrics
@@ -592,6 +636,17 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
     else:
         logging.debug("Output in csv format\n%s", repr(df2.to_csv()))
 
+def format_output_minecraft(config, worker_metrics):
+    logging.info("------------------------------------")
+    logging.info("%s OUTPUT", config["mode"].upper())
+    logging.info("------------------------------------")
+    df = pd.DataFrame(worker_metrics)
+    df_no_indices = df.to_string(index=False)
+    logging.info("\n%s", df_no_indices)
+
+    # Print ouput in csv format
+    logging.debug("Output in csv format\n%s", repr(df.to_csv()))
+
 
 def format_output(config, worker_metrics, endpoint_metrics):
     """Format processed output to provide useful insights
@@ -605,3 +660,5 @@ def format_output(config, worker_metrics, endpoint_metrics):
         format_output_image(config, worker_metrics, endpoint_metrics)
     elif config["benchmark"]["application"] == "empty":
         format_output_empty(config, worker_metrics)
+    elif config["benchmark"]["application"] == "minecraft":
+        format_output_minecraft(config, worker_metrics)
