@@ -274,8 +274,8 @@ def delete_old_content(config, machines):
     for machine in machines:
         if machine.is_local:
             command = """\
-rm -rf %s/.continuum/images/*terraform* && \
-rm -rf %s/.continuum/images/.terraform* && \
+rm -rf %s/.continuum/images/*gcp* && \
+rm -rf %s/.continuum/images/.gcp* && \
 rm -rf %s/.continuum/images/*.tf && \
 rm -rf %s/.continuum/cloud && \
 rm -rf %s/.continuum/edge && \

@@ -201,7 +201,7 @@ def create_inventory_vm(config, machines):
     logging.info("Generate Ansible inventory file for VMs")
 
     with open(".tmp/inventory_vms", "w", encoding="utf-8") as f:
-        # TODO: When using Terraform with GCP, host_ip needs to be accessible from the VMs
+        # TODO: When using GCP with Terraform, host_ip needs to be accessible from the VMs
         #       This is not the case when you use a cluster with a headnode and worker nodes
         #       that get internet access via the headnode.
         f.write("[all:vars]\n")
@@ -302,7 +302,7 @@ ansible_user=%s username=%s\n"
                     for name, ip in zip(machine.base_names, machine.base_ips):
                         # The resource manager "kubeedge" has "edge" in the name,
                         # so cloud_kubeedge may be caught as "edge", filter this out.
-                        # Only occurs for Qemu, because Terraform doesn't really use base images.
+                        # Only occurs for Qemu, because GCP doesn't really use base images.
                         # And: Mist computing uses kubeedge base images
                         occurences = len([i.start() for i in re.finditer("edge", name)])
                         is_qemu_kubeedge = int(

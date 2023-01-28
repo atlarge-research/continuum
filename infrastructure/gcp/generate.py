@@ -365,22 +365,3 @@ def start(config, _machines):
     generate_network(config)
     generate_vm(config)
     generate_output(config)
-
-
-# TODO
-# Step 1: Infra
-# - Generate correct configurations, without software installation
-# - Process the output (or manually run terraform output) to print SSH commands to the VMs on GCP
-# - Check if all those steps work within the Continuum framework
-#
-# Step 2: Software
-# - Convince Ansible to work with the Terraform / GCP stack
-# - Update Ansible YML files to work with these VMs
-#   - Think of usernames, network edits, etc.
-#   - What are the infra / os differences between QEMU / TF GCP
-#   - Would be nice to keep using a single .yml file no matter the infra
-# - Check if software works, so rm_only = True
-#
-# Step 3: Benchmark
-# - Check if you can run the benchmark as expected
-# - Compare results with QEMU runs

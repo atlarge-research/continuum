@@ -23,7 +23,7 @@ def generate_tc_commands(config, values, ips, disk):
     throughput = values[2]
 
     network = "ens2"
-    if config["infrastructure"]["provider"] == "terraform":
+    if config["infrastructure"]["provider"] == "gcp":
         network = "ens4"
 
     commands = []

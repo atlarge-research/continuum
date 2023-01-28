@@ -247,7 +247,7 @@ def parse_infrastructure(parser, input_config, config):
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
-        ["provider", str, lambda x: x in ["qemu", "terraform", "baremetal"], True, None],
+        ["provider", str, lambda x: x in ["qemu", "gcp", "baremetal"], True, None],
         ["infra_only", bool, lambda x: x in [True, False], False, False],
         ["cloud_nodes", int, lambda x: x >= 0, False, 0],
         ["edge_nodes", int, lambda x: x >= 0, False, 0],

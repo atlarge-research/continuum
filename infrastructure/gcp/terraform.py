@@ -1,4 +1,4 @@
-"""Create infrastructure by applying a Terraform configuration"""
+"""Create infrastructure for GCP by applying a Terraform configuration"""
 
 import os
 import sys
@@ -63,8 +63,8 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    if config["infrastructure"]["provider"] != "terraform":
-        parser.error("ERROR: Infrastructure provider should be terraform")
+    if config["infrastructure"]["provider"] != "gcp":
+        parser.error("ERROR: Infrastructure provider should be gcp")
 
     sec = "infrastructure"
     if len(config[sec]["gcp_credentials"]) > 0 and config[sec]["gcp_credentials"][-1] == "/":
@@ -73,7 +73,7 @@ def verify_options(parser, config):
 
 def set_ip_names(_config, machines, nodes_per_machine):
     """Set amount of cloud / edge / endpoints nodes per machine, and their usernames.
-    For Terraform with GCP, there is only 1 machine.
+    For GCP with Terraform, there is only 1 machine.
     The IPs are set by GCP, and we only know them after the VMs are started, contrary to QEMU.
     We will set the IPs later.
     The naming scheme is bound to what Terraform can do.
@@ -87,7 +87,7 @@ def set_ip_names(_config, machines, nodes_per_machine):
     logging.info("Set the names of all VMs for each physical machine")
 
     if len(machines) > 1 or len(nodes_per_machine) > 1:
-        logging.error("ERROR: Terraform only uses 1 machine")
+        logging.error("ERROR: GCP/Terraform only uses 1 machine")
         sys.exit()
 
     if nodes_per_machine[0]["cloud"] > 0:
@@ -266,13 +266,13 @@ def copy(config, machines):
 
 
 def netperf_install(config, machines):
-    """Install NetPerf on Terraform.
+    """Install NetPerf on GCP with Terraform.
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info("Install NetPerf on Terraform")
+    logging.info("Install NetPerf on GCP with Terraform")
     command = [
         "ansible-playbook",
         "-i",
