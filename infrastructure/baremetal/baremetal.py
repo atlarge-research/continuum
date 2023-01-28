@@ -29,13 +29,21 @@ def add_options(_config):
     return []
 
 
-def verify_options(_parser, _config):
+def verify_options(parser, config):
     """Verify the config from the module's requirements
 
     Args:
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
+    if (
+        config["infrastructure"]["cloud_nodes"] != 1
+        or config["infrastructure"]["edge_nodes"] != 0
+        or config["infrastructure"]["edge_nodes"] < 1
+    ):
+        parser.error("ERROR: Baremetal only supports #clouds==1 and #endpoints>=1 at the moment")
+    if config["infrastructure"]["external_physical_machines"]:
+        parser.error("ERROR: Baremetal only supports 1 physical machine at the moment")
 
 
 def update_ip(config, middle_ip, postfix_ip):
@@ -69,13 +77,6 @@ def set_ip_names(config, machines, nodes_per_machine):
             the number of those machines per physical node
     """
     logging.info("Set the IPs and names of all VMs for each physical machine - BAREMETAL")
-    if config["infrastructure"]["cloud_nodes"] != 1 or config["infrastructure"]["edge_nodes"] < 1:
-        logging.error("ERROR: Baremetal only supports #clouds==1 and #endpoints>0 at the moment")
-        sys.exit()
-    elif len(machines) > 1:
-        logging.error("ERROR: Baremetal only supports 1 physical machine at the moment")
-        sys.exit()
-
     middle_ip = config["infrastructure"]["middleIP"]
     postfix_ip = config["postfixIP_lower"]
 
