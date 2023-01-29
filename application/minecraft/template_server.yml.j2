@@ -4,7 +4,9 @@ metadata:
   name: {{ app_name }}-%ITEM
   labels:
     app.kubernetes.io/name: {{ app_name }}-%ITEM
+    applicationRunning: 'minecraft-server'
 spec:
+  restartPolicy: Never # important so that server can be stopped without making K8 recreate the pod
   containers:
   - name: {{ app_name }}
     image: {{ image }}
@@ -16,25 +18,6 @@ spec:
       requests:
         memory: "{{ memory_req }}Mi"
         cpu: {{ cpu_req }}
-    env:
-    - name: EULA
-      value: "true"
-    - name: ONLINE_MODE
-      value: "false"
-    - name: VERSION
-      value: "1.19"
-    - name: MODE
-      value: "creative"
-    - name: LEVEL_TYPE
-      value: "minecraft:flat"
-    - name: GENERATE_STRUCTURES
-      value: "false"
-    - name: SPAWN_MONSTERS
-      value: "false"
-    - name: SPAWN_NPCS
-      value: "false"
-    - name: OPS
-      value: "Linu_x"
 
 ---
 apiVersion: v1

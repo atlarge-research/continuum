@@ -5,7 +5,7 @@
     - name: Checkout Opencraft
       git:
         repo: 'git@github.com:atlarge-research/opencraft-dev.git'
-        version: '27-building-dockerfile-fails' # TODO: once merged, change to dev
+        version: 'dev'
         dest: '/tmp/opencraft'
 
     - name: Copy configuration file to server directory
@@ -14,11 +14,33 @@
         dest: '/tmp/opencraft/opencraft.yml'
         remote_src: true
 
+    - name: Copy start file to server directory
+      copy:
+        src: './start.sh'
+        dest: '/tmp/opencraft/start.sh'
+        remote_src: true
+
+    - name: Change image to Alpine # Amazon Linux 2 does not have tools installed to kill processes
+      lineinfile:
+        path: '/tmp/opencraft/Dockerfile'
+        search_string: 'FROM amazoncorretto:8'
+        line: 'FROM amazoncorretto:8-alpine'
+
     - name: Add configuration file to dockerfile
       blockinfile:
         path: '/tmp/opencraft/Dockerfile'
         insertbefore: 'CMD ["java", "-jar", "opencraft.jar"]'
-        block: 'COPY ./opencraft.yml /config/opencraft.yml'
+        block: |
+            COPY --from=builder /usr/src/opencraft/start.sh /usr/local/bin/start.sh
+            RUN chmod +x /usr/local/bin/start.sh
+            COPY ./opencraft.yml /config/opencraft.yml
+
+    - name: Output server values # Amazon Linux 2 does not have tools installed to kill processes
+      lineinfile:
+        path: '/tmp/opencraft/Dockerfile'
+        search_string: 'CMD ["java", "-jar", "opencraft.jar"]'
+        line: 'CMD ["start.sh"]'
+
 
     - name: Build and push image
       shell:
