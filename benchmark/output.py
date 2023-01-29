@@ -451,6 +451,15 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
 
 
 def gather_worker_metrics_minecraft(worker_output):
+    """Calculates the average tick rate and its standard deviation per server.
+    The server captures more than just the tick rate so this method can be adapted to get more metrics.
+    Args:
+        worker_output (list(list(str))): Output of each container that ran in cloud/edge.
+        Element in outer list is the node, element in inner list is a line in the output.
+
+    Returns:
+        list(dict): List of parsed output for each endpoint
+    """
     worker_metrics = []
     if worker_output == []:
         return worker_metrics
@@ -474,15 +483,16 @@ def gather_worker_metrics_minecraft(worker_output):
 
         # filter data based on tick
         filtered_data = [out[idx].split()]
-        for j in range(idx + 1, len(out)):
+        for row_idx in range(idx + 1, len(out)):
             # change the following line to get more metrics captured
-            row_split = out[j].split()
+            row_split = out[row_idx].split()
             if "tick" == row_split[1]:
                 filtered_data.append(row_split)
 
         # calculate metrics
         df = pd.DataFrame(filtered_data[1:], columns=filtered_data[0])
         df["value"] = pd.to_numeric(df["value"])
+        # filter before the following lines if you have more than one metric
         w_metrics["ticks_avg"] = df["value"].mean()
         w_metrics["ticks_stdev"] = df["value"].std()
 
@@ -643,6 +653,12 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
 
 
 def format_output_minecraft(config, worker_metrics):
+    """Pretty-prints the metrics for minecraft into CSV.
+
+    Args:
+        config (dict): Parsed configuration
+        worker_metrics (list(dict)): Metrics per worker node
+    """
     logging.info("------------------------------------")
     logging.info("%s OUTPUT", config["mode"].upper())
     logging.info("------------------------------------")
@@ -659,7 +675,7 @@ def format_output(config, worker_metrics, endpoint_metrics):
 
     Args:
         config (dict): Parsed configuration
-        sub_metrics (list(dict)): Metrics per worker node
+        worker_metrics (list(dict)): Metrics per worker node
         endpoint_metrics (list(dict)): Metrics per endpoint
     """
     if config["benchmark"]["application"] == "image_classification":

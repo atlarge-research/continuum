@@ -250,11 +250,13 @@ def start_worker(config, machines):
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
-    command = ("kubectl wait pods -n default -l applicationRunning=minecraft-server --for condition=Ready --timeout=90s")
-    output, error = machines[0].process(
-            config, command, shell=True, ssh=config["cloud_ssh"][0]
-        )[0]
-    machines[0].process(config, command, shell=True, )
+    command = "kubectl wait pods -n default -l applicationRunning=minecraft-server --for condition=Ready --timeout=90s"
+    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+    machines[0].process(
+        config,
+        command,
+        shell=True,
+    )
     if output:
         logging.info(output)
     if error:
@@ -262,21 +264,7 @@ def start_worker(config, machines):
         sys.exit()
 
     if config["benchmark"]["application"] == "minecraft":
-        # check log for "Ready for connections"
-        # get pods
-        command = ("kubectl get pods -l applicationRunning=minecraft-server --no-headers")
-        output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
-        
-        # check all servers if they contain
-        for line in output:
-            pod_name = line.split()[0]
-            while True:
-                command = (f"kubectl logs {pod_name}")
-                output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
-                if any("Ready for connections" in o for o in output):
-                    break
-
-
+        busy_wait_minecraft_server(config, machines)
 
     logging.info("Deployed %i %s applications", worker_apps, config["mode"])
     logging.info("Wait for subscriber applications to be scheduled and running")
@@ -328,6 +316,37 @@ def start_worker(config, machines):
 
     return starttime
 
+
+def busy_wait_minecraft_server(config, machines):
+    """Scans the logs of all minecraft servers for "Ready for connections" using busy waiting.
+    There's no timeout, so the application might hang if the servers never become ready.
+
+    Returns once all servers are running.
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    # get pods
+    command = "kubectl get pods -l applicationRunning=minecraft-server --no-headers"
+    output, error = machines[0].process(
+        config, command, shell=True, ssh=config["cloud_ssh"][0]
+    )[0]
+
+    # check all servers if they contain
+    for line in output:
+        pod_name = line.split()[0]
+        while True:
+            command = f"kubectl logs {pod_name}"
+            output, error = machines[0].process(
+                config, command, shell=True, ssh=config["cloud_ssh"][0]
+            )[0]
+            if error:
+                logging.error(error)
+                exit()
+
+            if any("Ready for connections" in o for o in output):
+                break
 
 def start_worker_mist(config, machines):
     """Start running the mist worker subscriber containers using Docker.
