@@ -449,6 +449,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
 
     return endpoint_metrics
 
+
 def gather_worker_metrics_minecraft(worker_output):
     worker_metrics = []
     if worker_output == []:
@@ -473,7 +474,7 @@ def gather_worker_metrics_minecraft(worker_output):
 
         # filter data based on tick
         filtered_data = [out[idx].split()]
-        for j in range(idx+1, len(out)):
+        for j in range(idx + 1, len(out)):
             # change the following line to get more metrics captured
             row_split = out[j].split()
             if "tick" == row_split[1]:
@@ -488,6 +489,7 @@ def gather_worker_metrics_minecraft(worker_output):
         worker_metrics.append(w_metrics)
 
     return sorted(worker_metrics, key=lambda x: x["worker_id"])
+
 
 def gather_metrics(machines, config, worker_output, endpoint_output, container_names, starttime):
     """Process the raw output to lists of dicts
@@ -532,7 +534,10 @@ def gather_metrics(machines, config, worker_output, endpoint_output, container_n
 
     endpoint_metrics = []
     # endpoints do not deliver metrics for Minecraft
-    if config["infrastructure"]["endpoint_nodes"] and config["benchmark"]["application"] != "minecraft":
+    if (
+        config["infrastructure"]["endpoint_nodes"]
+        and config["benchmark"]["application"] != "minecraft"
+    ):
         endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
 
     return worker_metrics, endpoint_metrics
@@ -635,6 +640,7 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
         logging.debug("Output in csv format\n%s\n%s", repr(df1.to_csv()), repr(df2.to_csv()))
     else:
         logging.debug("Output in csv format\n%s", repr(df2.to_csv()))
+
 
 def format_output_minecraft(config, worker_metrics):
     logging.info("------------------------------------")
