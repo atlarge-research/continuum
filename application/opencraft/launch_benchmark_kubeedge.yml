@@ -1,1 +1,26 @@
-- import_playbook: launch_benchmark_kubernetes.yml
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Create job file
+      template:
+        src: template_server.yml.j2
+        dest: /home/{{ username }}/job-template.yaml
+
+    - name: Create job directory
+      file:
+        path: /home/{{ username }}/jobs
+        state: directory
+
+    - name: Create job multiple times
+      shell: |
+        for i in `seq 0 {{ replicas }}`
+        do
+          cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" \
+          > "/home/{{ username }}/jobs/job-$i.yaml"
+        done
+
+    - name: Launch jobs
+      command: >
+        kubectl create --kubeconfig="/home/{{ username }}/.kube/config"
+        -f "/home/{{ username }}/jobs"
