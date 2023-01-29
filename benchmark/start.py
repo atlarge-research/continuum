@@ -204,8 +204,8 @@ def start_worker(config, machines):
         app_vars = {
             "sleep_time": config["benchmark"]["sleep_time"],
         }
-    # no extra variables are needed for the minecraft server
-    elif config["benchmark"]["application"] == "minecraft":
+    # no extra variables are needed for the opencraft server
+    elif config["benchmark"]["application"] == "opencraft":
         app_vars = {}
 
     # Merge the two var dicts
@@ -250,7 +250,7 @@ def start_worker(config, machines):
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)
-    command = "kubectl wait pods -n default -l applicationRunning=minecraft-server --for condition=Ready --timeout=90s"
+    command = "kubectl wait pods -n default -l applicationRunning=opencraft-server --for condition=Ready --timeout=90s"
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
     machines[0].process(
         config,
@@ -263,8 +263,8 @@ def start_worker(config, machines):
         logging.error(error)
         sys.exit()
 
-    if config["benchmark"]["application"] == "minecraft":
-        busy_wait_minecraft_server(config, machines)
+    if config["benchmark"]["application"] == "opencraft":
+        busy_wait_opencraft_server(config, machines)
 
     logging.info("Deployed %i %s applications", worker_apps, config["mode"])
     logging.info("Wait for subscriber applications to be scheduled and running")
@@ -317,8 +317,8 @@ def start_worker(config, machines):
     return starttime
 
 
-def busy_wait_minecraft_server(config, machines):
-    """Scans the logs of all minecraft servers for "Ready for connections" using busy waiting.
+def busy_wait_opencraft_server(config, machines):
+    """Scans the logs of all opencraft servers for "Ready for connections" using busy waiting.
     There's no timeout, so the application might hang if the servers never become ready.
 
     Returns once all servers are running.
@@ -328,10 +328,8 @@ def busy_wait_minecraft_server(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     # get pods
-    command = "kubectl get pods -l applicationRunning=minecraft-server --no-headers"
-    output, error = machines[0].process(
-        config, command, shell=True, ssh=config["cloud_ssh"][0]
-    )[0]
+    command = "kubectl get pods -l applicationRunning=opencraft-server --no-headers"
+    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
     # check all servers if they contain
     for line in output:
@@ -347,6 +345,7 @@ def busy_wait_minecraft_server(config, machines):
 
             if any("Ready for connections" in o for o in output):
                 break
+
 
 def start_worker_mist(config, machines):
     """Start running the mist worker subscriber containers using Docker.
@@ -505,7 +504,7 @@ def start_endpoint(config, machines):
             env = []
             if config["benchmark"]["application"] == "image_classification":
                 env.append("FREQUENCY=%i" % (config["benchmark"]["frequency"]))
-            elif config["benchmark"]["application"] == "minecraft":
+            elif config["benchmark"]["application"] == "opencraft":
                 env.append(f"HOST={worker_ip}")
                 env.append(f"PORT={30000 + worker_i}")
                 env.append(f"USERNAME=endpointX{worker_i}X{endpoint_i}")
@@ -714,7 +713,7 @@ def start(config, machines):
 
     # Wait for benchmark to finish
     if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["benchmark"]["application"] == "minecraft":
+        if config["benchmark"]["application"] == "opencraft":
             stop_opencraft(config, machines)
         if config["benchmark"]["resource_manager"] != "mist":
             wait_worker_completion(config, machines)
@@ -755,7 +754,7 @@ def stop_opencraft(config, machines):
     )  # there is always a cloud controller on which no server is deployed
     num_edges = config["infrastructure"]["edge_nodes"]
     if num_clouds > 0 and num_edges > 0:
-        logging.error("Minecraft currently only handles setups with servers in cloud xor edge")
+        logging.error("opencraft currently only handles setups with servers in cloud xor edge")
         sys.exit()
 
     number_server = max(num_clouds, num_edges)

@@ -98,13 +98,13 @@ def add_constants(config):
             }
         elif config["benchmark"]["application"] == "empty":
             config["images"] = {"worker": "redplanet00/kubeedge-applications:empty"}
-        elif config["benchmark"]["application"] == "minecraft":
+        elif config["benchmark"]["application"] == "opencraft":
             config["images"] = {
-                "worker": "lwagner1/minecraft_benchmark:minecraft_server",
-                "endpoint": "lwagner1/minecraft_benchmark:minecraft_bot",
+                "worker": "lwagner1/opencraft_benchmark:opencraft_server",
+                "endpoint": "lwagner1/opencraft_benchmark:opencraft_bot",
                 # this is a hack to avoid infrastructure/start.py/docker_pull to throw a KeyError
-                # for minecraft, no combined image exists
-                "combined": "lwagner1/minecraft_benchmark:minecraft_bot",
+                # for opencraft, no combined image exists
+                "combined": "lwagner1/opencraft_benchmark:opencraft_bot",
             }
 
     # 100.100.100.100

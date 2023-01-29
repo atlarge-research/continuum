@@ -759,7 +759,7 @@ def benchmark(parser, config, new):
         sec,
         "application",
         str,
-        lambda x: x in ["image_classification", "minecraft", "empty"],
+        lambda x: x in ["image_classification", "opencraft", "empty"],
         mandatory=True,
     )
 
@@ -850,7 +850,7 @@ def benchmark(parser, config, new):
             lambda x: x >= 1,
             mandatory=True,
         )
-    elif new[sec]["application"] == "minecraft":
+    elif new[sec]["application"] == "opencraft":
         option_check(
             parser,
             config,

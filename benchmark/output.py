@@ -88,7 +88,7 @@ def get_worker_output(config, machines):
             machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
 
             command = ["kubectl", "get", "pod", container, "-o", "yaml"]
-        elif config["benchmark"]["application"] == "minecraft":
+        elif config["benchmark"]["application"] == "opencraft":
             command = ["kubectl", "logs", container]
 
         commands.append(command)
@@ -450,7 +450,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def gather_worker_metrics_minecraft(worker_output):
+def gather_worker_metrics_opencraft(worker_output):
     """Calculates the average tick rate and its standard deviation per server.
     The server captures more than just the tick rate so this method can be adapted to get more metrics.
     Args:
@@ -539,14 +539,14 @@ def gather_metrics(machines, config, worker_output, endpoint_output, container_n
         worker_metrics = gather_worker_metrics_image(worker_output)
     elif config["benchmark"]["application"] == "empty":
         worker_metrics = gather_worker_metrics_empty(config, machines, worker_output, starttime)
-    elif config["benchmark"]["application"] == "minecraft":
-        worker_metrics = gather_worker_metrics_minecraft(worker_output)
+    elif config["benchmark"]["application"] == "opencraft":
+        worker_metrics = gather_worker_metrics_opencraft(worker_output)
 
     endpoint_metrics = []
-    # endpoints do not deliver metrics for Minecraft
+    # endpoints do not deliver metrics for opencraft
     if (
         config["infrastructure"]["endpoint_nodes"]
-        and config["benchmark"]["application"] != "minecraft"
+        and config["benchmark"]["application"] != "opencraft"
     ):
         endpoint_metrics = gather_endpoint_metrics(config, endpoint_output, container_names)
 
@@ -652,8 +652,8 @@ def format_output_image(config, worker_metrics, endpoint_metrics):
         logging.debug("Output in csv format\n%s", repr(df2.to_csv()))
 
 
-def format_output_minecraft(config, worker_metrics):
-    """Pretty-prints the metrics for minecraft into CSV.
+def format_output_opencraft(config, worker_metrics):
+    """Pretty-prints the metrics for opencraft into CSV.
 
     Args:
         config (dict): Parsed configuration
@@ -682,5 +682,5 @@ def format_output(config, worker_metrics, endpoint_metrics):
         format_output_image(config, worker_metrics, endpoint_metrics)
     elif config["benchmark"]["application"] == "empty":
         format_output_empty(config, worker_metrics)
-    elif config["benchmark"]["application"] == "minecraft":
-        format_output_minecraft(config, worker_metrics)
+    elif config["benchmark"]["application"] == "opencraft":
+        format_output_opencraft(config, worker_metrics)

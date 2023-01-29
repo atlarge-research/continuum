@@ -335,7 +335,7 @@ def copy(config, machines):
         d = dest + "launch_benchmark.yml"
         out.append(machines[0].copy_files(config, path, d))
 
-        # copy minecraft template file as well, it uses an extra template file
+        # copy opencraft template file as well, it uses an extra template file
         path = os.path.join(
             config["base"],
             "application",

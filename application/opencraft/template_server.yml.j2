@@ -4,7 +4,7 @@ metadata:
   name: {{ app_name }}-%ITEM
   labels:
     app.kubernetes.io/name: {{ app_name }}-%ITEM
-    applicationRunning: 'minecraft-server'
+    applicationRunning: 'opencraft-server'
 spec:
   restartPolicy: Never # important so that server can be stopped without making K8 recreate the pod
   containers:

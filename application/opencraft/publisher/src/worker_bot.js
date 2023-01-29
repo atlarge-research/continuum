@@ -36,8 +36,8 @@ function sleep(ms) {
 
 console.log(`Creating bot with name ${username} connecting to ${host}:${port}`)
 let worker_bot = mineflayer.createBot({
-    host: host, // minecraft server ip
-    username: username, // minecraft username
+    host: host, // opencraft server ip
+    username: username, // opencraft username
     port: port,                // only set if you need a port that isn't 25565
 });
 worker_bot.on('kicked', console.log)
