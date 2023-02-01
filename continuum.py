@@ -12,7 +12,7 @@ import sys
 import logging
 import time
 
-from benchmark import benchmark
+from application import application
 from configuration_parser import configuration_parser
 from execution_model import execution_model
 from infrastructure import infrastructure
@@ -98,13 +98,8 @@ def main(args):
     if args.config["module"]["execution_model"]:
         execution_model.start(args.config, machines)
 
-    # TODO: Change this do just 'if benchmark in config'
-    #       All this not not is too difficult
-    if (
-        not args.config["infrastructure"]["infra_only"]
-        and not args.config["benchmark"]["resource_manager_only"]
-    ):
-        benchmark.start(args.config, machines)
+    if args.config["module"]["application"]:
+        application.start(args.config, machines)
 
     if args.config["infrastructure"]["delete"]:
         infrastructure.delete_vms(args.config, machines)

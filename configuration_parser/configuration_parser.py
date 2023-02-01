@@ -102,6 +102,7 @@ def dynamic_import(parser, config):
                 "resource_manager.%s.%s" % (("kubeedge",) * 2)
             )
 
+        # Now for execution model
         if "execution_model" in config:
             # Check if resource manager directory exists
             dirs = list(os.walk("../execution_model"))[0][1]
@@ -117,19 +118,21 @@ def dynamic_import(parser, config):
                 )
                 sys.exit()
 
-        # Check if infrastructure provider directory exists
-        dirs = list(os.walk("../application"))[0][1]
-        dirs = [d for d in dirs if d[0] != "_"]
-        if config["benchmark"]["application"] in dirs:
-            config["module"]["application"] = importlib.import_module(
-                "application.%s.%s" % ((config["benchmark"]["application"],) * 2)
-            )
-        else:
-            parser.error(
-                "ERROR: Given application %s does not have an implementation",
-                config["benchmark"]["application"],
-            )
-            sys.exit()
+        # Now for applications
+        if not config["benchmark"]["resource_manager_only"]:
+            # Check if infrastructure provider directory exists
+            dirs = list(os.walk("../application"))[0][1]
+            dirs = [d for d in dirs if d[0] != "_"]
+            if config["benchmark"]["application"] in dirs:
+                config["module"]["application"] = importlib.import_module(
+                    "application.%s.%s" % ((config["benchmark"]["application"],) * 2)
+                )
+            else:
+                parser.error(
+                    "ERROR: Given application %s does not have an implementation",
+                    config["benchmark"]["application"],
+                )
+                sys.exit()
 
 
 def add_constants(parser, config):
@@ -422,6 +425,7 @@ def parse_benchmark(parser, input_config, config):
     config[sec] = {}
 
     # Get a list of all resource managers
+    # TODO: Make mist a provider - and scrap none
     rms = list(os.walk("../resource_manager"))[0][1]
     rms = [d for d in rms if d[0] != "_"]
     rms.append("mist")

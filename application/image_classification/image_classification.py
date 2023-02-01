@@ -46,3 +46,64 @@ def verify_options(parser, config):
     """
     if config["benchmark"]["application"] != "image_classification":
         parser.error("ERROR: Application should be image_classification")
+
+
+def baremetal(config, machines):
+    """Launch a baremetal deployment, without any virtualized infrastructure, docker-only
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    pass
+    # get_endpoint_output(config, machines, container_names, use_ssh=False)
+
+
+def mist(config, machines):
+    """Launch a mist computing deployment, with edge and endpoint machines, without any RM
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    pass
+
+
+def serverless(config, machines):
+    """Launch a serverless deployment, using for example OpenFaaS
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    pass
+
+
+def endpoint_only(config, machines):
+    """Launch a deployment with only endpoints, and no offloading between devices or RMs
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    pass
+
+
+def kube(config, machines):
+    """Launch a K8/kubeedge deployment, with possibly many cloud or edge workers, and endpoint users
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    pass
+
+
+def kube_control(config, machines):
+    """Launch a K8 deployment, benchmarking K8's controlplane instead of applications running on it
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    pass

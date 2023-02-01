@@ -8,7 +8,7 @@ import os
 from infrastructure import ansible
 
 
-def add_options(_config):
+def add_options(config):
     """Add config options for a particular module
 
     Args:
@@ -17,7 +17,10 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
+    # Mist doesn't have cache worker, only KubeEdge
+    if config["benchmark"]["resource_manager"] == "kubeedge":
+        settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
+
     return settings
 
 
@@ -28,13 +31,22 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    if (
+    # TODO Split KubeEdge and Mist into two providers
+    if config["benchmark"]["resource_manager"] == "kubeedge" and (
         config["infrastructure"]["cloud_nodes"] != 1
         or config["infrastructure"]["edge_nodes"] == 0
         or config["infrastructure"]["endpoint_nodes"] < 1
     ):
         parser.error("ERROR: KubeEdge requires #clouds=1, #edges>=1, #endpoints>=1")
-    elif config["infrastructure"]["edge_nodes"] % config["infrastructure"]["endpoint_nodes"] != 0:
+    elif config["benchmark"]["resource_manager"] == "mist" and (
+        config["infrastructure"]["cloud_nodes"] != 0
+        or config["infrastructure"]["edge_nodes"] == 0
+        or config["infrastructure"]["endpoint_nodes"] < 1
+    ):
+        # Mist, shares KubeEdge code for now
+        parser.error("ERROR: Mist requires #clouds=1, #edges>=1, #endpoints>=1")
+
+    if config["infrastructure"]["edge_nodes"] % config["infrastructure"]["endpoint_nodes"] != 0:
         parser.error("ERROR: KubeEdge requires #edges %% #endpoints == 0")
 
 

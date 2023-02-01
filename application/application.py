@@ -5,6 +5,8 @@ Mostly used for calling specific application code
 
 import logging
 
+from datetime import datetime
+
 
 def set_container_location(config):
     """[INTERFACE] Set registry location/path of containerized applications
@@ -34,94 +36,70 @@ def verify_options(parser, config):
     config["module"]["application"].verify_options(parser, config)
 
 
-def baremetal(config, machines):
-    # Deploy cloud/edge workers
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        containers_worker = start_worker_baremetal(config, machines)
-
-    if config["infrastructure"]["endpoint_nodes"]:
-        container_endpoint = start_endpoint_baremetal(config, machines)
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_endpoint)
-
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        wait_endpoint_completion(config, machines, config["cloud_ssh"], containers_worker)
-
-
-def mist(config, machines):
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        containers_worker = start_worker_mist(config, machines)
-
-    if config["infrastructure"]["endpoint_nodes"]:
-        container_endpoint = start_endpoint(config, machines)
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_endpoint)
-
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        wait_endpoint_completion(config, machines, config["edge_ssh"], containers_worker)
-
-
-def serverless(config, machines):
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        start_worker_serverless(config, machines)
-
-    if config["infrastructure"]["endpoint_nodes"]:
-        container_endpoint = start_endpoint(config, machines)
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_endpoint)
-
-
-def endpoint_only(config, machines):
-    if config["infrastructure"]["endpoint_nodes"]:
-        container_endpoint = start_endpoint(config, machines)
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_endpoint)
-
-
-def kube(config, machines):
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["benchmark"]["cache_worker"]:
-            cache_worker(config, machines)
-
-        start_worker(config, machines)
-
-    if config["infrastructure"]["endpoint_nodes"]:
-        container_endpoint = start_endpoint(config, machines)
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_endpoint)
-
-
-def kube_control(config, machines):
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        if config["benchmark"]["cache_worker"]:
-            cache_worker(config, machines)
-
-        starttime = start_worker(config, machines)
-
-    if config["infrastructure"]["endpoint_nodes"]:
-        container_endpoint = start_endpoint(config, machines)
-        wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_endpoint)
-
-
 def start(config, machines):
-    # Determine deployment options:
-    # TODO: Move this to RM code, or for the non-RM deployments to application specific(?)
+    """[INTERFACE] Start the application with a certain deployment model
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
     if config["infrastructure"]["provider"] == "baremetal":
-        baremetal(config, machines)
+        config["module"]["application"].baremetal(config, machines)
     elif config["benchmark"]["resource_manager"] == "mist":
-        mist(config, machines)
+        config["module"]["application"].mist(config, machines)
     elif config["module"]["execution_model"] and config["execution_model"]["model"] == "openFaas":
-        serverless(config, machines)
+        config["module"]["application"].serverless(config, machines)
     elif config["benchmark"]["resource_manager"] == "none":
-        endpoint_only(config, machines)
+        config["module"]["application"].endpoint_only(config, machines)
     elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
-        kube(config, machines)
+        config["module"]["application"].kube(config, machines)
     elif config["benchmark"]["resource_manager"] == "kubernetes_control":
-        kube_control(config, machines)
+        config["module"]["application"].kube_control(config, machines)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")
 
-    # Start the worker
-    # Start the endpoint
-    # Wait for the endpoint to finish
-    # Wait for the worker to finish
-    # Get output
-    # Process output
 
-    # Determine what application we're deploying
-    config["module"]["application"].start(config, machines)
+def print_raw_output(config, worker_output, endpoint_output):
+    """Print the raw output
+
+    Args:
+        config (dict): Parsed configuration
+        worker_output (list(list(str))): Output of each container ran on the edge
+        endpoint_output (list(list(str))): Output of each endpoint container
+    """
+    logging.debug("Print raw output from subscribers and publishers")
+    if (config["mode"] == "cloud" or config["mode"] == "edge") and worker_output:
+        logging.debug("------------------------------------")
+        logging.debug("%s OUTPUT", config["mode"].upper())
+        logging.debug("------------------------------------")
+        for out in worker_output:
+            for line in out:
+                logging.debug(line)
+
+            logging.debug("------------------------------------")
+
+    if config["infrastructure"]["endpoint_nodes"]:
+        logging.debug("------------------------------------")
+        logging.debug("ENDPOINT OUTPUT")
+        logging.debug("------------------------------------")
+        for out in endpoint_output:
+            for line in out:
+                logging.debug(line)
+
+            logging.debug("------------------------------------")
+
+
+def to_datetime_image(s):
+    """Parse a datetime string from docker logs to a Python datetime object
+
+    Args:
+        s (str): Docker datetime string
+
+    Returns:
+        datetime: Python datetime object
+    """
+    s = s.split(" ")[0]
+    s = s.replace("T", " ")
+    s = s.replace("Z", "")
+    s = s[: s.find(".") + 7]
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
