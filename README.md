@@ -1,219 +1,132 @@
 # Continuum
-Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
-Continuum offers the following features:
+>  Automate Cloud-Edge Infrastructure Deployments and Benchmarks with Continuum. 
+> 1. **Infrastructure deployment**: Create and manage virtual compute continuum infrastructure on the cloud or local hardware.
+> 2. **Software installation**: Automatically install complex software deployment on the provided infrastructure.
+> 3. **Benchmark execution**: Execute application- and system-level benchmarks on the compute continuum deployment.
 
-1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
-2. Users can freely configure the specifications of the virtual machines and the network connecting them through a single configuration file.
-3. Continuum automatically installs operating services, resource managers, and applications inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
-4. Continuum can automatically benchmark the resource managers and applications installed in the emulated cluster, and report metrics and logs back to the user.
-5. Continuum is easily extendable, allowing users to add support for more infrastructure providers, operating services, resource managers, and applications.
+Quick Jump: [How It Works](#how-it-works) | [Repository Structure](#repository-structure) | [Setup](#setup) | [Installation](#installation) | [Simple Example](#simple-example-15-minutes) | [Appendix](#appendix-a-create-an-ubuntu-2004-vm)
 
-## Features
-Continuum supports the following software:
-
-1. **Infrastructure**: Virtual machine provisioning through QEMU/KVM on local bare-metal devices.
-2. **Operating Services**: Continuum can set up an MQTT broker on edge device for lightweight communication to endpoint users.
-3. **Resource Manager**: Continuum can deploy containerized applications via Docker and Containerd using the resource managers Kubernetes and KubeEdge. OpenFaaS is supported for deploying serverless functions.
-4. **Applications and application back-ends**: Continuum supports any application that can be deployed on VMs, containers, or serverless functions. As an example, a machine learning application is included.
-
-## How it works
-Continuum has the following architecture:
-
-<div align="center">
-    <img src="./docs/images/architecture.png" width = "50%" align="center">
+<div align="right">
+    <img src="./docs/images/architecture.png" width = "30%" align="right">
 </div>
 <br>
 
-The execution flow consists of three phases, each having a configuration and execution step. These phases are **infrastructure deployment**, **software installation**, and **benchmarking**. Each phase is optional, i.e., the framework can be used for infrastructure deployment without any pre-installed software if so desired.
+## How It Works
+Continuum has the following execution flow:
+1. **Infrastructure configuration:** Users define their desired deployment using Continuum's configuration files, which internally get translated to configurations for the infrastructure provider of choice (e.g., QEMU, Google Cloud).
+2. **Infrastructure execution:** The provider creates the requested infrastructure with virtual machines and networks.
+3. **Software configuration:** Selected software installation scripts are configured and loaded using Ansible.
+4. **Software execution:** Ansible playbooks are executed, installing and configuring software for operating services and resource management on each machine. 
+5. **Benchmark configuration** A user-defined benchmark is configured and prepared.
+6. **Benchmark execution:** Containerized applications are executed directly (via Docker or Containerd) or via a resource manager (Kubernetes, KubeEdge, etc.). Key metrics are captured, processed, and presented to the user.
 
-1. **Infrastructure configuration:** Libvirt configuration files for QEMU/KVM are created based on the user's preferences.
-2. **Infrastructure execution:** The configuration files are executed, creating QEMU/KVM virtual machines connected through network bridges.
-3. **Software configuration:** Ansible is configured for software installation based on the configured infrastructure.
-4. **Software execution:** Ansible playbooks are executed, installing operating services and resource management software on each machine. This step includes setting up resource management clusters such as Kubernetes.
-5. **Benchmark configuration** The benchmark is configured and prepared based on the user's preferences.
-6. **Benchmark execution:** Applications (encapsulated in containers) are executed using resource managers running on the emulated infrastructure (Kubernetes, KubeEdge, etc.). Meanwhile, application- and system-level metrics are captured, processed, and presented to the user.
+## Repository Structure
+The Continuum repository has the following structure:
 
-## Citation
-When using Continuum for research, please cite the work as follows:
-```
-@misc{https://doi.org/10.48550/arxiv.2207.04159,
-  doi = {10.48550/ARXIV.2207.04159},
-  url = {https://arxiv.org/abs/2207.04159},
-  author = {Jansen, Matthijs and Al-Dulaimy, Auday and Papadopoulos, Alessandro V. and Trivedi, Animesh and Iosup, Alexandru},
-  title = {The SPEC-RG Reference Architecture for the Edge Continuum},
-  publisher = {arXiv},
-  year = {2022},
-  copyright = {arXiv.org perpetual, non-exclusive license}
-}
-```
+* [application](./application/): Source code of our benchmark applications. The built containers are hosted on DockerHub.
+* [benchmark](./benchmark/): Code for benchmark setup, execution, and output processing.
+* [configuration](./configuration/): Input configuration files for Continuum, including a test framework.
+* [configuration_parser](./configuration_parser/): Code for parsing the configuration files.
+* [docs](./docs/): Documentation on how to use Continuum, and fixes for recurring system-issues.
+* [execution_model](./execution_model/): Code for deploying the serverless execution model using OpenFaaS.
+* [infrastructure](./infrastructure/): Code for managing infrastructure providers.
+* [resource_manager](./resource_manager/): Code for managing distributed services and resource managers (e.g., Kubernetes).
+* [scripts](./scripts/): Scripts for replicating paper evaluations.
 
-### Acknowledgment
-This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
+## Setup (0 - 15 minutes)
+For this demo, we will use Continuum with Google Cloud Platform (GCP) as the infrastructure provider of choice.
+We use GCP over QEMU, the infrastructure provider used in our CCGRID paper, as it provides similar functionality and benchmark results, but is much easier to set up.
+QEMU requires the user to have powerful hardware and perform complex installation and configuration steps.
+With GCP, infrastructure provisioning is handled in the cloud, easing the burden of the user.
 
-## Observability
-Continuum has integrated support for Prometheus and Grafana on top of Kubernetes and OpenFaas.
-Continuum will automatically install these software packages and configure them when using `observability = True` in the configuration file, see `configuration/template.cfg`. 
-After Continuum has finished, you can use your browser to open the Grafana dashboard using `localhost:3000` and Prometheus using `localhost:9090`. 
-The Grafana dashboard requires a username and password, both are `admin` by default.
-In case you run Continuum on a machine without a graphical user interface, connect to the machine from a device with one, and port-forward the 3000 and 9090 ports. 
-For example, to port-forward the 3000 port, use `ssh -L 3000:XXX.XXX.XXX.XXX:3000 username@address -i /path/to/ssh_key`, with XXX.XXX.XXX.XXX the IP of the cloud controller VM that is printed after Continuum has finished (typically 192.168.100.2), username@address the IP address of the server you can Continuum on and the username of your account on the server, and the corresponding SSH key.
+Continuum with GCP requires the user to have a single computer with internet access.
+Continuum has been tested with the Ubuntu 20.04 operating system, and it is highly recommended to use this operating system to replicate our results.
+Other operating systems can potentially work as the main software requirements of our framework (Docker, Python, Ansible) are available on many operating systems - however, we can't guarantee successful operation.
+In the absence of a physical machine with Ubuntu 20.04, a virtual machine can be used.
+Any virtual machine provider can be used - we provide an example at the bottom of this README of how to create a Ubuntu 20.04 virtual machine on a physical Ubuntu installation using QEMU.
 
-## Demo
-This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
-The demo contains three parts:
+## Installation ()
+Install Continuum's software requirements on your Ubuntu 20.04 machine.
+We tested with Docker 20.10.12, Python 3.8.10, and Ansible 2.13.2.
 
-1. Prepare the environment
-2. Install the framework
-3. Use the framework
-
-In the first part, we prepare an Ubuntu 20.04 virtual machine using QEMU/KVM.
-In part two, we install the Continuum framework inside this VM and finally use the framework in part 3.
-If you have access to a machine with Ubuntu 20.04, you can skip part 1, "Prepare the environment", and start with part 2. 
-Continuum has been tested on Ubuntu 20.04, and correct functioning on other operating systems can not be guaranteed.
-
-If you want to use Continuum for research, you should install it directly on your machine, without using a virtual machine, as this reduces performance.
-The framework does support execution on multiple physical machines through a network bridge.
-We leave this multi-machine execution out of this tutorial; consult the documentation for more information.
-
-Software versions tested:
-
-- QEMU 6.1.0
-- Libvirt 6.0.0
-- Docker 20.10.12
-- Python 3.8.10
-- Ansible 2.13.2
-
-### Part 1: Prepare the environment
-We prepare a virtual machine with Ubuntu 20.04 in this step.
-The only requirement for this part is installing QEMU/KVM and Libvirt.
-You can execute this part on any operating system that supports these software packages; our demo focuses on Ubuntu 20.04.
-
-1. Install requirements
-    1. Install QEMU, KVM, and Libvirt: `sudo apt update && sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils`
-    2. Give permissions to LibVirt and KVM to run virtual machines (use your own username): `sudo adduser [username] libvirt &&` `sudo adduser [username] kvm`. You may need to log in and out to refresh your group memberships.
-    3. Check if the installation was successful: `qemu-system-x86_64 --version`
-    4. Check if libvirt is running: `sudo systemctl status libvirtd`. If not, activate it using `sudo systemctl enable --now libvirtd`
-2. Download the Ubuntu 20.04 server image: `wget https://releases.ubuntu.com/20.04.3/ubuntu-20.04.3-live-server-amd64.iso`
-3. Create a QCOW disk as storage for your VM: `qemu-img create -f qcow2 ubuntu.img 20G`
-    1. At least 20 GB of disk space is required for this tutorial
-4. Boot the VM
-    1. On a system with a GUI: `sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user`
-        1. This should automatically open up a new window for the VM.
-        2. Memory requirements: At least 4 GB (in this example -m 8G = 8 GB)
-        3. CPU requirements: At least 4 (in this example -smp 4 = 4 CPUs)
-    2. On a system without a GUI: `sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user,hostfwd=tcp::7777-:22`
-        1. Open up a new SSH session into the GUI-less machine using `ssh -X`. The machine that you are SSH’ing from should have a GUI.
-        2. Install Remmina on the GUI-less machine: `sudo apt install remmina` and run Remmina `remmina`
-        3. This should open the Remmina screen for you. Click on the + icon to create a new connection. Under protocol, select “VNC”, and then under server, add the VNC address displayed in the terminal where you started the VM (for example, 127.0.0.1:5900). Click save and connect to connect to the VM.
-5. Initialize the VM: Do not forget to install the open-SSH client during the installation! Remember the username and password you create for later. You can ignore all (security) updates for this demo.
-6. Shut the VM down once the initial setup is done, and launch again: `sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -cpu host -net nic -net user,hostfwd=tcp::8888-:22 --name ubuntu`
-    1. On a system with a GUI: A new screen should automatically open, and after some time the VM will be done booting up. If you don’t want to use a GUI for the VM, open up a new terminal and use `ssh [username]@localhost -p 8888`
-    2. On a system without  a GUI: Open up a new terminal and use `ssh [username]@localhost -p 8888`
-
-### Part 2: Install the framework
-We start installing all requirements for the Continuum framework.
-We assume the operating system is Ubuntu 20.04, either natively or via a VM.
-
-1. Install VM requirements
-    1. Install QEMU, KVM and Libvirt: `sudo apt update && sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils`
-    2. Give permissions to LibVirt and KVM to run virtual machines (use your own username): `sudo adduser [username] libvirt` and `sudo adduser [username] kvm`. You may need to log in and out to refresh your group memberships.
-    3. Check if the installation was successful: `qemu-system-x86_64 --version`. 
-    4. Check if libvirt is running: `sudo systemctl status libvirtd`. If not, activate it using `sudo systemctl enable --now libvirtd`
-2. Install Docker (see Docker website for alternative instructions)
+1. Install Docker:
     ```bash
-    sudo apt-get install \
-        ca-certificates \
-        curl \
-        gnupg \
-        lsb-release
-    
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
-    sudo apt-get update
-    sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-    
-    sudo groupadd docker
-    sudo usermod -aG docker $USER
-    sudo systemctl enable docker.service
-    sudo systemctl enable containerd.service
-    # Now refresh you SSH session by logging in / out
-    
-    # support https
-    hostname -I # copy first IP in list, paste in next command under IP_HERE
+    # 1. Install from the repository:
+    # https://docs.docker.com/engine/install/ubuntu/
+
+    # 2. Manage Docker as a non-root user
+    # https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user
+
+    # 3. Enable HTTP support
+    hostname -I
+    # - Select the first IP from this list - this is your machine's IP
+    # - Replace the IP_HERE variable with your IP
+    sudo mkdir /etc/docker
+    sudo touch /etc/docker/daemon.json
     echo '{ "insecure-registries":["IP_HERE:5000"] }' | sudo tee -a /etc/docker/daemon.json
     sudo systemctl restart docker
     ```
-    
-3. Get Pip: `sudo apt install python3-pip`
-4. Get Ansible: `sudo apt install ansible`
-    1. Check if Ansible works: `ansible --version`
-    2. Edit the ansible configuration: `sudo vim /etc/ansible/ansible.cfg`
-        1. Under `[ssh_connection]`, add `retries = 5`
-        2. Under `[defaults]`, add `callback_whitelist = profile_tasks`
-        3. Under `[defaults]`, add `command_warnings=False`
-5. Install the Continuum repository
-    1. `git clone https://github.com/atlarge-research/continuum.git`
-    2. Get python requirements: `cd continuum && pip3 install -r requirements.txt`
-    3. Create an .ssh directory: `mkdir ~/.ssh`
-    4. Create a known hosts file: `touch ~/.ssh/known_hosts`
-6. Delete the virtual bridge
-    1. `virsh net-destroy default` and `virsh net-undefine default`
-    2. Check that virbr0 no longer exists: `virsh net-list --all`
-7. Create a network bridge
-    1. Make a backup of the current network configuration: `sudo cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak`
-    2. Edit the network configuration to create a bridge (`sudo vim /etc/netplan/00-installer-config.yaml`). Use `ip a` to get your machine’s network interface (e.g., ens3, enp0s3) and IP (for this example, the IP listed under ens3) and `ip r` to get the gateway address (the first IP on the first line). An example file could look like this:
-        
-        ```bash
-        network:
-          ethernets:
-            ens3:
-              dhcp4: false
-              dhcp6: false
-          bridges:
-            br0:
-              interfaces: [ens3]
-              addresses: [10.0.2.15/16]
-              gateway4: 10.0.2.2
-              nameservers:
-                addresses: [1.1.1.1, 8.8.8.8]
-                search: []
-              parameters:
-                stp: true
-              dhcp4: false
-              dhcp6: false
-          version: 2
-        ```
-        
-    3. Enforce this new network policy with `sudo netplan generate` and `sudo netplan apply`
-    4. Use `brctl show` to check that bridge br0 now exists, and `ip a` to check that ens3 does not have a listed ip anymore, but br0 does instead.
-    5. If your ip listed under “addresses” does not start with 192.168, one change in the framework is required: Edit main.py (vim main.py), search for the “add_constants” function and change config[”prefixIP”] to your prefix (e.g., for this example “10.0”
-    6. Enable IP forwarding from VMs to the bridge
-        
-        ```bash
-        # This is one command
-        # If permission denied, execute "sudo su" first. 
-        cat >> /etc/sysctl.conf <<EOF
-        net.bridge.bridge-nf-call-ip6tables = 0
-        net.bridge.bridge-nf-call-iptables = 0
-        net.bridge.bridge-nf-call-arptables = 0
-        EOF
-        # If sudo su was used, do "exit" now
-        
-        # Then execute this command
-        sudo sysctl -p /etc/sysctl.conf
-        ```
+2. Install Pip:
+    ```bash
+    sudo apt install python3-pip
+    ```
+3. Install Ansible
+    ```bash
+    sudo apt install ansible
+    sudo sed -i '/# command_warnings = False/c\command_warnings = False' /etc/ansible/ansible.cfg
+    sudo sed -i '/#callback_whitelist = timer, mail/c\callback_whitelist = profile_tasks' /etc/ansible/ansible.cfg
+    ```
+4. Install Continuum
+    ```bash
+    git clone https://github.com/atlarge-research/continuum.git
+    cd continuum 
+    git checkout CCGRID2023-Artifact-Evaluation
+    pip3 install -r requirements.txt
+
+    # Make sure the SSH directory and files are there
+    mkdir ~/.ssh
+    touch ~/.ssh/known_hosts
+    ```
+5. Prepare Continuum for Google Cloud usage
+    ```bash
+    # 1. Get your projectID from GCP (example: continuum-project-123456)
+    # https://cloud.google.com/resource-manager/docs/creating-managing-projects
+
+    # 2. Download your GCP credentials
+    # https://cloud.google.com/iam/docs/creating-managing-service-account-keys
+
+    # Update all Continuum's configuration files with your GCP information
+    cd configuration
+    python3 gcp_update.py --help
+    # ----------------------------------------------------------------------------------------------
+    # Update: create file, show help here, and example command
+    # ----------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------
+    ```
+
+## Simple Example (2 x 15 minutes)
+First, we execute a simple example to see what Continuum can do:
+```bash
+cd continuum
+python3 continuum.py configuration/gcp_cloud_kubernetes_benchmark.cfg
+```
+Continuum attempts to start a Kuberentes cluster on Google Cloud, using 2 cloud VMs (one for the control plane, one as a worker) and 1 endpoint VM (the user that offloads data to the cloud).
+When Continuum is done, it will output the results of the performed benchmark, similar to this:
+```bash
+
+```
+Finally, it outputs SSH commands that can be used to SSH into the 
+
+
+
 
 ### Part 3: Use the framework
 Inside the continuum framework:
 
-1. Check the input parameters of the framework: `python3 main.py -h`.
+1. Check the input parameters of the framework: `python3 continuum.py -h`.
 2. The configuration files are stored in /configuration. Check /configuration/template.cfg for the template that these configuration files follow.
-3. Run one of these configurations, such as a simple edge computing benchmark: `python3 main.py -v configuration/bench_edge.cfg`
+3. Run one of these configurations, such as a simple edge computing benchmark: `python3 continuum.py -v configuration/bench_edge.cfg`
 4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
 
 ### Part 4: Install OpenFaaS
@@ -222,12 +135,12 @@ For the moment, we only allow OpenFaaS to be installed outside of the framework.
 
 1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag and `model = openFaas` in section `execution_model` is critical here.
     ```bash
-    python3 main.py configuration/bench_openfaas.cfg
+    python3 continuum.py configuration/bench_openfaas.cfg
     ```
 
 2. From your host-system ssh onto the `cloud_controller` node, for example:
    ```bash
-   ssh cloud_controller@192.168.100.2 -i ~/.ssh/id_rsa_benchmark
+   ssh cloud_controller@192.168.100.2 -i ~/.ssh/id_rsa_continuum
    ```
 
 3. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:
@@ -265,3 +178,51 @@ curl http://localhost:8080/function/figlet -d 'Hello world!'
 Please read the documentation in /docs when encountering issues during the installation or usage of the framework.
 
 ---
+
+
+# Appendix A: Create an Ubuntu 20.04 VM
+This code snippet shows how to create an Ubuntu 20.04 VM on a physical Ubuntu installation.
+```bash
+#-------------------------------------
+# 1. Install the QEMU stack
+sudo apt update 
+sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
+
+# Add your user to the libvirt and kvm user group
+sudo adduser [username] libvirt
+sudo adduser [username] kvm
+
+# Verify that the installation was succesful.
+qemu-system-x86_64 --version
+sudo systemctl status libvirtd
+
+# If the libvirtd daemon isn't running, do:
+sudo systemctl enable --now libvirtd
+
+#-------------------------------------
+# 2. Create the Ubuntu 20.04 VM (requirees 20GB in this example - lower can possibly also work)
+wget https://releases.ubuntu.com/20.04.3/ubuntu-20.04.3-live-server-amd64.iso
+qemu-img create -f qcow2 ubuntu.img 20G
+
+#-------------------------------------
+# 3. Boot the VM - example with 4 CPU cores and 8 GB memory (Continuum can work with less)
+# On a physical system with a GUI:
+sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user
+
+# On a system without a GUI:
+sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user,hostfwd=tcp::7777-:22
+# - Open an SSH session from a machine with a GUI to the GUI-less machine using "ssh -X"
+# - Install and run remmina on the GUI-less machine
+sudo apt install remmina
+remmina
+# - This should open a window on your machine with GUI
+# - Click on the + icon to create a new connection. Under protocol, select “VNC”, and then under server, add the VNC address displayed in the terminal where you started the VM (for example, 127.0.0.1:5900). Click save and connect to connect to the VM.
+#-------------------------------------
+
+# 4. Initialize the VM - don't forget to install an SSH client, and remember your username + password
+
+# 5. Shutdown the VM once it's initialized, and launch again
+sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -cpu host -net nic -net user,hostfwd=tcp::8888-:22 --name ubuntu
+# - On a system with GUI: A new screen will open for your VM
+# - On a system without GUI (or if you prefer a terminal): Do "ssh [username]@localhost -p 8888"
+```
