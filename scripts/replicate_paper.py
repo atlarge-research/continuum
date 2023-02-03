@@ -16,9 +16,6 @@ import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 
-from matplotlib.ticker import ScalarFormatter
-from matplotlib.ticker import NullFormatter
-
 # Home dir should be continuum/
 os.chdir("../")
 
@@ -404,10 +401,6 @@ class Deployments(Experiment):
         self.cores = [4, 4, 2, 2]
         self.endpoints = [2, 2, 2, 1]
 
-        self.y = None
-        self.y_load = None
-        self.y_latency = None
-
     def __repr__(self):
         """Returns this string when called as print(object)"""
         return """
@@ -528,10 +521,8 @@ CONFIGS                 %s""" % (
         """Print results of runs as text"""
         for i, config in enumerate(self.configs):
             logging.info(
-                "Conf: %15s | Sys Load: %4i%% | Latency: %10i ms | Comp: %10i ms | Comm: %10i ms",
+                "Conf: %15s | Comp: %10i ms | Comm: %10i ms",
                 config,
-                self.y_load[i],
-                self.y_latency[i],
                 self.runs[i]["latency_breakdown"][0],
                 self.runs[i]["latency_breakdown"][1],
             )

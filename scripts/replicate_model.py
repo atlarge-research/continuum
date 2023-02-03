@@ -18,7 +18,7 @@ from matplotlib import colors
 # pylint: disable=wrong-import-position,import-error
 
 sys.path.append(os.path.abspath("../configuration_parser"))
-import configuration_parser
+import start as configuration_parser
 
 # pylint: enable=wrong-import-position,import-error
 
