@@ -7,6 +7,9 @@ for i in configuration/tests/<qemu OR terraform>/*.cfg; do
     python3 main.py $i || break
 done
 ```
+
+**NOTE**: This contains more functionalities than covered in the CCGRID paper.
+
 A run is successful if it prints one or multiple `ssh vm_name@ip_address -i path/to/ssh/key` at the end.
 You can also check the log files in `/logs` to validate the runs.
 
