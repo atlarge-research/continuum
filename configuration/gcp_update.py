@@ -6,12 +6,24 @@ import os
 import sys
 import argparse
 
+# pylint: disable=import-error,wrong-import-position
+
 sys.path.append(os.path.abspath("../infrastructure"))
 
 import machine as m
 
+# pylint: enable=import-error,wrong-import-position
+
 
 def get_files(base="."):
+    """Get all .cfg files in the /configuration folder
+
+    Args:
+        base (str, optional): Base directory to start searching from. Defaults to ".".
+
+    Returns:
+        list(str): List of all .cfg files found
+    """
     target_files = []
     for folder, nested_folders, files in os.walk(base):
         # Add files in current folder
@@ -32,6 +44,14 @@ def get_files(base="."):
 
 
 def update_files(files, target, replace, reset):
+    """Update all occurences of <existing string> to <new string> in selected .cfg files
+
+    Args:
+        files (list(str)): .cfg files to replace strings in
+        target (_type_): Target string to replace
+        replace (_type_): String to replace target with
+        reset (_type_): Instead of setting a new value, replace with an empty string
+    """
     print("Apply filter: Update %s to %s" % (target, replace))
     commands = []
     for file in files:
@@ -40,7 +60,10 @@ def update_files(files, target, replace, reset):
         if reset:
             replace_str = "%s =" % (target)
 
+        # pylint: disable=anomalous-backslash-in-string
         filter_str = "'/%s/c\%s'" % (target, replace_str)
+        # pylint: enable=anomalous-backslash-in-string
+
         commands.append("sed -i %s %s" % (filter_str, file))
 
     machine = m.Machine("", True)
@@ -61,6 +84,11 @@ def update_files(files, target, replace, reset):
 
 
 def main(args):
+    """Replace all lines with <target string> with <new string> for all .cfg files
+
+    Args:
+        args (Namespace): Argparse namespace
+    """
     # Get all .cfg files
     print("Gather a list of all .cfg files")
     files = get_files()

@@ -10,6 +10,13 @@ def main():
     content = """\
 #!/bin/sh
 echo "-------------------------------"
+echo "Reset GCP values in config files"
+echo "-------------------------------"
+cd configuration
+python3 gcp_update.py --reset
+cd ..
+
+echo "-------------------------------"
 echo "Black"
 echo "-------------------------------"
 black --line-length 100 ./
