@@ -163,11 +163,11 @@ Symbol      Explanation             Value
 --------------------------------------------------
 R           data generation rate    %i Hz
 C_e         cores per endp.         %i
-Q_e         endp. CPU core quota    %.2f
+Q_e         endp. CPU core quota    %.4f
 --------------------------------------------------
 Acquired data
 --------------------------------------------------
-T_proc      norm. processing time   %.2f sec
+T_proc      norm. processing time   %.4f sec
 --------------------------------------------------""" % (
             self.R,
             self.C_e,
@@ -208,9 +208,9 @@ T_proc      norm. processing time   %.2f sec
         logging.info(
             """
 To satisfy: (T_proc * R) < (C_e * Q_e)
-            (%.2f * %i) < (%i * %.2f)
-            %.2f < %.2f
-            %s with a system load of %.2f""",
+            (%.4f * %i) < (%i * %.4f)
+            %.4f < %.4f
+            %s with a system load of %.4f""",
             self.T_proc,
             self.R,
             self.C_e,
@@ -256,7 +256,12 @@ To satisfy: (T_proc * R) < (C_e * Q_e)
         df["proc_time/data (ms)"] = pd.to_numeric(df["proc_time/data (ms)"], downcast="float")
         T_proc = df["proc_time/data (ms)"].mean() / 1000.0
 
-        logging.info("Actual T_proc for %i cores with %.2f quota: %.2f", self.C_e, self.Q_e, T_proc)
+        logging.info("Verify with #cpus=%i and quota=%.4f", self.C_e, self.Q_e)
+        logging.info("T_proc: %.4f", T_proc)
+        norm_T_proc = T_proc * (self.C_e * self.Q_e)
+        logging.info("Normalized T_proc: %.4f", norm_T_proc)
+        diff = ((norm_T_proc - self.T_proc) / self.T_proc) * 100
+        logging.info("Difference between predicted T_proc and actual T_proc: %.4f", diff)
 
 
 class ModelOffload(Model):
@@ -276,16 +281,16 @@ R           data generation rate    %i Hz
 E           #endpoints              %i
 C_w         cores per worker        %i
 C_e         cores per endp.         %i
-Q_w         worker CPU core quota   %.2f
-Q_e         endp. CPU core quota    %.2f
-B           bandwidth               %.2f Mbit
+Q_w         worker CPU core quota   %.4f
+Q_e         endp. CPU core quota    %.4f
+B           bandwidth               %.4f Mbit
 --------------------------------------------------
 Acquired data
 --------------------------------------------------
-d           Size of 1 data entity   %.2f MB
-D           Generated data / sec    %.2f Mbit
-T_proc      norm. proc time         %.2f sec
-T_pre       norm. preproc time      %.2f sec
+d           Size of 1 data entity   %.4f MB
+D           Generated data / sec    %.4f Mbit
+T_proc      norm. proc time         %.4f sec
+T_pre       norm. preproc time      %.4f sec
 --------------------------------------------------""" % (
             self.R,
             self.E,
@@ -349,9 +354,9 @@ T_pre       norm. preproc time      %.2f sec
         logging.info(
             """
 To satisfy: (T_proc * R * E) < (C_w * Q_w)
-            (%.2f * %i * %i) < (%i * %.2f)
-            %.2f < %.2f
-            %s with a system load of %.2f""",
+            (%.4f * %i * %i) < (%i * %.4f)
+            %.4f < %.4f
+            %s with a system load of %.4f""",
             self.T_proc,
             self.R,
             self.E,
@@ -375,9 +380,9 @@ To satisfy: (T_proc * R * E) < (C_w * Q_w)
         logging.info(
             """
 To satisfy: (T_pre * R) < (C_e * Q_e)
-            (%.2f * %i) < (%i * %.2f)
-            %.2f < %.2f
-            %s with a system load of %.2f""",
+            (%.4f * %i) < (%i * %.4f)
+            %.4f < %.4f
+            %s with a system load of %.4f""",
             self.T_pre,
             self.R,
             self.C_e,
@@ -399,7 +404,7 @@ To satisfy: (T_pre * R) < (C_e * Q_e)
         logging.info(
             """
 To satisfy: D < B
-            %.2f < %.2f
+            %.4f < %.4f
             %s""",
             demand,
             capacity,
