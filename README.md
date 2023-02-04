@@ -17,7 +17,7 @@ Continuum has the following execution flow:
 2. **Infrastructure execution:** The provider creates the requested infrastructure with virtual machines and networks.
 3. **Software configuration:** Selected software installation scripts are configured and loaded using Ansible.
 4. **Software execution:** Ansible playbooks are executed, installing and configuring software for operating services and resource managers on each machine. 
-5. **Benchmark configuration** A user-defined benchmark is configured and prepared.
+5. **Benchmark configuration:** A user-defined benchmark is configured and prepared.
 6. **Benchmark execution:** Containerized applications are executed directly (via Docker or Containerd) or via a resource manager (Kubernetes, KubeEdge, etc.). Key metrics are captured, processed, and presented to the user.
 
 ## Repository Structure
@@ -35,17 +35,18 @@ The Continuum repository has the following structure:
 
 ## Setup (0 - 15 minutes)
 For this demo, we will use Continuum with Google Cloud Platform (GCP) as the infrastructure provider of choice.
-We use GCP over QEMU, the infrastructure provider used in our CCGRID paper, as it provides similar functionality and benchmark results, but is much easier to set up.
+We use GCP over QEMU, the infrastructure provider used in our CCGRID paper, as it provides similar functionality and benchmark results but is much easier to set up.
 QEMU requires the user to have powerful hardware and perform complex installation and configuration steps.
 With GCP, this is handled by the cloud provider instead of the user.
-With a GCP Free Trial account, there are no costs of using Continuum with GCP.
-Otherwise, the cost of using GCP is limited to several dollars at most.
+With a GCP Free Trial account, using Continuum with GCP is free.
+Otherwise, the cost of using GCP is usually limited to several dollars.
+Please get in touch with us if you would like to replicate our results using QEMU.
 
 Continuum with GCP requires the user to have a single computer with internet access.
-Continuum has been tested with the Ubuntu 20.04 operating system, and it is highly recommended to use this operating system to replicate our results.
-Other operating systems can potentially work as the main software requirements of our framework (Docker, Python, Ansible, Terraform) are available on many operating systems.
+Continuum has been tested with the Ubuntu 20.04 operating system, and we highly recommend using this operating system to replicate our results.
+Other operating systems can work as the main software requirements of our framework (Docker, Python, Ansible, Terraform) are available on many operating systems.
 However, we can only guarantee successful execution on Ubuntu 20.04.
-In the absence of a physical machine with Ubuntu 20.04, a virtual machine can be used.
+A physical or virtual machine with Ubuntu 20.04 can be used.
 Any virtual machine provider can be used - we provide an example at the bottom of this README of how to create an Ubuntu 20.04 virtual machine on a physical Ubuntu installation using QEMU.
 
 ## Installation (5 minutes)
@@ -84,7 +85,7 @@ We tested with Docker 23.0.0, pip3 20.0.2 for Python 3.8.10, Ansible 2.9.6, and 
     # For more information, see https://developer.hashicorp.com/terraform/cli/install/apt
     sudo apt install terraform
     ```
-4. Install Continuum
+5. Install Continuum
     ```bash
     git clone https://github.com/atlarge-research/continuum.git
     cd continuum 
@@ -95,7 +96,7 @@ We tested with Docker 23.0.0, pip3 20.0.2 for Python 3.8.10, Ansible 2.9.6, and 
     mkdir ~/.ssh
     touch ~/.ssh/known_hosts
     ```
-5. Prepare Continuum for Google Cloud usage
+6. Prepare Continuum for Google Cloud usage
     ```bash
     # 1. Get your projectID from GCP (example: continuum-project-123456)
     # https://cloud.google.com/resource-manager/docs/creating-managing-projects
@@ -127,14 +128,18 @@ We tested with Docker 23.0.0, pip3 20.0.2 for Python 3.8.10, Ansible 2.9.6, and 
 
 ## Simple Example (15 minutes)
 First, we execute a simple example to see what Continuum can do:
+
 ```bash
 cd ..
 python3 main.py configuration/gcp_cloud_kubernetes_benchmark.cfg
 ```
-Continuum attempts to start a Kubernetes cluster on Google Cloud, using 2 cloud VMs (one for the Kubernetes control plane, one as a Kubernetes worker) and 1 endpoint VM (the user that offloads data to the cloud).
-When Continuum is done, it will output the results of the performed benchmark, see below for an example.
 
-In this example, one endpoint offloaded 5 images to one cloud worker for 300 seconds, where image classification was performed on each image, and the result was sent back to the endpoint. The time between the endpoint application sending the image and the cloud application receiving the image was 107.49 on average, it then took the cloud worker 81.46 ms to process each image on average, for a total end-to-end latency (the time between the endpoint generating an image and getting the image classification output back) of 191.23 ms per image on average.
+Continuum attempts to start a Kubernetes cluster on Google Cloud, using two cloud VMs (one for the Kubernetes control plane, one as a Kubernetes worker) and one endpoint VM (the user that offloads data to the cloud).
+When Continuum is done, it will output the results of the performed benchmark; see below for an example.
+See the experimental setup in our CCGRID paper for a more detailed explanation.
+
+In this example, one endpoint offloads five images to one cloud worker for 300 seconds, where the cloud worker performs image classification on each image, and the results are sent back to the endpoint. The time between the endpoint application sending the image and the cloud application receiving the image was 107.49 on average; it then took the cloud worker 81.46 ms to process each image on average, for a total end-to-end latency (the time between the endpoint generating an image and getting the image classification output back) of 191.23 ms per image on average.
+
 ```bash
 ------------------------------------
 CLOUD OUTPUT
@@ -147,13 +152,17 @@ ENDPOINT OUTPUT
  connected_to  total_time (s)  preproc_time/data (ms)  data_size_avg (kb)  latency_avg (ms)  latency_stdev (ms)
             0          302.45                    0.45               65.28            191.23               24.44
 ```
-Finally, it outputs SSH commands that can be used to SSH into the provided VMs:
+
+Finally, Continuum outputs SSH commands that can be used to SSH into the provided VMs:
+
 ```bash
 ssh cloud0@34.90.184.203 -i /home/continuum-vm/.ssh/id_rsa_benchmark
 ssh cloud1@34.91.43.123 -i /home/continuum-vm/.ssh/id_rsa_benchmark
 ssh endpoint0@34.90.242.25 -i /home/continuum-vm/.ssh/id_rsa_benchmark
 ```
+
 Optionally, you can inspect the Kubernetes cluster running on the cloud VMs:
+
 ```bash
 # SSH to cloud0 - the Kubernetes control plane
 ssh cloud0@34.90.184.203 -i /home/continuum-vm/.ssh/id_rsa_benchmark
@@ -163,6 +172,7 @@ exit
 ```
 
 To delete the infrastructure:
+
 ```bash
 cd ~/.continuum/images
 terraform destroy --auto-approve
@@ -171,18 +181,17 @@ terraform destroy --auto-approve
 ## Figure 6 (4 x 15 minutes)
 We reproduce the Figure 6 experiment "Breakdown of the end-to-end latency per deployment" from our CCGRID paper.
 The setup differs slightly for GCP compared to QEMU, which we used in the paper: 
-First, we use fewer cloud, edge, and endpoint machines to reduce the cost of using GCP. 
-Moreover, using many GCP virtual machines requires special permissions, which need to be approved by GCP first. 
+First, we use fewer cloud, edge, and endpoint machines to reduce the cost of GCP. 
+Moreover, using many GCP resources may require you to increase your resource quota, which needs to be approved by GCP first.
 Second, we use different resources per VM. 
 GCP offers VMs with specific CPU/memory specifications, which we have to adhere to. 
-Therefore, the VMs we create have different specifications compared to the experimental setup in our CCGRID paper. 
+Therefore, the VMs we create have different specifications than our CCGRID paper's experimental setup. 
 However, the trend of powerful cloud VMs, less powerful edge VMs, and least powerful endpoint VMs remains.
 Third, the GCP VMs are executed on more powerful hardware compared to our local setup used in our CCGRID paper. 
-This changes the VM's performance compared to before, however, all VMs are influenced in the same way, making the results still comparable.
-
-Continuum automatically deletes all provided GCP infrastructure at the end of each run - no manual intervention is needed.
+This changes the VM's performance compared to before; however, all VMs are influenced similarly, making the results comparable.
 
 To replicate Figure 6 on GCP, using the configurations in `configuration/experiment_large_deployments`:
+
 ```bash
 # Clean-up old files
 cd continuum
@@ -193,30 +202,32 @@ cd scripts
 python3 replicate_paper.py Deployments
 ```
 
-The script will execute all configurations in `configuration/experiment_large_deployments`.
-Once it is done, the Figure 6 graph is created in continuum/logs as a PNG file.
-The provided infrastructure is automatically deleted at the end of Continuum's execution, unless Continuum crashed.
-When starting Continuum again, it will attempt to delete the provided infrastructure of the previous run automatically.
+The script will execute all configurations in `configuration/experiment_large_deployments`; you can read these configuration files for the specific GCP VMs used for the experiment, and compare them to the experimental setup described in our paper.
+Once the script has executed all four configurations, it will create Figure 6 as a PDF in the `/logs` directory.
+The provided infrastructure is automatically deleted at the end of Continuum's execution unless Continuum crashes.
+In the case of a crash, you can delete the infrastructure by hand by either using `terraform destroy --auto-approve` in the `~/.continuum/images` folder or by deleting all resources in the Google Cloud Platform console.
+For reference, Continuum attempts to create the following GCP resources: Compute Engine - VM instances, VPC Network - VPC Networks, VPC Network - IP addresses, and VPC Network - Firewall.
 
-If the script crashes during the execution of one of the 4 experiments (due to any reason), you need to restart the experiment.
-The script will re-use the experiments that ran successfully and re-do the crashed experiments.
-Do as follows:
+If the script crashes during the execution of one of the four experiments (for any reason), you need to restart the experiment.
+The script will re-use the successful experiments and re-do the crashed experiments.
+To give an example:
+
 ```bash
-# 1. Remove the log file of the crashed run (most often the last log file)
-# - Example:
-rm logs/2023-01-17_16:56:04_edge_image_classification.log
-
-# 2. Copy the timestamp of the oldest log file of this run
-# - Using the previous example - if your /logs directory looks like this:
-# logs/2023-01-17_15:36:12_cloud_image_classification.log
-# logs/2023-01-17_15:51:36_cloud_image_classification.log
-# logs/2023-01-17_16:24:55_cloud_image_classification.log
+# Situation: The 4th experiment has crashed
+# The /logs directory looks like this:
+#   2023-02-04_08:55:22_cloud_image_classification.log
+#   2023-02-04_09:08:28_edge_image_classification.log
+#   2023-02-04_09:22:48_edge_image_classification.log
+#   2023-02-04_09:37:34_edge_image_classification.log
 #
-# - Copy the timestamp 2023-01-17_15:36:12
-# - IMPORTANT: The /logs directory should only have log files related to Figure 6 replication, no other log files.
-# 
-# 3. Restart the experiment
-python3 replicate_paper.py -r 2023-01-17_15:36:12 Deployments
+# 1. Remove the log file of the crashed run (the last log file)
+rm 2023-02-04_09:37:34_edge_image_classification.log
+
+# 2. Copy the timestamp of the oldest log file
+# - In this case: 2023-02-04_08:55:22
+
+# 3. Restart the experiment and reuse the successful runs
+python3 replicate.py -r 2023-02-04_08:55:22 Deployments
 
 # Alternatively, you can delete the entire logs directory and restart everything
 rm -r logs/*.log
@@ -226,6 +237,7 @@ python3 replicate_paper.py Deployments
 
 ## Figure 7 (9 x 15 minutes)
 The same explanation in Figure 6 applies to Figure 7 - configurations differ slightly between GCP and QEMU, but the results are similar. When the script crashes, see the explanation above on how to restart. To replicate Figure 7, using the configurations in `configuration/experiment_endpoint_scaling`:
+
 ```bash
 rm -r logs/*.log
 cd scripts
@@ -241,15 +253,16 @@ cd scripts
 python3 replicate_model.py 
 ```
 
-The `replicate_model.py` script uses the same restart logic as `replicate_paper.py`, see the explanation above.
+The `replicate_model.py` script uses the same restart logic as `replicate_paper.py`; see the explanation above.
 
 ## Further Customization
-To further customize deployments with the Continuum framework, you can create your own configuration files.
-The configuration template `configuration/template.cfg` lists all configuration options the framework offers, and can function as a good starting point.
-Alternatively, you can have a look at and execute all configurations used to test the functionality of the framework, see the code below.
-Note that Continuum offers much more functionality than displayed in the CCGRID paper, like bare-metal and serverless deployments.
-Some of these deployments require more extensive setups; this is out of the scope of this artifact evaluation.
+You can create configuration files to further customize deployments with the Continuum framework.
+The configuration template `configuration/template.cfg` lists all the framework's configuration options and can function as a good starting point.
+Alternatively, you can look at and execute all configurations used to test the framework's functionality, see the code below.
+Continuum offers much more functionality than displayed in the CCGRID paper, like bare-metal and serverless deployments.
+Some of these deployments require more extensive setups; this is out of the scope of this artifact evaluation but is described in the main branch of this repository.
 For more information on how to set up these advanced features, see the main branch of the Continuum framework.
+
 ```bash
 cd continuum
 for i in configuration/tests/terraform/*.cfg; do
@@ -259,6 +272,7 @@ done
 
 # Appendix A: Create an Ubuntu 20.04 VM
 This code snippet shows how to create an Ubuntu 20.04 VM on a physical Ubuntu installation.
+
 ```bash
 #-------------------------------------
 # 1. Install the QEMU stack

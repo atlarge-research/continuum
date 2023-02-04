@@ -140,7 +140,7 @@ class EndpointScaling(Experiment):
 
         self.modes = ["cloud", "edge", "endpoint"]
         self.cores = [4, 2, 2]
-        self.endpoints = [1, 2, 4, 8]
+        self.endpoints = [1, 2, 4]
 
         self.y = None
         self.y_load = None
@@ -511,7 +511,7 @@ CONFIGS                 %s""" % (
         )
 
         ax.set_ylabel("Time (ms)")
-        ax.set_ylim(0, 400)
+        ax.set_ylim(0, 250)
         ax.set_xlabel("Deployment")
         ax.legend(loc="upper left", framealpha=1.0)
         t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
