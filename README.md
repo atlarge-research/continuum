@@ -235,7 +235,7 @@ cd scripts
 python3 replicate_paper.py Deployments
 ```
 
-## Figure 7 (9 x 15 minutes)
+## Figure 7 (7 x 15 minutes)
 The same explanation in Figure 6 applies to Figure 7 - configurations differ slightly between GCP and QEMU, but the results are similar. When the script crashes, see the explanation above on how to restart. To replicate Figure 7, using the configurations in `configuration/experiment_endpoint_scaling`:
 
 ```bash
