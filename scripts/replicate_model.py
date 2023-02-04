@@ -191,7 +191,7 @@ T_proc      norm. processing time   %.2f sec
             output, _ = self.execute(command)
 
         # Parse output to dataframe
-        df = self.str_to_df(output[-4][1:-2])
+        df = self.str_to_df(output[-5][1:-2])
         logging.debug("\n%s", df.to_string(index=False))
 
         # Extract the required data
@@ -249,7 +249,7 @@ To satisfy: (T_proc * R) < (C_e * Q_e)
             output, _ = self.execute(command)
 
         # Parse output of endpoint to dataframe
-        df = self.str_to_df(output[-4][1:-2])
+        df = self.str_to_df(output[-5][1:-2])
         logging.info("\n%s", df.to_string(index=False))
 
 
@@ -310,7 +310,7 @@ T_pre       norm. preproc time      %.2f sec
             output, _ = self.execute(command)
 
         # Parse output of worker to dataframe, and extract required data
-        df_worker = self.str_to_df(output[-5][1:-2])
+        df_worker = self.str_to_df(output[-6][1:-2])
         logging.debug("\n%s", df_worker.to_string(index=False))
 
         df_worker["proc_time/data (ms)"] = pd.to_numeric(
@@ -319,7 +319,7 @@ T_pre       norm. preproc time      %.2f sec
         self.T_proc = df_worker["proc_time/data (ms)"].mean() / 1000.0
 
         # Parse output of endpoint to dataframe, and extract required data
-        df_endpoint = self.str_to_df(output[-4][1:-2])
+        df_endpoint = self.str_to_df(output[-5][1:-2])
         logging.debug("\n%s", df_endpoint.to_string(index=False))
 
         df_endpoint["preproc_time/data (ms)"] = pd.to_numeric(
@@ -432,11 +432,11 @@ To satisfy: D < B
             output, _ = self.execute(command)
 
         # Parse output of worker to dataframe
-        df_worker = self.str_to_df(output[-5][1:-2])
+        df_worker = self.str_to_df(output[-6][1:-2])
         logging.info("\n%s", df_worker.to_string(index=False))
 
         # Parse output of endpoint to dataframe
-        df_endpoint = self.str_to_df(output[-4][1:-2])
+        df_endpoint = self.str_to_df(output[-5][1:-2])
         logging.info("\n%s", df_endpoint.to_string(index=False))
 
 

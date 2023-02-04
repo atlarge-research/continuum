@@ -138,7 +138,7 @@ Continuum attempts to start a Kubernetes cluster on Google Cloud, using two clou
 When Continuum is done, it will output the results of the performed benchmark; see below for an example.
 See the experimental setup in our CCGRID paper for a more detailed explanation.
 
-In this example, one endpoint offloads five images to one cloud worker for 300 seconds, where the cloud worker performs image classification on each image, and the results are sent back to the endpoint. The time between the endpoint application sending the image and the cloud application receiving the image was 107.49 on average; it then took the cloud worker 81.46 ms to process each image on average, for a total end-to-end latency (the time between the endpoint generating an image and getting the image classification output back) of 191.23 ms per image on average.
+In this example, one endpoint offloads five images per second to one cloud worker for 300 seconds, then the cloud worker performs image classification on each image, and sends the results back to the endpoint. The time between the endpoint application sending the image and the cloud application receiving the image was 107.49 on average; it then took the cloud worker 81.46 ms to process each image on average, for a total end-to-end latency (the time between the endpoint generating an image and getting the image classification output back) of 191.23 ms per image on average.
 
 ```bash
 ------------------------------------
