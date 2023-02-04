@@ -253,7 +253,7 @@ ENDPOINTS/WORKER        %s""" % (
         _, ax1 = plt.subplots(figsize=(12, 6))
         ax2 = ax1.twinx()
 
-        bar_width = 0.2
+        bar_width = 0.25
         bars = np.arange(len(self.modes))
 
         colors = ["dimgray", "gray", "darkgray", "lightgray"]
@@ -294,8 +294,8 @@ ENDPOINTS/WORKER        %s""" % (
         ys = y_total_latency
         xs, ys = zip(*sorted(zip(xs, ys)))
         ax2.plot(
-            xs[:4],
-            ys[:4],
+            xs[:3],
+            ys[:3],
             color="midnightblue",
             linewidth=3.0,
             marker="o",
@@ -303,8 +303,8 @@ ENDPOINTS/WORKER        %s""" % (
             label="End-to-end latency",
         )
         ax2.plot(
-            xs[4:8],
-            ys[4:8],
+            xs[3:6],
+            ys[3:6],
             color="midnightblue",
             linewidth=3.0,
             marker="o",
@@ -312,8 +312,8 @@ ENDPOINTS/WORKER        %s""" % (
             label="End-to-end latency",
         )
         ax2.plot(
-            xs[8],
-            ys[8],
+            xs[6],
+            ys[6],
             color="midnightblue",
             linewidth=3.0,
             marker="o",
@@ -332,15 +332,13 @@ ENDPOINTS/WORKER        %s""" % (
                 (0, 0),
                 (0, 1),
                 (0, 2),
-                (0, 3),
                 (1, 0),
                 (1, 1),
                 (1, 2),
-                (1, 3),
                 (2, 0),
             ]
         ]
-        ax1.set_xticks(label_ticks, ["1", "2", "4", "8", "1", "2", "4", "8", "1"])
+        ax1.set_xticks(label_ticks, ["1", "2", "4", "1", "2", "4", "1"])
 
         # Set y axis 1: load
         h1, l1 = ax1.get_legend_handles_labels()
