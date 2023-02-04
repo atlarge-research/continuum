@@ -258,9 +258,9 @@ To satisfy: (T_proc * R) < (C_e * Q_e)
 
         logging.info("Verify with #cpus=%i and quota=%.4f", self.C_e, self.Q_e)
         logging.info("T_proc: %.4f", T_proc)
-        norm_T_proc = T_proc * (self.C_e * self.Q_e)
-        logging.info("Normalized T_proc: %.4f", norm_T_proc)
-        diff = ((norm_T_proc - self.T_proc) / self.T_proc) * 100
+        T_proc_norm = T_proc * (self.C_e * self.Q_e)
+        logging.info("Normalized T_proc: %.4f", T_proc_norm)
+        diff = ((T_proc_norm - self.T_proc) / self.T_proc) * 100
         logging.info("Difference between predicted T_proc and actual T_proc: %.4f", diff)
 
 
