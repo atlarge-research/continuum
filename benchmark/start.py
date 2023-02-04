@@ -637,7 +637,9 @@ def start_endpoint(config, machines):
                 if config["control_ips"]:
                     env.append("CLOUD_CONTROLLER_IP=%s" % (config["control_ips"][0]))
             else:
-                env.append("CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"]))
+                env.append(
+                    "CPU_THREADS=%i" % (max(1, config["benchmark"]["application_endpoint_cpu"]))
+                )
 
             logging.info("Launch %s", cont_name)
 
