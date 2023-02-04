@@ -236,7 +236,7 @@ python3 replicate_paper.py Deployments
 ```
 
 ## Figure 7 (7 x 15 minutes)
-The same explanation in Figure 6 applies to Figure 7 - configurations differ between GCP and QEMU, but the trends in the results are similar. The output can again be found in the `/logs` directory as a PDF. When the script crashes, see the explanation above on how to restart. To replicate Figure 7, using the configurations in `configuration/experiment_endpoint_scaling`:
+The same explanation in Figure 6 applies to Figure 7 - configurations differ between GCP and QEMU, but the trends in the results are similar. The main difference is that we omit the experiments with 8 endpoints, as this may create more VMs than the default GCP quota allows, see the discussion in the previous section. The output can again be found in the `/logs` directory as a PDF. When the script crashes, see the explanation above on how to restart. To replicate Figure 7, using the configurations in `configuration/experiment_endpoint_scaling`:
 
 ```bash
 rm -r logs/*.log
@@ -256,6 +256,7 @@ python3 replicate_model.py
 The `replicate_model.py` script uses the same restart logic as `replicate_paper.py`; see the explanation above.
 This experiment again produces a PDF in the `/logs` directory.
 The explanation of the heatmap and the parameters used can be found in the paper, the configuration files in `/configuration/model`, and in the output of the `replicate_model.py` script.
+We use the same configurations A and B as shown in Figure 7 in the CCGRID paper: Point A in the heatmap corresponds with the endpoint baseline in Figure 7, and point B corresponds with the edge offloading scenario with 2 endpoints connected.
 
 ## Further Customization
 You can create configuration files to further customize deployments with the Continuum framework.

@@ -252,17 +252,6 @@ To satisfy: (T_proc * R) < (C_e * Q_e)
         df = self.str_to_df(output[-5][1:-2])
         logging.info("\n%s", df.to_string(index=False))
 
-        # Extract the required data
-        df["proc_time/data (ms)"] = pd.to_numeric(df["proc_time/data (ms)"], downcast="float")
-        T_proc = df["proc_time/data (ms)"].mean() / 1000.0
-
-        logging.info("Verify with #cpus=%i and quota=%.4f", self.C_e, self.Q_e)
-        logging.info("T_proc: %.4f", T_proc)
-        norm = T_proc * (self.C_e * self.Q_e)
-        logging.info("Normalized T_proc: %.4f", norm)
-        diff = ((norm - self.T_proc) / self.T_proc) * 100
-        logging.info("Difference between predicted T_proc and actual T_proc: %.4f", diff)
-
 
 class ModelOffload(Model):
     """Model for local execution on endpoints"""
