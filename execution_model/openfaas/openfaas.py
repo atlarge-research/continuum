@@ -2,7 +2,6 @@
 
 import logging
 import os
-import sys
 
 from infrastructure import ansible
 
@@ -33,7 +32,7 @@ def verify_options(parser, config):
     elif "cache_worker" in config["benchmark"] and config["benchmark"]["cache_worker"] == "True":
         parser.error("ERROR: OpenFaaS app does not support application caching")
     elif (
-        application in config["benchmark"]
+        "application" in config["benchmark"]
         and config["benchmark"]["application"] != "image_classification"
     ):
         parser.error("ERROR: Serverless OpenFaaS only works with the image_classification app")
@@ -46,13 +45,6 @@ def start(config, machines):
         config (dict): Parsed Configuration
         machines (List[Machine]): all physical machines available
     """
-    if config["benchmark"]["resource_manager"] != "kubernetes":
-        logging.error(
-            "FAILED! OpenFaaS only runs with Kubernetes, but %s was installed",
-            config["benchmark"]["resource_manager"],
-        )
-        sys.exit()
-
     logging.info("Installing OpenFaaS")
 
     command = [

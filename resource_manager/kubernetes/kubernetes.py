@@ -36,10 +36,11 @@ def verify_options(parser, config):
         or config["infrastructure"]["endpoint_nodes"] < 1
     ):
         parser.error("ERROR: Kubernetes requires #clouds>=2, #edges=0, #endpoints>=1")
-    elif (config["infrastructure"]["cloud_nodes"] - 1) % config["infrastructure"][
-        "endpoint_nodes"
-    ] != 0:
-        parser.error("ERROR: Kubernetes requires (#clouds-1) %% #endpoints == 0 (-1 for control)")
+    elif (
+        config["infrastructure"]["endpoint_nodes"] % (config["infrastructure"]["cloud_nodes"] - 1)
+        != 0
+    ):
+        parser.error(r"ERROR: Kubernetes requires (#clouds-1) % #endpoints == 0 (-1 for control)")
 
 
 def start(config, machines):

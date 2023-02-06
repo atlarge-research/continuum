@@ -192,7 +192,7 @@ endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
 
 
 def create_inventory_vm(config, machines):
-    """Create ansible inventory for setting up Kubernetes and KubeEdge, so ssh to all VMs is needed
+    """Create inventory for installing and configuring software in VMs
 
     Args:
         config (dict): Parsed configuration

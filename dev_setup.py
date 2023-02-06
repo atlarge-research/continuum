@@ -9,6 +9,8 @@ def main():
     """Generate the content of the pre-commit file, and create the file"""
     content = """\
 #!/bin/sh
+set -e
+
 echo "-------------------------------"
 echo "Reset GCP values in config files"
 echo "-------------------------------"
