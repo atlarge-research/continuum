@@ -201,9 +201,6 @@ def create_inventory_vm(config, machines):
     logging.info("Generate Ansible inventory file for VMs")
 
     with open(".tmp/inventory_vms", "w", encoding="utf-8") as f:
-        # TODO: When using GCP with Terraform, host_ip needs to be accessible from the VMs
-        #       This is not the case when you use a cluster with a headnode and worker nodes
-        #       that get internet access via the headnode.
         f.write("[all:vars]\n")
         f.write("ansible_python_interpreter=/usr/bin/python3\n")
         f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
@@ -360,7 +357,8 @@ def copy(config, machines):
 
     # Copy the benchmark file if needed
     if (
-        not config["infrastructure"]["infra_only"]
+        "benchmark" in config 
+        and config["benchmark"]["application"] is not None
         and (config["mode"] == "cloud" or config["mode"] == "edge")
         and config["benchmark"]["resource_manager"] != "mist"
     ):

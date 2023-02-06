@@ -56,10 +56,17 @@ def set_logging(args):
 
     if args.config["infrastructure"]["infra_only"]:
         log_name = "%s_infra_only.log" % (t)
-    else:
+    elif args.config["benchmark"]["resource_manager_only"]:
         log_name = "%s_%s_%s.log" % (
             t,
             args.config["mode"],
+            args.config["benchmark"]["resource_manager"],
+        )
+    else:
+        log_name = "%s_%s_%s_%s.log" % (
+            t,
+            args.config["mode"],
+            args.config["benchmark"]["resource_manager"],
             args.config["benchmark"]["application"],
         )
 

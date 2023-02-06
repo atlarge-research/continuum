@@ -32,7 +32,7 @@ def verify_options(parser, config):
     elif "cache_worker" in config["benchmark"] and config["benchmark"]["cache_worker"] == "True":
         parser.error("ERROR: OpenFaaS app does not support application caching")
     elif (
-        "application" in config["benchmark"]
+        not config["benchmark"]["resource_manager_only"]
         and config["benchmark"]["application"] != "image_classification"
     ):
         parser.error("ERROR: Serverless OpenFaaS only works with the image_classification app")

@@ -585,7 +585,6 @@ def start(config, machines):
     copy(config, machines)
     start_vms(config, machines)
 
-    # TODO: Do something with the internal ips (networking between VMs)
     m.gather_ips(config, machines)
     m.gather_ssh(config, machines)
     infrastructure.add_ssh(config, machines)

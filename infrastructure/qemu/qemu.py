@@ -365,9 +365,6 @@ def base_image(config, machines):
             name = name.rstrip(string.digits)
             base_names.append(name)
 
-    # Names can be duplicates across machines, prevent this (TODO: can this be possible?)
-    base_names = list(set(base_names))
-
     # Create a mask for the previous list
     need_images = [False for _ in range(len(base_names))]
 

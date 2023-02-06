@@ -439,11 +439,17 @@ def parse_benchmark(parser, input_config, config):
         ["resource_manager", str, lambda x: x in rms, True, None],
         ["resource_manager_only", bool, lambda x: x in [True, False], False, None],
         ["docker_pull", bool, lambda x: x in [True, False], False, None],
-        ["application", str, lambda x: x in apps, True, None],
+        ["application", str, lambda x: x in apps, False, None],
     ]
 
     for s in settings:
         option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
+
+    # Application is mandatory if resource_manager_only=False
+    if config[sec]["resource_manager_only"] and config[sec]["application"] is not None:
+        parser.error("ERROR: When resource_manager_only=True, application should not be set")
+    elif not config[sec]["resource_manager_only"] and config[sec]["application"] is None:
+        parser.error("ERROR: When resource_manager_only=False, application should be set")
 
     # Set default values first
     default_cpu = 0.0

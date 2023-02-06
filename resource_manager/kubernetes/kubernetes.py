@@ -367,7 +367,6 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
                 continue
 
             if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
-                # TODO: Application specific filter again, move to application code
                 logging.error("".join(error))
                 sys.exit()
 
@@ -643,7 +642,6 @@ def wait_worker_completion(config, machines):
             output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
             if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
-                # TODO: Application specific filter
                 logging.error("".join(error))
                 sys.exit()
 
