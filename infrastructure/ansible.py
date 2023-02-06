@@ -357,7 +357,7 @@ def copy(config, machines):
 
     # Copy the benchmark file if needed
     if (
-        "benchmark" in config 
+        "benchmark" in config
         and config["benchmark"]["application"] is not None
         and (config["mode"] == "cloud" or config["mode"] == "edge")
         and config["benchmark"]["resource_manager"] != "mist"
