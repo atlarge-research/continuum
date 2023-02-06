@@ -4,8 +4,13 @@ Mostly used for calling specific application code
 """
 
 import logging
+import sys
 
 from datetime import datetime
+
+from resource_manager.kubernetes import kubernetes
+from resource_manager.endpoint import endpoint
+from execution_model.openfaas import openfaas
 
 
 def set_container_location(config):
@@ -44,19 +49,20 @@ def start(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     if config["infrastructure"]["provider"] == "baremetal":
-        config["module"]["application"].baremetal(config, machines)
+        baremetal(config, machines)
     elif config["benchmark"]["resource_manager"] == "mist":
-        config["module"]["application"].mist(config, machines)
+        mist(config, machines)
     elif config["module"]["execution_model"] and config["execution_model"]["model"] == "openFaas":
-        config["module"]["application"].serverless(config, machines)
+        serverless(config, machines)
     elif config["benchmark"]["resource_manager"] == "none":
-        config["module"]["application"].endpoint_only(config, machines)
+        endpoint_only(config, machines)
     elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
-        config["module"]["application"].kube(config, machines)
+        kube(config, machines)
     elif config["benchmark"]["resource_manager"] == "kubernetes_control":
-        config["module"]["application"].kube_control(config, machines)
+        kube_control(config, machines)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")
+        sys.exit()
 
 
 def print_raw_output(config, worker_output, endpoint_output):
@@ -89,7 +95,7 @@ def print_raw_output(config, worker_output, endpoint_output):
             logging.debug("------------------------------------")
 
 
-def to_datetime_image(s):
+def to_datetime(s):
     """Parse a datetime string from docker logs to a Python datetime object
 
     Args:
@@ -103,3 +109,198 @@ def to_datetime_image(s):
     s = s.replace("Z", "")
     s = s[: s.find(".") + 7]
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
+
+
+def baremetal(config, machines):
+    """Launch a mist computing deployment
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    # Start the worker
+    app_vars = config["module"]["application"].start_worker(config, machines)
+    container_names_work = kubernetes.start_worker(config, machines, app_vars)
+
+    # Start the endpoint
+    container_names = endpoint.start_endpoint(config, machines)
+    endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+
+    # Wait for benchmark to finish
+    endpoint.wait_endpoint_completion(config, machines, config["cloud_ssh"], container_names_work)
+
+    # Now get raw output
+    logging.info("Benchmark has been finished, prepare results")
+    endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
+    worker_output = kubernetes.get_worker_output(config, machines, container_names_work)
+
+    # Parse output into dicts, and print result
+    print_raw_output(config, worker_output, endpoint_output)
+    worker_metrics = config["module"]["application"].gather_worker_metrics(
+        machines, config, worker_output, None
+    )
+    endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
+        config, endpoint_output, container_names
+    )
+    config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
+
+
+def mist(config, machines):
+    """Launch a mist computing deployment
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    # Start the worker
+    app_vars = config["module"]["application"].start_worker(config, machines)
+    container_names_work = kubernetes.start_worker(config, machines, app_vars)
+
+    # Start the endpoint
+    container_names = endpoint.start_endpoint(config, machines)
+    endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+
+    # Wait for benchmark to finish
+    endpoint.wait_endpoint_completion(config, machines, config["edge_ssh"], container_names_work)
+
+    # Now get raw output
+    logging.info("Benchmark has been finished, prepare results")
+    endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
+    worker_output = kubernetes.get_worker_output(config, machines, container_names_work)
+
+    # Parse output into dicts, and print result
+    print_raw_output(config, worker_output, endpoint_output)
+    worker_metrics = config["module"]["application"].gather_worker_metrics(
+        machines, config, worker_output, None
+    )
+    endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
+        config, endpoint_output, container_names
+    )
+    config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
+
+
+def serverless(config, machines):
+    """Launch a serverless deployment using Kubernetes + OpenFaaS
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    # Start the worker
+    openfaas.start_worker(config, machines)
+
+    # Start the endpoint
+    container_names = endpoint.start_endpoint(config, machines)
+    endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+
+    # Now get raw output
+    logging.info("Benchmark has been finished, prepare results")
+    endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
+
+    # Parse output into dicts, and print result
+    print_raw_output(config, None, endpoint_output)
+    endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
+        config, endpoint_output, container_names
+    )
+    config["module"]["application"].format_output(config, None, endpoint_metrics)
+
+
+def endpoint_only(config, machines):
+    """Launch a deployment with only endpoint machines / apps
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    # Start the endpoint
+    container_names = endpoint.start_endpoint(config, machines)
+    endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+
+    # Now get raw output
+    logging.info("Benchmark has been finished, prepare results")
+    endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
+
+    # Parse output into dicts, and print result
+    print_raw_output(config, None, endpoint_output)
+    endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
+        config, endpoint_output, container_names
+    )
+    config["module"]["application"].format_output(config, None, endpoint_metrics)
+
+
+def kube(config, machines):
+    """Launch a K8 deployment, benchmarking K8's applications
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    # Cache the worker to prevent loading
+    if config["benchmark"]["cache_worker"]:
+        app_vars = config["module"]["application"].cache_worker(config, machines)
+        kubernetes.cache_worker(config, machines, app_vars)
+
+    # Start the worker
+    app_vars = config["module"]["application"].start_worker(config, machines)
+    kubernetes.start_worker(config, machines, app_vars)
+
+    # Start the endpoint
+    container_names = endpoint.start_endpoint(config, machines)
+    endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+
+    # Wait for benchmark to finish
+    kubernetes.wait_worker_completion(config, machines)
+
+    # Now get raw output
+    logging.info("Benchmark has been finished, prepare results")
+    endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
+    worker_output = kubernetes.get_worker_output(config, machines)
+
+    # Parse output into dicts, and print result
+    print_raw_output(config, worker_output, endpoint_output)
+    worker_metrics = config["module"]["application"].gather_worker_metrics(
+        machines, config, worker_output, None
+    )
+    endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
+        config, endpoint_output, container_names
+    )
+    config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
+
+
+def kube_control(config, machines):
+    """Launch a K8 deployment, benchmarking K8's controlplane instead of applications running on it
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    # Cache the worker to prevent loading
+    if config["benchmark"]["cache_worker"]:
+        app_vars = config["module"]["application"].cache_worker(config, machines)
+        kubernetes.cache_worker(config, machines, app_vars)
+
+    # Start the worker
+    app_vars = config["module"]["application"].start_worker(config, machines)
+    starttime = kubernetes.start_worker(config, machines, app_vars, get_starttime=True)
+
+    # Start the endpoint
+    container_names = endpoint.start_endpoint(config, machines)
+    endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+
+    # Wait for benchmark to finish
+    kubernetes.wait_worker_completion(config, machines)
+
+    # Now get raw output
+    logging.info("Benchmark has been finished, prepare results")
+    endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
+    worker_output = kubernetes.get_worker_output(config, machines)
+
+    # Parse output into dicts, and print result
+    print_raw_output(config, worker_output, endpoint_output)
+    worker_metrics = config["module"]["application"].gather_worker_metrics(
+        machines, config, worker_output, starttime
+    )
+    endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
+        config, endpoint_output, container_names
+    )
+    config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)

@@ -1,5 +1,6 @@
 """\
 Setup KubeEdge on cloud/edge
+This resource manager doesn't have any/many help functions, see the /kubernetes folder instead
 """
 
 import logging

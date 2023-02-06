@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-from infrastructure.ansible import ansible_check_output
+from infrastructure import ansible
 
 
 def add_options(_config):
@@ -30,6 +30,10 @@ def verify_options(parser, config):
         parser.error("ERROR: Execution model should be openFaas")
     elif config["benchmark"]["resource_manager"] != "kubernetes":
         parser.error("ERROR: Execution_model openFaas requires resource_manager Kubernetes")
+    elif "cache_worker" in config["benchmark"] and config["benchmark"]["cache_worker"] == "True":
+        parser.error("ERROR: OpenFaaS app does not support application caching")
+    elif config["benchmark"]["application"] != "image_classification":
+        parser.error("ERROR: Serverless OpenFaaS only works with the image_classification app")
 
 
 def start(config, machines):
@@ -58,4 +62,44 @@ def start(config, machines):
         ),
     ]
 
-    ansible_check_output(machines[0].process(config, command)[0])
+    ansible.check_output(machines[0].process(config, command)[0])
+
+
+def start_worker(config, machines):
+    """Start the serverless function on OpenFaaS
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Deploy serverless functions on %s", config["mode"])
+
+    # Global variables for each applications
+    memory = min(1000, int(config["benchmark"]["application_worker_memory"] * 1000))
+    cpu = min(1, config["benchmark"]["application_worker_cpu"])
+
+    global_vars = {
+        "app_name": config["benchmark"]["application"].split("_")[0],
+        "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        "memory_req": memory,
+        "cpu_req": cpu,
+        "cpu_threads": max(1, cpu),
+    }
+
+    # Merge the two var dicts
+    all_vars = {**global_vars}
+
+    # Parse to string
+    vars_str = ""
+    for k, v in all_vars.items():
+        vars_str += str(k) + "=" + str(v) + " "
+
+    # Launch applications on cloud/edge
+    command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        vars_str[:-1],
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
+    )
+
+    ansible.check_output(machines[0].process(config, command, shell=True)[0])
+    logging.info("Deployed %s serverless application", config["mode"])

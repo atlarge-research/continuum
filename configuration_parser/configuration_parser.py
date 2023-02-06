@@ -83,7 +83,6 @@ def dynamic_import(parser, config):
             "ERROR: Given provider %s does not have an implementation",
             config["infrastructure"]["provider"],
         )
-        sys.exit()
 
     if not config["infrastructure"]["infra_only"]:
         # Check if resource manager directory exists
@@ -116,7 +115,6 @@ def dynamic_import(parser, config):
                     "ERROR: Given execution model %s does not have an implementation",
                     config["execution_model"]["model"],
                 )
-                sys.exit()
 
         # Now for applications
         if not config["benchmark"]["resource_manager_only"]:
@@ -129,10 +127,9 @@ def dynamic_import(parser, config):
                 )
             else:
                 parser.error(
-                    "ERROR: Given application %s does not have an implementation",
+                    "ERROR: Application %s does not exist",
                     config["benchmark"]["application"],
                 )
-                sys.exit()
 
 
 def add_constants(parser, config):

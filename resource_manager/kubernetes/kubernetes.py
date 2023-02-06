@@ -229,6 +229,28 @@ def cache_worker(config, machines, app_vars):
 
 
 def start_worker(config, machines, app_vars, get_starttime=False):
+    """Select the correct function to start the worker application
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        app_vars (dict OR list): Dictionary or list of variables for a specific app
+        get_starttime (bool, optional): Measure invocation time. Defaults to False.
+
+    Returns:
+        (datetime): Invocation time of the kubectl apply command that launches the benchmark
+        OR
+        (list(list(str))): Names of docker containers launched per machine
+    """
+    if config["benchmark"]["resource_manager"] == "mist":
+        return start_worker_mist(config, machines, app_vars)
+    if config["benchmark"]["resource_manager"] == "baremetal":
+        return start_worker_baremetal(config, machines, app_vars)
+
+    return start_worker_kube(config, machines, app_vars, get_starttime)
+
+
+def start_worker_kube(config, machines, app_vars, get_starttime):
     """Start the MQTT subscriber application on cloud / edge workers.
     Submit the job request to the cloud controller, which automatically starts it on the cluster.
     Every cloud / edge worker will only have 1 application running taking up all resources.
@@ -264,15 +286,6 @@ def start_worker(config, machines, app_vars, get_starttime=False):
         "replicas": worker_apps - 1,  # 0 indexed comparison
         "pull_policy": "Never",
     }
-
-    # Application-specific variables
-    if config["benchmark"]["application"] == "image_classification":
-        app_vars = {
-            "container_port": 1883,
-            "mqtt_logs": True,
-            "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / worker_apps),
-            "cpu_threads": max(1, int(config["benchmark"]["application_worker_cpu"])),
-        }
 
     # Merge the two var dicts
     all_vars = {**global_vars, **app_vars}
@@ -368,12 +381,16 @@ def start_worker(config, machines, app_vars, get_starttime=False):
         return starttime
 
 
-def start_endpoint(config, machines):
-    """Start running the endpoint containers using Docker.
+def start_worker_mist(config, machines, app_vars):
+    """Start running the mist worker subscriber containers using Docker.
+    Wait for them to finish, and get their output.
+    Every edge worker will only have 1 application running taking up all resources.
+    Multiple subscribers per node won't work, they all read the same messages from the MQTT bus.
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        app_vars (list): Dictionary of variables for a specific app
 
     Returns:
         list(list(str)): Names of docker containers launched per machine
@@ -384,81 +401,41 @@ def start_endpoint(config, machines):
     sshs = []
     container_names = []
 
-    # Calc endpoints per worker
-    workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        # If there is a control machine, dont count that one in
-        controllers = [m.cloud_controller for m in machines]
-        workers -= controllers
+    for worker_ssh in config["edge_ssh"]:
+        cont_name = worker_ssh.split("@")[0]
+        worker_ip = worker_ssh.split("@")[1]
 
-        # Calculate number of endpoints per worker
-        end_per_work = int(config["infrastructure"]["endpoint_nodes"] / workers)
-        worker_ips = config["cloud_ips_internal"] + config["edge_ips_internal"]
-        off = 1
-    else:
-        end_per_work = 1
-        worker_ips = [""]
-        off = 10000000
+        # Set variables for the application
+        # TODO: MQTT_LOCAL_IP is app specific, but we only have this info here. Better solution?
+        env = app_vars + ["MQTT_LOCAL_IP=%s" % (worker_ip)]
 
-    # For each worker (cloud or edge), connect to end_per_work endpoints.
-    for worker_i, worker_ip in enumerate(worker_ips):
-        for endpoint_i, endpoint_ssh in enumerate(
-            config["endpoint_ssh"][worker_i * end_per_work : (worker_i + off) * end_per_work]
-        ):
-            # Docker container name and variables depends on deployment mode
-            cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
+        command = (
+            [
+                "docker",
+                "container",
+                "run",
+                "--detach",
+                "--cpus=%i" % (config["benchmark"]["application_worker_cpu"]),
+                "--memory=%ig" % (config["benchmark"]["application_worker_memory"]),
+                "--network=host",
+            ]
+            + ["--env %s" % (e) for e in env]
+            + [
+                "--name",
+                cont_name,
+                os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+            ]
+        )
 
-            # TODO Move this to arguments to make it more flexible
-            env = ["FREQUENCY=%i" % (config["benchmark"]["frequency"])]
-
-            if config["mode"] == "cloud" or config["mode"] == "edge":
-                cont_name = "%s%i_" % (config["mode"], worker_i) + cont_name
-                env.append("MQTT_LOCAL_IP=%s" % (endpoint_ssh.split("@")[1]))
-                env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
-                env.append("MQTT_LOGS=True")
-
-                if config["control_ips"]:
-                    env.append("CLOUD_CONTROLLER_IP=%s" % (config["control_ips"][0]))
-            else:
-                env.append("CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"]))
-
-            logging.info("Launch %s", cont_name)
-
-            # Decide wether to use the endpoint or combined image
-            image = "endpoint"
-            if config["mode"] == "endpoint":
-                image = "combined"
-
-            command = (
-                [
-                    "docker",
-                    "container",
-                    "run",
-                    "--detach",
-                    "--cpus=%i" % (config["benchmark"]["application_endpoint_cpu"]),
-                    "--memory=%ig" % (config["benchmark"]["application_endpoint_memory"]),
-                    "--network=host",
-                ]
-                + ["--env %s" % (e) for e in env]
-                + [
-                    "--name",
-                    cont_name,
-                    os.path.join(
-                        config["registry"],
-                        config["images"][image].split(":")[1],
-                    ),
-                ]
-            )
-
-            commands.append(command)
-            sshs.append(endpoint_ssh)
-            container_names.append(cont_name)
+        commands.append(command)
+        sshs.append(worker_ssh)
+        container_names.append(cont_name)
 
     results = machines[0].process(config, commands, ssh=sshs)
 
     # Checkout process output
     for ssh, (output, error) in zip(sshs, results):
-        logging.debug("Check output of endpoint start in ssh [%s]", ssh)
+        logging.debug("Check output of mist endpoint start in ssh [%s]", ssh)
 
         if error and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
@@ -467,35 +444,16 @@ def start_endpoint(config, machines):
             logging.error("No output from docker container")
             sys.exit()
 
-    return container_names
-
-
-def wait_endpoint_completion(config, machines, sshs, container_names):
-    """Wait for all containers to be finished running the benchmark on endpoints
-    OR for all mist containers, which also use docker so this function can be reused
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-        sshs (list(str)): SSH addresses to edge or endpoint VMs
-        container_names (list(str)): Names of docker containers launched
-    """
-    logging.info("Wait on all endpoint or mist containers to finish")
+    # Wait for containers to be succesfully deployed
+    logging.info("Wait for Mist applications to be deployed")
     time.sleep(10)
 
-    for ssh, cont_name in zip(sshs, container_names):
-        logging.info("Wait for container to finish: %s on VM %s", cont_name, ssh.split("@")[0])
-        finished = False
+    for worker_ssh in config["edge_ssh"]:
+        deployed = False
 
-        while not finished:
-            # Get list of docker containers
+        while not deployed:
             command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
-            ssh_entry = ssh
-            if config["infrastructure"]["provider"] == "baremetal":
-                command = 'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"'
-                ssh_entry = None
-
-            output, error = machines[0].process(config, command, shell=True, ssh=ssh_entry)[0]
+            output, error = machines[0].process(config, command, shell=True, ssh=worker_ssh)[0]
 
             if error:
                 logging.error("".join(error))
@@ -507,35 +465,138 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
             # Get status of docker container
             status_line = None
             for line in output:
-                if cont_name in line:
-                    status_line = line
+                for cont_name in container_names:
+                    if cont_name in line:
+                        status_line = line
 
             if status_line is None:
                 logging.error(
-                    "ERROR: Could not find status of container %s running in VM %s: %s",
-                    cont_name,
-                    ssh.split("@")[0],
+                    "ERROR: Could not find the status of any container running in VM %s: %s",
+                    worker_ssh.split("@")[0],
                     "".join(output),
                 )
                 sys.exit()
 
             parsed = status_line.rstrip().split(" ")
 
-            # Check status
+            # If not yet up, wait
             if parsed[1] == "Up":
-                time.sleep(5)
-            elif parsed[1] == "Exited" and parsed[2] == "(0)":
-                finished = True
+                deployed = True
             else:
+                time.sleep(5)
+
+    return container_names
+
+
+def start_worker_baremetal(config, machines, app_vars):
+    """Start running the endpoint containers using Docker.
+
+    Assumptions for now:
+    - You can only have one worker
+    - The worker is a cloud node
+
+    Instructions for starting/stopping/installing mosquitto on bare-metal (only requirement)
+    - sudo apt install mosquitto=1.6.9-1
+    - mosquitto -d -p 1883
+    - sudo systemctl start mosquitto.service
+    - sudo systemctl stop mosquitto.service
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        app_vars (list): Dictionary of variables for a specific app
+
+    Returns:
+        list(list(str)): Names of docker containers launched per machine
+    """
+    logging.info("Deploy Docker containers on endpoints with publisher application")
+
+    if config["infrastructure"]["cloud_nodes"] != 1 and config["infrastructure"]["edge_nodes"] != 0:
+        logging.error("ERROR: Baremetal currently only works with #clouds==1 and #edges==0")
+        sys.exit()
+
+    period_scaler = 100000
+    period = int(config["infrastructure"]["cloud_cores"] * period_scaler)
+    quota = int(period * config["infrastructure"]["cloud_quota"])
+
+    cont_name = config["cloud_ssh"][0].split("@")[0]
+
+    env_list = []
+    for e in app_vars:
+        env_list.append("--env")
+        env_list.append(e)
+
+    command = (
+        [
+            "docker",
+            "container",
+            "run",
+            "--detach",
+            "--memory=%ig" % (config["infrastructure"]["cloud_memory"]),
+            "--cpu-period=%i" % (period),
+            "--cpu-quota=%i" % (quota),
+            "--network=host",
+        ]
+        + env_list
+        + [
+            "--name",
+            cont_name,
+            os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        ]
+    )
+
+    output, error = machines[0].process(config, command)[0]
+
+    logging.debug("Check output of worker container")
+    if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+        logging.error("".join(error))
+        sys.exit()
+    elif not output:
+        logging.error("No output from docker container")
+        sys.exit()
+
+    # Wait for containers to be succesfully deployed
+    logging.info("Wait for baremetal worker applications to be deployed")
+    time.sleep(10)
+
+    for worker_ssh in config["cloud_ssh"]:
+        deployed = False
+
+        while not deployed:
+            command = 'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"'
+            output, error = machines[0].process(config, command, shell=True)[0]
+
+            if error:
+                logging.error("".join(error))
+                sys.exit()
+            elif not output:
+                logging.error("No output from docker container")
+                sys.exit()
+
+            # Get status of docker container
+            status_line = None
+            for line in output:
+                for cont_name in [cont_name]:
+                    if cont_name in line:
+                        status_line = line
+
+            if status_line is None:
                 logging.error(
-                    'ERROR: Container %s failed in VM %s with status "%s"',
-                    cont_name,
-                    ssh.split("@")[0],
-                    status_line,
+                    "ERROR: Could not find the status of any container running in VM %s: %s",
+                    worker_ssh.split("@")[0],
+                    "".join(output),
                 )
                 sys.exit()
 
-    logging.info("All endpoint or mist containers have finished")
+            parsed = status_line.rstrip().split(" ")
+
+            # If not yet up, wait
+            if parsed[1] == "Up":
+                deployed = True
+            else:
+                time.sleep(5)
+
+    return [cont_name]
 
 
 def wait_worker_completion(config, machines):
@@ -594,7 +655,25 @@ def wait_worker_completion(config, machines):
             sys.exit()
 
 
-def get_worker_output(config, machines):
+def get_worker_output(config, machines, container_names=None):
+    """Select the correct function to start the worker application
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        container_names (list(list(str))): Names of docker containers launched per machine
+
+    Returns:
+        list(list(str)): Output of each container ran on the cloud / edge
+    """
+    # TODO Mist doesn't use kubernetes -> remove from this file, to a mist.py file
+    if config["benchmark"]["resource_manager"] in ["mist", "baremetal"]:
+        return get_worker_output_mist(config, machines, container_names)
+
+    return get_worker_output_kube(config, machines)
+
+
+def get_worker_output_kube(config, machines):
     """Get the output of worker cloud / edge applications
 
     Args:
@@ -627,6 +706,14 @@ def get_worker_output(config, machines):
         command = ["kubectl", "logs", "--timestamps=true", container]
         commands.append(command)
 
+        # Extra: Log kubernetes system components
+        # - These logs are deleted after some time, so better backup them now
+        command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
+            container,
+            container,
+        )
+        machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
+
     # Get the logs
     results = machines[0].process(config, commands, ssh=config["cloud_ssh"][0])
 
@@ -635,6 +722,48 @@ def get_worker_output(config, machines):
     for i, (output, error) in enumerate(results):
         if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
             logging.error("Container %i: %s", i, "".join(error))
+            sys.exit()
+
+        output = [line.rstrip() for line in output]
+        worker_output.append(output)
+
+    return worker_output
+
+
+def get_worker_output_mist(config, machines, container_names):
+    """Get the output of worker mist applications
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        container_names (list(list(str))): Names of docker containers launched per machine
+
+    Returns:
+        list(list(str)): Output of each container ran as a worker in the mist
+    """
+    logging.info("Gather output from subscribers")
+
+    # Alternatively, use docker logs -t container_name for detailed timestamps
+    # Exampel: "2021-10-14T08:55:55.912611917Z Start connecting with the MQTT broker"
+    commands = [["docker", "logs", "-t", cont_name] for cont_name in container_names]
+
+    ssh_entry = config["edge_ssh"]
+    ssh_entry2 = config["edge_ssh"]
+    if config["infrastructure"]["provider"] == "baremetal":
+        ssh_entry = None
+        ssh_entry2 = config["cloud_ssh"]
+
+    results = machines[0].process(config, commands, ssh=ssh_entry)
+
+    worker_output = []
+    for container, ssh, (output, error) in zip(container_names, ssh_entry2, results):
+        logging.info("Get output from mist worker %s on VM %s", container, ssh)
+
+        if error:
+            logging.error("".join(error))
+            sys.exit()
+        elif not output:
+            logging.error("Container %s output empty", container)
             sys.exit()
 
         output = [line.rstrip() for line in output]
