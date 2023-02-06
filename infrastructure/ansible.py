@@ -208,7 +208,10 @@ def create_inventory_vm(config, machines):
         f.write("ansible_python_interpreter=/usr/bin/python3\n")
         f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
         f.write("ansible_ssh_private_key_file=%s\n" % (config["ssh_key"]))
-        f.write("registry_ip=%s\n" % (config["registry"]))
+
+        if "registry" in config:
+            f.write("registry_ip=%s\n" % (config["registry"]))
+
         f.write(
             "continuum_home=%s\n"
             % (os.path.join(config["infrastructure"]["base_path"], ".continuum"))

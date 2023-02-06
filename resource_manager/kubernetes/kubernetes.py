@@ -250,6 +250,38 @@ def start_worker(config, machines, app_vars, get_starttime=False):
     return start_worker_kube(config, machines, app_vars, get_starttime)
 
 
+def launch_with_starttime(config, machines):
+    """Launch the application by hand using kubectl to time how long the invocation takes
+
+    TODO This is actually specific for the empty app - can we somehow move it to there?
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+
+    Returns:
+        (float): Time needed to start the application with kubectl
+    """
+    starttime = 0.0
+
+    # This only creates the file we need, now launch the benchmark
+    command = (
+        "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config "
+        + '-f /home/cloud_controller/job-template.yaml"'
+    )
+    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+
+    if len(output) < 2 or "created" not in output[1]:
+        logging.error("Could not deploy pods: %s", "".join(output))
+        sys.exit()
+    if error and not all("[CONTINUUM]" in l for l in error):
+        logging.error("Could not deploy pods: %s", "".join(error))
+        sys.exit()
+
+    starttime = float(output[0])
+    return starttime
+
+
 def start_worker_kube(config, machines, app_vars, get_starttime):
     """Start the MQTT subscriber application on cloud / edge workers.
     Submit the job request to the cloud controller, which automatically starts it on the cluster.
@@ -305,27 +337,7 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
     ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
     if get_starttime:
-        starttime = 0.0
-        # TODO: Remove this part, use first print in kubectl itself instead
-        # TODO: Move this application specific code properly to the app folders
-        #       with classes etc.
-        # This only creates the file we need, now launch the benchmark
-        command = (
-            "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config "
-            + '-f /home/cloud_controller/job-template.yaml"'
-        )
-        output, error = machines[0].process(
-            config, command, shell=True, ssh=config["cloud_ssh"][0]
-        )[0]
-
-        if len(output) < 2 or "job.batch/empty created" not in output[1]:
-            logging.error("Could not deploy pods: %s", "".join(output))
-            sys.exit()
-        if error and not all("[CONTINUUM]" in l for l in error):
-            logging.error("Could not deploy pods: %s", "".join(error))
-            sys.exit()
-
-        starttime = float(output[0])
+        starttime = launch_with_starttime(config, machines)
 
     # Waiting for the applications to fully initialize (includes scheduling)
     time.sleep(10)

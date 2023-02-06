@@ -72,7 +72,7 @@ def dynamic_import(parser, config):
     }
 
     # Check if infrastructure provider directory exists
-    dirs = list(os.walk("../infrastructure"))[0][1]
+    dirs = list(os.walk("./infrastructure"))[0][1]
     dirs = [d for d in dirs if d[0] != "_"]
     if config["infrastructure"]["provider"] in dirs:
         config["module"]["provider"] = importlib.import_module(
@@ -87,7 +87,7 @@ def dynamic_import(parser, config):
     if not config["infrastructure"]["infra_only"]:
         # Check if resource manager directory exists
         # Not all RM have modules (e.g., mist, none)
-        dirs = list(os.walk("../resource_manager"))[0][1]
+        dirs = list(os.walk("./resource_manager"))[0][1]
         dirs = [d for d in dirs if d[0] != "_"]
         if config["benchmark"]["resource_manager"] in dirs:
             config["module"]["resource_manager"] = importlib.import_module(
@@ -104,7 +104,7 @@ def dynamic_import(parser, config):
         # Now for execution model
         if "execution_model" in config:
             # Check if resource manager directory exists
-            dirs = list(os.walk("../execution_model"))[0][1]
+            dirs = list(os.walk("./execution_model"))[0][1]
             dirs = [d for d in dirs if d[0] != "_"]
             if config["execution_model"]["model"] in dirs:
                 config["module"]["execution_model"] = importlib.import_module(
@@ -119,7 +119,7 @@ def dynamic_import(parser, config):
         # Now for applications
         if not config["benchmark"]["resource_manager_only"]:
             # Check if infrastructure provider directory exists
-            dirs = list(os.walk("../application"))[0][1]
+            dirs = list(os.walk("./application"))[0][1]
             dirs = [d for d in dirs if d[0] != "_"]
             if config["benchmark"]["application"] in dirs:
                 config["module"]["application"] = importlib.import_module(
@@ -246,7 +246,7 @@ def parse_infrastructure(parser, input_config, config):
     config[sec] = {}
 
     # Get a list of all providers
-    providers = list(os.walk("../infrastructure"))[0][1]
+    providers = list(os.walk("./infrastructure"))[0][1]
     providers = [d for d in providers if d[0] != "_"]
 
     settings = [
@@ -423,7 +423,7 @@ def parse_benchmark(parser, input_config, config):
 
     # Get a list of all resource managers
     # TODO: Make mist a provider - and scrap none
-    rms = list(os.walk("../resource_manager"))[0][1]
+    rms = list(os.walk("./resource_manager"))[0][1]
     rms = [d for d in rms if d[0] != "_"]
     rms.append("mist")
     rms.append("none")
@@ -431,7 +431,7 @@ def parse_benchmark(parser, input_config, config):
         rms.remove("endpoint")
 
     # Get a list of all apps
-    apps = list(os.walk("../application"))[0][1]
+    apps = list(os.walk("./application"))[0][1]
     apps = [d for d in apps if d[0] != "_"]
 
     settings = [
@@ -485,7 +485,7 @@ def parse_execution_model(parser, input_config, config):
         return
 
     # Get a list of all execution models
-    models = list(os.walk("../execution_model"))[0][1]
+    models = list(os.walk("./execution_model"))[0][1]
     models = [d for d in models if d[0] != "_"]
 
     config[sec] = {}

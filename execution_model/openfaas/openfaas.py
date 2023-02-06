@@ -32,7 +32,10 @@ def verify_options(parser, config):
         parser.error("ERROR: Execution_model openFaas requires resource_manager Kubernetes")
     elif "cache_worker" in config["benchmark"] and config["benchmark"]["cache_worker"] == "True":
         parser.error("ERROR: OpenFaaS app does not support application caching")
-    elif config["benchmark"]["application"] != "image_classification":
+    elif (
+        application in config["benchmark"]
+        and config["benchmark"]["application"] != "image_classification"
+    ):
         parser.error("ERROR: Serverless OpenFaaS only works with the image_classification app")
 
 
