@@ -454,7 +454,6 @@ def docker_registry(config, machines):
     images = list(config["images"].values())
 
     # TODO This is RM specific, move this to the RM code
-    #      Move this to the provider via interface call
     if config["benchmark"]["resource_manager"] == "kubernetes_control":
         images_kube = [
             "redplanet00/kube-proxy:v1.25.3",
@@ -489,9 +488,8 @@ def docker_registry(config, machines):
 
 def docker_pull(config, machines, base_names):
     """Pull the correct docker images into the base images.
-    Not for Kubernetes/KubeEdge deployments, as those use the registries
-    For endpoint, pull both the publisher and combined images, as it can be used in
-    either cloud/edge mode, or in endpoint mode for publisher and subscriber are combined.
+    Do this for (i) All QEMU base images and (ii) All GCP endpoint VMs
+    Resource managers like Kubernetes don't need this, they will pull the containers by themselves
 
     Args:
         config (dict): Parsed configuration

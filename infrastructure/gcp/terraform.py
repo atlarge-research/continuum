@@ -337,16 +337,12 @@ def move_registry(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     # Determine to new location of the registry
-    ssh = None
-    if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubernetes_control"]:
+    if config["infrastructure"]["cloud_nodes"]:
         ssh = config["cloud_ssh"][0]
-    elif config["benchmark"]["resource_manager"] in ["mist"]:
+    elif config["infrastructure"]["edge_nodes"]:
         ssh = config["edge_ssh"][0]
-    elif config["benchmark"]["resource_manager"] in ["none"]:
-        ssh = config["endpoint_ssh"][0]
     else:
-        logging.error("ERROR: Unknown resource manager %s", config["benchmark"]["resource_manager"])
-        sys.exit()
+        ssh = config["endpoint_ssh"][0]
 
     # Create a registry on the cloud controller
     logging.info("Create Docker registry on %s - %s", ssh, config["registry"])
@@ -441,16 +437,12 @@ def set_registry(config, machines):
     config["old_registry"] = config["registry"]
 
     # Determine to new location of the registry
-    registry = None
-    if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubernetes_control"]:
+    if config["infrastructure"]["cloud_nodes"]:
         registry = machines[0].cloud_controller_ips_internal[0] + ":5000"
-    elif config["benchmark"]["resource_manager"] in ["mist"]:
+    elif config["infrastructure"]["edge_nodes"]:
         registry = machines[0].edge_ips_internal[0] + ":5000"
-    elif config["benchmark"]["resource_manager"] in ["none"]:
-        registry = machines[0].endpoint_ips_internal[0] + ":5000"
     else:
-        logging.error("ERROR: Unknown resource manager %s", config["benchmark"]["resource_manager"])
-        sys.exit()
+        registry = machines[0].endpoint_ips_internal[0] + ":5000"
 
     config["registry"] = registry
 
@@ -519,17 +511,15 @@ def base_install(config, machines):
 
         base_names = machines[0].base_names
 
-        # When user Kubernetes / KubeEdge with Terraform GCP, these resource managers will
-        # automatically pull from dockerhub. Endpoints don't have these resource managers,
-        # so we still have to pull automatically for them.
+        # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
+        # These RM will automatically pull images, so we can skip this here.
+        # Only pull endpoint images instead
         if (
             config["benchmark"]["resource_manager"]
             in ["kubernetes", "kubeedge", "kubernetes_control"]
             and config["infrastructure"]["endpoint_nodes"] > 0
         ):
-            base_names = [
-                base_name for base_name in machines[0].base_names if "endpoint" in base_name
-            ]
+            base_names = [base_name for base_name in base_names if "endpoint" in base_name]
 
         infrastructure.docker_pull(config, machines, base_names)
 
