@@ -145,5 +145,13 @@
           MaxSessions 10000
           MaxStartups 10000
 
+    - name: Clone kube-prometheus
+      command: git clone https://github.com/prometheus-operator/kube-prometheus.git /kube-prometheus
+
+    - name: Git checkout
+      command: git checkout release-0.12
+      args:
+        chdir: /kube-prometheus
+
     - name: Reset SSH client
       command: systemctl restart sshd
