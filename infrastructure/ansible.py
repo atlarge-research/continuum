@@ -390,7 +390,9 @@ def copy(config, machines):
                 path = os.path.join(config["base"], "resource_manager", rm, "edge")
                 out.append(machines[0].copy_files(config, path, dest, recursive=True))
         if "execution_model" in config:
-            path = os.path.join(config["base"], "execution_model")
+            path = os.path.join(
+                config["base"], "execution_model", config["execution_model"]["model"], "cloud"
+            )
             out.append(machines[0].copy_files(config, path, dest, recursive=True))
 
         path = os.path.join(config["base"], "resource_manager/endpoint/endpoint/")
