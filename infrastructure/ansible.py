@@ -396,8 +396,9 @@ def copy(config, machines):
             )
             out.append(machines[0].copy_files(config, path, dest, recursive=True))
 
-        path = os.path.join(config["base"], "resource_manager/endpoint/endpoint/")
-        out.append(machines[0].copy_files(config, path, dest, recursive=True))
+        if config["infrastructure"]["endpoint_nodes"]:
+            path = os.path.join(config["base"], "resource_manager/endpoint/endpoint/")
+            out.append(machines[0].copy_files(config, path, dest, recursive=True))
 
     for output, error in out:
         if error:

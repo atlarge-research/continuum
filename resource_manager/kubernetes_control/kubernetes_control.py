@@ -32,9 +32,9 @@ def verify_options(parser, config):
     if (
         config["infrastructure"]["cloud_nodes"] < 2
         or config["infrastructure"]["edge_nodes"] != 0
-        or config["infrastructure"]["endpoint_nodes"] < 1
+        or config["infrastructure"]["endpoint_nodes"] < 0
     ):
-        parser.error("ERROR: Kubernetes requires #clouds>=2, #edges=0, #endpoints>=1")
+        parser.error("ERROR: Kubernetes-control requires #clouds>=2, #edges=0, #endpoints>=0")
     elif (
         config["infrastructure"]["endpoint_nodes"] % (config["infrastructure"]["cloud_nodes"] - 1)
         != 0

@@ -472,10 +472,10 @@ def parse_benchmark(parser, input_config, config):
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
-        ["application_worker_cpu", float, lambda x: x >= 0.1, False, default_cpu],
-        ["application_worker_memory", float, lambda x: x >= 0.1, False, default_mem],
-        ["application_endpoint_cpu", float, lambda x: x >= 0.1, False, ec],
-        ["application_endpoint_memory", float, lambda x: x >= 0.1, False, em],
+        ["application_worker_cpu", float, lambda x: x >= 0.001, False, default_cpu],
+        ["application_worker_memory", float, lambda x: x >= 0.001, False, default_mem],
+        ["application_endpoint_cpu", float, lambda x: x >= 0.001, False, ec],
+        ["application_endpoint_memory", float, lambda x: x >= 0.001, False, em],
         ["applications_per_worker", int, lambda x: x >= 1, False, 1],
         ["observability", bool, lambda x: x in [True, False], False, False],
     ]
