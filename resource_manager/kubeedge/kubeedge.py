@@ -23,8 +23,7 @@ def add_options(config):
     if config["benchmark"]["resource_manager"] == "kubeedge":
         settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
 
-    if settings:
-        return settings
+    return settings
 
 
 def verify_options(parser, config):

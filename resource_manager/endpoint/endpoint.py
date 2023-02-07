@@ -64,7 +64,7 @@ def start_endpoint_default(config, machines):
     workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
     if config["mode"] == "cloud" or config["mode"] == "edge":
         # If there is a control machine, dont count that one in
-        controllers = sum([m.cloud_controller for m in machines])
+        controllers = sum(m.cloud_controller for m in machines)
         workers -= controllers
 
         # Calculate number of endpoints per worker
