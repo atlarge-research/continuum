@@ -592,7 +592,7 @@ def start(config):
     set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
-    if not config["infrastructure"]["infra_only"]:
+    if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
         docker_registry(config, machines)
 
     start_provider(config, machines)
