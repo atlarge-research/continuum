@@ -19,10 +19,12 @@ def add_options(config):
         list(list()): Options to add
     """
     # Mist doesn't have cache worker, only KubeEdge
+    settings = None
     if config["benchmark"]["resource_manager"] == "kubeedge":
         settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
 
-    return settings
+    if settings:
+        return settings
 
 
 def verify_options(parser, config):

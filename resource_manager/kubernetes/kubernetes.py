@@ -625,7 +625,7 @@ def wait_worker_completion(config, machines):
     workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
     if config["mode"] == "cloud" or config["mode"] == "edge":
         # If there is a control machine, dont count that one in
-        controllers = len([m.cloud_controller for m in machines])
+        controllers = sum([m.cloud_controller for m in machines])
         workers -= controllers
 
     # On the cloud controller, check the status of each pod, and wait until finished

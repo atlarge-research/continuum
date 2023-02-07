@@ -473,6 +473,8 @@ def parse_benchmark(parser, input_config, config):
         ["applications_per_worker", int, lambda x: x >= 1, False, 1],
         ["observability", bool, lambda x: x in [True, False], False, False],
     ]
+    # TODO: Observability only works with Kubernetes / KubeControl at the moment
+    #       Enforce this check or not?
 
     for s in settings:
         option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
@@ -552,24 +554,28 @@ def add_options(parser, input_config, config):
     # Get the options from each module
     if config["module"]["application"]:
         setting = application.add_options(config)
-        for s in setting:
-            s.append("benchmark")
-        settings.append(setting)
+        if setting:
+            for s in setting:
+                s.append("benchmark")
+            settings.append(setting)
     if config["module"]["execution_model"]:
         setting = execution_model.add_options(config)
-        for s in setting:
-            s.append("execution_model")
-        settings.append(setting)
+        if setting:
+            for s in setting:
+                s.append("execution_model")
+            settings.append(setting)
     if config["module"]["provider"]:
         setting = infrastructure.add_options(config)
-        for s in setting:
-            s.append("infrastructure")
-        settings.append(setting)
+        if setting:
+            for s in setting:
+                s.append("infrastructure")
+            settings.append(setting)
     if config["module"]["resource_manager"]:
         setting = resource_manager.add_options(config)
-        for s in setting:
-            s.append("benchmark")
-        settings.append(setting)
+        if setting:
+            for s in setting:
+                s.append("benchmark")
+            settings.append(setting)
 
     # Parse / verify the options, and add to config
     for per_module_settings in settings:
