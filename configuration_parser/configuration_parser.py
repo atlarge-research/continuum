@@ -231,7 +231,10 @@ def option_check(
         parser.error("Config: Missing option %s->%s" % (section, option))
     else:
         # Set default value if the user didnt set any
-        config[section][option] = intype(default)
+        if default is None or isinstance(default, bool):
+            config[section][option] = default
+        else:
+            config[section][option] = intype(default)
 
 
 def parse_infrastructure(parser, input_config, config):
