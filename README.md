@@ -220,7 +220,7 @@ Inside the continuum framework:
 In this part, you will setup [OpenFaaS](https://docs.openfaas.com/), a serverless framework, in the Kubernetes cluster that `Continuum` created for you.  
 For the moment, we only allow OpenFaaS to be installed outside of the framework. In the future, we will integrate it in the framework.
 
-1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag and `model = openFaas` in section `execution_model` is critical here.
+1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag and `model = openfaas` in section `execution_model` is critical here.
     ```bash
     python3 continuum.py configuration/bench_openfaas.cfg
     ```

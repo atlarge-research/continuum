@@ -25,10 +25,10 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (dict): Parsed Configuration
     """
-    if config["execution_model"]["model"] != "openFaas":
-        parser.error("ERROR: Execution model should be openFaas")
+    if config["execution_model"]["model"] != "openfaas":
+        parser.error("ERROR: Execution model should be openfaas")
     elif config["benchmark"]["resource_manager"] != "kubernetes":
-        parser.error("ERROR: Execution_model openFaas requires resource_manager Kubernetes")
+        parser.error("ERROR: Execution_model openfaas requires resource_manager Kubernetes")
     elif "cache_worker" in config["benchmark"] and config["benchmark"]["cache_worker"] == "True":
         parser.error("ERROR: OpenFaaS app does not support application caching")
     elif (
@@ -53,7 +53,7 @@ def start(config, machines):
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(
             config["infrastructure"]["base_path"],
-            ".continuum/execution_model/openFaas.yml",
+            ".continuum/execution_model/openfaas.yml",
         ),
     ]
 

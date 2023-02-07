@@ -15,7 +15,7 @@ def set_container_location(config):
         config (dict): Parsed configuration
     """
     source = "redplanet00/kubeedge-applications"
-    if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
+    if "execution_model" in config and config["execution_model"]["model"] == "openfaas":
         # Serverless applications
         # Has no combined - does not make sense
         config["images"] = {

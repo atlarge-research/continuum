@@ -52,7 +52,7 @@ def start(config, machines):
         baremetal(config, machines)
     elif config["benchmark"]["resource_manager"] == "mist":
         mist(config, machines)
-    elif config["module"]["execution_model"] and config["execution_model"]["model"] == "openFaas":
+    elif config["module"]["execution_model"] and config["execution_model"]["model"] == "openfaas":
         serverless(config, machines)
     elif config["benchmark"]["resource_manager"] == "none":
         endpoint_only(config, machines)

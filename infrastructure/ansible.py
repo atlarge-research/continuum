@@ -363,7 +363,7 @@ def copy(config, machines):
         and config["benchmark"]["resource_manager"] != "mist"
     ):
         suffix = config["benchmark"]["resource_manager"]
-        if "execution_model" in config and config["execution_model"]["model"] == "openFaas":
+        if "execution_model" in config:
             suffix = config["execution_model"]["model"]
 
         path = os.path.join(
