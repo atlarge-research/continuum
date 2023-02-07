@@ -577,7 +577,7 @@ def start(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info("Set up QEMU")
+    logging.info("Set up GCP")
     logging.info("Generate configuration files for Infrastructure and Ansible")
     infrastructure.create_keypair(config, machines)
     generate.start(config, machines)

@@ -99,8 +99,7 @@ def main(args):
     """
     machines = infrastructure.start(args.config)
 
-    if args.config["module"]["resource_manager"]:
-        resource_manager.start(args.config, machines)
+    resource_manager.start(args.config, machines)
 
     if args.config["module"]["execution_model"]:
         execution_model.start(args.config, machines)

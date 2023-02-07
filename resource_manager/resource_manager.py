@@ -13,7 +13,8 @@ def start(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     # Install software on cloud/edge nodes
-    config["module"]["resource_manager"].start(config, machines)
+    if config["module"]["resource_manager"]:
+        config["module"]["resource_manager"].start(config, machines)
 
     # Start RM software on endpoints
     if config["infrastructure"]["endpoint_nodes"]:
