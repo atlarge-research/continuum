@@ -53,7 +53,7 @@ def start(config, machines):
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(
             config["infrastructure"]["base_path"],
-            ".continuum/execution_model/openfaas.yml",
+            ".continuum/cloud/openfaas.yml",
         ),
     ]
 
