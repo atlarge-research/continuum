@@ -506,7 +506,7 @@ def base_install(config, machines):
         netperf_install(config, machines)
 
     # Install docker containers if required
-    if not config["infrastructure"]["infra_only"]:
+    if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
         move_registry(config, machines)
 
         base_names = machines[0].base_names
@@ -566,7 +566,7 @@ def start_vms(config, machines):
 
     set_ips(machines, output)
 
-    if not config["infrastructure"]["infra_only"]:
+    if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
         set_registry(config, machines)
 
 

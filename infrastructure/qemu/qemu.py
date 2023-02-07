@@ -533,7 +533,7 @@ def base_image(config, machines):
     ansible.check_output(machines[0].process(config, command)[0])
 
     # Install docker containers if required
-    if not config["infrastructure"]["infra_only"]:
+    if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
         infrastructure.docker_pull(config, machines, base_names)
 
     # Get host timezone
