@@ -114,19 +114,17 @@ def cache_worker(config, machines, app_vars):
     # Set parameters based on mode
     if config["mode"] == "cloud":
         worker_apps = config["infrastructure"]["cloud_nodes"] - 1
-        cores = config["infrastructure"]["cloud_cores"]
     elif config["mode"] == "edge":
         worker_apps = config["infrastructure"]["edge_nodes"]
-        cores = config["infrastructure"]["edge_cores"]
 
-    # Global variables for each applications
-    # cpu_req = cores - 0.4
-    #   Kubernetes services take up some CPU space, and we do not want to oversubscribe
     global_vars = {
         "app_name": config["benchmark"]["application"].replace("_", "-"),
         "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
-        "cpu_req": cores - 0.4,
+        "cpu_req": int(
+            config["benchmark"]["application_worker_cpu"]
+            * config["benchmark"]["applications_per_worker"]
+        ),
         "replicas": worker_apps,
         "pull_policy": "IfNotPresent",
     }
