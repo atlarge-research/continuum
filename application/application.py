@@ -58,7 +58,7 @@ def start(config, machines):
         endpoint_only(config, machines)
     elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
         kube(config, machines)
-    elif config["benchmark"]["resource_manager"] == "kubernetes_control":
+    elif config["benchmark"]["resource_manager"] == "kubecontrol":
         kube_control(config, machines)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")

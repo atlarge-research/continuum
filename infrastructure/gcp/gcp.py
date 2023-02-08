@@ -509,19 +509,17 @@ def base_install(config, machines):
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
         move_registry(config, machines)
 
-        base_names = machines[0].base_names
+        docker_base_names = machines[0].base_names
 
         # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
         # These RM will automatically pull images, so we can skip this here.
         # Only pull endpoint images instead
-        if (
-            config["benchmark"]["resource_manager"]
-            in ["kubernetes", "kubeedge", "kubernetes_control"]
-            and config["infrastructure"]["endpoint_nodes"] > 0
-        ):
-            base_names = [base_name for base_name in base_names if "endpoint" in base_name]
+        if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubecontrol"]:
+            docker_base_names = [
+                base_name for base_name in docker_base_names if "endpoint" in base_name
+            ]
 
-        infrastructure.docker_pull(config, machines, base_names)
+        infrastructure.docker_pull(config, machines, docker_base_names)
 
     set_timezone(config, machines)
 

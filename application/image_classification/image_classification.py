@@ -55,8 +55,8 @@ def verify_options(parser, config):
         parser.error("ERROR: Application should be image_classification")
     elif "cache_worker" in config["benchmark"] and config["benchmark"]["cache_worker"] == "True":
         parser.error("ERROR: image_classification app does not support application caching")
-    elif config["benchmark"]["resource_manager"] == "kubernetes_control":
-        parser.error("ERROR: Application image_classification does not support kubernetes_control")
+    elif config["benchmark"]["resource_manager"] == "kubecontrol":
+        parser.error("ERROR: Application image_classification does not support kubecontrol")
 
 
 def start_worker(config, machines):

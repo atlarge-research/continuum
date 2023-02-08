@@ -2,20 +2,6 @@
 - hosts: clouds
   become: true
   tasks:
-    - name: Ensure docker service is running
-      systemd:
-        name: docker
-        state: started
-
-    - name: Add cloud user to docker group
-      user:
-        name: "{{ username }}"
-        groups: docker
-        append: true
-
-    - name: Restart docker service
-      command: systemctl restart docker
-
     - name: Run Mosquitto
       command: mosquitto -d -p 1883
 
@@ -44,7 +30,3 @@
         state: absent
       with_items:
         - /tmp/join-command.txt
-
-  handlers:
-    - name: docker status
-      service: name=docker state=started

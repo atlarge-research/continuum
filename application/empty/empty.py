@@ -44,8 +44,8 @@ def verify_options(parser, config):
     """
     if config["benchmark"]["application"] != "empty":
         parser.error("ERROR: Application should be empty")
-    elif config["benchmark"]["resource_manager"] != "kubernetes_control":
-        parser.error("ERROR: Application empty requires resource_manager Kubernetes_control")
+    elif config["benchmark"]["resource_manager"] != "kubecontrol":
+        parser.error("ERROR: Application empty requires resource_manager kubecontrol")
 
 
 def cache_worker(_config, _machines):

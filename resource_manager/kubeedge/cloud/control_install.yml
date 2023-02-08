@@ -33,7 +33,7 @@
         kubeadm init
           --apiserver-advertise-address={{ cloud_ip }}
           --apiserver-cert-extra-sans={{ cloud_ip }}
-          --node-name cloud-master
+          --node-name {{ ansible_hostname }}
           --pod-network-cidr=192.168.0.0/16
 
     - name: Create user Kubernetes directory

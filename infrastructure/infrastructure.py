@@ -454,7 +454,7 @@ def docker_registry(config, machines):
     images = list(config["images"].values())
 
     # TODO This is RM specific, move this to the RM code
-    if config["benchmark"]["resource_manager"] == "kubernetes_control":
+    if config["benchmark"]["resource_manager"] == "kubecontrol":
         images_kube = [
             "redplanet00/kube-proxy:v1.25.3",
             "redplanet00/kube-controller-manager:v1.25.3",
@@ -495,10 +495,10 @@ def docker_pull(config, machines, base_names):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
         base_names (list(str)): List of base images to actually pull to
-
-    Returns:
-        list(list(str)): Names of docker containers launched per machine
     """
+    if not base_names:
+        return
+
     logging.info("Pull docker containers into base images")
 
     # Pull the images

@@ -514,6 +514,7 @@ def base_image(config, machines):
             commands.append(command)
 
     if commands:
+        logging.info("Install software in the base VMs")
         results = machines[0].process(config, commands)
 
         for command, (output, error) in zip(commands, results):
@@ -534,7 +535,16 @@ def base_image(config, machines):
 
     # Install docker containers if required
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
-        infrastructure.docker_pull(config, machines, base_names)
+        # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
+        # These RM will automatically pull images, so we can skip this here.
+        # Only pull endpoint images instead
+        docker_base_names = base_names
+        if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubecontrol"]:
+            docker_base_names = [
+                base_name for base_name in docker_base_names if "endpoint" in base_name
+            ]
+
+        infrastructure.docker_pull(config, machines, docker_base_names)
 
     # Get host timezone
     command = ["ls", "-alh", "/etc/localtime"]
