@@ -127,7 +127,7 @@ def cache_worker(config, machines, app_vars):
         "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": cores - 0.4,
-        "replicas": worker_apps - 1,  # 0 indexed comparison
+        "replicas": worker_apps,
         "pull_policy": "IfNotPresent",
     }
 
@@ -149,9 +149,8 @@ def cache_worker(config, machines, app_vars):
     ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
     # This only creates the file we need, now launch the benchmark
-    command = (
-        "kubectl apply --kubeconfig=/home/cloud_controller/.kube/config "
-        + "-f /home/cloud_controller/job-template.yaml"
+    command = "kubectl apply -f /home/%s/job-template.yaml" % (
+        machines[0].cloud_controller_names[0]
     )
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
@@ -214,9 +213,8 @@ def cache_worker(config, machines, app_vars):
     command = [
         "kubectl",
         "delete",
-        "--kubeconfig=/home/cloud_controller/.kube/config",
         "-f",
-        "/home/cloud_controller/job-template.yaml",
+        "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0]),
     ]
     output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
@@ -266,9 +264,8 @@ def launch_with_starttime(config, machines):
     starttime = 0.0
 
     # This only creates the file we need, now launch the benchmark
-    command = (
-        "\"date +'%s.%N'; kubectl apply --kubeconfig=/home/cloud_controller/.kube/config "
-        + '-f /home/cloud_controller/job-template.yaml"'
+    command = "\"date +'%s.%N'; kubectl apply " + '-f /home/%s/job-template.yaml"' % (
+        machines[0].cloud_controller_names[0]
     )
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
@@ -316,7 +313,7 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
         "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
-        "replicas": worker_apps - 1,  # 0 indexed comparison
+        "replicas": worker_apps,
         "pull_policy": "Never",
     }
 
@@ -666,7 +663,7 @@ def wait_worker_completion(config, machines):
             sys.exit()
 
 
-def get_worker_output(config, machines, container_names=None):
+def get_worker_output(config, machines, container_names=None, get_description=False):
     """Select the correct function to start the worker application
 
     Args:
@@ -681,15 +678,16 @@ def get_worker_output(config, machines, container_names=None):
     if config["benchmark"]["resource_manager"] in ["mist", "baremetal"]:
         return get_worker_output_mist(config, machines, container_names)
 
-    return get_worker_output_kube(config, machines)
+    return get_worker_output_kube(config, machines, get_description)
 
 
-def get_worker_output_kube(config, machines):
+def get_worker_output_kube(config, machines, get_description):
     """Get the output of worker cloud / edge applications
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        get_description (bool): Also output an extensive description of all pod properties
 
     Returns:
         list(list(str)): Output of each container ran on the cloud / edge
@@ -715,15 +713,19 @@ def get_worker_output_kube(config, machines):
     for line in output[1:]:
         container = line.split(" ")[0]
         command = ["kubectl", "logs", "--timestamps=true", container]
+        if get_description:
+            command = ["kubectl", "get", "pod", container, "-o", "yaml"]
+
         commands.append(command)
 
-        # Extra: Log kubernetes system components
-        # - These logs are deleted after some time, so better backup them now
-        command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
-            container,
-            container,
-        )
-        machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
+        if get_description:
+            # Extra: Log kubernetes system components
+            # - These logs are deleted after some time, so better backup them now
+            command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
+                container,
+                container,
+            )
+            machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
 
     # Get the logs
     results = machines[0].process(config, commands, ssh=config["cloud_ssh"][0])

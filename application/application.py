@@ -283,24 +283,36 @@ def kube_control(config, machines):
     app_vars = config["module"]["application"].start_worker(config, machines)
     starttime = kubernetes.start_worker(config, machines, app_vars, get_starttime=True)
 
-    # Start the endpoint
-    container_names = endpoint.start_endpoint(config, machines)
-    endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
+    # Important: kubecontrol doesn't require endpoints
+    if config["infrastructure"]["endpoint_nodes"]:
+        # Start the endpoint
+        container_names = endpoint.start_endpoint(config, machines)
+        endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
     kubernetes.wait_worker_completion(config, machines)
 
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
-    endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
+    endpoint_output = []
+    if config["infrastructure"]["endpoint_nodes"]:
+        endpoint_output = endpoint.get_endpoint_output(
+            config, machines, container_names, use_ssh=True
+        )
+
     worker_output = kubernetes.get_worker_output(config, machines)
+    worker_description = kubernetes.get_worker_output(config, machines, get_description=True)
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, endpoint_output)
     worker_metrics = config["module"]["application"].gather_worker_metrics(
-        machines, config, worker_output, starttime
+        machines, config, worker_output, worker_description, starttime
     )
-    endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
-        config, endpoint_output, container_names
-    )
+
+    endpoint_metrics = []
+    if config["infrastructure"]["endpoint_nodes"]:
+        endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
+            config, endpoint_output, container_names
+        )
+
     config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)

@@ -80,13 +80,14 @@ def start_worker(config, _machines):
     return app_vars
 
 
-def gather_worker_metrics(machines, config, worker_output, starttime):
+def gather_worker_metrics(machines, config, _worker_output, worker_description, starttime):
     """Gather metrics from cloud or edge workers for the empty app
 
     Args:
         machines (list(Machine object)): List of machine objects representing physical machines
         config (dict): Parsed configuration
         worker_output (list(list(str))): Output of each container ran on the edge
+        worker_description (list(list(str))): Extensive description of each container
         starttime (datetime): Time that 'kubectl apply' is called to launche the benchmark
 
     Returns:
@@ -99,14 +100,14 @@ def gather_worker_metrics(machines, config, worker_output, starttime):
     }
 
     worker_metrics = []
-    for _ in range(len(worker_output)):
+    for _ in range(len(worker_description)):
         worker_metrics.append(copy.deepcopy(worker_set))
 
     commands = []
     sshs = []
 
     # Parse output and build new commands to get final data with
-    for i, out in enumerate(worker_output):
+    for i, out in enumerate(worker_description):
         container_id = 0
         nodename = 0
 
@@ -127,6 +128,9 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
             container_id
         )
         commands.append(command)
+
+        # Place the _ back in the name
+        nodename = nodename.replace(machines[0].user, "_" + machines[0].user)
 
         for machine in machines:
             if nodename in machine.cloud_names + machine.edge_names:

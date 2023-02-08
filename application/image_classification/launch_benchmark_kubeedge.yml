@@ -53,5 +53,4 @@
 
     - name: Launch jobs
       command: >
-        kubectl create --kubeconfig="/home/{{ username }}/.kube/config"
-        -f "/home/{{ username }}/jobs"
+        kubectl create -f "/home/{{ username }}/jobs"

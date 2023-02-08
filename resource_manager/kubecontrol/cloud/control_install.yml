@@ -55,17 +55,19 @@
         group: "{{ username }}"
         remote_src: true
 
+    - name: Set KUBECONFIG variable globally
+      shell: echo "export KUBECONFIG=/home/{{ username }}/.kube/config" >> /etc/environment
+
     - name: Enable networking with Calico, only for cloud mode
       shell: |
         if [ "{{ cloud_mode }}" -gt "0" ]; then
-          kubectl create --kubeconfig="/home/{{ username }}/.kube/config" -f /kube-flannel.yml
+          kubectl create -f /kube-flannel.yml
         fi
 
     - name: Create join command for worker nodes (cloud-only)
       shell: |
         echo '#!/bin/bash' > /tmp/join-command.txt
-        kubeadm token create --kubeconfig="/home/{{ username }}/.kube/config" \
-          --print-join-command >> /tmp/join-command.txt
+        kubeadm token create --print-join-command >> /tmp/join-command.txt
 
     - name: Copy join command to local file
       fetch:
