@@ -498,7 +498,7 @@ def base_install(config, machines):
 
         infrastructure.docker_pull(config, machines, base_names)
 
-    set_timezone(config, machines)
+    # set_timezone(config, machines)
 
 
 def start(config, machines):
