@@ -281,7 +281,7 @@ def kube_control(config, machines):
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    starttime = kubernetes.start_worker(config, machines, app_vars, get_starttime=True)
+    starttime, status = kubernetes.start_worker(config, machines, app_vars, get_starttime=True)
 
     # Important: kubecontrol doesn't require endpoints
     if config["infrastructure"]["endpoint_nodes"]:
@@ -315,4 +315,6 @@ def kube_control(config, machines):
             config, endpoint_output, container_names
         )
 
-    config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
+    config["module"]["application"].format_output(
+        config, worker_metrics, endpoint_metrics, status=status
+    )

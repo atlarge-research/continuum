@@ -2,6 +2,7 @@
 
 import logging
 import copy
+import sys
 import numpy as np
 import pandas as pd
 
@@ -356,7 +357,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def format_output(config, worker_metrics, endpoint_metrics):
+def format_output(config, worker_metrics, endpoint_metrics, status=None):
     """Format processed output to provide useful insights (image_classification)
 
     Args:
@@ -364,6 +365,10 @@ def format_output(config, worker_metrics, endpoint_metrics):
         sub_metrics (list(dict)): Metrics per worker node
         endpoint_metrics (list(dict)): Metrics per endpoint
     """
+    if status is not None:
+        logging.error("This application does not support status reporting")
+        sys.exit()
+
     df1 = None
     if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:
         logging.info("------------------------------------")

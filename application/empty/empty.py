@@ -3,11 +3,15 @@
 import logging
 import sys
 import copy
+import time
 
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
+
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 
 from application import application
 
@@ -284,7 +288,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def format_output(config, worker_metrics, _endpoint_metrics):
+def format_output(config, worker_metrics, _endpoint_metrics, status=None):
     """Format processed output to provide useful insights (empty)
 
     Args:
@@ -307,3 +311,69 @@ def format_output(config, worker_metrics, _endpoint_metrics):
 
     # Print ouput in csv format
     logging.debug("Output in csv format\n%s", repr(df.to_csv()))
+
+    # Plot the status of each pod over time
+    if status is not None:
+        for stat in status:
+            logging.debug(stat)
+
+        # From: https://docs.openstack.org/developer/performance-docs/test_results/
+        #           container_cluster_systems/kubernetes/density/index.html
+        _, ax1 = plt.subplots(figsize=(12, 6))
+
+        # Re-format data
+        times = [s["time"] for s in status]
+        arriving = [s["Arriving"] for s in status]
+        pending = [s["Pending"] for s in status]
+        containercreating = [s["ContainerCreating"] for s in status]
+        running = [s["Running"] for s in status]
+        succeeded = [s["Succeeded"] for s in status]
+
+        categories = []
+        results = []
+        if sum(arriving) > 0:
+            categories.append("Arriving")
+            results.append(arriving)
+        if sum(pending) > 0:
+            categories.append("Pending")
+            results.append(pending)
+        if sum(containercreating) > 0:
+            categories.append("ContainerCreating")
+            results.append(containercreating)
+        if sum(running) > 0:
+            categories.append("Running")
+            results.append(running)
+        if sum(succeeded) > 0:
+            categories.append("Succeeded")
+            results.append(succeeded)
+
+        colors = {
+            "Arriving": "#cc0000",
+            "Pending": "#ffb624",
+            "ContainerCreating": "#ebeb00",
+            "Running": "#50c878",
+            "Succeeded": "#a366ff",
+        }
+
+        cs = [colors[cat] for cat in categories]
+        ax1.stackplot(times, results, colors=cs)
+
+        ax1.grid(True)
+
+        # Set y axis details
+        total_pods = sum(status[0][cat] for cat in categories)
+        ax1.set_ylabel("Pods")
+        ax1.set_ylim(0, total_pods)
+
+        # Set x axis details
+        ax1.set_xlabel("Time (s)")
+        ax1.set_xlim(0, status[-1]["time"])
+
+        # add legend
+        patches = [mpatches.Patch(color=c) for c in cs]
+        texts = categories
+        ax1.legend(patches, texts, loc="lower left")
+
+        # Save plot
+        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+        plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")

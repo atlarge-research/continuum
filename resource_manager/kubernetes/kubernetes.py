@@ -241,10 +241,113 @@ def start_worker(config, machines, app_vars, get_starttime=False):
     """
     if config["benchmark"]["resource_manager"] == "mist":
         return start_worker_mist(config, machines, app_vars)
+
     if config["benchmark"]["resource_manager"] == "baremetal":
         return start_worker_baremetal(config, machines, app_vars)
 
-    return start_worker_kube(config, machines, app_vars, get_starttime)
+    # For non-mist/baremetal deployments
+    starttime = start_worker_kube(config, machines, app_vars, get_starttime)
+    status = wait_worker_ready(config, machines, get_starttime)
+    return starttime, status
+
+
+def wait_worker_ready(config, machines, get_starttime):
+    """Wait for the Kubernetes pods to be running
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        get_starttime (bool, optional): Measure invocation time. Defaults to False.
+
+    Returns (optional):
+        (list(dict)): Status of all pods every second
+    """
+    if config["mode"] == "cloud":
+        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
+            "applications_per_worker"
+        ]
+    elif config["mode"] == "edge":
+        worker_apps = (
+            config["infrastructure"]["edge_nodes"] * config["benchmark"]["applications_per_worker"]
+        )
+
+    status = []
+    while True:
+        # Get the list of all pods
+        command = (
+            "\"date +'%s.%N'; kubectl get pods "
+            + '-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase --sort-by=.spec.nodeName"'
+        )
+        output, error = machines[0].process(
+            config, command, shell=True, ssh=config["cloud_ssh"][0]
+        )[0]
+
+        start_t = float(output[0])
+        output = output[1:]
+
+        # Not all pods are yet shown in the 'kubectl get pods' command
+        if error and any("couldn't find any field with path" in line for line in error):
+            continue
+
+        # Real crash
+        if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
+            logging.error("".join(error))
+            sys.exit()
+
+        # Loop over all pods, check status, and create a list of all current statuses
+        # Possible status:
+        # - Pending
+        # - Running
+        # - Succeeded
+        # - Failed
+        # - Unknown
+        # - ContainerCreating
+        # - Arriving (not yet shown up in kubectl)
+        status_entry = {
+            "time": start_t,
+            "Arriving": 0,
+            "Pending": 0,
+            "ContainerCreating": 0,
+            "Running": 0,
+            "Succeeded": 0,
+        }
+        for line in output[1:]:
+            l = line.rstrip().split(" ")
+            app_name = l[0]
+            app_status = l[-1]
+
+            if app_status in ["Failed", "Unknown"]:
+                logging.error(
+                    'Container on cloud/edge %s has status %s, expected "Pending" or "Running"',
+                    app_name,
+                    app_status,
+                )
+                sys.exit()
+
+            status_entry[app_status] += 1
+
+        total = (
+            status_entry["Pending"]
+            + status_entry["Running"]
+            + status_entry["Succeeded"]
+            + status_entry["ContainerCreating"]
+        )
+        status_entry["Arriving"] = worker_apps - total
+        status.append(status_entry)
+
+        # Stop if all statuses are running
+        if status_entry["Running"] == total:
+            break
+
+    if get_starttime:
+        # Normalize time
+        init_t = status[0]["time"]
+        for stat in status:
+            stat["time"] -= init_t
+
+        return status
+
+    return None
 
 
 def launch_with_starttime(config, machines):
@@ -333,59 +436,9 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
     ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
     if get_starttime:
-        starttime = launch_with_starttime(config, machines)
+        return launch_with_starttime(config, machines)
 
-    # Waiting for the applications to fully initialize (includes scheduling)
-    time.sleep(10)
-    logging.info("Deployed %i %s applications", worker_apps, config["mode"])
-    logging.info("Wait for subscriber applications to be scheduled and running")
-
-    pending = True
-    i = 0
-
-    while i < worker_apps:
-        # Get the list of deployed pods
-        if pending:
-            command = [
-                "kubectl",
-                "get",
-                "pods",
-                "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
-                "--sort-by=.spec.nodeName",
-            ]
-            output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
-
-            if error and any("couldn't find any field with path" in line for line in error):
-                logging.debug("Retry getting list of kubernetes pods")
-                time.sleep(5)
-                pending = True
-                continue
-
-            if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
-                logging.error("".join(error))
-                sys.exit()
-
-        line = output[i + 1].rstrip().split(" ")
-        app_name = line[0]
-        app_status = line[-1]
-
-        # Check status of app
-        if app_status == "Pending":
-            time.sleep(5)
-            pending = True
-        elif app_status == "Running":
-            i += 1
-            pending = False
-        else:
-            logging.error(
-                'Container on cloud/edge %s has status %s, expected "Pending" or "Running"',
-                app_name,
-                app_status,
-            )
-            sys.exit()
-
-    if get_starttime:
-        return starttime
+    return None
 
 
 def start_worker_mist(config, machines, app_vars):
