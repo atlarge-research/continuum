@@ -36,7 +36,7 @@
 
     - name: Copy containerd config from local to target
       copy:
-        src: ~/.continuum/cloud/config.toml
+        src: "{{ continuum_home }}/cloud/config.toml"
         dest: /etc/containerd/config.toml
 
     - name: Replace registry ip in containerd config file

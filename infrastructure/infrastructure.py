@@ -322,14 +322,14 @@ def create_continuum_dir(config, machines):
         if machine.is_local:
             command = (
                 "mkdir -p %s/.continuum && \
-                 mkdir -p %s/.continuum/images"
+                 mkdir %s/.continuum/images"
                 % ((config["infrastructure"]["base_path"],) * 2)
             )
         else:
             command = (
                 'ssh %s "\
                  mkdir -p %s/.continuum && \
-                 mkdir -p %s/.continuum/images"'
+                 mkdir %s/.continuum/images"'
                 % ((machine.name,) + (config["infrastructure"]["base_path"],) * 2)
             )
 
@@ -337,11 +337,13 @@ def create_continuum_dir(config, machines):
 
     results = machines[0].process(config, commands, shell=True)
 
-    for output, error in results:
+    for (output, error), command in zip(results, commands):
         if error:
+            logging.error("Command: %s", command)
             logging.error("".join(error))
             sys.exit()
         elif output:
+            logging.error("Command: %s", command)
             logging.error("".join(output))
             sys.exit()
 
