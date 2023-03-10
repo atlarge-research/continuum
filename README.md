@@ -43,7 +43,7 @@ Otherwise, the cost of using GCP is usually limited to several dollars.
 Please get in touch with us if you would like to replicate our results using QEMU.
 
 Continuum with GCP requires the user to have a single computer with internet access.
-Continuum has been tested with the Ubuntu 20.04 operating system, and we highly recommend using this operating system to replicate our results.
+Continuum has been tested with the Ubuntu 20.04 operating system on the host machine, and we highly recommend using this operating system to replicate our results.
 Other operating systems can work as the main software requirements of our framework (Docker, Python, Ansible, Terraform) are available on many operating systems.
 However, we can only guarantee successful execution on Ubuntu 20.04.
 A physical or virtual machine with Ubuntu 20.04 can be used.
@@ -83,6 +83,7 @@ We tested with Docker 23.0.0, pip3 20.0.2 for Python 3.8.10, Ansible 2.9.6, and 
 4. Install Terraform
     ```bash
     # For more information, see https://developer.hashicorp.com/terraform/cli/install/apt
+    # A successful installation could be:
     sudo apt install terraform
     ```
 5. Install Continuum
@@ -98,13 +99,16 @@ We tested with Docker 23.0.0, pip3 20.0.2 for Python 3.8.10, Ansible 2.9.6, and 
     ```
 6. Prepare Continuum for Google Cloud usage
     ```bash
-    # 1. Get your projectID from GCP (example: continuum-project-123456)
+    # 1. Prepare a GCP account
+    # The service account needs access to the Compute Engine service
+
+    # 2. Get your projectID from GCP (example: continuum-project-123456)
     # https://cloud.google.com/resource-manager/docs/creating-managing-projects
 
-    # 2. Download your GCP credentials
+    # 3. Download your GCP credentials
     # https://cloud.google.com/iam/docs/creating-managing-service-account-keys
 
-    # 3. Update all Continuum's configuration files with your GCP information
+    # 4. Update all Continuum's configuration files with your GCP information
     # All parameters are required!
     cd configuration
     python3 gcp_update.py --help
