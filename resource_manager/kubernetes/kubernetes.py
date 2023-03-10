@@ -152,7 +152,7 @@ def cache_worker(config, machines, app_vars):
     )
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
-    if not output or not ("job.batch" in output[0] and "created" in output[0]):
+    if not output or not any("job.batch" in o and "created" in o for o in output):
         logging.error("Could not deploy pods: %s", "".join(output))
         sys.exit()
     if error and not all("[CONTINUUM]" in l for l in error):
@@ -188,7 +188,12 @@ def cache_worker(config, machines, app_vars):
                 logging.error("".join(error))
                 sys.exit()
 
-        line = output[i + 1].rstrip().split(" ")
+        # The first couple of lines may have custom prints
+        for offset, o in enumerate(output):
+            if "NAME" in o and "STATUS" in o:
+                break
+
+        line = output[i + 1 + offset].rstrip().split(" ")
         app_name = line[0]
         app_status = line[-1]
 
@@ -216,7 +221,7 @@ def cache_worker(config, machines, app_vars):
     ]
     output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
-    if not output or not ("job.batch" in output[0] and "deleted" in output[0]):
+    if not output or not any("job.batch" in o and "deleted" in o for o in output):
         logging.error('Output does not contain "job.batch" and "deleted": %s', "".join(output))
         sys.exit()
     elif error and not all("[CONTINUUM]" in l for l in error):
@@ -311,7 +316,17 @@ def wait_worker_ready(config, machines, get_starttime):
             "Running": 0,
             "Succeeded": 0,
         }
-        for line in output[1:]:
+
+        # The first couple of lines may have custom prints
+        for offset, o in enumerate(output):
+            if "NAME" in o and "STATUS" in o:
+                break
+
+        for line in output[1 + offset :]:
+            # Some custom output may appear afterwards - ignore
+            if "CONTINUUM" in line:
+                break
+
             l = line.rstrip().split(" ")
             app_name = l[0]
             app_status = l[-1]
@@ -370,7 +385,7 @@ def launch_with_starttime(config, machines):
     )
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
-    if len(output) < 2 or "created" not in output[1]:
+    if len(output) < 2 or not any("created" in o for o in output):
         logging.error("Could not deploy pods: %s", "".join(output))
         sys.exit()
     if error and not all("[CONTINUUM]" in l for l in error):
@@ -693,8 +708,13 @@ def wait_worker_completion(config, machines):
                 logging.error("".join(error))
                 sys.exit()
 
+        # The first couple of lines may have custom prints
+        for offset, o in enumerate(output):
+            if "NAME" in o and "STATUS" in o:
+                break
+
         # Parse list, get status of app i
-        line = output[i + 1].rstrip().split(" ")
+        line = output[i + 1 + offset].rstrip().split(" ")
         app_name = line[0]
         app_status = line[-1]
 
@@ -759,9 +779,18 @@ def get_worker_output_kube(config, machines, get_description):
         logging.error("".join(error))
         sys.exit()
 
+    # The first couple of lines may have custom prints
+    for offset, o in enumerate(output):
+        if "NAME" in o and "STATUS" in o:
+            break
+
     # Gather commands to get logs
     commands = []
-    for line in output[1:]:
+    for line in output[1 + offset :]:
+        # Some custom output may appear afterwards - ignore
+        if "CONTINUUM" in line:
+            break
+
         container = line.split(" ")[0]
         command = ["kubectl", "logs", "--timestamps=true", container]
         if get_description:

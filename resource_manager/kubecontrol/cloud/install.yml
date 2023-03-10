@@ -39,6 +39,9 @@
         dest: /tmp/join-command.txt
         mode: +x
 
+    - name: Add ignore errors flag
+      command: sed -i '${s/$/ --ignore-preflight-errors all/}' /tmp/join-command.txt
+
     - name: Execute the join command
       shell: bash /tmp/join-command.txt
 

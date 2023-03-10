@@ -41,6 +41,7 @@
           --pod-network-cidr=10.244.0.0/16
           --kubernetes-version=1.25.3
           --image-repository={{ registry_ip }}
+          --ignore-preflight-errors all
 
     - name: Create user Kubernetes directory
       file:
