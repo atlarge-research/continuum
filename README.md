@@ -1,10 +1,10 @@
 # Continuum
 Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
-Continuum offers the following features: 
+Continuum offers the following features:
 
 1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
 2. Users can freely configure the specifications of the virtual machines and the network connecting them through a single configuration file.
-3. Continuum automatically installs operating services, resource managers, and applicaitons inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
+3. Continuum automatically installs operating services, resource managers, and applications inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
 4. Continuum can automatically benchmark the resource managers and applications installed in the emulated cluster, and report metrics and logs back to the user.
 5. Continuum is easily extendable, allowing users to add support for more infrastructure providers, operating services, resource managers, and applications.
 
@@ -36,19 +36,41 @@ The execution flow consists of three phases, each having a configuration and exe
 ## Citation
 When using Continuum for research, please cite the work as follows:
 ```
-@misc{https://doi.org/10.48550/arxiv.2207.04159,
-  doi = {10.48550/ARXIV.2207.04159},
-  url = {https://arxiv.org/abs/2207.04159},
-  author = {Jansen, Matthijs and Al-Dulaimy, Auday and Papadopoulos, Alessandro V. and Trivedi, Animesh and Iosup, Alexandru},
-  title = {The SPEC-RG Reference Architecture for the Edge Continuum},
-  publisher = {arXiv},
-  year = {2022},
-  copyright = {arXiv.org perpetual, non-exclusive license}
+@inproceedings{2023-jansen-continuum,
+    author    = {Matthijs Jansen and
+                 Linus Wagner and
+                 Animesh Trivedi and
+                 Alexandru Iosup},
+    title     = {Continuum: Automate Infrastructure Deployment and Benchmarking in the Compute Continuum},
+    booktitle = {Proceedings of the International Conference on Performance Engineering, Coimbra, Portugal, April, 2023},
+    year      = {2023},
+    doi       = {},
+    url       = {https://atlarge-research.com/pdfs/2023-fastcontinuum-continuum.pdf},
 }
 ```
 
-## Demo
-**This demo is for the ASCI A24 course 2022.**
+Other work on the Continuum framework includes:
+```
+@inproceedings{2023-jansen-refarch,
+    author    = {Matthijs Jansen and
+                 Auday Al-Duilamy and
+                 Allesandro Vittorio Papadopoulos and
+                 Animesh Trivedi and
+                 Alexandru Iosup},
+    title     = {The {SPEC-RG} Reference Architecture for the Compute Continuum},
+    booktitle = {The 23rd IEEE/ACM International Symposium on Cluster, Cloud and Internet Computing, CCGRID 2023, Bangalore, India, May 1-4, 2023},
+    year      = {2023},
+    doi       = {},
+    url       = {https://atlarge-research.com/pdfs/2023-ccgrid-refarch.pdf},
+}
+```
+
+### Acknowledgment
+This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
+
+---
+# Demo
+**This demo is for the ASCI courses in 2022/2023.**
 
 **For other users, please use the main branch of the project instead**
 
@@ -59,7 +81,7 @@ This demo consists of three parts:
 
 ### Part 1: Access the servers
 For this demo, you will get access to VU compute servers.
-We currently only support this demo on our own servers.
+We currently only support this demo on these servers.
 
 1. Send a public SSH key to the provided email address. You will receive a username `asci-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`.
 2. Access the headnode of the cluster over SSH: `ssh asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using your username from step 1.
