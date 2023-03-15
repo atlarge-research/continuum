@@ -10,6 +10,8 @@ import base64
 import json
 from PIL import Image
 import numpy as np
+
+# pylint: disable-next=import-error
 import tflite_runtime.interpreter as tflite
 
 CPU_THREADS = int(os.environ["CPU_THREADS"])

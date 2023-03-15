@@ -1,6 +1,5 @@
 ---
 - hosts: endpoints
-  become: true
   tasks:
     - name: Create endpoint images
       shell: |

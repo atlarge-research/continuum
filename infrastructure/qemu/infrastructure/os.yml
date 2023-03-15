@@ -1,6 +1,5 @@
 ---
 - hosts: all_hosts
-  become: true
   tasks:
     - name: Install curl if not RedHat
       package:

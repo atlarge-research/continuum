@@ -1,6 +1,5 @@
 ---
 - hosts: all_hosts
-  become: true
   tasks:
     - name: Remove existing base image user data (if any)
       shell: |

@@ -189,6 +189,7 @@ def cache_worker(config, machines, app_vars):
                 sys.exit()
 
         # The first couple of lines may have custom prints
+        offset = 0
         for offset, o in enumerate(output):
             if "NAME" in o and "STATUS" in o:
                 break
@@ -318,6 +319,7 @@ def wait_worker_ready(config, machines, get_starttime):
         }
 
         # The first couple of lines may have custom prints
+        offset = 0
         for offset, o in enumerate(output):
             if "NAME" in o and "STATUS" in o:
                 break
@@ -709,6 +711,7 @@ def wait_worker_completion(config, machines):
                 sys.exit()
 
         # The first couple of lines may have custom prints
+        offset = 0
         for offset, o in enumerate(output):
             if "NAME" in o and "STATUS" in o:
                 break
@@ -780,6 +783,7 @@ def get_worker_output_kube(config, machines, get_description):
         sys.exit()
 
     # The first couple of lines may have custom prints
+    offset = 0
     for offset, o in enumerate(output):
         if "NAME" in o and "STATUS" in o:
             break

@@ -10,6 +10,8 @@ import multiprocessing
 from PIL import Image
 import numpy as np
 import paho.mqtt.client as mqtt
+
+# pylint: disable-next=import-error
 import tflite_runtime.interpreter as tflite
 
 MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]

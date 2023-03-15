@@ -8,6 +8,8 @@ import time
 import multiprocessing
 import numpy as np
 from PIL import Image
+
+# pylint: disable-next=import-error
 import tflite_runtime.interpreter as tflite
 
 
