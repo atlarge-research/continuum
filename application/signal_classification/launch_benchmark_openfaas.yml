@@ -1,0 +1,30 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Create OpenFaaS deployment file
+      shell: |
+        cat > "/home/{{ username }}/function.yml" <<EOF
+        provider:
+          name: openfaas
+          gateway: http://127.0.0.1:8080
+
+        functions:
+          {{ app_name }}:
+            image: {{ image }}
+            environment:
+              CPU_THREADS: "{{ cpu_threads }}"
+            requests:
+              memory: "{{ memory_req }}Mi"
+              cpu: {{ cpu_req }}
+            labels:
+              com.openfaas.scale.min: 1
+              com.openfaas.scale.max: 3
+        EOF
+
+    - name: Forward incoming 8080 traffic to localhost
+      command: |
+        iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 127.0.0.1:8080
+
+    - name: Launch jobs
+      command: faas-cli deploy --yaml "/home/{{ username }}/function.yml"
