@@ -322,14 +322,14 @@ def create_continuum_dir(config, machines):
         if machine.is_local:
             command = (
                 "mkdir -p %s/.continuum && \
-                 mkdir %s/.continuum/images"
+                 mkdir -p %s/.continuum/images"
                 % ((config["infrastructure"]["base_path"],) * 2)
             )
         else:
             command = (
                 'ssh %s "\
                  mkdir -p %s/.continuum && \
-                 mkdir %s/.continuum/images"'
+                 mkdir -p %s/.continuum/images"'
                 % ((machine.name,) + (config["infrastructure"]["base_path"],) * 2)
             )
 
@@ -469,11 +469,16 @@ def docker_registry(config, machines):
         need_pull += [True] * 6
 
     # Pull images which aren't present yet in the registry
-    for image, pull in zip(images, need_pull):
+    for i, (image, pull) in enumerate(zip(images, need_pull)):
         if not pull:
             continue
 
-        dest = os.path.join(config["registry"], image.split(":")[1])
+        # Kubecontrol images need different splitting
+        if config["benchmark"]["resource_manager"] == "kubecontrol" and i >= (len(images) - 6):
+            dest = os.path.join(config["registry"], image.split("/")[1])
+        else:
+            dest = os.path.join(config["registry"], image.split(":")[1])
+        
         commands = [
             ["docker", "pull", image],
             ["docker", "tag", image, dest],
