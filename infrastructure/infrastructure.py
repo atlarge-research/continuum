@@ -478,7 +478,7 @@ def docker_registry(config, machines):
             dest = os.path.join(config["registry"], image.split("/")[1])
         else:
             dest = os.path.join(config["registry"], image.split(":")[1])
-        
+
         commands = [
             ["docker", "pull", image],
             ["docker", "tag", image, dest],
