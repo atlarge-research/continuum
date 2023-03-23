@@ -310,7 +310,8 @@ def wait_worker_ready(config, machines, get_starttime):
         # - ContainerCreating
         # - Arriving (not yet shown up in kubectl)
         status_entry = {
-            "time": start_t,
+            "time_orig": start_t,
+            "time": 0,
             "Arriving": 0,
             "Pending": 0,
             "ContainerCreating": 0,
@@ -358,7 +359,7 @@ def wait_worker_ready(config, machines, get_starttime):
 
     if get_starttime:
         # Normalize time
-        init_t = status[0]["time"]
+        init_t = status[0]["time_orig"]
         for stat in status:
             stat["time"] -= init_t
 
@@ -867,3 +868,105 @@ def get_worker_output_mist(config, machines, container_names):
         worker_output.append(output)
 
     return worker_output
+
+
+def get_control_output(config, machines, starttime, status):
+    """Get output from Kubernetes control plane components, used to create detailed timeline
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        starttime (datetime): Invocation time of kubectl apply command that launches the benchmark
+        status (list(list(str))): Status of started Kubernetes pods over time
+
+    Returns:
+        list(str): Parsed output from control plane components
+    """
+    logging.info("Collect and parse output from Kubernetes controlplane components")
+
+    # Save custom output in file so you can read it later if needed (for all nodes)
+    command = """\"cd /var/log && \
+        sudo su -c \\\"grep -ri --exclude continuum.txt '\[continuum\]' > continuum.txt\\\"\""""
+    results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"])
+
+    for _, error in results:
+        if error:
+            logging.error("".join(error))
+            sys.exit()
+
+    # Get output from each cloud node
+    outputs = []
+    for ssh in zip(config["cloud_ssh"]):
+        command = ["sudo", "cat", "/var/log/continuum.txt"]
+        output, error = machines[0].process(config, command, ssh=ssh)[0]
+
+        if error:
+            logging.error("".join(error))
+            sys.exit()
+
+        outputs.append(output)
+
+    # Parse output, filter per component, get timestamp and custom output
+    components = ["kubelet", "scheduler", "apiserver", "proxy", "controller-manager"]
+    parsed = {}
+
+    for ssh, output in zip(config["cloud_ssh"], outputs):
+        name = ssh.split("@")[0]
+        parsed[name] = {}
+
+        for line in output:
+            line = line.strip()
+
+            # Split per Kubernetes controlplane component
+            comp = ""
+            for c in components:
+                if c in line:
+                    comp = c
+                    break
+
+            if comp == "":
+                logging.debug("[WARNING] No component in line: %s", line)
+                continue
+
+            if comp not in parsed[name]:
+                parsed[name][comp] = []
+
+            # For each line, get timestamp and unique print
+            line_split = line.split(" ")
+
+            try:
+                index = line_split.index("[CONTINUUM]")
+
+                # Example: "%!s(int64=1679583342891810186)"
+                time_str = line_split[index - 1]
+                time_str = time_str.split("=")[1][:-1]
+                time_obj_nano = float(time_str)
+                time_obj = time_obj_nano / 10**9
+            except:
+                logging.debug("[WARNING] Could not parse line: %s", line)
+                continue
+
+            line = line.split("[CONTINUUM] ")[1]
+            parsed[name][comp].append([time_obj, line])
+
+    # Now filter out everything before starttime and after endtime
+    # Starttime and endtime are both in 192031029309.1230910293 format
+    endtime = status[-1]["time_orig"]
+    parsed_copy = {}
+    for node, output in parsed.items():
+        parsed_copy[node] = {}
+        for component, out in output.items():
+            parsed_copy[node][component] = []
+            for entry in out:
+                if entry[0] >= starttime and entry[0] <= endtime:
+                    parsed_copy[node][component].append(entry)
+
+    # Validate the filtering
+    for _, output in parsed_copy.items():
+        for _, out in output.items():
+            for entry in out:
+                if entry[0] < starttime or entry[0] > endtime:
+                    logging.error("[ERROR] FILTERING DIDNT WORK for entry %f", entry[0])
+                    sys.exit()
+
+    return parsed_copy

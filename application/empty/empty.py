@@ -288,13 +288,18 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
     return endpoint_metrics
 
 
-def format_output(config, worker_metrics, _endpoint_metrics, status=None):
+def format_output(
+    config, worker_metrics, _endpoint_metrics, status=None, control=None, starttime=None
+):
     """Format processed output to provide useful insights (empty)
 
     Args:
         config (dict): Parsed configuration
         sub_metrics (list(dict)): Metrics per worker node
         endpoint_metrics (list(dict)): Metrics per endpoint
+        status (list(list(str)), optional): Status of started Kubernetes pods over time
+        control (list(str), optional): Parsed output from control plane components
+        starttime (datetime, optional): Invocation time of kubectl apply command
     """
     logging.info("------------------------------------")
     logging.info("%s OUTPUT", config["mode"].upper())
@@ -314,66 +319,103 @@ def format_output(config, worker_metrics, _endpoint_metrics, status=None):
 
     # Plot the status of each pod over time
     if status is not None:
-        for stat in status:
-            logging.debug(stat)
+        plot_status(status)
 
-        # From: https://docs.openstack.org/developer/performance-docs/test_results/
-        #           container_cluster_systems/kubernetes/density/index.html
-        _, ax1 = plt.subplots(figsize=(12, 6))
+        if control is not None:
+            plot_control(status, control, starttime)
 
-        # Re-format data
-        times = [s["time"] for s in status]
-        arriving = [s["Arriving"] for s in status]
-        pending = [s["Pending"] for s in status]
-        containercreating = [s["ContainerCreating"] for s in status]
-        running = [s["Running"] for s in status]
-        succeeded = [s["Succeeded"] for s in status]
 
-        categories = []
-        results = []
-        if sum(arriving) > 0:
-            categories.append("Arriving")
-            results.append(arriving)
-        if sum(pending) > 0:
-            categories.append("Pending")
-            results.append(pending)
-        if sum(containercreating) > 0:
-            categories.append("ContainerCreating")
-            results.append(containercreating)
-        if sum(running) > 0:
-            categories.append("Running")
-            results.append(running)
-        if sum(succeeded) > 0:
-            categories.append("Succeeded")
-            results.append(succeeded)
+def plot_control(status, control, starttime):
+    """Print and plot controlplane data from the source code
 
-        colors = {
-            "Arriving": "#cc0000",
-            "Pending": "#ffb624",
-            "ContainerCreating": "#ebeb00",
-            "Running": "#50c878",
-            "Succeeded": "#a366ff",
-        }
+    Args:
+        status (list(list(str)), optional): Status of started Kubernetes pods over time
+        control (list(str), optional): Parsed output from control plane components
+        starttime (datetime, optional): Invocation time of kubectl apply command
+    """
+    endtime = status[-1]["time_orig"]
+    logging.debug("Start time: %f", starttime)
+    logging.debug("End time: %f", endtime)
 
-        cs = [colors[cat] for cat in categories]
-        ax1.stackplot(times, results, colors=cs)
+    for node, output in control.items():
+        logging.debug("=======================================")
+        logging.debug(node)
+        logging.debug("=======================================")
+        for component, out in output.items():
+            logging.debug("\t=======================================")
+            logging.debug("\t" + component)
+            logging.debug("\t=======================================")
 
-        ax1.grid(True)
+            for time, o in out:
+                logging.debug("\t[%s] %s", str(time), o)
 
-        # Set y axis details
-        total_pods = sum(status[0][cat] for cat in categories)
-        ax1.set_ylabel("Pods")
-        ax1.set_ylim(0, total_pods)
 
-        # Set x axis details
-        ax1.set_xlabel("Time (s)")
-        ax1.set_xlim(0, status[-1]["time"])
+def plot_status(status):
+    """Print and plot controlplane data from external observations
 
-        # add legend
-        patches = [mpatches.Patch(color=c) for c in cs]
-        texts = categories
-        ax1.legend(patches, texts, loc="lower left")
+    Args:
+        status (list(list(str)), optional): Status of started Kubernetes pods over time
+    """
+    for stat in status:
+        logging.debug(stat)
 
-        # Save plot
-        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")
+    # From: https://docs.openstack.org/developer/performance-docs/test_results/
+    #           container_cluster_systems/kubernetes/density/index.html
+    _, ax1 = plt.subplots(figsize=(12, 6))
+
+    # Re-format data
+    times = [s["time"] for s in status]
+    arriving = [s["Arriving"] for s in status]
+    pending = [s["Pending"] for s in status]
+    containercreating = [s["ContainerCreating"] for s in status]
+    running = [s["Running"] for s in status]
+    succeeded = [s["Succeeded"] for s in status]
+
+    categories = []
+    results = []
+    if sum(arriving) > 0:
+        categories.append("Arriving")
+        results.append(arriving)
+    if sum(pending) > 0:
+        categories.append("Pending")
+        results.append(pending)
+    if sum(containercreating) > 0:
+        categories.append("ContainerCreating")
+        results.append(containercreating)
+    if sum(running) > 0:
+        categories.append("Running")
+        results.append(running)
+    if sum(succeeded) > 0:
+        categories.append("Succeeded")
+        results.append(succeeded)
+
+    colors = {
+        "Arriving": "#cc0000",
+        "Pending": "#ffb624",
+        "ContainerCreating": "#ebeb00",
+        "Running": "#50c878",
+        "Succeeded": "#a366ff",
+    }
+
+    cs = [colors[cat] for cat in categories]
+    ax1.stackplot(times, results, colors=cs)
+
+    ax1.grid(True)
+
+    # Set y axis details
+    total_pods = sum(status[0][cat] for cat in categories)
+    ax1.set_ylabel("Pods")
+    ax1.set_ylim(0, total_pods)
+
+    # Set x axis details
+    ax1.set_xlabel("Time (s)")
+    ax1.set_xlim(0, status[-1]["time"])
+
+    # add legend
+    patches = [mpatches.Patch(color=c) for c in cs]
+    texts = categories
+    ax1.legend(patches, texts, loc="lower left")
+
+    # Save plot
+    t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+    plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")

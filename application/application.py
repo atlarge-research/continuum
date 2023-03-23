@@ -292,6 +292,8 @@ def kube_control(config, machines):
     # Wait for benchmark to finish
     kubernetes.wait_worker_completion(config, machines)
 
+    control_output = kubernetes.get_control_output(config, machines, starttime, status)
+
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
     endpoint_output = []
@@ -316,5 +318,10 @@ def kube_control(config, machines):
         )
 
     config["module"]["application"].format_output(
-        config, worker_metrics, endpoint_metrics, status=status
+        config,
+        worker_metrics,
+        endpoint_metrics,
+        status=status,
+        control=control_output,
+        starttime=starttime,
     )
