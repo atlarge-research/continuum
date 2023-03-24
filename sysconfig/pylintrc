@@ -32,3 +32,6 @@ max-args=10
 max-branches=50
 max-statements=120
 max-attributes=25
+
+[REFACTORING]
+max-nested-blocks=6

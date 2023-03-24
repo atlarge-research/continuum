@@ -100,22 +100,29 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
     logging.info("Gather metrics with start time: %s", str(starttime))
 
     worker_set = {
-        "total_time": None,  # Total scheduling time
+        "scheduler_queue": None,  # Time to schedule
+        "container_create": None,  # Time to create container
+        "container_created": None,  # Time to created container
+        "app_start": None,  # Time to app in container
     }
 
     worker_metrics = []
     for _ in range(len(worker_description)):
         worker_metrics.append(copy.deepcopy(worker_set))
 
-    commands = []
+    command_start = []
+    command_end = []
     sshs = []
 
     # Parse output and build new commands to get final data with
     for i, out in enumerate(worker_description):
         container_id = 0
         nodename = 0
+        pod_name = ""
 
         for line in out:
+            if "name: empty-" in line:
+                pod_name = line.split("name: ")[1]
             if "nodeName" in line:
                 nodename = line.split("nodeName: ")[1]
             elif "containerID" in line:
@@ -128,10 +135,16 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
 
         # Get output from the worker node using journalctl, to get millisecond timing
         command = """sudo journalctl -u containerd -o short-precise | \
+grep \'%s'""" % (
+            pod_name
+        )
+        command_start.append(command)
+
+        command = """sudo journalctl -u containerd -o short-precise | \
 grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
             container_id
         )
-        commands.append(command)
+        command_end.append(command)
 
         # Place the _ back in the name
         nodename = nodename.replace(machines[0].user, "_" + machines[0].user)
@@ -150,32 +163,45 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
                 break
 
     # Given the commands and the ssh address to execute it at, execute all commands
-    results = machines[0].process(config, commands, shell=True, ssh=sshs, retryonoutput=True)
+    results_start = machines[0].process(
+        config, command_start, shell=True, ssh=sshs, retryonoutput=True
+    )
+    results_end = machines[0].process(config, command_end, shell=True, ssh=sshs, retryonoutput=True)
 
     # Parse the final output to get the total execution time
-    for i, (command, (output, error)) in enumerate(zip(commands, results)):
-        if not output:
-            logging.error("No output for pod %i and command [%s]", i, command)
-            sys.exit()
-        if len(output) > 1:
-            logging.error(
-                "Incorrect output for pod %i and command [%s]: %s", i, command, "".join(output)
-            )
-            sys.exit()
-        elif error and not all("[CONTINUUM]" in l for l in error):
-            logging.error("Error for pod %i and command [%s]: %s", i, command, "".join(error))
-            sys.exit()
+    for j, (command, result) in enumerate(
+        zip([command_start, command_end], [results_start, results_end])
+    ):
+        for i, (com, (output, error)) in enumerate(zip(command, result)):
+            if not output:
+                logging.error("No output for pod %i and command [%s]", i, com)
+                sys.exit()
+            if ("StartContainer" in output[0] and len(output) > 1) or (
+                "RunPodSandbox" in output[0] and len(output) > 2
+            ):
+                logging.error(
+                    "Incorrect output for pod %i and command [%s]: %s", i, com, "".join(output)
+                )
+                sys.exit()
+            elif error and not all("[CONTINUUM]" in l for l in error):
+                logging.error("Error for pod %i and command [%s]: %s", i, com, "".join(error))
+                sys.exit()
 
-        # Now parse the line to datetime with milliseconds
-        dt = output[0].split('time="')[1].split("+")[0]
-        dt = dt.replace("T", " ")
-        dt = dt[:-3]
-        dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
-        end_time = datetime.timestamp(dt)
+            # Now parse the line to datetime with milliseconds
+            dt = output[0].split('time="')[1].split("+")[0]
+            dt = dt.replace("T", " ")
+            dt = dt[:-3]
+            dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
+            end_time = datetime.timestamp(dt)
 
-        worker_metrics[i]["total_time"] = end_time - starttime
+            if j == 0:
+                # Start time
+                worker_metrics[i]["container_create"] = end_time - starttime
+            else:
+                # End time
+                worker_metrics[i]["container_created"] = end_time - starttime
 
-    return sorted(worker_metrics, key=lambda x: x["total_time"])
+    return worker_metrics
 
 
 def gather_endpoint_metrics(config, endpoint_output, container_names):
@@ -289,40 +315,32 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
 
 
 def format_output(
-    config, worker_metrics, _endpoint_metrics, status=None, control=None, starttime=None
+    config,
+    worker_metrics,
+    _endpoint_metrics,
+    status=None,
+    control=None,
+    starttime=None,
+    worker_output=None,
 ):
     """Format processed output to provide useful insights (empty)
 
     Args:
         config (dict): Parsed configuration
-        sub_metrics (list(dict)): Metrics per worker node
+        worker_metrics (list(dict)): Metrics per worker node
         endpoint_metrics (list(dict)): Metrics per endpoint
         status (list(list(str)), optional): Status of started Kubernetes pods over time
         control (list(str), optional): Parsed output from control plane components
         starttime (datetime, optional): Invocation time of kubectl apply command
+        worker_output (list(list(str)), optional): Output of each container ran on the edge
     """
-    logging.info("------------------------------------")
-    logging.info("%s OUTPUT", config["mode"].upper())
-    logging.info("------------------------------------")
-    df = pd.DataFrame(worker_metrics)
-    df.rename(
-        columns={
-            "total_time": "total_time (s)",
-        },
-        inplace=True,
-    )
-    df_no_indices = df.to_string(index=False)
-    logging.info("\n%s", df_no_indices)
-
-    # Print ouput in csv format
-    logging.debug("Output in csv format\n%s", repr(df.to_csv()))
-
     # Plot the status of each pod over time
     if status is not None:
         plot_status(status)
 
         if control is not None:
-            plot_control(status, control, starttime)
+            fill_control(control, starttime, worker_metrics, worker_output)
+            plot_control(config, worker_metrics)
 
 
 def plot_status(status):
@@ -396,26 +414,139 @@ def plot_status(status):
     plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")
 
 
-def plot_control(status, control, starttime):
-    """Print and plot controlplane data from the source code
+def fill_control(control, starttime, worker_metrics, worker_output):
+    """Gather all data/timestamps on control plane activities
+    1. Kubectl apply                  -> starttime
+    2. Scheduling queue               -> 0124
+    3. Container creation             ->
+    4. Container created              ->
+    5. Code is running in container   -> kubectl logs <pod>
 
     Args:
-        status (list(list(str)), optional): Status of started Kubernetes pods over time
         control (list(str), optional): Parsed output from control plane components
         starttime (datetime, optional): Invocation time of kubectl apply command
+        worker_metrics (list(dict)): Metrics per worker node
+        worker_output (list(list(str))): Output of each container ran on the edge
     """
-    endtime = status[-1]["time_orig"]
-    logging.debug("Start time: %f", starttime)
-    logging.debug("End time: %f", endtime)
-
+    # Scheduler time
+    i = 0
     for node, output in control.items():
-        logging.debug("=======================================")
-        logging.debug(node)
-        logging.debug("=======================================")
-        for component, out in output.items():
-            logging.debug("\t=======================================")
-            logging.debug("\t" + component)
-            logging.debug("\t=======================================")
+        if "controller" in node:
+            for component, out in output.items():
+                if component == "scheduler":
+                    for t, line in out:
+                        if "0124" in line:
+                            worker_metrics[i]["scheduler_queue"] = t - starttime
+                            i += 1
 
-            for time, o in out:
-                logging.debug("\t[%s] %s", str(time), o)
+    # Container creation
+    for i, output in enumerate(worker_output):
+        for line in output:
+            if "Start the application" in line:
+                dt = line.split("+")[0]
+                dt = dt.replace("T", " ")
+                dt = dt[:-3]
+                dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
+                end_time = datetime.timestamp(dt)
+
+                worker_metrics[i]["app_start"] = end_time - starttime
+
+
+def plot_control(config, worker_metrics):
+    """Plot controlplane data from the source code
+
+    Args:
+        config (dict): Parsed configuration
+        worker_metrics (list(dict)): Metrics per worker node
+    """
+    logging.info("------------------------------------")
+    logging.info("%s OUTPUT", config["mode"].upper())
+    logging.info("------------------------------------")
+    df = pd.DataFrame(worker_metrics)
+    df.rename(
+        columns={
+            "scheduler_queue": "scheduler_queue (s)",
+            "container_create": "container_create (s)",
+            "container_created": "container_created (s)",
+            "app_start": "app_start (s)",
+        },
+        inplace=True,
+    )
+    df_no_indices = df.to_string(index=False)
+    logging.info("\n%s", df_no_indices)
+
+    # Print ouput in csv format
+    logging.debug("Output in csv format\n%s", repr(df.to_csv()))
+
+    # ----------------------------------------------------------------------------
+    # Plot
+    _, ax1 = plt.subplots(figsize=(12, 6))
+
+    # Re-format data
+    scheduler = [w["scheduler_queue"] for w in worker_metrics]
+    create = [w["container_create"] for w in worker_metrics]
+    app_start = [w["app_start"] for w in worker_metrics]
+
+    events = []
+    events += [(t, "scheduler") for t in scheduler]
+    events += [(t, "container") for t in create]
+    events += [(t, "app") for t in app_start]
+    events.sort()
+
+    # Phases:
+    # 1. Arriving   [starttime, scheduler_queue]
+    # 2. Scheduler  [scheduler_queue, container_create]
+    # 3. Container  [container_create, app_start]
+    # 4. Running    [app_start, >]
+    current = [len(scheduler), 0, 0, 0]
+    results = [current.copy()]
+    times = [0.0]
+    for t, etype in events:
+        times.append(t)
+        if etype == "scheduler":
+            current[0] -= 1
+            current[1] += 1
+            results.append(current.copy())
+        elif etype == "container":
+            current[1] -= 1
+            current[2] += 1
+            results.append(current.copy())
+        elif etype == "app":
+            current[2] -= 1
+            current[3] += 1
+            results.append(current.copy())
+
+    results2 = [[], [], [], []]
+    for result in results:
+        for i, val in enumerate(result):
+            results2[i].append(val)
+
+    categories = ["Arriving", "Scheduling", "ContainerCreating", "Running"]
+    colors = {
+        "Arriving": "#cc0000",
+        "Scheduling": "#ffb624",
+        "ContainerCreating": "#ebeb00",
+        "Running": "#50c878",
+    }
+
+    cs = [colors[cat] for cat in categories]
+    ax1.stackplot(times, results2, colors=cs)
+
+    ax1.grid(True)
+
+    # Set y axis details
+    ax1.set_ylabel("Pods")
+    ax1.set_ylim(0, len(scheduler))
+
+    # Set x axis details
+    ax1.set_xlabel("Time (s)")
+    ax1.set_xlim(0, times[-1])
+
+    # add legend
+    patches = [mpatches.Patch(color=c) for c in cs]
+    texts = categories
+    ax1.legend(patches, texts, loc="lower left")
+
+    # Save plot
+    t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+    plt.savefig("./logs/%s_breakdown_intern.pdf" % (t), bbox_inches="tight")

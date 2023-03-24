@@ -324,4 +324,5 @@ def kube_control(config, machines):
         status=status,
         control=control_output,
         starttime=starttime,
+        worker_output=worker_output,
     )

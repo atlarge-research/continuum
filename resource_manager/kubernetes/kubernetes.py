@@ -971,12 +971,4 @@ def get_control_output(config, machines, starttime, status):
                 if entry[0] >= starttime and entry[0] <= endtime:
                     parsed_copy[node][component].append(entry)
 
-    # Validate the filtering
-    for _, output in parsed_copy.items():
-        for _, out in output.items():
-            for entry in out:
-                if entry[0] < starttime or entry[0] > endtime:
-                    logging.error("[ERROR] FILTERING DIDNT WORK for entry %f", entry[0])
-                    sys.exit()
-
     return parsed_copy
