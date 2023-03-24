@@ -311,7 +311,7 @@ def wait_worker_ready(config, machines, get_starttime):
         # - Arriving (not yet shown up in kubectl)
         status_entry = {
             "time_orig": start_t,
-            "time": 0,
+            "time": start_t,
             "Arriving": 0,
             "Pending": 0,
             "ContainerCreating": 0,
@@ -359,7 +359,7 @@ def wait_worker_ready(config, machines, get_starttime):
 
     if get_starttime:
         # Normalize time
-        init_t = status[0]["time_orig"]
+        init_t = status[0]["time"]
         for stat in status:
             stat["time"] -= init_t
 
@@ -887,6 +887,16 @@ def get_control_output(config, machines, starttime, status):
     # Save custom output in file so you can read it later if needed (for all nodes)
     command = """\"cd /var/log && \
         sudo su -c \\\"grep -ri --exclude continuum.txt '\[continuum\]' > continuum.txt\\\"\""""
+    results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"])
+
+    for _, error in results:
+        if error:
+            logging.error("".join(error))
+            sys.exit()
+
+    # Save pods output - it may get overwritten later on
+    command = """\"cd /var/log && \
+        sudo cp -r pods pods-continuum\""""
     results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"])
 
     for _, error in results:

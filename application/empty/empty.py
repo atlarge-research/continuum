@@ -307,7 +307,7 @@ def format_output(
     df = pd.DataFrame(worker_metrics)
     df.rename(
         columns={
-            "total_time": "total_time (ms)",
+            "total_time": "total_time (s)",
         },
         inplace=True,
     )
@@ -323,31 +323,6 @@ def format_output(
 
         if control is not None:
             plot_control(status, control, starttime)
-
-
-def plot_control(status, control, starttime):
-    """Print and plot controlplane data from the source code
-
-    Args:
-        status (list(list(str)), optional): Status of started Kubernetes pods over time
-        control (list(str), optional): Parsed output from control plane components
-        starttime (datetime, optional): Invocation time of kubectl apply command
-    """
-    endtime = status[-1]["time_orig"]
-    logging.debug("Start time: %f", starttime)
-    logging.debug("End time: %f", endtime)
-
-    for node, output in control.items():
-        logging.debug("=======================================")
-        logging.debug(node)
-        logging.debug("=======================================")
-        for component, out in output.items():
-            logging.debug("\t=======================================")
-            logging.debug("\t" + component)
-            logging.debug("\t=======================================")
-
-            for time, o in out:
-                logging.debug("\t[%s] %s", str(time), o)
 
 
 def plot_status(status):
@@ -419,3 +394,28 @@ def plot_status(status):
     # Save plot
     t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
     plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")
+
+
+def plot_control(status, control, starttime):
+    """Print and plot controlplane data from the source code
+
+    Args:
+        status (list(list(str)), optional): Status of started Kubernetes pods over time
+        control (list(str), optional): Parsed output from control plane components
+        starttime (datetime, optional): Invocation time of kubectl apply command
+    """
+    endtime = status[-1]["time_orig"]
+    logging.debug("Start time: %f", starttime)
+    logging.debug("End time: %f", endtime)
+
+    for node, output in control.items():
+        logging.debug("=======================================")
+        logging.debug(node)
+        logging.debug("=======================================")
+        for component, out in output.items():
+            logging.debug("\t=======================================")
+            logging.debug("\t" + component)
+            logging.debug("\t=======================================")
+
+            for time, o in out:
+                logging.debug("\t[%s] %s", str(time), o)
