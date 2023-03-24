@@ -42,7 +42,7 @@ When using Continuum for research, please cite the work as follows:
                  Animesh Trivedi and
                  Alexandru Iosup},
     title     = {Continuum: Automate Infrastructure Deployment and Benchmarking in the Compute Continuum},
-    booktitle = {Proceedings of the International Conference on Performance Engineering, Coimbra, Portugal, April, 2023},
+    booktitle = {Proceedings of the First FastContinuum Workshop, in conjuncrtion with ICPE, Coimbra, Portugal, April, 2023},
     year      = {2023},
     doi       = {},
     url       = {https://atlarge-research.com/pdfs/2023-fastcontinuum-continuum.pdf},
