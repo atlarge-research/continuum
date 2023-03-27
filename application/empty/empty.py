@@ -12,6 +12,7 @@ import pandas as pd
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 from application import application
 
@@ -391,8 +392,10 @@ def plot_status(status):
     }
 
     cs = [colors[cat] for cat in categories]
-    ax1.stackplot(times, results, colors=cs)
+    ax1.stackplot(times, results, colors=cs, step="post")
 
+    ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.invert_yaxis()
     ax1.grid(True)
 
     # Set y axis details
@@ -407,7 +410,7 @@ def plot_status(status):
     # add legend
     patches = [mpatches.Patch(color=c) for c in cs]
     texts = categories
-    ax1.legend(patches, texts, loc="lower left")
+    ax1.legend(patches, texts, loc="upper right")
 
     # Save plot
     t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
@@ -530,8 +533,10 @@ def plot_control(config, worker_metrics):
     }
 
     cs = [colors[cat] for cat in categories]
-    ax1.stackplot(times, results2, colors=cs)
+    ax1.stackplot(times, results2, colors=cs, step="post")
 
+    ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.invert_yaxis()
     ax1.grid(True)
 
     # Set y axis details
@@ -545,7 +550,7 @@ def plot_control(config, worker_metrics):
     # add legend
     patches = [mpatches.Patch(color=c) for c in cs]
     texts = categories
-    ax1.legend(patches, texts, loc="lower left")
+    ax1.legend(patches, texts, loc="upper right")
 
     # Save plot
     t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())

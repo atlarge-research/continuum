@@ -1094,6 +1094,75 @@ ENDPOINTS/WORKER        %s""" % (
             )
 
 
+class Control(Experiment):
+    """Experiment:
+    Kubernetes control plane benchmark
+    See /continuum/configuration/experiment_control/README.md for more info
+    """
+
+    def __init__(self, resume):
+        Experiment.__init__(self, resume)
+
+        self.dirs = ["containers_per_node", "nodes", "total_containers"]
+
+        self.configs = [
+            [
+                "container_1",
+                "container_10",
+                "container_20",
+                "container_30",
+                "container_40",
+                "container_50",
+            ],
+            ["node_1", "node_2", "node_4", "node_8", "node_16"],
+            ["node_1", "node_2", "node_4", "node_8", "node_16"],
+        ]
+
+    def __repr__(self):
+        """Returns this string when called as print(object)"""
+        return """
+APP                     image-classification
+DIRS                    %s
+CONFIGS 1               %s
+CONFIGS 2               %s
+CONFIGS 3               %s""" % (
+            ",".join([str(c) for c in self.dirs]),
+            ",".join([str(c) for c in self.configs[0]]),
+            ",".join([str(c) for c in self.configs[1]]),
+            ",".join([str(c) for c in self.configs[2]]),
+        )
+
+    def generate(self):
+        """Generate commands to run the benchmark based on the current settings"""
+        for directory, configs in zip(self.dirs, self.configs):
+            for config in configs:
+                command = [
+                    "python3",
+                    "continuum.py",
+                    "-v",
+                    "configuration/experiment_control/%s/%s.cfg" % (directory, config),
+                ]
+                command = [str(c) for c in command]
+
+                run = {
+                    "command": command,
+                    "output": None,
+                }
+                self.runs.append(run)
+
+    def parse_output(self):
+        """Input parsing and plotting is done in Continuum itself"""
+        pass
+
+    def plot(self):
+        """Input parsing and plotting is done in Continuum itself"""
+        pass
+
+    def print_result(self):
+        """Input parsing and plotting is done in Continuum itself"""
+        pass
+
+
 def main(args):
     """Main function
 
@@ -1115,6 +1184,9 @@ def main(args):
     elif args.experiment == "Serverless":
         logging.info("Experiment: Vary #endpoints and CPU/Memory per worker for Serverless")
         exp = Serverless(args.resume)
+    elif args.experiment == "Control":
+        logging.info("Experiment: Kubernetes Control")
+        exp = Control(args.resume)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
         sys.exit()
@@ -1134,7 +1206,14 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "experiment",
-        choices=["EndpointScaling", "Deployments", "LatencyCPUVariation", "Provider", "Serverless"],
+        choices=[
+            "EndpointScaling",
+            "Deployments",
+            "LatencyCPUVariation",
+            "Provider",
+            "Serverless",
+            "Control",
+        ],
         help="Experiment to replicate",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
