@@ -101,6 +101,8 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
     logging.info("Gather metrics with start time: %s", str(starttime))
 
     worker_set = {
+        "manage_job": None,  # Time to start job manager
+        "pod_object": None,  # Time to create pod object
         "scheduler_queue": None,  # Time to schedule
         "container_create": None,  # Time to create container
         "container_created": None,  # Time to created container
@@ -431,6 +433,32 @@ def fill_control(control, starttime, worker_metrics, worker_output):
         worker_metrics (list(dict)): Metrics per worker node
         worker_output (list(list(str))): Output of each container ran on the edge
     """
+    # Start job manager
+    for node, output in control.items():
+        if "controller" in node:
+            for component, out in output.items():
+                if component == "controller-manager":
+                    for t, line in out:
+                        if "0028" in line:
+                            worker_metrics[0]["manage_job"] = t - starttime
+                            break
+
+    # Job manager is only called once per job - and therefore is the same for all pods
+    manage_job = worker_metrics[0]["manage_job"]
+    for metrics in worker_metrics:
+        metrics["manage_job"] = manage_job
+
+    # Pod object creation time
+    i = 0
+    for node, output in control.items():
+        if "controller" in node:
+            for component, out in output.items():
+                if component == "controller-manager":
+                    for t, line in out:
+                        if "0277" in line:
+                            worker_metrics[i]["pod_object"] = t - starttime
+                            i += 1
+
     # Scheduler time
     i = 0
     for node, output in control.items():
@@ -468,6 +496,8 @@ def plot_control(config, worker_metrics):
     df = pd.DataFrame(worker_metrics)
     df.rename(
         columns={
+            "manage_job": "manage_job (s)",
+            "pod_object": "pod_object (s)",
             "scheduler_queue": "scheduler_queue (s)",
             "container_create": "container_create (s)",
             "container_created": "container_created (s)",
@@ -486,53 +516,80 @@ def plot_control(config, worker_metrics):
     _, ax1 = plt.subplots(figsize=(12, 6))
 
     # Re-format data
+    manage = [w["manage_job"] for w in worker_metrics]
+    pobject = [w["pod_object"] for w in worker_metrics]
     scheduler = [w["scheduler_queue"] for w in worker_metrics]
     create = [w["container_create"] for w in worker_metrics]
     app_start = [w["app_start"] for w in worker_metrics]
 
     events = []
+    events += [(t, "manager") for t in manage]
+    events += [(t, "object") for t in pobject]
     events += [(t, "scheduler") for t in scheduler]
     events += [(t, "container") for t in create]
     events += [(t, "app") for t in app_start]
     events.sort()
 
     # Phases:
-    # 1. Arriving   [starttime, scheduler_queue]
-    # 2. Scheduler  [scheduler_queue, container_create]
-    # 3. Container  [container_create, app_start]
-    # 4. Running    [app_start, >]
-    current = [len(scheduler), 0, 0, 0]
+    # 1. Arriving           [starttime, manage_job]
+    # 2. Controller         [manage_job, pod_object]
+    # 3. Object Management  [pod_object, scheduler_queue]
+    # 4. Scheduler          [scheduler_queue, container_create]
+    # 5. Container Creation [container_create, app_start]
+    # 6. Running            [app_start, >]
+    categories = [
+        "Arriving",
+        "Controller",
+        "Object Managing",
+        "Scheduling",
+        "Container Creating",
+        "Running",
+    ]
+    colors = {
+        "Arriving": "#bcbd22",
+        "Controller": "#ff7f0e",
+        "Object Managing": "#d62728",
+        "Scheduling": "#1f77b4",
+        "Container Creating": "#9467bd",
+        "Running": "#2ca02c",
+    }
+    cs = [colors[cat] for cat in categories]
+
+    # Set event order
+    current = [0 for _ in range(len(categories))]
+    current[0] = len(scheduler)  # Every pod starts in the first phase
     results = [current.copy()]
     times = [0.0]
     for t, etype in events:
         times.append(t)
-        if etype == "scheduler":
+        if etype == "manager":
             current[0] -= 1
             current[1] += 1
             results.append(current.copy())
-        elif etype == "container":
+        elif etype == "object":
             current[1] -= 1
             current[2] += 1
             results.append(current.copy())
-        elif etype == "app":
+        elif etype == "scheduler":
             current[2] -= 1
             current[3] += 1
             results.append(current.copy())
+        elif etype == "container":
+            current[3] -= 1
+            current[4] += 1
+            results.append(current.copy())
+        elif etype == "app":
+            current[4] -= 1
+            current[5] += 1
+            results.append(current.copy())
 
-    results2 = [[], [], [], []]
+    # Parse in right format
+    results2 = [[] for _ in range(len(categories))]
     for result in results:
         for i, val in enumerate(result):
             results2[i].append(val)
 
-    categories = ["Arriving", "Scheduling", "ContainerCreating", "Running"]
-    colors = {
-        "Arriving": "#cc0000",
-        "Scheduling": "#ffb624",
-        "ContainerCreating": "#ebeb00",
-        "Running": "#50c878",
-    }
-
-    cs = [colors[cat] for cat in categories]
+    # And plot
     ax1.stackplot(times, results2, colors=cs, step="post")
 
     ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
