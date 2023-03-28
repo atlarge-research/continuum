@@ -1114,8 +1114,8 @@ class Control(Experiment):
                 "container_40",
                 "container_50",
             ],
-            ["node_1", "node_2", "node_4", "node_8", "node_16"],
-            ["node_1", "node_2", "node_4", "node_8", "node_16"],
+            ["node_1", "node_2", "node_4", "node_8"],
+            ["node_1", "node_2", "node_4", "node_8"],
         ]
 
     def __repr__(self):
