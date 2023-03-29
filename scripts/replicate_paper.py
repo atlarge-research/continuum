@@ -1108,11 +1108,10 @@ class Control(Experiment):
         self.configs = [
             [
                 "container_1",
-                "container_10",
                 "container_20",
-                "container_30",
                 "container_40",
-                "container_50",
+                "container_60",
+                "container_80",
             ],
             ["node_1", "node_2", "node_4", "node_8"],
             ["node_1", "node_2", "node_4", "node_8"],
@@ -1149,6 +1148,8 @@ CONFIGS 3               %s""" % (
                     "output": None,
                 }
                 self.runs.append(run)
+
+            break
 
     def parse_output(self):
         """Input parsing and plotting is done in Continuum itself"""
