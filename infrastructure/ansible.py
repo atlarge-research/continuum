@@ -366,6 +366,10 @@ def copy(config, machines):
         if "execution_model" in config:
             suffix = config["execution_model"]["model"]
 
+        # Different deployment models for kubeconfig, with different config files
+        if "kube_deployment" in config["benchmark"]:
+            suffix += "_%s" % (config["benchmark"]["kube_deployment"])
+
         path = os.path.join(
             config["base"],
             "application",

@@ -55,7 +55,7 @@
     - name: Enable networking with Calico, only for cloud mode
       shell: |
         if [ "{{ cloud_mode }}" -gt "0" ]; then
-          kubectl create -f /kube-flannel.yml
+          kubectl apply -f /kube-flannel.yml
         fi
 
     - name: Create join command for worker nodes (cloud-only)

@@ -17,24 +17,14 @@
               containers:
               - name: {{ app_name }}
                 image: {{ image }}
-                ports:
-                - containerPort: 1883
-                imagePullPolicy: Always
+                imagePullPolicy: {{ pull_policy }}
                 resources:
                   requests:
                     memory: "{{ memory_req }}Mi"
                     cpu: {{ cpu_req }}
                 env:
-                - name: MQTT_LOCAL_IP
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: status.hostIP
-                - name: MQTT_LOGS
-                  value: "{{ mqtt_logs }}"
-                - name: CPU_THREADS
-                  value: "{{ cpu_threads }}"
-                - name: ENDPOINT_CONNECTED
-                  value: "{{ endpoint_connected }}"
+                - name: SLEEP_TIME
+                  value: "{{ sleep_time }}"
               restartPolicy: Never
         EOF
 
@@ -45,12 +35,8 @@
 
     - name: Create job multiple times
       shell: |
-        for i in `seq 0 {{ replicas }}`
+        for i in `seq 1 {{ replicas }}`
         do
           cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" \
           > "/home/{{ username }}/jobs/job-$i.yaml"
         done
-
-    - name: Launch jobs
-      command: >
-        kubectl apply -f "/home/{{ username }}/jobs"

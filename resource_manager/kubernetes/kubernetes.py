@@ -146,9 +146,25 @@ def cache_worker(config, machines, app_vars):
     ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
     # This only creates the file we need, now launch the benchmark
-    command = "kubectl apply -f /home/%s/job-template.yaml" % (
-        machines[0].cloud_controller_names[0]
-    )
+    if (
+        "kube_deployment" in config["benchmark"]
+        and config["benchmark"]["kube_deployment"] == "file"
+    ):
+        # Option "file" launches a kubectl command on an entire directory
+        command = "kubectl apply -f /home/%s/jobs" % (machines[0].cloud_controller_names[0])
+    elif (
+        "kube_deployment" in config["benchmark"]
+        and config["benchmark"]["kube_deployment"] == "call"
+    ):
+        # Option "call" launches one kubectl command per job file
+        command = "for filename in /home/%s/jobs/*; do kubectl apply -f $filename & done" % (
+            machines[0].cloud_controller_names[0]
+        )
+    else:
+        command = "kubectl apply -f /home/%s/job-template.yaml" % (
+            machines[0].cloud_controller_names[0]
+        )
+
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
     if not output or not any("job.batch" in o and "created" in o for o in output):
@@ -796,12 +812,42 @@ def get_worker_output_kube(config, machines, get_description):
             break
 
         container = line.split(" ")[0]
-        command = ["kubectl", "logs", "--timestamps=true", container]
-        if get_description:
-            command = ["kubectl", "get", "pod", container, "-o", "yaml"]
 
-        commands.append(command)
+        # Check if there is only 1 container per pod or multiple - requires different approach
+        # We treat every container as an entity - no matter if there are multiple in a pod
+        sub_pods_mode = False
+        sub_pods = 1
+        if (
+            "kube_deployment" in config["benchmark"]
+            and config["benchmark"]["kube_deployment"] == "container"
+        ):
+            # This deployment has all containers in 1 pod
+            # This requires special parsing
+            # There is only 1 line in "kubectl get pods", but you can get sub-output anyway
 
+            # Assume cloud mode
+            sub_pods_mode = True
+            sub_pods = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
+                "applications_per_worker"
+            ]
+
+        # Loop through every sub-container in the single pod
+        for i in range(1, sub_pods + 1):
+            # Sub-pods-mode requires the name of the container to be appended
+            if sub_pods_mode:
+                container_long = container + " empty-%i" % (i)
+            else:
+                container_long = container
+
+            command = ["kubectl", "logs", "--timestamps=true", container_long]
+
+            if get_description:
+                # Will be identical between containers - per pod level
+                command = ["kubectl", "get", "pod", container, "-o", "yaml"]
+
+            commands.append(command)
+
+        # Only once - per pod level
         if get_description:
             # Extra: Log kubernetes system components
             # - These logs are deleted after some time, so better backup them now

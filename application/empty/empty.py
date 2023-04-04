@@ -36,7 +36,10 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    settings = [["sleep_time", int, lambda x: x >= 1, True, False]]
+    settings = [
+        ["sleep_time", int, lambda x: x >= 1, True, False],
+        ["kube_deployment", str, lambda x: x in ["pod", "container", "file", "call"], False, "pod"],
+    ]
     return settings
 
 
@@ -119,6 +122,34 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
 
     # Parse output and build new commands to get final data with
     for i, out in enumerate(worker_description):
+
+        # SUB POD PARSING !!!!
+        # TODO
+        # Output looks like a list of this:
+        """
+        - containerID: containerd://b902b9bfad37b9b9f465cbeb264c95fd767b43eb87476e851fd68f42cb033708
+          image: 192.168.1.103:5000/empty:latest
+          imageID: 192.168.1.103:5000/empty@sha256:232357f63d479ce38135369af30a17073493a16595d5a5d98079322ea815db87
+          lastState: {}
+          name: empty-51
+          ready: false
+          restartCount: 0
+          started: false
+          state:
+              terminated:
+              containerID: containerd://b902b9bfad37b9b9f465cbeb264c95fd767b43eb87476e851fd68f42cb033708
+              exitCode: 0
+              finishedAt: "2023-04-04T21:30:49Z"
+              reason: Completed
+          startedAt: "2023-04-04T21:29:28Z"
+        """
+        # SO:
+        # - empty- should be empty-%i parse
+        # - nodeName is still unique
+        # - containerID is not unique, same as empty-
+        #
+        # Filter on a per - containerID: base
+
         container_id = 0
         nodename = 0
         pod_name = ""
@@ -135,6 +166,11 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
         if container_id == 0 or nodename == 0:
             logging.error("Could not find containerID for pod or scheduled node")
             sys.exit()
+
+        # NOTE
+        # - This grep on pod_name and container_id still should work - no matter nesting
+        # - BUT: YOU SHOULD GREP ON "pod_name," INCLUDE THE COMMA
+        #   Otherwise grep "empty-1" will also give you "empty-19" -> so include comma ALWAYS
 
         # Get output from the worker node using journalctl, to get millisecond timing
         command = """sudo journalctl -u containerd -o short-precise | \
