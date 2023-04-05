@@ -107,6 +107,7 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
         "manage_job": None,  # Time to start job manager
         "pod_object": None,  # Time to create pod object
         "scheduler_queue": None,  # Time to schedule
+        "pod_create": None,  # Time to create pod
         "container_create": None,  # Time to create container
         "container_created": None,  # Time to created container
         "app_start": None,  # Time to app in container
@@ -116,74 +117,65 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
     for _ in range(len(worker_description)):
         worker_metrics.append(copy.deepcopy(worker_set))
 
-    command_start = []
-    command_end = []
+    command_ccreate = []
+    command_ccreated = []
+    command_pcreate = []
     sshs = []
+
+    # TODO: This breaks when you have multiple multi-container pods
+    #       That requires you to reset this var to 0 once you reach the max containers per pod
+    last_container_id_index = 0
 
     # Parse output and build new commands to get final data with
     for i, out in enumerate(worker_description):
-
-        # SUB POD PARSING !!!!
-        # TODO
-        # Output looks like a list of this:
-        """
-        - containerID: containerd://b902b9bfad37b9b9f465cbeb264c95fd767b43eb87476e851fd68f42cb033708
-          image: 192.168.1.103:5000/empty:latest
-          imageID: 192.168.1.103:5000/empty@sha256:232357f63d479ce38135369af30a17073493a16595d5a5d98079322ea815db87
-          lastState: {}
-          name: empty-51
-          ready: false
-          restartCount: 0
-          started: false
-          state:
-              terminated:
-              containerID: containerd://b902b9bfad37b9b9f465cbeb264c95fd767b43eb87476e851fd68f42cb033708
-              exitCode: 0
-              finishedAt: "2023-04-04T21:30:49Z"
-              reason: Completed
-          startedAt: "2023-04-04T21:29:28Z"
-        """
-        # SO:
-        # - empty- should be empty-%i parse
-        # - nodeName is still unique
-        # - containerID is not unique, same as empty-
-        #
-        # Filter on a per - containerID: base
-
-        container_id = 0
-        nodename = 0
+        container_id_index = 0
+        container_id = ""
+        nodename = ""
         pod_name = ""
 
         for line in out:
-            if "name: empty-" in line:
+            if "name: empty-" in line and pod_name == "":
+                # Only take the first mention - this is the pod name
+                # All following mentions are container names - we don't need those
                 pod_name = line.split("name: ")[1]
-            if "nodeName" in line:
+            elif "nodeName" in line:
                 nodename = line.split("nodeName: ")[1]
-            elif "containerID" in line:
+            elif "containerID" in line and container_id_index <= last_container_id_index:
+                # Works with single and multiple containers per pod
                 container_id = line.split("://")[1]
-                break
+                if container_id_index == last_container_id_index:
+                    last_container_id_index += 2  # Every containerID is printed twice
+                    container_id_index += 2
 
-        if container_id == 0 or nodename == 0:
-            logging.error("Could not find containerID for pod or scheduled node")
+                container_id_index += 1
+
+        if container_id == "":
+            logging.error("ERROR: container_id could not be be set")
             sys.exit()
-
-        # NOTE
-        # - This grep on pod_name and container_id still should work - no matter nesting
-        # - BUT: YOU SHOULD GREP ON "pod_name," INCLUDE THE COMMA
-        #   Otherwise grep "empty-1" will also give you "empty-19" -> so include comma ALWAYS
+        elif nodename == "":
+            logging.error("ERROR: nodename could not be be set")
+            sys.exit()
+        elif pod_name == "":
+            logging.error("ERROR: pod_name could not be be set")
+            sys.exit()
 
         # Get output from the worker node using journalctl, to get millisecond timing
         command = """sudo journalctl -u containerd -o short-precise | \
 grep \'%s'""" % (
             pod_name
         )
-        command_start.append(command)
+        command_ccreate.append(command)
 
         command = """sudo journalctl -u containerd -o short-precise | \
 grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
             container_id
         )
-        command_end.append(command)
+        command_ccreated.append(command)
+
+        command = "sudo cat /var/log/syslog | grep '0330 waitForVolumeAttach pod=default/%s'" % (
+            pod_name
+        )
+        command_pcreate.append(command)
 
         # Place the _ back in the name
         nodename = nodename.replace(machines[0].user, "_" + machines[0].user)
@@ -202,43 +194,64 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
                 break
 
     # Given the commands and the ssh address to execute it at, execute all commands
-    results_start = machines[0].process(
-        config, command_start, shell=True, ssh=sshs, retryonoutput=True
+    results_ccreate = machines[0].process(
+        config, command_ccreate, shell=True, ssh=sshs, retryonoutput=True
     )
-    results_end = machines[0].process(config, command_end, shell=True, ssh=sshs, retryonoutput=True)
+    results_ccreated = machines[0].process(
+        config, command_ccreated, shell=True, ssh=sshs, retryonoutput=True
+    )
+    results_pcreate = machines[0].process(
+        config, command_pcreate, shell=True, ssh=sshs, retryonoutput=True
+    )
 
     # Parse the final output to get the total execution time
     for j, (command, result) in enumerate(
-        zip([command_start, command_end], [results_start, results_end])
+        zip(
+            [command_ccreate, command_ccreated, command_pcreate],
+            [results_ccreate, results_ccreated, results_pcreate],
+        )
     ):
         for i, (com, (output, error)) in enumerate(zip(command, result)):
             if not output:
                 logging.error("No output for pod %i and command [%s]", i, com)
                 sys.exit()
-            if ("StartContainer" in output[0] and len(output) > 1) or (
-                "RunPodSandbox" in output[0] and len(output) > 2
+
+            if (
+                (j == 0 and (len(output) != 2 or "RunPodSandbox" not in output[0]))
+                or (j == 1 and (len(output) != 1 or "StartContainer" not in output[0]))
+                or (j == 2 and (len(output) != 1 or "waitForVolumeAttach" not in output[0]))
             ):
                 logging.error(
                     "Incorrect output for pod %i and command [%s]: %s", i, com, "".join(output)
                 )
                 sys.exit()
-            elif error and not all("[CONTINUUM]" in l for l in error):
+
+            if error and not all("[CONTINUUM]" in l for l in error):
                 logging.error("Error for pod %i and command [%s]: %s", i, com, "".join(error))
                 sys.exit()
 
-            # Now parse the line to datetime with milliseconds
-            dt = output[0].split('time="')[1].split("+")[0]
-            dt = dt.replace("T", " ")
-            dt = dt[:-3]
-            dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
-            end_time = datetime.timestamp(dt)
+            if j < 2:
+                # RunPodSandBox (at j==0) can be found on line 1, not line 0
+                line_index = int(not j)
+
+                # Now parse the line to datetime with milliseconds
+                dt = output[line_index].split('time="')[1].split("+")[0]
+                dt = dt.replace("T", " ")
+                dt = dt[:-3]
+                dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
+                end_time = datetime.timestamp(dt)
+            else:
+                # Example: %!s(int64=1680728624591234908)
+                time_str = output[0].split("=")[1].split(")")[0]
+                time_obj_nano = float(time_str)
+                end_time = time_obj_nano / 10**9
 
             if j == 0:
-                # Start time
                 worker_metrics[i]["container_create"] = end_time - starttime
-            else:
-                # End time
+            elif j == 1:
                 worker_metrics[i]["container_created"] = end_time - starttime
+            elif j == 2:
+                worker_metrics[i]["pod_create"] = end_time - starttime
 
     return worker_metrics
 
@@ -495,6 +508,12 @@ def fill_control(control, starttime, worker_metrics, worker_output):
                             worker_metrics[i]["pod_object"] = t - starttime
                             i += 1
 
+    # Fill up if there are multiple containers per pod
+    j = i - 1
+    while i < len(worker_metrics):
+        worker_metrics[i]["pod_object"] = worker_metrics[j]["pod_object"]
+        i += 1
+
     # Scheduler time
     i = 0
     for node, output in control.items():
@@ -505,6 +524,12 @@ def fill_control(control, starttime, worker_metrics, worker_output):
                         if "0124" in line:
                             worker_metrics[i]["scheduler_queue"] = t - starttime
                             i += 1
+
+    # Fill up if there are multiple containers per pod
+    j = i - 1
+    while i < len(worker_metrics):
+        worker_metrics[i]["scheduler_queue"] = worker_metrics[j]["scheduler_queue"]
+        i += 1
 
     # Container creation
     for i, output in enumerate(worker_output):
@@ -535,6 +560,7 @@ def plot_control(config, worker_metrics):
             "manage_job": "manage_job (s)",
             "pod_object": "pod_object (s)",
             "scheduler_queue": "scheduler_queue (s)",
+            "pod_create": "pod_create (s)",
             "container_create": "container_create (s)",
             "container_created": "container_created (s)",
             "app_start": "app_start (s)",
@@ -555,14 +581,18 @@ def plot_control(config, worker_metrics):
     manage = [w["manage_job"] for w in worker_metrics]
     pobject = [w["pod_object"] for w in worker_metrics]
     scheduler = [w["scheduler_queue"] for w in worker_metrics]
-    create = [w["container_create"] for w in worker_metrics]
+    pod_create = [w["pod_create"] for w in worker_metrics]
+    cont_create = [w["container_create"] for w in worker_metrics]
+    cont_created = [w["container_created"] for w in worker_metrics]
     app_start = [w["app_start"] for w in worker_metrics]
 
     events = []
     events += [(t, "manager") for t in manage]
     events += [(t, "object") for t in pobject]
     events += [(t, "scheduler") for t in scheduler]
-    events += [(t, "container") for t in create]
+    events += [(t, "pod_create") for t in pod_create]
+    events += [(t, "container_create") for t in cont_create]
+    events += [(t, "container_created") for t in cont_created]
     events += [(t, "app") for t in app_start]
     events.sort()
 
@@ -570,24 +600,30 @@ def plot_control(config, worker_metrics):
     # 1. Arriving           [starttime, manage_job]
     # 2. Controller         [manage_job, pod_object]
     # 3. Object Management  [pod_object, scheduler_queue]
-    # 4. Scheduler          [scheduler_queue, container_create]
-    # 5. Container Creation [container_create, app_start]
-    # 6. Running            [app_start, >]
+    # 4. Scheduler          [scheduler_queue, pod_create]
+    # 5. Pod creation       [pod_create, container_create]
+    # 6. Container creation [container_create, container_created]
+    # 7. Container start    [container_created, app_start]
+    # 8. Running            [app_start, >]
     categories = [
         "Arriving",
         "Controller",
         "Object Managing",
         "Scheduling",
+        "Pod creating",
         "Container Creating",
+        "Container Starting",
         "Running",
     ]
     colors = {
-        "Arriving": "#bcbd22",
-        "Controller": "#ff7f0e",
-        "Object Managing": "#d62728",
-        "Scheduling": "#1f77b4",
-        "Container Creating": "#9467bd",
-        "Running": "#2ca02c",
+        "Arriving": "b",
+        "Controller": "g",
+        "Object Managing": "r",
+        "Scheduling": "c",
+        "Pod creating": "m",
+        "Container Creating": "y",
+        "Container Starting": "k",
+        "Running": "b",
     }
     cs = [colors[cat] for cat in categories]
 
@@ -610,13 +646,21 @@ def plot_control(config, worker_metrics):
             current[2] -= 1
             current[3] += 1
             results.append(current.copy())
-        elif etype == "container":
+        elif etype == "pod_create":
             current[3] -= 1
             current[4] += 1
             results.append(current.copy())
-        elif etype == "app":
+        elif etype == "container_create":
             current[4] -= 1
             current[5] += 1
+            results.append(current.copy())
+        elif etype == "container_created":
+            current[5] -= 1
+            current[6] += 1
+            results.append(current.copy())
+        elif etype == "app":
+            current[6] -= 1
+            current[7] += 1
             results.append(current.copy())
 
     # Parse in right format

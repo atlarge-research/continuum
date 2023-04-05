@@ -151,19 +151,18 @@ def cache_worker(config, machines, app_vars):
         and config["benchmark"]["kube_deployment"] == "file"
     ):
         # Option "file" launches a kubectl command on an entire directory
-        command = "kubectl apply -f /home/%s/jobs" % (machines[0].cloud_controller_names[0])
+        file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
+        command = "kubectl apply -f %s" % (file)
     elif (
         "kube_deployment" in config["benchmark"]
         and config["benchmark"]["kube_deployment"] == "call"
     ):
         # Option "call" launches one kubectl command per job file
-        command = "for filename in /home/%s/jobs/*; do kubectl apply -f $filename & done" % (
-            machines[0].cloud_controller_names[0]
-        )
+        file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
+        command = "for filename in %s/*; do kubectl apply -f $filename & done" % (file)
     else:
-        command = "kubectl apply -f /home/%s/job-template.yaml" % (
-            machines[0].cloud_controller_names[0]
-        )
+        file = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
+        command = "kubectl apply -f %s" % (file)
 
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
@@ -229,12 +228,7 @@ def cache_worker(config, machines, app_vars):
             sys.exit()
 
     # All apps have succesfully been executed, now kill them
-    command = [
-        "kubectl",
-        "delete",
-        "-f",
-        "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0]),
-    ]
+    command = ["kubectl", "delete", "-f", file]
     output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
     if not output or not any("job.batch" in o and "deleted" in o for o in output):
@@ -396,6 +390,9 @@ def launch_with_starttime(config, machines):
         (float): Time needed to start the application with kubectl
     """
     starttime = 0.0
+
+    # TODO FIX THIS - MAY NEED DIFFERENT FILE/DIR THAN JOB-TEMPLATE.YAML
+    #      SEE LINE 149-165 IN THIS FILE
 
     # This only creates the file we need, now launch the benchmark
     command = "\"date +'%s.%N'; kubectl apply " + '-f /home/%s/job-template.yaml"' % (
@@ -832,20 +829,21 @@ def get_worker_output_kube(config, machines, get_description):
             ]
 
         # Loop through every sub-container in the single pod
-        for i in range(1, sub_pods + 1):
-            # Sub-pods-mode requires the name of the container to be appended
-            if sub_pods_mode:
-                container_long = container + " empty-%i" % (i)
-            else:
-                container_long = container
+        if get_description:
+            # Will be identical between containers - per pod level
+            command = ["kubectl", "get", "pod", container, "-o", "yaml"]
+            for _ in range(sub_pods):
+                commands.append(command)
+        else:
+            for i in range(1, sub_pods + 1):
+                # Sub-pods-mode requires the name of the container to be appended
+                if sub_pods_mode:
+                    container_long = container + " empty-%i" % (i)
+                else:
+                    container_long = container
 
-            command = ["kubectl", "logs", "--timestamps=true", container_long]
-
-            if get_description:
-                # Will be identical between containers - per pod level
-                command = ["kubectl", "get", "pod", container, "-o", "yaml"]
-
-            commands.append(command)
+                command = ["kubectl", "logs", "--timestamps=true", container_long]
+                commands.append(command)
 
         # Only once - per pod level
         if get_description:
