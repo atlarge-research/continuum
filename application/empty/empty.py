@@ -616,14 +616,14 @@ def plot_control(config, worker_metrics):
         "Running",
     ]
     colors = {
-        "Arriving": "b",
-        "Controller": "g",
-        "Object Managing": "r",
-        "Scheduling": "c",
-        "Pod creating": "m",
-        "Container Creating": "y",
-        "Container Starting": "k",
-        "Running": "b",
+        "Arriving": "#33a02c",
+        "Controller": "#b2df8a",
+        "Object Managing": "#1f78b4",
+        "Scheduling": "#a6cee3",
+        "Pod creating": "#33a02c",
+        "Container Creating": "#b2df8a",
+        "Container Starting": "#1f78b4",
+        "Running": "#a6cee3",
     }
     cs = [colors[cat] for cat in categories]
 
@@ -663,14 +663,21 @@ def plot_control(config, worker_metrics):
             current[7] += 1
             results.append(current.copy())
 
-    # Parse in right format
+    # Transpose - this is the right format
     results2 = [[] for _ in range(len(categories))]
     for result in results:
         for i, val in enumerate(result):
             results2[i].append(val)
 
+    # Now invert
+    results2 = list(reversed(results2))
+
     # And plot
-    ax1.stackplot(times, results2, colors=cs, step="post")
+    stacks = ax1.stackplot(times, results2, colors=list(reversed(cs)), step="post")
+
+    hatches = [".", ".", ".", "."]
+    for stack, hatch in zip(stacks[4:], hatches):
+        stack.set_hatch(hatch)
 
     ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
     ax1.invert_yaxis()
@@ -685,9 +692,15 @@ def plot_control(config, worker_metrics):
     ax1.set_xlim(0, times[-1])
 
     # add legend
-    patches = [mpatches.Patch(color=c) for c in cs]
+    patches = []
+    for i, c in enumerate(cs):
+        if i < 4:
+            patches.append(mpatches.Patch(facecolor=c, edgecolor="k", hatch=hatches[i - 4] * 3))
+        else:
+            patches.append(mpatches.Patch(facecolor=c, edgecolor="k"))
+
     texts = categories
-    ax1.legend(patches, texts, loc="upper right")
+    ax1.legend(patches, texts, loc="lower right")
 
     # Save plot
     t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())

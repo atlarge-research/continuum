@@ -391,14 +391,27 @@ def launch_with_starttime(config, machines):
     """
     starttime = 0.0
 
-    # TODO FIX THIS - MAY NEED DIFFERENT FILE/DIR THAN JOB-TEMPLATE.YAML
-    #      SEE LINE 149-165 IN THIS FILE
+    if (
+        "kube_deployment" in config["benchmark"]
+        and config["benchmark"]["kube_deployment"] == "file"
+    ):
+        # Option "file" launches a kubectl command on an entire directory
+        file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
+        command = "kubectl apply -f %s" % (file)
+    elif (
+        "kube_deployment" in config["benchmark"]
+        and config["benchmark"]["kube_deployment"] == "call"
+    ):
+        # Option "call" launches one kubectl command per job file
+        file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
+        command = "for filename in %s/*; do kubectl apply -f $filename & done" % (file)
+    else:
+        file = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
+        command = "kubectl apply -f %s" % (file)
 
-    # This only creates the file we need, now launch the benchmark
-    command = "\"date +'%s.%N'; kubectl apply " + '-f /home/%s/job-template.yaml"' % (
-        machines[0].cloud_controller_names[0]
-    )
-    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+    # Now launch the benchmark
+    tcommand = "\"date +'%%s.%%N'; %s\"" % (command)
+    output, error = machines[0].process(config, tcommand, shell=True, ssh=config["cloud_ssh"][0])[0]
 
     if len(output) < 2 or not any("created" in o for o in output):
         logging.error("Could not deploy pods: %s", "".join(output))
