@@ -146,6 +146,11 @@ if __name__ == "__main__":
     parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 
     arguments = parser_obj.parse_args()
+    print("infrastructure:")
+    print(arguments.config['infrastructure'])
+
+    print("benchmark:")
+    print(arguments.config['benchmark'])
 
     # Set loggers, print current config
     set_logging(arguments)
