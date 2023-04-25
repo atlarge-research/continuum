@@ -1,6 +1,6 @@
-import { NodeMap, ReadWriteSpeed, ConfigurationMap, Connection, GCPConfig, defaultGCPConfig, BenchmarkConfig } from "./generics";
+import { NodeMap, ReadWriteSpeed, ConfigurationMap, Connection, GCPConfig, defaultGCPConfig, BenchmarkConfig, applicationVars } from "./generics";
 import { checkValidator } from "./validator";
-import { nodesValidator, coresValidator, quotaValidator, readWriteSpeedValidator, memoryValidator, connectionValidator as connectionValidator, prefixIPValidator, is8BitValidator } from "./validate_generics"
+import { nodesValidator, coresValidator, quotaValidator, readWriteSpeedValidator, memoryValidator, connectionValidator as connectionValidator, prefixIPValidator, is8BitValidator, numberIsUnsignedValidator} from "./validate_generics"
 
 class Configuration {
     provider: string; // Options: qemu, gcp, baremetal (mandatory)
@@ -26,10 +26,12 @@ class Configuration {
     prefixIP: number // Default: 192.168, format: XXX.XXX,
     middleIP: number // Default: 100, Any number 1 - 254
     middleIPBase: number // Default: 90, Any number 1 - 254
-    delete: boolean 
+    delete: boolean
 
     gcpConfig?: GCPConfig // create validator
     benchmarkConfig?: BenchmarkConfig
+
+    executionModel: "openfaas"
 
 
     constructor(map: ConfigurationMap) {
@@ -143,7 +145,7 @@ class Configuration {
             ? map.basePath
             : "~"
 
-        this.prefixIP = map.prefixIP != null 
+        this.prefixIP = map.prefixIP != null
             ? map.prefixIP
             : 192.168
 
@@ -155,7 +157,7 @@ class Configuration {
             ? map.middleIPBase
             : 90
 
-        
+
 
         this.delete = map.delete === true
 
@@ -186,18 +188,28 @@ class Configuration {
                     applicationEndpointCPU: map.benchmarkConfig.applicationEndpointCPU != null
                         ? map.benchmarkConfig.applicationEndpointCPU
                         : map.cores.endpoint,
+
                     applicationEndpointMemory: map.benchmarkConfig.applicationEndpointMemory != null
                         ? map.benchmarkConfig.applicationEndpointMemory
                         : map.cores.endpoint,
+
+                    applicationsPerWorker: map.benchmarkConfig.applicationsPerWorker != null
+                        ? map.benchmarkConfig.applicationsPerWorker
+                        : 1,
+
                     applicationVars: map.benchmarkConfig.applicationVars != null
                         ? map.benchmarkConfig.applicationVars
-                        : undefined
+                        : undefined,
 
-
+                    cacheWorker: map.benchmarkConfig.cacheWorker === true,
+                    observability: map.benchmarkConfig.observability === true,
                 }
                 : undefined
-            : undefined
+            : undefined,
 
+            this.executionModel = map.executionMode != null
+                ? map.executionMode
+                : "openfaas"
     }
 
     validate() {
@@ -212,8 +224,22 @@ class Configuration {
         checkValidator(connectionValidator(this.cloudEndPointConnection))
         checkValidator(connectionValidator(this.edgeEndPointConnection))
         checkValidator(prefixIPValidator(this.prefixIP))
-        checkValidator(is8BitValidator("middleIP",this.middleIP))
-        checkValidator(is8BitValidator("middleIPBase",this.middleIPBase))
+        checkValidator(is8BitValidator("middleIP", this.middleIP))
+        checkValidator(is8BitValidator("middleIPBase", this.middleIPBase))
+
+        if (this.benchmarkConfig != null) {
+            checkValidator(numberIsUnsignedValidator("applicationWorkerCPU", this.benchmarkConfig.applicationWorkerCPU!, false, 0.1))
+            checkValidator(numberIsUnsignedValidator("applicationWorkerMemory", this.benchmarkConfig.applicationWorkerMemory!, false, 0.1))
+
+            checkValidator(numberIsUnsignedValidator("applicationEndpointCPU", this.benchmarkConfig.applicationEndpointCPU!, false, 0.1))
+            checkValidator(numberIsUnsignedValidator("applicationEndpointMemory", this.benchmarkConfig.applicationEndpointMemory!, false, 0.1))
+
+            checkValidator(numberIsUnsignedValidator("applicationsPerWorker", this.benchmarkConfig.applicationsPerWorker!, true, 1))
+        }
+    }
+
+    print() {
+        console.log(this)
     }
 }
 
@@ -229,15 +255,17 @@ const config1 = new Configuration({
         writeSpeed: { cloud: 3, edge: 5, endpoint: 4 }
     },
     prefixIP: 223.100, // as this is handled as a number trailing zeros are assumed
-    middleIPBase: 42332,
+    middleIPBase: 244,
     infra_only: false,
     cloudConnection: { latencyAvg: 2 },
     benchmarkConfig: {
         resourceManager: "kubernetes",
         application: "asd",
-        applicationVars: Object.fromEntries([
+        applicationVars: applicationVars([
             ["frequency", 5]
-        ])
+        ]),
+        applicationsPerWorker: 1,
+        applicationEndpointCPU: 0.2
     }
 })
 

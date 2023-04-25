@@ -54,7 +54,13 @@ export type BenchmarkConfig = {
     applicationEndpointCPU?: number
     applicationEndpointMemory?: number
 
+    applicationsPerWorker?: number
+
     applicationVars?: Object
+
+    cacheWorker?: boolean
+    observability?: boolean
+
 }
 
 
@@ -93,5 +99,9 @@ export type ConfigurationMap = {
 
     gcpConfig?: GCPConfig
     benchmarkConfig?: BenchmarkConfig
+
+    executionMode?: "openfaas"
 }
+
+export const applicationVars = (variables: Iterable<[PropertyKey, any]>) => Object.fromEntries(variables)
 

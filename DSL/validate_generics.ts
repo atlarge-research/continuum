@@ -20,6 +20,17 @@ function betweenZeroPointOneAndOne(num: number): boolean {
     return num >= 0.1 && num <= 1
 }
 
+
+export function numberIsUnsignedValidator(variableName: string, num: number, isInteger: boolean, minimalValue?: number): Validator {
+    return isInteger
+        ? isUnsignedInt(num) && (minimalValue == null || num >= minimalValue)
+            ? successValidator()
+            : errorValidator(`${variableName} needs to have a non-negative Integer value. Current value is ${num}. ${minimalValue != null ? `minimal value is ${minimalValue}`:``}`)
+        : isUnsigned(num) && (minimalValue == null || num >= minimalValue)
+            ? successValidator()
+            : errorValidator(`${variableName} needs to have a non-negative numeric value. Current value is ${num}. ${minimalValue != null ? `minimal value is ${minimalValue}`:``}`)
+}
+
 //takes either the Nodes or the Cores and checks that all values are integers.
 // the  variable name is used do describe what nodeMap instance causing an error (if it occurs)
 function nodeMapUnsignedIntValidator(nodeMap: NodeMap, variableName: string): Validator {
@@ -134,8 +145,8 @@ export function readWriteSpeedValidator(readWriteSpeed: ReadWriteSpeed): Validat
     const readSpeedValidator = nodeMapUnsignedIntValidator(readWriteSpeed.readSpeed!, "read speed")
     const writeSpeedValidator = nodeMapUnsignedIntValidator(readWriteSpeed.writeSpeed!, "write speed")
 
-    if(readSpeedValidator.errorMessage.length > 0) readSpeedValidator.errorMessage += '\nError: '
-    
+    if (readSpeedValidator.errorMessage.length > 0) readSpeedValidator.errorMessage += '\nError: '
+
     return {
         success: readSpeedValidator.success && writeSpeedValidator.success,
         errorMessage: readSpeedValidator.errorMessage + writeSpeedValidator.errorMessage,
@@ -144,8 +155,8 @@ export function readWriteSpeedValidator(readWriteSpeed: ReadWriteSpeed): Validat
 
 export function connectionValidator(connection: Connection): Validator {
     if (NullOrBiggerThanZero(connection.latencyAvg) &&
-            NullOrBiggerThanZero(connection.latencyVar) &&
-            NullOrBiggerThanOne(connection.throughput)) {
+        NullOrBiggerThanZero(connection.latencyVar) &&
+        NullOrBiggerThanOne(connection.throughput)) {
         return successValidator()
     }
     return errorValidator("Invalid connection settings value/s. The following needs to hold:\nlatency avg >= 0, latency var >= 0 and throughput >= 1")
@@ -153,20 +164,21 @@ export function connectionValidator(connection: Connection): Validator {
 
 //between 0 and 255
 function is8BitNumber(num: number): boolean {
-    return num >= 0 && num <= 255
+    return isUnsignedInt(num) && num <= 255
 }
 
 export function prefixIPValidator(prefixIP: number): Validator {
     const first = Math.floor(prefixIP)
-    const second =  prefixIP * 1000 % 1000
-    if(is8BitNumber(first) && is8BitNumber(second)){
+    const second = prefixIP * 1000 % 1000
+    if (is8BitNumber(first) && is8BitNumber(second)) {
         return successValidator()
     }
-   return errorValidator("Prefix IP needs to be of the format XXX.XXX where each XXX is between 0 and 255")
+    return errorValidator("Prefix IP needs to be of the format XXX.XXX where each XXX is between 0 and 255")
 }
 
 export function is8BitValidator(variableName: string, num: number): Validator {
     return is8BitNumber(num) ? successValidator() : errorValidator(`${variableName} needs to be between 0 and 255, actual value: ${num}`)
 }
+
 
 
