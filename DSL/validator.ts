@@ -1,6 +1,3 @@
-/*
-custom error handling type
-*/
 import process from 'process'
 
 export type Validator = { success: boolean, errorMessage: string }
@@ -9,17 +6,16 @@ export function successValidator(): Validator {
 }
 
 export function errorValidator(error: string): Validator {
-    return { success: false, errorMessage: error + "\n" }
+    return { success: false, errorMessage: error + " " }
 }
 
 export function checkValidator(validator: Validator): void {
     try {
         if (!validator.success) {
-            throw new Error(validator.errorMessage)
+            throw validator.errorMessage
         }
-    } catch (error) {
-        console.log(('\n' + error + '').split("\t")[0])
-        // console.log(error)
+    } catch (errorMessage) {
+        console.error(("Error: " + errorMessage))
         process.exit(1)
     }
 }

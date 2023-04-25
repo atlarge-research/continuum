@@ -1,8 +1,6 @@
-export type Provider = "qemu" | "gcp" | "baremetal"
-export type WirelessNetworkPreset = '4g' | '5g'
-
 // A generic data map data type that associates numeric values to the 3 types of nodes in the framework. 
 // This data type is used to describe different parts of the configuration
+
 export type NodeMap = {
     cloud: number;
     edge: number;
@@ -20,7 +18,7 @@ export type Connection = {
     throughput?: number;
 }
 
-export type GCPConfiguration = {
+export type GCPConfig = {
     cloud: string
     edge: string
     endpoint: string
@@ -30,16 +28,8 @@ export type GCPConfiguration = {
     credentials:string
 }
 
-// export type Benchmark = {
-//     //# Options: kubernetes (cloud mode), kubeedge (edge mode), mist (no RM edge), none (local processing on endpoints), kubecontrol (experimental)
-//     resourceManager: "kubernetes" | "kubeedge" | "mist" | "none" | "kubecontrol"
-//     resourceManagerOnly: boolean
-//     dockerPull: boolean // Default: false, Force docker pull for application updates
-//     application: DEFINE THE APPLICATION TYPE HERE
-// }
-
 //made this for now dont know if is needed
-export function defaultGCPConfig(): GCPConfiguration {
+export function defaultGCPConfig(): GCPConfig {
     return {
         cloud: "e2-medium",
         edge: "e2-small",
@@ -51,25 +41,57 @@ export function defaultGCPConfig(): GCPConfiguration {
     }
 }
 
+export type BenchmarkConfig = {
+    //# Options: kubernetes (cloud mode), kubeedge (edge mode), mist (no RM edge), none (local processing on endpoints), kubecontrol (experimental)
+    resourceManager: "kubernetes" | "kubeedge" | "mist" | "none" | "kubecontrol"
+    resourceManagerOnly?: boolean // Default: true, if true only resource manager, no benchmark executed.
+    dockerPull?: boolean // Default: false, Force docker pull for application updates
+    application: string // Options: image_classification, empty
+
+    applicationWorkerCPU?: number
+    applicationWorkerMemory?: number
+
+    applicationEndpointCPU?: number
+    applicationEndpointMemory?: number
+
+    applicationVars?: Object
+}
+
+
 export type ConfigurationMap = {
-    provider: Provider,
+
+    provider: "qemu" | "gcp" | "baremetal",
     infra_only?: boolean,
+    
     nodes: NodeMap,
     cores: NodeMap,
     memory: NodeMap,
     quota: NodeMap,
+
     readWriteSpeed?: ReadWriteSpeed,
-    wirelessNetworkPreset?: WirelessNetworkPreset
+    wirelessNetworkPreset?: "4g" | "5g"
+
     cpuPin?: boolean
     networkEmulation?: boolean
+
     cloudConnection?: Connection
     edgeConnection?: Connection
     cloudEdgeConnection?: Connection
     cloudEndPointConnection?: Connection
     EdgeEndPointConnection?: Connection
+
+    //Continue: validate from here//
+
     externalPhysicalMachines?: string[]
     netperf?: boolean
     basePath?: string
-    gcpConfig?: GCPConfiguration
+
+    prefixIP?: number // Default: 192.168, format: XXX.XXX,
+    middleIP?: number // Default: 100, Any number 1 - 254
+    middleIPBase?: number // Default: 90, Any number 1 - 254
+    delete?: boolean
+
+    gcpConfig?: GCPConfig
+    benchmarkConfig?: BenchmarkConfig
 }
 

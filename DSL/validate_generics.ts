@@ -133,6 +133,8 @@ export function readWriteSpeedValidator(readWriteSpeed: ReadWriteSpeed): Validat
 
     const readSpeedValidator = nodeMapUnsignedIntValidator(readWriteSpeed.readSpeed!, "read speed")
     const writeSpeedValidator = nodeMapUnsignedIntValidator(readWriteSpeed.writeSpeed!, "write speed")
+
+    if(readSpeedValidator.errorMessage.length > 0) readSpeedValidator.errorMessage += '\nError: '
     
     return {
         success: readSpeedValidator.success && writeSpeedValidator.success,
@@ -149,12 +151,18 @@ export function connectionValidator(connection: Connection): Validator {
     return errorValidator("Invalid connection settings value/s. The following needs to hold:\nlatency avg >= 0, latency var >= 0 and throughput >= 1")
 }
 
+//between 0 and 255
+function is8BitNumber(num: number): boolean {
+    return num >= 0 && num <= 255
+}
 
-
-
-//test validator
-// checkValidator(nodeMapIntegerValuesValidator({cloud: 3, edge:1.1, endpoint:5}))
-
-//TODO: Add default values to structure
+export function prefixIPValidator(prefixIP: number): Validator {
+    const first = Math.floor(prefixIP)
+    const second =  prefixIP * 1000 % 1000
+    if(is8BitNumber(first) && is8BitNumber(second)){
+        return successValidator()
+    }
+   return errorValidator("Prefix IP needs to be of the format XXX.XXX where each XXX is between 0 and 255")
+}
 
 
