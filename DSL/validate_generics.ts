@@ -165,4 +165,8 @@ export function prefixIPValidator(prefixIP: number): Validator {
    return errorValidator("Prefix IP needs to be of the format XXX.XXX where each XXX is between 0 and 255")
 }
 
+export function is8BitValidator(variableName: string, num: number): Validator {
+    return is8BitNumber(num) ? successValidator() : errorValidator(`${variableName} needs to be between 0 and 255, actual value: ${num}`)
+}
+
 

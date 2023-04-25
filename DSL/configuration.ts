@@ -1,6 +1,6 @@
 import { NodeMap, ReadWriteSpeed, ConfigurationMap, Connection, GCPConfig, defaultGCPConfig, BenchmarkConfig } from "./generics";
 import { checkValidator } from "./validator";
-import { nodesValidator, coresValidator, quotaValidator, readWriteSpeedValidator, memoryValidator, connectionValidator as connectionValidator, prefixIPValidator } from "./validate_generics"
+import { nodesValidator, coresValidator, quotaValidator, readWriteSpeedValidator, memoryValidator, connectionValidator as connectionValidator, prefixIPValidator, is8BitValidator } from "./validate_generics"
 
 class Configuration {
     provider: string; // Options: qemu, gcp, baremetal (mandatory)
@@ -212,6 +212,8 @@ class Configuration {
         checkValidator(connectionValidator(this.cloudEndPointConnection))
         checkValidator(connectionValidator(this.edgeEndPointConnection))
         checkValidator(prefixIPValidator(this.prefixIP))
+        checkValidator(is8BitValidator("middleIP",this.middleIP))
+        checkValidator(is8BitValidator("middleIPBase",this.middleIPBase))
     }
 }
 
@@ -227,6 +229,7 @@ const config1 = new Configuration({
         writeSpeed: { cloud: 3, edge: 5, endpoint: 4 }
     },
     prefixIP: 223.100, // as this is handled as a number trailing zeros are assumed
+    middleIPBase: 42332,
     infra_only: false,
     cloudConnection: { latencyAvg: 2 },
     benchmarkConfig: {
