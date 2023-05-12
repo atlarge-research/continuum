@@ -65,13 +65,16 @@ def start(config, machines):
         ]
     )
 
-    # Setup cloud worker
+    # Setup worker
     commands.append(
         [
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/install.yml"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/%s/install.yml" % (config["mode"]),
+            ),
         ]
     )
 

@@ -161,7 +161,7 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
 
         # Get output from the worker node using journalctl, to get millisecond timing
         command = """sudo journalctl -u containerd -o short-precise | \
-grep \'%s'""" % (
+grep \'%s-'""" % (
             pod_name
         )
         command_ccreate.append(command)
@@ -172,7 +172,7 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
         )
         command_ccreated.append(command)
 
-        command = "sudo cat /var/log/syslog | grep '0330 waitForVolumeAttach pod=default/%s'" % (
+        command = "sudo cat /var/log/syslog | grep '0330 waitForVolumeAttach pod=default/%s-'" % (
             pod_name
         )
         command_pcreate.append(command)
