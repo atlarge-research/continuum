@@ -457,13 +457,14 @@ def docker_registry(config, machines):
 
     # TODO This is RM specific, move this to the RM code
     if config["benchmark"]["resource_manager"] == "kubecontrol":
+        version = str(config["benchmark"]["kube_version"])
         images_kube = [
-            "redplanet00/kube-proxy:v1.25.3",
-            "redplanet00/kube-controller-manager:v1.25.3",
-            "redplanet00/kube-scheduler:v1.25.3",
-            "redplanet00/kube-apiserver:v1.25.3",
-            "redplanet00/etcd:3.5.4-0",
-            "redplanet00/pause:3.8",
+            "redplanet00/kube-proxy:" + version,
+            "redplanet00/kube-controller-manager:" + version,
+            "redplanet00/kube-scheduler:" + version,
+            "redplanet00/kube-apiserver:" + version,
+            "redplanet00/etcd:3.5.7-0",
+            "redplanet00/pause:3.9",
         ]
         images += images_kube
         need_pull += [True] * 6

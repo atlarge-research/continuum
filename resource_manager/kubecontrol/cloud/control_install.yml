@@ -87,7 +87,7 @@
           --apiserver-cert-extra-sans={{ cloud_ip }}
           --node-name {{ ansible_hostname }}
           --pod-network-cidr=10.244.0.0/16
-          --kubernetes-version=1.25.3
+          --kubernetes-version={{ kubeversion }}
           --image-repository={{ registry_ip }}
           --ignore-preflight-errors all
           --patches /home/{{ username }}/patches/

@@ -39,6 +39,7 @@ def add_options(_config):
     settings = [
         ["sleep_time", int, lambda x: x >= 1, True, False],
         ["kube_deployment", str, lambda x: x in ["pod", "container", "file", "call"], False, "pod"],
+        ["kube_version", str, lambda _: True, False, "v1.27.0"],
     ]
     return settings
 
@@ -172,7 +173,8 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
         )
         command_ccreated.append(command)
 
-        command = "sudo cat /var/log/syslog | grep '0330 waitForVolumeAttach pod=default/%s-'" % (
+        # Use syslog* because there may be multiple syslogs in case there is much output
+        command = "sudo cat /var/log/syslog* | grep '0330 waitForVolumeAttach pod=default/%s-'" % (
             pod_name
         )
         command_pcreate.append(command)
@@ -216,6 +218,15 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
                 logging.error("No output for pod %i and command [%s]", i, com)
                 sys.exit()
 
+            # There could have been previous pods with the same name (e.g., caching)
+            # We should ignore those printouts
+            if j == 0 and len(output) > 2:
+                output = output[-2:]
+
+            # Same for j == 2
+            if j == 2 and len(output) > 1:
+                output = output[-1:]
+
             if (
                 (j == 0 and (len(output) != 2 or "RunPodSandbox" not in output[0]))
                 or (j == 1 and (len(output) != 1 or "StartContainer" not in output[0]))
@@ -226,7 +237,12 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
                 )
                 sys.exit()
 
-            if error and not all("[CONTINUUM]" in l for l in error):
+            # Special ignore: from j==2, cat syslog* gives some errors
+            if (
+                error
+                and not all("[CONTINUUM]" in l for l in error)
+                and not (j == 2 and all("No such file or directory" in l for l in error))
+            ):
                 logging.error("Error for pod %i and command [%s]: %s", i, com, "".join(error))
                 sys.exit()
 
