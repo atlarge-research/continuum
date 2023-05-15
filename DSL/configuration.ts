@@ -241,6 +241,10 @@ class Configuration {
     print() {
         console.log(this)
     }
+    
+    printJson(){
+        console.log(JSON.stringify(this))
+    }
 }
 
 // example of a configuration instance
@@ -261,16 +265,21 @@ const config1 = new Configuration({
     benchmarkConfig: {
         resourceManager: "kubernetes",
         application: "asd",
-        applicationVars: applicationVars([
-            ["frequency", 5]
-        ]),
+        applicationVars: applicationVars(
+            [
+                ["frequency", 5]
+            ]
+        ),
         applicationsPerWorker: 1,
         applicationEndpointCPU: 0.2
     }
 })
 
 config1.validate()
-console.log(config1)
-console.log(JSON.stringify(config1))
+config1.printJson()
+
+
+
+
 
 

@@ -14,6 +14,7 @@ import time
 
 from application import application
 from configuration_parser import configuration_parser
+from dsl_parser import dsl_parser
 from execution_model import execution_model
 from infrastructure import infrastructure
 from resource_manager import resource_manager
@@ -140,20 +141,22 @@ if __name__ == "__main__":
 
     parser_obj.add_argument(
         "config",
-        type=lambda x: configuration_parser.start(parser_obj, x),
+        type=lambda x: dsl_parser.start(parser_obj, x),
+        # type=lambda x: configuration_parser.start(parser_obj, x),
         help="benchmark config file",
     )
     parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 
     arguments = parser_obj.parse_args()
-    print("infrastructure:")
-    print(arguments.config['infrastructure'])
+    print(arguments.config)
+    # print("infrastructure:")
+    # print(arguments.config['infrastructure'])
 
-    print("benchmark:")
-    print(arguments.config['benchmark'])
+    # print("benchmark:")
+    # print(arguments.config['benchmark'])
 
-    # Set loggers, print current config
-    set_logging(arguments)
-    configuration_parser.print_config(arguments.config)
+    # # Set loggers, print current config
+    # set_logging(arguments)
+    # configuration_parser.print_config(arguments.config)
 
-    main(arguments)
+    # main(arguments)

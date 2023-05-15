@@ -41,7 +41,7 @@
 			"})",
 			"",
 			"${1:newConfiguration}.validate()",
-			"console.log(JSON.stringify(${1:newConfiguration}))",
+			"${1:newConfiguration}.printJson()",
 		],
 		"description": "Creates basic instance of configuration class"
 	},
