@@ -89,6 +89,26 @@ def start_worker(config, _machines):
     return app_vars
 
 
+def time_delta(t, starttime):
+    """Calculate a time delta.
+    Timezones may not be applied to all measurement data,
+    so we need to detect and correct negative time deltas manually
+
+    Args:
+        t (float): Timestamp of a particular event
+        starttime (float): Timestamp of the start of the benchmark
+
+    Returns:
+        float: Possitive time delta
+    """
+    delta = t - starttime
+    seconds_per_hour = float(3600)
+    while delta < float(0):
+        delta += seconds_per_hour
+
+    return delta
+
+
 def gather_worker_metrics(machines, config, _worker_output, worker_description, starttime):
     """Gather metrics from cloud or edge workers for the empty app
 
@@ -218,19 +238,17 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
                 logging.error("No output for pod %i and command [%s]", i, com)
                 sys.exit()
 
-            # There could have been previous pods with the same name (e.g., caching)
-            # We should ignore those printouts
-            if j == 0 and len(output) > 2:
-                output = output[-2:]
+            # Only take the last line if there are multiple lines
+            if len(output) > 0:
+                short_output = output[-1]
+            else:
+                logging.error("No output for pod %i and command [%s]", i, com)
 
-            # Same for j == 2
-            if j == 2 and len(output) > 1:
-                output = output[-1:]
-
+            # Check for keywords
             if (
-                (j == 0 and (len(output) != 2 or "RunPodSandbox" not in output[0]))
-                or (j == 1 and (len(output) != 1 or "StartContainer" not in output[0]))
-                or (j == 2 and (len(output) != 1 or "waitForVolumeAttach" not in output[0]))
+                (j == 0 and "RunPodSandbox" not in short_output)
+                or (j == 1 and "StartContainer" not in short_output)
+                or (j == 2 and "waitForVolumeAttach" not in short_output)
             ):
                 logging.error(
                     "Incorrect output for pod %i and command [%s]: %s", i, com, "".join(output)
@@ -247,27 +265,27 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
                 sys.exit()
 
             if j < 2:
-                # RunPodSandBox (at j==0) can be found on line 1, not line 0
-                line_index = int(not j)
-
                 # Now parse the line to datetime with milliseconds
-                dt = output[line_index].split('time="')[1].split("+")[0]
+                dt = short_output.split('time="')[1]
+                dt = dt.split(" level=")[0]
+                dt = dt.split("Z")[0]
                 dt = dt.replace("T", " ")
                 dt = dt[:-3]
                 dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
                 end_time = datetime.timestamp(dt)
             else:
                 # Example: %!s(int64=1680728624591234908)
-                time_str = output[0].split("=")[1].split(")")[0]
+                time_str = short_output.split("=")[1]
+                time_str = time_str.split(")")[0]
                 time_obj_nano = float(time_str)
                 end_time = time_obj_nano / 10**9
 
             if j == 0:
-                worker_metrics[i]["container_create"] = end_time - starttime
+                worker_metrics[i]["container_create"] = time_delta(end_time, starttime)
             elif j == 1:
-                worker_metrics[i]["container_created"] = end_time - starttime
+                worker_metrics[i]["container_created"] = time_delta(end_time, starttime)
             elif j == 2:
-                worker_metrics[i]["pod_create"] = end_time - starttime
+                worker_metrics[i]["pod_create"] = time_delta(end_time, starttime)
 
     return worker_metrics
 
@@ -407,7 +425,7 @@ def format_output(
         plot_status(status)
 
         if control is not None:
-            fill_control(control, starttime, worker_metrics, worker_output)
+            fill_control(config, control, starttime, worker_metrics, worker_output)
             plot_control(config, worker_metrics)
 
 
@@ -484,7 +502,7 @@ def plot_status(status):
     plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")
 
 
-def fill_control(control, starttime, worker_metrics, worker_output):
+def fill_control(config, control, starttime, worker_metrics, worker_output):
     """Gather all data/timestamps on control plane activities
     1. Kubectl apply                  -> starttime
     2. Scheduling queue               -> 0124
@@ -493,19 +511,27 @@ def fill_control(control, starttime, worker_metrics, worker_output):
     5. Code is running in container   -> kubectl logs <pod>
 
     Args:
+        config (dict): Parsed configuration
         control (list(str), optional): Parsed output from control plane components
         starttime (datetime, optional): Invocation time of kubectl apply command
         worker_metrics (list(dict)): Metrics per worker node
         worker_output (list(list(str))): Output of each container ran on the edge
     """
+    logging.info("Gather metrics on deployment phases")
+
+    controlplane_node = "controller"
+    if config["infrastructure"]["provider"] == "gcp":
+        controlplane_node = "cloud0"
+
     # Start job manager
     for node, output in control.items():
-        if "controller" in node:
+        if controlplane_node in node:
             for component, out in output.items():
                 if component == "controller-manager":
                     for t, line in out:
                         if "0028" in line:
-                            worker_metrics[0]["manage_job"] = t - starttime
+                            logging.debug("0028")
+                            worker_metrics[0]["manage_job"] = time_delta(t, starttime)
                             break
 
     # Job manager is only called once per job - and therefore is the same for all pods
@@ -516,12 +542,13 @@ def fill_control(control, starttime, worker_metrics, worker_output):
     # Pod object creation time
     i = 0
     for node, output in control.items():
-        if "controller" in node:
+        if controlplane_node in node:
             for component, out in output.items():
                 if component == "controller-manager":
                     for t, line in out:
                         if "0277" in line:
-                            worker_metrics[i]["pod_object"] = t - starttime
+                            logging.debug("0277")
+                            worker_metrics[i]["pod_object"] = time_delta(t, starttime)
                             i += 1
 
     # Fill up if there are multiple containers per pod
@@ -533,12 +560,12 @@ def fill_control(control, starttime, worker_metrics, worker_output):
     # Scheduler time
     i = 0
     for node, output in control.items():
-        if "controller" in node:
+        if controlplane_node in node:
             for component, out in output.items():
                 if component == "scheduler":
                     for t, line in out:
                         if "0124" in line:
-                            worker_metrics[i]["scheduler_queue"] = t - starttime
+                            worker_metrics[i]["scheduler_queue"] = time_delta(t, starttime)
                             i += 1
 
     # Fill up if there are multiple containers per pod
@@ -551,13 +578,13 @@ def fill_control(control, starttime, worker_metrics, worker_output):
     for i, output in enumerate(worker_output):
         for line in output:
             if "Start the application" in line:
-                dt = line.split("+")[0]
+                dt = line.split("Z")[0]
                 dt = dt.replace("T", " ")
                 dt = dt[:-3]
                 dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
                 end_time = datetime.timestamp(dt)
 
-                worker_metrics[i]["app_start"] = end_time - starttime
+                worker_metrics[i]["app_start"] = time_delta(end_time, starttime)
 
 
 def plot_control(config, worker_metrics):
@@ -573,13 +600,12 @@ def plot_control(config, worker_metrics):
     df = pd.DataFrame(worker_metrics)
     df.rename(
         columns={
-            "manage_job": "manage_job (s)",
-            "pod_object": "pod_object (s)",
-            "scheduler_queue": "scheduler_queue (s)",
-            "pod_create": "pod_create (s)",
-            "container_create": "container_create (s)",
-            "container_created": "container_created (s)",
-            "app_start": "app_start (s)",
+            "manage_job": "created_workload_obj (s)",
+            "pod_object": "unpacked_workload_obj (s)",
+            "scheduler_queue": "created_pod_obj (s)",
+            "pod_create": "scheduled_pod (s)",
+            "container_create": "created_pod (s)",
+            "app_start": "created_container (s)",
         },
         inplace=True,
     )
@@ -599,7 +625,6 @@ def plot_control(config, worker_metrics):
     scheduler = [w["scheduler_queue"] for w in worker_metrics]
     pod_create = [w["pod_create"] for w in worker_metrics]
     cont_create = [w["container_create"] for w in worker_metrics]
-    cont_created = [w["container_created"] for w in worker_metrics]
     app_start = [w["app_start"] for w in worker_metrics]
 
     events = []
@@ -608,43 +633,65 @@ def plot_control(config, worker_metrics):
     events += [(t, "scheduler") for t in scheduler]
     events += [(t, "pod_create") for t in pod_create]
     events += [(t, "container_create") for t in cont_create]
-    events += [(t, "container_created") for t in cont_created]
     events += [(t, "app") for t in app_start]
     events.sort()
 
     # Phases:
-    # 1. Arriving           [starttime, manage_job]
-    # 2. Controller         [manage_job, pod_object]
-    # 3. Object Management  [pod_object, scheduler_queue]
-    # 4. Scheduler          [scheduler_queue, pod_create]
-    # 5. Pod creation       [pod_create, container_create]
-    # 6. Container creation [container_create, container_created]
-    # 7. Container start    [container_created, app_start]
-    # 8. Running            [app_start, >]
-    categories = [
-        "Arriving",
-        "Controller",
-        "Object Managing",
-        "Scheduling",
-        "Pod creating",
-        "Container Creating",
-        "Container Starting",
-        "Running",
-    ]
+    # 1: Create workload        [starttime, manage_job]
+    #   - Starts when the user executes KubeCTL
+    #       - Times in Continuum
+    #   - Ends when the resource controller (e.g., job controller)
+    #     receives the workload resource object
+    #       - Source code 0028
+    #   - In between, the APIserver creates the workload resource object in the datastore
+    #     and the appropiate resource controller notices that resource has been created
+    #
+    # 2: Unpack workload        [manage_job, pod_object]
+    #   - Ends right before a pod is created for a particular workload instance
+    #       - Source code 0277
+    #   - In between, workload-wide stuff is checked like permissions, and the object is
+    #     unpacked into workload instances if parallelism is used. Each instance is
+    #     treated seperately from here on.
+    #
+    # 3: Pod object creation    [pod_object, scheduler_queue]
+    #   - Ends right before pod is added to the scheduling queue
+    #       - Source code 0124
+    #   - In between, a pod is created for a workload instance, is written to the datastore
+    #     via the APIserver, which the scheduler notices and adds to its scheduling queue
+    #
+    # 4: Scheduling             [scheduler_queue, pod_create]
+    #   - Ends when the container runtime on a worker starts creating resources for this pod
+    #   - In between, the pod is added to the scheduling queue, the scheduler attempts to
+    #     and eventually successfully schedules the pod onto a worker node, and writes
+    #     the status update back to the datastore via the APIserver
+    #
+    # 5: Pod creation           [pod_create, container_create]
+    #   - Ends when containers inside the pod are starting to be created
+    #   - In between, the kubelet notices a pod object in the datastore has been assigned to
+    #     the worker node of that kubelet, and calls various OS-level software packages and
+    #     the container runtime to create a pod abstraction, including process+network namespaces
+    #
+    # 6: Container creation     [container_create, app_start]
+    #   - Ends when the application in the container prints output
+    #   - In between, all containers inside the pod are being created, the pod and containers are
+    #     being started and the code inside the container starts executing
+    #
+    # 7: Application run        [app_start, >]
+    #   - Application code inside the container is running
+
     colors = {
-        "Arriving": "#33a02c",
-        "Controller": "#b2df8a",
-        "Object Managing": "#1f78b4",
-        "Scheduling": "#a6cee3",
-        "Pod creating": "#33a02c",
-        "Container Creating": "#b2df8a",
-        "Container Starting": "#1f78b4",
-        "Running": "#a6cee3",
+        "Create Workload Object": "#33a02c",
+        "Unpack Workload Object": "#b2df8a",
+        "Create Pod Object": "#1f78b4",
+        "Schedule Pod": "#a6cee3",
+        "Create Pod": "#33a02c",
+        "Create Container": "#b2df8a",
+        "Application Runs": "#1f78b4",
     }
-    cs = [colors[cat] for cat in categories]
+    cs = [colors[cat] for cat in colors.keys()]
 
     # Set event order
-    current = [0 for _ in range(len(categories))]
+    current = [0 for _ in range(len(colors))]
     current[0] = len(scheduler)  # Every pod starts in the first phase
     results = [current.copy()]
     times = [0.0]
@@ -670,17 +717,13 @@ def plot_control(config, worker_metrics):
             current[4] -= 1
             current[5] += 1
             results.append(current.copy())
-        elif etype == "container_created":
+        elif etype == "app":
             current[5] -= 1
             current[6] += 1
             results.append(current.copy())
-        elif etype == "app":
-            current[6] -= 1
-            current[7] += 1
-            results.append(current.copy())
 
     # Transpose - this is the right format
-    results2 = [[] for _ in range(len(categories))]
+    results2 = [[] for _ in range(len(colors))]
     for result in results:
         for i, val in enumerate(result):
             results2[i].append(val)
@@ -691,8 +734,8 @@ def plot_control(config, worker_metrics):
     # And plot
     stacks = ax1.stackplot(times, results2, colors=list(reversed(cs)), step="post")
 
-    hatches = [".", ".", ".", "."]
-    for stack, hatch in zip(stacks[4:], hatches):
+    hatch = "."
+    for stack in stacks[3:]:
         stack.set_hatch(hatch)
 
     ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
@@ -710,12 +753,12 @@ def plot_control(config, worker_metrics):
     # add legend
     patches = []
     for i, c in enumerate(cs):
-        if i < 4:
-            patches.append(mpatches.Patch(facecolor=c, edgecolor="k", hatch=hatches[i - 4] * 3))
+        if i < 3:
+            patches.append(mpatches.Patch(facecolor=c, edgecolor="k", hatch=hatch * 3))
         else:
             patches.append(mpatches.Patch(facecolor=c, edgecolor="k"))
 
-    texts = categories
+    texts = colors.keys()
     ax1.legend(patches, texts, loc="lower right")
 
     # Save plot

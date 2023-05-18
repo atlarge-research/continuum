@@ -425,7 +425,7 @@ def move_registry(config, machines):
                 sys.exit()
 
 
-def set_registry(config, machines):
+def set_registry(config, machines, control=False):
     """Registry will be moved to the cloud controller, see the move_registry function.
     We need to change the registry IP before installing base software.
     We can only configure the registry itself afterward.
@@ -433,16 +433,20 @@ def set_registry(config, machines):
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        is_control (bool): For kubecontrol, use the public dockerhub registry instead of local
     """
     config["old_registry"] = config["registry"]
 
     # Determine to new location of the registry
-    if config["infrastructure"]["cloud_nodes"]:
-        registry = machines[0].cloud_controller_ips_internal[0] + ":5000"
-    elif config["infrastructure"]["edge_nodes"]:
-        registry = machines[0].edge_ips_internal[0] + ":5000"
+    if control:
+        registry = "docker.io/redplanet00"
     else:
-        registry = machines[0].endpoint_ips_internal[0] + ":5000"
+        if config["infrastructure"]["cloud_nodes"]:
+            registry = machines[0].cloud_controller_ips_internal[0] + ":5000"
+        elif config["infrastructure"]["edge_nodes"]:
+            registry = machines[0].edge_ips_internal[0] + ":5000"
+        else:
+            registry = machines[0].endpoint_ips_internal[0] + ":5000"
 
     config["registry"] = registry
 
@@ -507,9 +511,12 @@ def base_install(config, machines):
 
     # Install docker containers if required
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
-        move_registry(config, machines)
-
-        docker_base_names = machines[0].base_names
+        # Kubecontrol won't use docker registries in the cloud due to conflicts with containerd
+        if config["benchmark"]["resource_manager"] == "kubecontrol":
+            docker_base_names = []
+        else:
+            move_registry(config, machines)
+            docker_base_names = machines[0].base_names
 
         # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
         # These RM will automatically pull images, so we can skip this here.
@@ -564,8 +571,10 @@ def start_vms(config, machines):
 
     set_ips(machines, output)
 
+    # Kubecontrol doesn't use docker registries in the cloud due to conflicts with containerd
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
-        set_registry(config, machines)
+        is_control = config["benchmark"]["resource_manager"] == "kubecontrol"
+        set_registry(config, machines, control=is_control)
 
 
 def start(config, machines):

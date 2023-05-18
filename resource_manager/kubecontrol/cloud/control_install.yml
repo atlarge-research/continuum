@@ -32,53 +32,53 @@
 
         sudo sysctl --system
 
-    - name: Create patches directory for Kubernetes
-      command: mkdir /home/{{ username }}/patches
+    # - name: Create patches directory for Kubernetes
+    #   command: mkdir /home/{{ username }}/patches
 
-    - name: Create kube-apiserver patch file
-      shell: |
-        cat > "/home/{{ username }}/patches/kube-apiserver.yaml" <<EOF
-        spec:
-          containers:
-          - name: kube-apiserver
-            resources:
-              requests:
-                cpu: 1000m
-        EOF
+    # - name: Create kube-apiserver patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/kube-apiserver.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: kube-apiserver
+    #         resources:
+    #           requests:
+    #             cpu: 1000m
+    #     EOF
 
-    - name: Create kube-controller-manager patch file
-      shell: |
-        cat > "/home/{{ username }}/patches/kube-controller-manager.yaml" <<EOF
-        spec:
-          containers:
-          - name: kube-controller-manager
-            resources:
-              requests:
-                cpu: 1000m
-        EOF
+    # - name: Create kube-controller-manager patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/kube-controller-manager.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: kube-controller-manager
+    #         resources:
+    #           requests:
+    #             cpu: 1000m
+    #     EOF
 
-    - name: Create kube-scheduler patch file
-      shell: |
-        cat > "/home/{{ username }}/patches/kube-scheduler.yaml" <<EOF
-        spec:
-          containers:
-          - name: kube-scheduler
-            resources:
-              requests:
-                cpu: 1000m
-        EOF
+    # - name: Create kube-scheduler patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/kube-scheduler.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: kube-scheduler
+    #         resources:
+    #           requests:
+    #             cpu: 1000m
+    #     EOF
 
-    - name: Create etcd patch file
-      shell: |
-        cat > "/home/{{ username }}/patches/etcd.yaml" <<EOF
-        spec:
-          containers:
-          - name: etcd
-            resources:
-              requests:
-                cpu: 1000m
-                memory: 2500Mi
-        EOF
+    # - name: Create etcd patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/etcd.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: etcd
+    #         resources:
+    #           requests:
+    #             cpu: 1000m
+    #             memory: 2500Mi
+    #     EOF
 
     - name: Initialize the Kubernetes cluster using kubeadm
       command: >
@@ -90,8 +90,7 @@
           --kubernetes-version={{ kubeversion }}
           --image-repository={{ registry_ip }}
           --ignore-preflight-errors all
-          --patches /home/{{ username }}/patches/
-
+    # --patches /home/{{ username }}/patches/
     - name: Create user Kubernetes directory
       file:
         path: /home/{{ username }}/.kube
