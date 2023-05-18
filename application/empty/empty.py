@@ -39,7 +39,13 @@ def add_options(_config):
     settings = [
         ["sleep_time", int, lambda x: x >= 1, True, False],
         ["kube_deployment", str, lambda x: x in ["pod", "container", "file", "call"], False, "pod"],
-        ["kube_version", str, lambda _: True, False, "v1.27.0"],
+        [
+            "kube_version",
+            str,
+            lambda _: ["v1.27.0", "v1.26.0", "v1.25.0", "v1.24.0", "v1.23.0"],
+            False,
+            "v1.27.0",
+        ],
     ]
     return settings
 
@@ -180,10 +186,17 @@ def gather_worker_metrics(machines, config, _worker_output, worker_description, 
             logging.error("ERROR: pod_name could not be be set")
             sys.exit()
 
+        # If kubecontrol mode = container, there is only one pod
+        # Therefore, pod name doesnt have -X, e.g., -1, -2 at the end of pod name
+        minus = "-"
+        if config["benchmark"]["kube_deployment"] == "container":
+            minus = ""
+
         # Get output from the worker node using journalctl, to get millisecond timing
         command = """sudo journalctl -u containerd -o short-precise | \
-grep \'%s-'""" % (
-            pod_name
+grep \'%s%s'""" % (
+            pod_name,
+            minus,
         )
         command_ccreate.append(command)
 
@@ -194,8 +207,9 @@ grep \'StartContainer for \\\\\"%s\\\\\" returns successfully'""" % (
         command_ccreated.append(command)
 
         # Use syslog* because there may be multiple syslogs in case there is much output
-        command = "sudo cat /var/log/syslog* | grep '0330 waitForVolumeAttach pod=default/%s-'" % (
-            pod_name
+        command = "sudo cat /var/log/syslog* | grep '0330 waitForVolumeAttach pod=default/%s%s'" % (
+            pod_name,
+            minus,
         )
         command_pcreate.append(command)
 

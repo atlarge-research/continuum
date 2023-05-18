@@ -458,13 +458,33 @@ def docker_registry(config, machines):
     # TODO This is RM specific, move this to the RM code
     if config["benchmark"]["resource_manager"] == "kubecontrol":
         version = str(config["benchmark"]["kube_version"])
+
+        # Get specific etcd and pause versions per Kubernetes version
+        if version == "v1.27.0":
+            etcd = "3.5.7-0"
+            pause = "3.9"
+        elif version == "v1.26.0":
+            etcd = "3.5.6-0"
+            pause = "3.9"
+        elif version == "v1.25.0":
+            etcd = "3.5.4-0"
+            pause = "3.8"
+        elif version == "v1.24.0":
+            etcd = "3.5.3-0"
+            pause = "3.7"
+        elif version == "v1.23.0":
+            etcd = "3.5.1-0"
+            pause = "3.6"
+        else:
+            logging.error("Continuum supports Kubernetes v1.[23-27].0, not: %s", version)
+
         images_kube = [
             "redplanet00/kube-proxy:" + version,
             "redplanet00/kube-controller-manager:" + version,
             "redplanet00/kube-scheduler:" + version,
             "redplanet00/kube-apiserver:" + version,
-            "redplanet00/etcd:3.5.7-0",
-            "redplanet00/pause:3.9",
+            "redplanet00/etcd:" + etcd,
+            "redplanet00/pause:" + pause,
         ]
         images += images_kube
         need_pull += [True] * 6
