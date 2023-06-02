@@ -12,10 +12,10 @@
         spec:
           template:
             metadata:
-              name: {{ app_name }}
+              name: {{ app_name }}-%ITEM
             spec:
               containers:
-              - name: {{ app_name }}
+              - name: {{ app_name }}-%ITEM
                 image: {{ image }}
                 imagePullPolicy: {{ pull_policy }}
                 resources:

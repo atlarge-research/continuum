@@ -43,7 +43,11 @@
     #       - name: kube-apiserver
     #         resources:
     #           requests:
-    #             cpu: 1000m
+    #             cpu: 250m
+    #             memory: 500Mi
+    #           limits:
+    #             cpu: 250m
+    #             memory: 500Mi
     #     EOF
 
     # - name: Create kube-controller-manager patch file
@@ -54,7 +58,11 @@
     #       - name: kube-controller-manager
     #         resources:
     #           requests:
-    #             cpu: 1000m
+    #             cpu: 100m
+    #             memory: 200Mi
+    #           limits:
+    #             cpu: 100m
+    #             memory: 200Mi
     #     EOF
 
     # - name: Create kube-scheduler patch file
@@ -65,7 +73,11 @@
     #       - name: kube-scheduler
     #         resources:
     #           requests:
-    #             cpu: 1000m
+    #             cpu: 100m
+    #             memory: 200Mi
+    #           limits:
+    #             cpu: 100m
+    #             memory: 200Mi
     #     EOF
 
     # - name: Create etcd patch file
@@ -76,21 +88,71 @@
     #       - name: etcd
     #         resources:
     #           requests:
-    #             cpu: 1000m
-    #             memory: 2500Mi
+    #             cpu: 200m
+    #             memory: 400Mi
+    #           limits:
+    #             cpu: 200m
+    #             memory: 400Mi
     #     EOF
+
+    - name: Create kubelet config file
+      shell: |
+        cat > "/home/{{ username }}/config.yaml" <<EOF
+        apiVersion: kubeadm.k8s.io/v1beta3
+        kind: InitConfiguration
+        localAPIEndpoint:
+          advertiseAddress: {{ cloud_ip }}
+        ---
+        apiVersion: kubeadm.k8s.io/v1beta3
+        kind: ClusterConfiguration
+        apiServer:
+          certSANs: 
+          - {{ cloud_ip }}
+        imageRepository: {{ registry_ip }}
+        kubernetesVersion: {{ kubeversion }}
+        networking:
+          podSubnet: 10.244.0.0/16
+        controllerManager:
+          extraArgs:
+            kube-api-qps: "100000"
+            kube-api-burst: "100000"
+        scheduler:
+          extraArgs:
+            kube-api-qps: "100000"
+            kube-api-burst: "100000"
+        ---
+        apiVersion: kubelet.config.k8s.io/v1beta1
+        kind: KubeletConfiguration
+        containerLogMaxSize: "100Mi"
+        containerLogMaxFiles: 10
+        EOF
+    # ---- From InitConfiguration
+    # patches:
+    #   directory: /home/{{ username }}/patches/
+    #
+    # ---- From ClusterConfiguration
+    # controllerManager:
+    #       extraArgs:
+    #         kube-api-qps: "100000"
+    #         kube-api-burst: "100000"
+    #
+    # ---- From KubeletConfiguration
+    # maxPods: 265
+    # eventRecordQPS: 0
+    # kubeAPIQPS: 0
+    # serializeImagePulls: false
+    # maxParallelImagePulls: 10000
+    # registryPullQPS: 0
+    # featureGates:
+    #   EventedPLEG: true
 
     - name: Initialize the Kubernetes cluster using kubeadm
       command: >
         kubeadm init
-          --apiserver-advertise-address={{ cloud_ip }}
-          --apiserver-cert-extra-sans={{ cloud_ip }}
           --node-name {{ ansible_hostname }}
-          --pod-network-cidr=10.244.0.0/16
-          --kubernetes-version={{ kubeversion }}
-          --image-repository={{ registry_ip }}
           --ignore-preflight-errors all
-    # --patches /home/{{ username }}/patches/
+          --config /home/{{ username }}/config.yaml
+
     - name: Create user Kubernetes directory
       file:
         path: /home/{{ username }}/.kube

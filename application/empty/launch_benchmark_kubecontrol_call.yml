@@ -2,26 +2,27 @@
 - hosts: cloudcontroller
   become: true
   tasks:
-    - name: Create job file
-      shell: |
-        cat > "/home/{{ username }}/job-template.yaml" <<EOF
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {{ app_name }}
-        spec:
-          template:
-            metadata:
-              name: {{ app_name }}
-            spec:
-              restartPolicy: Never
-              containers:
+    - name: Create job directory
+      file:
+        path: /home/{{ username }}/jobs
+        state: directory
 
     - name: Add container descriptions
       shell: |
         for i in `seq 1 {{ replicas }}`
         do
-          cat >> "/home/{{ username }}/job-template.yaml" <<EOF
+          cat > "/home/{{ username }}/jobs/job-$i.yaml" <<EOF
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: {{ app_name }}-$i
+        spec:
+          template:
+            metadata:
+              name: {{ app_name }}-$i
+            spec:
+              restartPolicy: Never
+              containers:
               - name: {{ app_name }}-$i
                 image: {{ image }}
                 imagePullPolicy: {{ pull_policy }}
@@ -34,3 +35,15 @@
                   value: "{{ sleep_time }}"
         EOF
         done
+
+    - name: Create execution script
+      shell: |
+        cat > "/home/{{ username }}/exec.sh" <<EOF
+        date +'%s.%N'
+        for filename in /home/{{ username }}/jobs/*; do kubectl apply -f \$filename & done
+        EOF
+
+    - name: Make the execution script executable
+      file:
+        dest: /home/{{ username }}/exec.sh
+        mode: +x

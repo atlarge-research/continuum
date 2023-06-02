@@ -7,6 +7,8 @@ import os
 import sys
 import time
 
+from datetime import datetime
+
 from infrastructure import ansible
 
 
@@ -159,7 +161,7 @@ def cache_worker(config, machines, app_vars):
     ):
         # Option "call" launches one kubectl command per job file
         file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
-        command = "for filename in %s/*; do kubectl apply -f $filename & done" % (file)
+        command = "/home/%s/exec.sh" % (machines[0].cloud_controller_names[0])
     else:
         file = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
         command = "kubectl apply -f %s" % (file)
@@ -398,20 +400,21 @@ def launch_with_starttime(config, machines):
         # Option "file" launches a kubectl command on an entire directory
         file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
         command = "kubectl apply -f %s" % (file)
+        command = "\"date +'%%s.%%N'; %s\"" % (command)
     elif (
         "kube_deployment" in config["benchmark"]
         and config["benchmark"]["kube_deployment"] == "call"
     ):
         # Option "call" launches one kubectl command per job file
         file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
-        command = "for filename in %s/*; do kubectl apply -f $filename & done" % (file)
+        command = "/home/%s/exec.sh" % (machines[0].cloud_controller_names[0])
     else:
         file = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
         command = "kubectl apply -f %s" % (file)
+        command = "\"date +'%%s.%%N'; %s\"" % (command)
 
     # Now launch the benchmark
-    tcommand = "\"date +'%%s.%%N'; %s\"" % (command)
-    output, error = machines[0].process(config, tcommand, shell=True, ssh=config["cloud_ssh"][0])[0]
+    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
     if len(output) < 2 or not any("created" in o for o in output):
         logging.error("Could not deploy pods: %s", "".join(output))
@@ -858,28 +861,35 @@ def get_worker_output_kube(config, machines, get_description):
                 command = ["kubectl", "logs", "--timestamps=true", container_long]
                 commands.append(command)
 
-        # Only once - per pod level
-        if get_description:
-            # Extra: Log kubernetes system components
-            # - These logs are deleted after some time, so better backup them now
-            command = "\"sudo su -c 'cd /var/log && grep -ri %s &> output-%s.txt'\"" % (
-                container,
-                container,
-            )
-            machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
+    # Append commands into 1 big command
+    big_command = '"'
+    for command in commands:
+        com = " ".join(command) + ";"
+        big_command += com
+        big_command += 'echo "DELIMITER01234";'
+
+    big_command += '"'
 
     # Get the logs
-    results = machines[0].process(config, commands, ssh=config["cloud_ssh"][0])
+    output, error = machines[0].process(
+        config, big_command, ssh=config["cloud_ssh"][0], shell=True
+    )[0]
 
-    # Get the output
+    # Check error
+    if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
+        logging.error("Container %i: %s", i, "".join(error))
+        sys.exit()
+
+    # Split based on custom delimiter, and group output per pod
     worker_output = []
-    for i, (output, error) in enumerate(results):
-        if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
-            logging.error("Container %i: %s", i, "".join(error))
-            sys.exit()
-
-        output = [line.rstrip() for line in output]
-        worker_output.append(output)
+    entry = []
+    for line in output:
+        line = line.rstrip()
+        if "DELIMITER01234" in line:
+            worker_output.append(entry)
+            entry = []
+        else:
+            entry.append(line)
 
     return worker_output
 
@@ -934,9 +944,10 @@ def get_control_output(config, machines, starttime, status):
         machines (list(Machine object)): List of machine objects representing physical machines
         starttime (datetime): Invocation time of kubectl apply command that launches the benchmark
         status (list(list(str))): Status of started Kubernetes pods over time
+        worker_description (list(list(str))): Extensive description of each container
 
     Returns:
-        list(str): Parsed output from control plane components
+        dict: Parsed output from control plane components
     """
     logging.info("Collect and parse output from Kubernetes controlplane components")
 
@@ -1015,6 +1026,8 @@ def get_control_output(config, machines, starttime, status):
             line = line.split("[CONTINUUM] ")[1]
             parsed[name][comp].append([time_obj, line])
 
+    get_containerd_output(config, machines, parsed)
+
     # Now filter out everything before starttime and after endtime
     # Starttime and endtime are both in 192031029309.1230910293 format
     endtime = status[-1]["time_orig"]
@@ -1024,7 +1037,89 @@ def get_control_output(config, machines, starttime, status):
         for component, out in output.items():
             parsed_copy[node][component] = []
             for entry in out:
+                # There may be time zone differences between timestamps
+                # We assume no 2 prints differ by more than 1 hour
+                seconds_per_hour = float(3600)
+                while entry[0] - starttime < seconds_per_hour:
+                    entry[0] += seconds_per_hour
+
+                while entry[0] - starttime > seconds_per_hour:
+                    entry[0] -= seconds_per_hour
+
+                # Now check for time interval
                 if entry[0] >= starttime and entry[0] <= endtime:
                     parsed_copy[node][component].append(entry)
 
     return parsed_copy
+
+
+def get_containerd_output(config, machines, parsed):
+    """Get output from containerd on the worker nodes and parse into dict for later processing
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        parsed (list(str)): Parsed output from control plane components
+    """
+    logging.info("Get output from containerd and parse")
+
+    # Save custom output in file so you can read it later if needed (for all nodes)
+    command = """\"cd /var/log && \
+        sudo su -c \\\"journalctl -u containerd -o short-precise > containerd.txt\\\"\""""
+    results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"])
+
+    for _, error in results:
+        if error:
+            logging.error("".join(error))
+            sys.exit()
+
+    # Get output from each cloud node
+    outputs = []
+    for ssh in zip(config["cloud_ssh"]):
+        command = ["sudo", "cat", "/var/log/containerd.txt"]
+        output, error = machines[0].process(config, command, ssh=ssh)[0]
+
+        if error:
+            logging.error("".join(error))
+            sys.exit()
+
+        outputs.append(output)
+
+    # Get output from all worker nodes related to our pods and containers
+    for ssh, output in zip(config["cloud_ssh"][1:], outputs[1:]):
+        name = ssh.split("@")[0]
+        for line in output:
+            line = line.strip()
+
+            # Filter lines on specific events - and tag the events
+            tag = ""
+            if (
+                "RunPodSandbox for &PodSandboxMetadata{Name:empty" in line
+                and "returns sandbox id" in line
+            ):
+                # This is for container_create stamp
+                tag = "RunPodSandbox returns"
+            elif "StartContainer for" in line and "returns successfully" in line:
+                # This is end of container phase, "container created"
+                tag = "StartContainer returns"
+
+            if tag == "":
+                continue
+
+            if "containerd" not in parsed[name]:
+                parsed[name]["containerd"] = []
+
+            # Get timestamp
+            try:
+                dt = line.split('time="')[1]
+                dt = dt.split(" level=")[0]
+                dt = dt.split("Z")[0]
+                dt = dt.replace("T", " ")
+                dt = dt[:-3]
+                dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
+                time_obj = datetime.timestamp(dt)
+            except:
+                logging.debug("[WARNING] Could not parse line: %s", line)
+                continue
+
+            parsed[name]["containerd"].append([time_obj, tag])
