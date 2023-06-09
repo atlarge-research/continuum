@@ -140,8 +140,8 @@ export function memoryValidator(nodes: NodeMap, memory: NodeMap): Validator {
     return errorValidator("Memory values must be atleast 1")
 }
 
-export function readWriteSpeedValidator(readWriteSpeed: ReadWriteSpeed): Validator {
-
+export function readWriteSpeedValidator(readWriteSpeed: ReadWriteSpeed | undefined): Validator {
+    if(!readWriteSpeed) return errorValidator("Invalid Read/Write Speed")
     const readSpeedValidator = nodeMapUnsignedIntValidator(readWriteSpeed.readSpeed!, "read speed")
     const writeSpeedValidator = nodeMapUnsignedIntValidator(readWriteSpeed.writeSpeed!, "write speed")
 
@@ -153,21 +153,25 @@ export function readWriteSpeedValidator(readWriteSpeed: ReadWriteSpeed): Validat
     }
 }
 
-export function connectionValidator(connection: Connection): Validator {
+export function connectionValidator(connection: Connection | undefined): Validator {
+    const errorMessage = "Invalid connection settings value/s. The following needs to hold:\nlatency avg >= 0, latency var >= 0 and throughput >= 1"
+    if(!connection) return errorValidator(errorMessage);
     if (NullOrBiggerThanZero(connection.latencyAvg) &&
         NullOrBiggerThanZero(connection.latencyVar) &&
         NullOrBiggerThanOne(connection.throughput)) {
         return successValidator()
     }
-    return errorValidator("Invalid connection settings value/s. The following needs to hold:\nlatency avg >= 0, latency var >= 0 and throughput >= 1")
+    return errorValidator(errorMessage)
 }
 
 //between 0 and 255
-function is8BitNumber(num: number): boolean {
+function is8BitNumber(num: number | undefined): boolean {
+    if(!num) return false
     return isUnsignedInt(num) && num <= 255
 }
 
-export function prefixIPValidator(prefixIP: number): Validator {
+export function prefixIPValidator(prefixIP: number | undefined): Validator {
+    if(!prefixIP) return errorValidator("Invalid Prefix IP")
     const first = Math.floor(prefixIP)
     const second = prefixIP * 1000 % 1000
     if (is8BitNumber(first) && is8BitNumber(second)) {
@@ -176,7 +180,8 @@ export function prefixIPValidator(prefixIP: number): Validator {
     return errorValidator("Prefix IP needs to be of the format XXX.XXX where each XXX is between 0 and 255")
 }
 
-export function is8BitValidator(variableName: string, num: number): Validator {
+export function is8BitValidator(variableName: string, num: number | undefined): Validator {
+    if(!num) return errorValidator(`${variableName} needs to be between 0 and 255`)
     return is8BitNumber(num) ? successValidator() : errorValidator(`${variableName} needs to be between 0 and 255, actual value: ${num}`)
 }
 

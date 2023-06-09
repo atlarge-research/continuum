@@ -23,9 +23,9 @@ export type GCPConfig = {
     edge: string
     endpoint: string
     region: string
-    zone:string
-    project:string
-    credentials:string
+    zone: string
+    project: string
+    credentials: string
 }
 
 //made this for now dont know if is needed
@@ -39,6 +39,48 @@ export function defaultGCPConfig(): GCPConfig {
         project: "continuum-123456",
         credentials: "~/.ssh/continuum-123456-12a34b56c78d"
     }
+}
+
+
+
+
+export type InfrastructureConfig = {
+
+    provider: "qemu" | "gcp" | "baremetal",
+    infraOnly?: boolean,
+
+    nodes: NodeMap; // x >= 0, number of VMs to spawn per tier, ONLY IF X_nodes > 0, then the corresponding X_cores, X_memory, and X_quota are mandatory
+    cores: NodeMap; // cloud >= 2 (edge and/or endpoint) >= 1 (each), number of cores per VM
+    memory: NodeMap; // x >= 1, Memory in GB per VM
+    quota: NodeMap; // 0.1 <= x <= 1.0, CPU bandwidth quota (at 0.5 a VM will use a CPU core for half of the time)
+
+    readWriteSpeed?: ReadWriteSpeed; // x >= 0, Default: 0 (unlimited) Read and write throughputs to disk in MB.
+    wirelessNetworkPreset?: "4g" | "5g" // Options: 4g, 5g. Default: 4g
+
+    cpuPin?: boolean // Default: false, Requires total_VM_cores < physical_cores_available (or add more external machines)
+    networkEmulation?: boolean // Default: false, Connection instances are only relevant if this is set to true
+
+    cloudConnection?: Connection
+    edgeConnection?: Connection
+    cloudEdgeConnection?: Connection
+    cloudEndPointConnection?: Connection
+    edgeEndPointConnection?: Connection
+
+    //Continue: validate from here//
+
+    externalPhysicalMachines?: string[]
+    netperf?: boolean
+    basePath?: string
+
+    prefixIP?: number // Default: 192.168, format: XXX.XXX,
+    middleIP?: number // Default: 100, Any number 1 - 254
+    middleIPBase?: number // Default: 90, Any number 1 - 254
+    delete?: boolean
+
+    gcpConfig?: GCPConfig
+    // benchmarkConfig?: BenchmarkConfig
+
+    executionMode?: "openfaas"
 }
 
 export type BenchmarkConfig = {
@@ -63,44 +105,9 @@ export type BenchmarkConfig = {
 
 }
 
-
 export type ConfigurationMap = {
-
-    provider: "qemu" | "gcp" | "baremetal",
-    infra_only?: boolean,
-    
-    nodes: NodeMap,
-    cores: NodeMap,
-    memory: NodeMap,
-    quota: NodeMap,
-
-    readWriteSpeed?: ReadWriteSpeed,
-    wirelessNetworkPreset?: "4g" | "5g"
-
-    cpuPin?: boolean
-    networkEmulation?: boolean
-
-    cloudConnection?: Connection
-    edgeConnection?: Connection
-    cloudEdgeConnection?: Connection
-    cloudEndPointConnection?: Connection
-    EdgeEndPointConnection?: Connection
-
-    //Continue: validate from here//
-
-    externalPhysicalMachines?: string[]
-    netperf?: boolean
-    basePath?: string
-
-    prefixIP?: number // Default: 192.168, format: XXX.XXX,
-    middleIP?: number // Default: 100, Any number 1 - 254
-    middleIPBase?: number // Default: 90, Any number 1 - 254
-    delete?: boolean
-
-    gcpConfig?: GCPConfig
-    benchmarkConfig?: BenchmarkConfig
-
-    executionMode?: "openfaas"
+    infrastructure: InfrastructureConfig,
+    benchmark: BenchmarkConfig
 }
 
 export const applicationVars = (variables: Iterable<[PropertyKey, any]>) => Object.fromEntries(variables)

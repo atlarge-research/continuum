@@ -156,7 +156,7 @@ if __name__ == "__main__":
     # print(arguments.config['benchmark'])
 
     # # Set loggers, print current config
-    # set_logging(arguments)
-    # configuration_parser.print_config(arguments.config)
+    set_logging(arguments)
+    configuration_parser.print_config(arguments.config)
 
-    # main(arguments)
+    main(arguments)

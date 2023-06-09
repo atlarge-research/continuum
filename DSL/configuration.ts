@@ -1,54 +1,39 @@
-import { NodeMap, ReadWriteSpeed, ConfigurationMap, Connection, GCPConfig, defaultGCPConfig, BenchmarkConfig, applicationVars } from "./generics";
+import { NodeMap, ReadWriteSpeed, InfrastructureConfig, Connection, GCPConfig, defaultGCPConfig, BenchmarkConfig, applicationVars, ConfigurationMap } from "./generics";
 import { checkValidator } from "./validator";
-import { nodesValidator, coresValidator, quotaValidator, readWriteSpeedValidator, memoryValidator, connectionValidator as connectionValidator, prefixIPValidator, is8BitValidator, numberIsUnsignedValidator} from "./validate_generics"
+import { nodesValidator, coresValidator, quotaValidator, readWriteSpeedValidator, memoryValidator, connectionValidator as connectionValidator, prefixIPValidator, is8BitValidator, numberIsUnsignedValidator } from "./validate_generics"
 
 class Configuration {
-    provider: string; // Options: qemu, gcp, baremetal (mandatory)
-    infra_only: boolean; // Default: false, Only do infrastructure deployment, ignore the benchmark
-    nodes: NodeMap; // x >= 0, number of VMs to spawn per tier, ONLY IF X_nodes > 0, then the corresponding X_cores, X_memory, and X_quota are mandatory
-    cores: NodeMap; // cloud >= 2 (edge and/or endpoint) >= 1 (each), number of cores per VM
-    memory: NodeMap; // x >= 1, Memory in GB per VM
-    quota: NodeMap; // 0.1 <= x <= 1.0, CPU bandwidth quota (at 0.5 a VM will use a CPU core for half of the time)
-    readWriteSpeed: ReadWriteSpeed; // x >= 0, Default: 0 (unlimited) Read and write throughputs to disk in MB.
-    wirelessNetworkPreset: string // Options: 4g, 5g. Default: 4g
-    cpuPin: boolean // Default: false, Requires total_VM_cores < physical_cores_available (or add more external machines)
-    networkEmulation: boolean // Default: false, Connection instances are only relevant if this is set to true
-    cloudConnection: Connection
-    edgeConnection: Connection
-    cloudEdgeConnection: Connection
-    cloudEndPointConnection: Connection
-    edgeEndPointConnection: Connection
 
-    externalPhysicalMachines: string[]
-    netperf: boolean
-    basePath: string
 
-    prefixIP: number // Default: 192.168, format: XXX.XXX,
-    middleIP: number // Default: 100, Any number 1 - 254
-    middleIPBase: number // Default: 90, Any number 1 - 254
-    delete: boolean
-
-    gcpConfig?: GCPConfig // create validator
+    infrastructure: InfrastructureConfig = {
+        provider: 'qemu',
+        nodes: { cloud: 0, edge: 0, endpoint: 0 },
+        cores: { cloud: 0, edge: 0, endpoint: 0 },
+        memory: { cloud: 0, edge: 0, endpoint: 0 },
+        quota: { cloud: 0, edge: 0, endpoint: 0 },
+    }
+    mode: string = "cloud"
     benchmark?: BenchmarkConfig
 
     executionModel: "openfaas"
 
 
-    constructor(map: ConfigurationMap) {
 
-        this.provider = map.provider;
-        this.nodes = map.nodes;
-        this.cores = map.cores;
-        this.memory = map.memory;
-        this.quota = map.quota;
+    constructor(config: ConfigurationMap) {
 
-        this.readWriteSpeed = map.readWriteSpeed != null
+        this.infrastructure.provider = config.infrastructure.provider;
+        this.infrastructure.nodes = config.infrastructure.nodes;
+        this.infrastructure.cores = config.infrastructure.cores;
+        this.infrastructure.memory = config.infrastructure.memory;
+        this.infrastructure.quota = config.infrastructure.quota;
+
+        this.infrastructure.readWriteSpeed = config.infrastructure.readWriteSpeed != null
             ? {
-                readSpeed: map.readWriteSpeed.readSpeed != null
-                    ? map.readWriteSpeed.readSpeed
+                readSpeed: config.infrastructure.readWriteSpeed.readSpeed != null
+                    ? config.infrastructure.readWriteSpeed.readSpeed
                     : { cloud: 0, edge: 0, endpoint: 0 },
-                writeSpeed: map.readWriteSpeed.writeSpeed != null
-                    ? map.readWriteSpeed.writeSpeed
+                writeSpeed: config.infrastructure.readWriteSpeed.writeSpeed != null
+                    ? config.infrastructure.readWriteSpeed.writeSpeed
                     : { cloud: 0, edge: 0, endpoint: 0 },
             }
             : {
@@ -57,175 +42,173 @@ class Configuration {
             }
 
         //if null evaluate to false
-        this.infra_only = map.infra_only === true
-        this.cpuPin = map.cpuPin === true
-        this.networkEmulation = map.networkEmulation === true
+        this.infrastructure.infraOnly = config.infrastructure.infraOnly === true
+        this.infrastructure.cpuPin = config.infrastructure.cpuPin === true
+        this.infrastructure.networkEmulation = config.infrastructure.networkEmulation === true
 
-        this.wirelessNetworkPreset = map.wirelessNetworkPreset != null
-            ? map.wirelessNetworkPreset
+        this.infrastructure.wirelessNetworkPreset = config.infrastructure.wirelessNetworkPreset != null
+            ? config.infrastructure.wirelessNetworkPreset
             : '4g'
 
 
-        this.cloudConnection = map.cloudConnection != null
+        this.infrastructure.cloudConnection = config.infrastructure.cloudConnection != null
             ? {
-                latencyAvg: map.cloudConnection.latencyAvg != null
-                    ? map.cloudConnection.latencyAvg
+                latencyAvg: config.infrastructure.cloudConnection.latencyAvg != null
+                    ? config.infrastructure.cloudConnection.latencyAvg
                     : 0,
-                latencyVar: map.cloudConnection.latencyVar != null
-                    ? map.cloudConnection.latencyVar
+                latencyVar: config.infrastructure.cloudConnection.latencyVar != null
+                    ? config.infrastructure.cloudConnection.latencyVar
                     : 0,
-                throughput: map.cloudConnection.throughput != null
-                    ? map.cloudConnection.throughput
+                throughput: config.infrastructure.cloudConnection.throughput != null
+                    ? config.infrastructure.cloudConnection.throughput
                     : 1000
             }
             : { latencyAvg: 0, latencyVar: 0, throughput: 1000 }
 
-        this.edgeConnection = map.edgeConnection != null
+        this.infrastructure.edgeConnection = config.infrastructure.edgeConnection != null
             ? {
-                latencyAvg: map.edgeConnection.latencyAvg != null
-                    ? map.edgeConnection.latencyAvg
+                latencyAvg: config.infrastructure.edgeConnection.latencyAvg != null
+                    ? config.infrastructure.edgeConnection.latencyAvg
                     : 7.5,
-                latencyVar: map.edgeConnection.latencyVar != null
-                    ? map.edgeConnection.latencyVar
+                latencyVar: config.infrastructure.edgeConnection.latencyVar != null
+                    ? config.infrastructure.edgeConnection.latencyVar
                     : 2.5,
-                throughput: map.edgeConnection.throughput != null
-                    ? map.edgeConnection.throughput
+                throughput: config.infrastructure.edgeConnection.throughput != null
+                    ? config.infrastructure.edgeConnection.throughput
                     : 1000
             }
             : { latencyAvg: 7.5, latencyVar: 2.5, throughput: 1000 }
 
-        this.cloudEdgeConnection = map.cloudEdgeConnection != null
+        this.infrastructure.cloudEdgeConnection = config.infrastructure.cloudEdgeConnection != null
             ? {
-                latencyAvg: map.cloudEdgeConnection.latencyAvg != null
-                    ? map.cloudEdgeConnection.latencyAvg
+                latencyAvg: config.infrastructure.cloudEdgeConnection.latencyAvg != null
+                    ? config.infrastructure.cloudEdgeConnection.latencyAvg
                     : 7.5,
-                latencyVar: map.cloudEdgeConnection.latencyVar != null
-                    ? map.cloudEdgeConnection.latencyVar
+                latencyVar: config.infrastructure.cloudEdgeConnection.latencyVar != null
+                    ? config.infrastructure.cloudEdgeConnection.latencyVar
                     : 2.5,
-                throughput: map.cloudEdgeConnection.throughput != null
-                    ? map.cloudEdgeConnection.throughput
+                throughput: config.infrastructure.cloudEdgeConnection.throughput != null
+                    ? config.infrastructure.cloudEdgeConnection.throughput
                     : 1000
             }
             : { latencyAvg: 7.5, latencyVar: 2.5, throughput: 1000 }
 
-        this.cloudEndPointConnection = map.cloudEndPointConnection != null
+        this.infrastructure.cloudEndPointConnection = config.infrastructure.cloudEndPointConnection != null
             ? {
-                latencyAvg: map.cloudEndPointConnection.latencyAvg != null
-                    ? map.cloudEndPointConnection.latencyAvg
+                latencyAvg: config.infrastructure.cloudEndPointConnection.latencyAvg != null
+                    ? config.infrastructure.cloudEndPointConnection.latencyAvg
                     : 45,
-                latencyVar: map.cloudEndPointConnection.latencyVar != null
-                    ? map.cloudEndPointConnection.latencyVar
+                latencyVar: config.infrastructure.cloudEndPointConnection.latencyVar != null
+                    ? config.infrastructure.cloudEndPointConnection.latencyVar
                     : 5,
-                throughput: map.cloudEndPointConnection.throughput != null
-                    ? map.cloudEndPointConnection.throughput
+                throughput: config.infrastructure.cloudEndPointConnection.throughput != null
+                    ? config.infrastructure.cloudEndPointConnection.throughput
                     : 7.21
             }
             : { latencyAvg: 45, latencyVar: 5, throughput: 7.21 }
 
-        this.edgeEndPointConnection = map.EdgeEndPointConnection != null
+        this.infrastructure.edgeEndPointConnection = config.infrastructure.edgeEndPointConnection != null
             ? {
-                latencyAvg: map.EdgeEndPointConnection.latencyAvg != null
-                    ? map.EdgeEndPointConnection.latencyAvg
+                latencyAvg: config.infrastructure.edgeEndPointConnection.latencyAvg != null
+                    ? config.infrastructure.edgeEndPointConnection.latencyAvg
                     : 7.5,
-                latencyVar: map.EdgeEndPointConnection.latencyVar != null
-                    ? map.EdgeEndPointConnection.latencyVar
+                latencyVar: config.infrastructure.edgeEndPointConnection.latencyVar != null
+                    ? config.infrastructure.edgeEndPointConnection.latencyVar
                     : 2.5,
-                throughput: map.EdgeEndPointConnection.throughput != null
-                    ? map.EdgeEndPointConnection.throughput
+                throughput: config.infrastructure.edgeEndPointConnection.throughput != null
+                    ? config.infrastructure.edgeEndPointConnection.throughput
                     : 7.21
             }
             : { latencyAvg: 7.5, latencyVar: 2.5, throughput: 7.21 }
 
-        this.externalPhysicalMachines = map.externalPhysicalMachines != null
-            ? map.externalPhysicalMachines
+        this.infrastructure.externalPhysicalMachines = config.infrastructure.externalPhysicalMachines != null
+            ? config.infrastructure.externalPhysicalMachines
             : []
 
-        this.netperf = map.netperf === true
-        this.basePath = map.basePath != null
-            ? map.basePath
+        this.infrastructure.netperf = config.infrastructure.netperf === true
+        this.infrastructure.basePath = config.infrastructure.basePath != null
+            ? config.infrastructure.basePath
             : "~"
 
-        this.prefixIP = map.prefixIP != null
-            ? map.prefixIP
+        this.infrastructure.prefixIP = config.infrastructure.prefixIP != null
+            ? config.infrastructure.prefixIP
             : 192.168
 
-        this.middleIP = map.middleIP != null
-            ? map.middleIP
+        this.infrastructure.middleIP = config.infrastructure.middleIP != null
+            ? config.infrastructure.middleIP
             : 100
 
-        this.middleIPBase = map.middleIPBase != null
-            ? map.middleIPBase
+        this.infrastructure.middleIPBase = config.infrastructure.middleIPBase != null
+            ? config.infrastructure.middleIPBase
             : 90
 
 
 
-        this.delete = map.delete === true
+        this.infrastructure.delete = config.infrastructure.delete === true
 
-        //TODO ask mathijs if GCP config needs to have default values
-        //NOW it does
-        this.gcpConfig = map.provider === "gcp"
-            ? map.gcpConfig != null
-                ? map.gcpConfig
+        this.infrastructure.gcpConfig = config.infrastructure.provider === "gcp"
+            ? config.infrastructure.gcpConfig != null
+                ? config.infrastructure.gcpConfig
                 : defaultGCPConfig()
             : undefined
 
-        this.benchmark = !map.infra_only
-            ? map.benchmarkConfig != null
+        this.benchmark = !config.infrastructure.infraOnly
+            ? config.benchmark != null
                 ? {
-                    resourceManager: map.benchmarkConfig.resourceManager,
-                    resourceManagerOnly: map.benchmarkConfig.resourceManagerOnly === true,
-                    dockerPull: map.benchmarkConfig.dockerPull === true,
-                    application: map.benchmarkConfig.application,
+                    resourceManager: config.benchmark.resourceManager,
+                    resourceManagerOnly: config.benchmark.resourceManagerOnly === true,
+                    dockerPull: config.benchmark.dockerPull === true,
+                    application: config.benchmark.application,
 
-                    applicationWorkerCPU: map.benchmarkConfig.applicationWorkerCPU != null
-                        ? map.benchmarkConfig.applicationWorkerCPU
-                        : map.cores.cloud - 0.5,
+                    applicationWorkerCPU: config.benchmark.applicationWorkerCPU != null
+                        ? config.benchmark.applicationWorkerCPU
+                        : config.infrastructure.cores.cloud - 0.5,
 
-                    applicationWorkerMemory: map.benchmarkConfig.applicationWorkerMemory != null
-                        ? map.benchmarkConfig.applicationWorkerMemory
-                        : map.cores.cloud - 0.5,
+                    applicationWorkerMemory: config.benchmark.applicationWorkerMemory != null
+                        ? config.benchmark.applicationWorkerMemory
+                        : config.infrastructure.cores.cloud - 0.5,
 
-                    applicationEndpointCPU: map.benchmarkConfig.applicationEndpointCPU != null
-                        ? map.benchmarkConfig.applicationEndpointCPU
-                        : map.cores.endpoint,
+                    applicationEndpointCPU: config.benchmark.applicationEndpointCPU != null
+                        ? config.benchmark.applicationEndpointCPU
+                        : config.infrastructure.cores.endpoint,
 
-                    applicationEndpointMemory: map.benchmarkConfig.applicationEndpointMemory != null
-                        ? map.benchmarkConfig.applicationEndpointMemory
-                        : map.cores.endpoint,
+                    applicationEndpointMemory: config.benchmark.applicationEndpointMemory != null
+                        ? config.benchmark.applicationEndpointMemory
+                        : config.infrastructure.cores.endpoint,
 
-                    applicationsPerWorker: map.benchmarkConfig.applicationsPerWorker != null
-                        ? map.benchmarkConfig.applicationsPerWorker
+                    applicationsPerWorker: config.benchmark.applicationsPerWorker != null
+                        ? config.benchmark.applicationsPerWorker
                         : 1,
 
-                    applicationVars: map.benchmarkConfig.applicationVars != null
-                        ? map.benchmarkConfig.applicationVars
+                    applicationVars: config.benchmark.applicationVars != null
+                        ? config.benchmark.applicationVars
                         : undefined,
 
-                    cacheWorker: map.benchmarkConfig.cacheWorker === true,
-                    observability: map.benchmarkConfig.observability === true,
+                    cacheWorker: config.benchmark.cacheWorker === true,
+                    observability: config.benchmark.observability === true,
                 }
                 : undefined
             : undefined,
 
-            this.executionModel = map.executionMode != null
-                ? map.executionMode
+            this.executionModel = config.infrastructure.executionMode != null
+                ? config.infrastructure.executionMode
                 : "openfaas"
     }
 
     validate() {
-        checkValidator(nodesValidator(this.nodes))
-        checkValidator(coresValidator(this.nodes, this.cores))
-        checkValidator(quotaValidator(this.nodes, this.quota))
-        checkValidator(memoryValidator(this.nodes, this.memory))
-        checkValidator(readWriteSpeedValidator(this.readWriteSpeed))
-        checkValidator(connectionValidator(this.cloudConnection))
-        checkValidator(connectionValidator(this.edgeConnection))
-        checkValidator(connectionValidator(this.cloudEdgeConnection))
-        checkValidator(connectionValidator(this.cloudEndPointConnection))
-        checkValidator(connectionValidator(this.edgeEndPointConnection))
-        checkValidator(prefixIPValidator(this.prefixIP))
-        checkValidator(is8BitValidator("middleIP", this.middleIP))
-        checkValidator(is8BitValidator("middleIPBase", this.middleIPBase))
+        checkValidator(nodesValidator(this.infrastructure.nodes))
+        checkValidator(coresValidator(this.infrastructure.nodes, this.infrastructure.cores))
+        checkValidator(quotaValidator(this.infrastructure.nodes, this.infrastructure.quota))
+        checkValidator(memoryValidator(this.infrastructure.nodes, this.infrastructure.memory))
+        checkValidator(readWriteSpeedValidator(this.infrastructure.readWriteSpeed))
+        checkValidator(connectionValidator(this.infrastructure.cloudConnection))
+        checkValidator(connectionValidator(this.infrastructure.edgeConnection))
+        checkValidator(connectionValidator(this.infrastructure.cloudEdgeConnection))
+        checkValidator(connectionValidator(this.infrastructure.cloudEndPointConnection))
+        checkValidator(connectionValidator(this.infrastructure.edgeEndPointConnection))
+        checkValidator(prefixIPValidator(this.infrastructure.prefixIP))
+        checkValidator(is8BitValidator("middleIP", this.infrastructure.middleIP))
+        checkValidator(is8BitValidator("middleIPBase", this.infrastructure.middleIPBase))
 
         if (this.benchmark != null) {
             checkValidator(numberIsUnsignedValidator("applicationWorkerCPU", this.benchmark.applicationWorkerCPU!, false, 0.1))
@@ -241,9 +224,112 @@ class Configuration {
     print() {
         console.log(this)
     }
-    
-    printJson(){
-        console.log(JSON.stringify(this))
+
+    printJson() {
+        console.log(JSON.stringify({
+            infrastructure: {
+                provider: this.infrastructure.provider,
+                infra_only: this.infrastructure.infraOnly,
+                cloud_nodes: this.infrastructure.nodes.cloud,
+                edge_nodes: this.infrastructure.nodes.edge,
+                endpoint_nodes: this.infrastructure.nodes.endpoint,
+
+                cloud_cores: this.infrastructure.cores.cloud,
+                edge_cores: this.infrastructure.cores.edge,
+                endpoint_cores: this.infrastructure.cores.endpoint,
+
+                cloud_memory: this.infrastructure.memory.cloud,
+                edge_memory: this.infrastructure.memory.edge,
+                endpoint_memory: this.infrastructure.memory.endpoint,
+
+                cloud_quota: this.infrastructure.quota.cloud,
+                edge_quota: this.infrastructure.quota.edge,
+                endpoint_quota: this.infrastructure.quota.endpoint,
+
+                cloud_read_speed: this.infrastructure.readWriteSpeed?.readSpeed?.cloud,
+                edge_read_speed: this.infrastructure.readWriteSpeed?.readSpeed?.edge,
+                endpoint_read_speed: this.infrastructure.readWriteSpeed?.readSpeed?.endpoint,
+
+                cloud_write_speed: this.infrastructure.readWriteSpeed?.writeSpeed?.cloud,
+                edge_write_speed: this.infrastructure.readWriteSpeed?.writeSpeed?.edge,
+                endpoint_write_speed: this.infrastructure.readWriteSpeed?.writeSpeed?.endpoint,
+
+                cpu_pin: this.infrastructure.cpuPin,
+                network_emulation: this.infrastructure.networkEmulation,
+
+                wireless_network_preset: this.infrastructure.wirelessNetworkPreset,
+
+                cloud_latency_avg: this.infrastructure.cloudConnection?.latencyAvg,
+                cloud_latency_var: this.infrastructure.cloudConnection?.latencyVar,
+                cloud_throughput: this.infrastructure.cloudConnection?.throughput,
+
+                edge_latency_avg: this.infrastructure.edgeConnection?.latencyAvg,
+                edge_latency_var: this.infrastructure.edgeConnection?.latencyVar,
+                edge_throughput: this.infrastructure.edgeConnection?.throughput,
+
+                cloud_edge_latency_avg: this.infrastructure.cloudEdgeConnection?.latencyAvg,
+                cloud_edge_latency_var: this.infrastructure.cloudEdgeConnection?.latencyVar,
+                cloud_edge_throughput: this.infrastructure.cloudEdgeConnection?.throughput,
+
+
+                cloud_endpoint_latency_avg: this.infrastructure.cloudEndPointConnection?.latencyAvg,
+                cloud_endpoint_latency_var: this.infrastructure.cloudEndPointConnection?.latencyVar,
+                cloud_endpoint_throughput: this.infrastructure.cloudEndPointConnection?.throughput,
+
+                edge_endpoint_latency_avg: this.infrastructure.edgeEndPointConnection?.latencyAvg,
+                edge_endpoint_latency_var: this.infrastructure.edgeEndPointConnection?.latencyVar,
+                edge_endpoint_throughput: this.infrastructure.edgeEndPointConnection?.throughput,
+
+                external_physical_machines: this.infrastructure.externalPhysicalMachines,
+
+                netperf: this.infrastructure.netperf,
+                base_path: this.infrastructure.basePath,
+
+                prefixIP: this.infrastructure.prefixIP,
+                middleIP: this.infrastructure.middleIP,
+                middleIP_base: this.infrastructure.middleIPBase,
+
+                delete: this.infrastructure.delete,
+
+                gcp_cloud: this.infrastructure.gcpConfig?.cloud,
+                gcp_edge: this.infrastructure.gcpConfig?.edge,
+                gcp_endpoint: this.infrastructure.gcpConfig?.endpoint,
+
+                gcp_region: this.infrastructure.gcpConfig?.region,
+
+
+                gcp_zone: this.infrastructure.gcpConfig?.zone,
+
+
+                gcp_project: this.infrastructure.gcpConfig?.project,
+
+                gcp_credentials: this.infrastructure.gcpConfig?.credentials,
+            },
+            mode: this.mode,
+            // the ... is to append these two objects together
+            benchmark: {
+                ...{
+                    resource_manager: this.benchmark?.resourceManager,
+                    resource_manager_only: this.benchmark?.resourceManagerOnly,
+
+                    docker_pull: this.benchmark?.dockerPull,
+
+                    application: this.benchmark?.application,
+
+                    application_worker_cpu: this.benchmark?.applicationWorkerCPU,
+                    application_worker_memory: this.benchmark?.applicationWorkerMemory,
+
+
+                    application_endpoint_cpu: this.benchmark?.applicationEndpointCPU,
+                    application_endpoint_memory: this.benchmark?.applicationEndpointMemory,
+
+                    applications_per_worker: this.benchmark?.applicationsPerWorker,
+
+                    cache_worker: this.benchmark?.cacheWorker,
+                    observability: this.benchmark?.observability
+                }, ...this.benchmark?.applicationVars
+            }
+        }))
     }
 }
 
@@ -337,30 +423,44 @@ class Configuration {
 //     }
 // })
 
-    // more configurations can be placed below,
+// more configurations can be placed below,
 // ]
 
 // configList.forEach((config) => config.validate())
 // console.log(JSON.stringify(configList))
 
 //TODO: press tab to quickly fill in placeholder values
-const newConfiguration = new Configuration({
-    provider: 'qemu',
-    nodes: { cloud: 2, edge: 5, endpoint: 2 },
-    cores: { cloud: 2, edge: 2, endpoint: 2 },
-    memory: { cloud: 5, edge: 1, endpoint: 8 },
-    quota: { cloud: 0.5, edge: 0.8, endpoint: 0.4 },
-    
-    //if infra only is set to true benchmarkConfig can be removed
-    benchmarkConfig: {
-        resourceManager: "kubernetes",
-        application: "empty", // has to correspond to an existing application module
-        applicationVars: applicationVars([
-            ["sleep_time", 60], //variable in the sleep application
-            // key value pair syntax: ["frequency", 5]
-        ])
+const newConfiguration = new Configuration(
+    {
+        infrastructure: {
+            provider: 'qemu',
+            nodes: { cloud: 2, edge: 5, endpoint: 2 },
+            cores: { cloud: 2, edge: 2, endpoint: 2 },
+            memory: { cloud: 5, edge: 1, endpoint: 8 },
+            quota: { cloud: 0.5, edge: 0.8, endpoint: 0.4 },
+
+            //if infra only is set to true benchmarkConfig can be removed
+            // benchmarkConfig: {
+            //     resourceManager: "kubernetes",
+            //     application: "empty", // has to correspond to an existing application module
+            //     applicationVars: applicationVars([
+            //         ["sleep_time", 60], //variable in the sleep application
+            //         // key value pair syntax: ["frequency", 5]
+            //     ])
+            // }
+        },
+        //if infra only is set to true benchmarkConfig can be removed
+        benchmark: {
+            resourceManager: "kubernetes",
+            application: "empty", // has to correspond to an existing application module
+            applicationVars: applicationVars([
+                ["sleep_time", 60], //variable in the sleep application
+                // key value pair syntax: ["frequency", 5]
+            ])
+        }
     }
-})
+
+)
 
 newConfiguration.validate()
 newConfiguration.printJson()
