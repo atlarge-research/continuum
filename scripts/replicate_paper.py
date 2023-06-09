@@ -1305,15 +1305,6 @@ class Control(Experiment):
         events += [(t, "app") for t in experiment["df"]["created_container (s)"]]
         events.sort()
 
-        # colors = {
-        #     "P1": "#33a02c",
-        #     "P2": "#b2df8a",
-        #     "P3": "#1f78b4",
-        #     "P4": "#a6cee3",
-        #     "P5": "#33a02c",
-        #     "P6": "#b2df8a",
-        #     "Deployed": "#1f78b4",
-        # }
         colors = {
             "P1": "#6929c4",
             "P2": "#1192e8",
@@ -1323,15 +1314,6 @@ class Control(Experiment):
             "P6": "#570408",
             "Deployed": "#198038",
         }
-        # colors = {
-        #     "P1": "#1d00d9",
-        #     "P2": "#ae00b5",
-        #     "P3": "#e9008b",
-        #     "P4": "#ff0062",
-        #     "P5": "#ff2d3e",
-        #     "P6": "#ff751c",
-        #     "Deployed": "#ffa600",
-        # }
         cs = [colors[cat] for cat in colors.keys()]
 
         # Set event order
