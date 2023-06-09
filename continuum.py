@@ -6,11 +6,14 @@ Check the documentation and help for more information.
 """
 
 import argparse
+import json
 import os
 import os.path
 import sys
 import logging
 import time
+import pprint
+from colorama import Fore
 
 from application import application
 from configuration_parser import configuration_parser
@@ -132,6 +135,11 @@ def main(args):
                 args.config["ssh_key"],
             )
 
+def print_config(dict):
+    print(Fore.CYAN + "\nConfiguration provided:\n" + Fore.YELLOW)
+    pprint.pprint(dict)
+    print(Fore.WHITE)
+
 
 if __name__ == "__main__":
     # Get input arguments, and validate those arguments
@@ -148,14 +156,8 @@ if __name__ == "__main__":
     parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 
     arguments = parser_obj.parse_args()
-    print(arguments.config)
-    # # print("infrastructure:")
-    # # print(arguments.config['infrastructure'])
+    print_config(arguments.config)
 
-    # # print("benchmark:")
-    # # print(arguments.config['benchmark'])
-
-    # # # Set loggers, print current config
     set_logging(arguments)
     configuration_parser.print_config(arguments.config)
 
