@@ -149,13 +149,13 @@ if __name__ == "__main__":
 
     arguments = parser_obj.parse_args()
     print(arguments.config)
-    # print("infrastructure:")
-    # print(arguments.config['infrastructure'])
+    # # print("infrastructure:")
+    # # print(arguments.config['infrastructure'])
 
-    # print("benchmark:")
-    # print(arguments.config['benchmark'])
+    # # print("benchmark:")
+    # # print(arguments.config['benchmark'])
 
-    # # Set loggers, print current config
+    # # # Set loggers, print current config
     set_logging(arguments)
     configuration_parser.print_config(arguments.config)
 
