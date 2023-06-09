@@ -29,7 +29,7 @@ class Configuration {
     delete: boolean
 
     gcpConfig?: GCPConfig // create validator
-    benchmarkConfig?: BenchmarkConfig
+    benchmark?: BenchmarkConfig
 
     executionModel: "openfaas"
 
@@ -169,7 +169,7 @@ class Configuration {
                 : defaultGCPConfig()
             : undefined
 
-        this.benchmarkConfig = !map.infra_only
+        this.benchmark = !map.infra_only
             ? map.benchmarkConfig != null
                 ? {
                     resourceManager: map.benchmarkConfig.resourceManager,
@@ -227,14 +227,14 @@ class Configuration {
         checkValidator(is8BitValidator("middleIP", this.middleIP))
         checkValidator(is8BitValidator("middleIPBase", this.middleIPBase))
 
-        if (this.benchmarkConfig != null) {
-            checkValidator(numberIsUnsignedValidator("applicationWorkerCPU", this.benchmarkConfig.applicationWorkerCPU!, false, 0.1))
-            checkValidator(numberIsUnsignedValidator("applicationWorkerMemory", this.benchmarkConfig.applicationWorkerMemory!, false, 0.1))
+        if (this.benchmark != null) {
+            checkValidator(numberIsUnsignedValidator("applicationWorkerCPU", this.benchmark.applicationWorkerCPU!, false, 0.1))
+            checkValidator(numberIsUnsignedValidator("applicationWorkerMemory", this.benchmark.applicationWorkerMemory!, false, 0.1))
 
-            checkValidator(numberIsUnsignedValidator("applicationEndpointCPU", this.benchmarkConfig.applicationEndpointCPU!, false, 0.1))
-            checkValidator(numberIsUnsignedValidator("applicationEndpointMemory", this.benchmarkConfig.applicationEndpointMemory!, false, 0.1))
+            checkValidator(numberIsUnsignedValidator("applicationEndpointCPU", this.benchmark.applicationEndpointCPU!, false, 0.1))
+            checkValidator(numberIsUnsignedValidator("applicationEndpointMemory", this.benchmark.applicationEndpointMemory!, false, 0.1))
 
-            checkValidator(numberIsUnsignedValidator("applicationsPerWorker", this.benchmarkConfig.applicationsPerWorker!, true, 1))
+            checkValidator(numberIsUnsignedValidator("applicationsPerWorker", this.benchmark.applicationsPerWorker!, true, 1))
         }
     }
 
@@ -248,36 +248,122 @@ class Configuration {
 }
 
 // example of a configuration instance
-const config1 = new Configuration({
+// const config1 = new Configuration({
+//     provider: 'qemu',
+//     nodes: { cloud: 2, edge: 5, endpoint: 2 },
+//     cores: { cloud: 2, edge: 2, endpoint: 2 },
+//     memory: { cloud: 5, edge: 1, endpoint: 8 },
+//     quota: { cloud: 0.5, edge: 0.8, endpoint: 0.4 },
+//     readWriteSpeed: {
+//         readSpeed: { cloud: 1, edge: 5, endpoint: 2 },
+//         writeSpeed: { cloud: 3, edge: 5, endpoint: 4 }
+//     },
+//     prefixIP: 223.100, // as this is handled as a number trailing zeros are assumed
+//     middleIPBase: 244,
+//     infra_only: false,
+//     cloudConnection: { latencyAvg: 2 },
+//     benchmarkConfig: {
+//         resourceManager: "kubernetes",
+//         application: "asd",
+//         applicationVars: applicationVars(
+//             [
+//                 ["frequency", 5]
+//             ]
+//         ),
+//         applicationsPerWorker: 1,
+//         applicationEndpointCPU: 0.2
+//     }
+// })
+
+// config1.validate()
+// config1.printJson()
+
+
+// //TODO: press tab to quickly fill in placeholder values
+// const configList = [
+
+// // example of a configuration instance
+// new Configuration({
+//     provider: 'qemu',
+//     nodes: { cloud: 2, edge: 5, endpoint: 2 },
+//     cores: { cloud: 2, edge: 2, endpoint: 2 },
+//     memory: { cloud: 5, edge: 1, endpoint: 8 },
+//     quota: { cloud: 0.5, edge: 0.8, endpoint: 0.4 },
+//     readWriteSpeed: {
+//         readSpeed: { cloud: 1, edge: 5, endpoint: 2 },
+//         writeSpeed: { cloud: 3, edge: 5, endpoint: 4 }
+//     },
+//     prefixIP: 223.100, // as this is handled as a number trailing zeros are assumed
+//     middleIPBase: 244,
+//     infra_only: false,
+//     cloudConnection: { latencyAvg: 2 },
+//     benchmarkConfig: {
+//         resourceManager: "kubernetes",
+//         application: "asd",
+//         applicationVars: applicationVars(
+//             [
+//                 ["frequency", 5]
+//             ]
+//         ),
+//         applicationsPerWorker: 1,
+//         applicationEndpointCPU: 0.2
+//     }
+// }),
+// example of a configuration instance
+// new Configuration({
+//     provider: 'qemu',
+//     nodes: { cloud: 2, edge: 5, endpoint: 2 },
+//     cores: { cloud: 2, edge: 2, endpoint: 2 },
+//     memory: { cloud: 5, edge: 1, endpoint: 8 },
+//     quota: { cloud: 0.5, edge: 0.8, endpoint: 0.4 },
+//     readWriteSpeed: {
+//         readSpeed: { cloud: 1, edge: 5, endpoint: 2 },
+//         writeSpeed: { cloud: 3, edge: 5, endpoint: 4 }
+//     },
+//     prefixIP: 223.100, // as this is handled as a number trailing zeros are assumed
+//     middleIPBase: 244,
+//     infra_only: false,
+//     cloudConnection: { latencyAvg: 2 },
+//     benchmarkConfig: {
+//         resourceManager: "kubernetes",
+//         application: "asd",
+//         applicationVars: applicationVars(
+//             [
+//                 ["frequency", 5]
+//             ]
+//         ),
+//         applicationsPerWorker: 1,
+//         applicationEndpointCPU: 0.2
+//     }
+// })
+
+    // more configurations can be placed below,
+// ]
+
+// configList.forEach((config) => config.validate())
+// console.log(JSON.stringify(configList))
+
+//TODO: press tab to quickly fill in placeholder values
+const newConfiguration = new Configuration({
     provider: 'qemu',
     nodes: { cloud: 2, edge: 5, endpoint: 2 },
     cores: { cloud: 2, edge: 2, endpoint: 2 },
     memory: { cloud: 5, edge: 1, endpoint: 8 },
     quota: { cloud: 0.5, edge: 0.8, endpoint: 0.4 },
-    readWriteSpeed: {
-        readSpeed: { cloud: 1, edge: 5, endpoint: 2 },
-        writeSpeed: { cloud: 3, edge: 5, endpoint: 4 }
-    },
-    prefixIP: 223.100, // as this is handled as a number trailing zeros are assumed
-    middleIPBase: 244,
-    infra_only: false,
-    cloudConnection: { latencyAvg: 2 },
+    
+    //if infra only is set to true benchmarkConfig can be removed
     benchmarkConfig: {
         resourceManager: "kubernetes",
-        application: "asd",
-        applicationVars: applicationVars(
-            [
-                ["frequency", 5]
-            ]
-        ),
-        applicationsPerWorker: 1,
-        applicationEndpointCPU: 0.2
+        application: "empty", // has to correspond to an existing application module
+        applicationVars: applicationVars([
+            ["sleep_time", 60], //variable in the sleep application
+            // key value pair syntax: ["frequency", 5]
+        ])
     }
 })
 
-config1.validate()
-config1.printJson()
-
+newConfiguration.validate()
+newConfiguration.printJson()
 
 
 
