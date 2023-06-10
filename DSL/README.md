@@ -12,7 +12,11 @@ To make use of the DSL itself any text editor and access to a terminal will do. 
 3. Select one of the snippets presented in VS-Code
 4. Type in the name you want to give the configuration and it will automatically fill it in for you every where that its needed.
 5. By pressing `TAB` or `SHIFT + TAB` you can navigate back and forth the different placeholders to quickly fill in the correct values. In cases where you can only specify certain values a dropdown with the possible options will be provided.
-6. To execute Continuum with the DSL run: `python3 continuum.py <file_path>` (NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules))
+6. To execute Continuum with the DSL run:
+```bash
+python3 continuum.py <file_path>
+```
+(NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules))
 
 If you make any mistake when filling in a variable that only accept specific values, delete the quote marks and press `"`. VS-Code with automatically present you with a list of all possible values.
 
