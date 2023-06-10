@@ -333,7 +333,7 @@ export default class Configuration {
         
     }
 
-    printJson() {
+    output() {
         console.log(JSON.stringify(this.formatted()))
     }
 }

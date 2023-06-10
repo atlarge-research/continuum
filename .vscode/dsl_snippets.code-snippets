@@ -45,7 +45,7 @@
 			"})",
 			"",
 			"${1:newConfiguration}.validate()",
-			"${1:newConfiguration}.printJson()",
+			"${1:newConfiguration}.output()",
 		],
 		"description": "Creates basic instance of configuration class"
 	},
@@ -78,7 +78,7 @@
 			
 			"",
 			"${1:configList}.forEach((config) => config.validate())",
-			"console.log(JSON.stringify(${1:configList}))",
+			"console.log(JSON.stringify(configList.map(config => config.formatted())))",
 		],
 		"description": "Creates list of configurations"
 	}

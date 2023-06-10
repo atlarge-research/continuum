@@ -24,12 +24,15 @@ def start(parser, file_path):
     if(len(stderr)):
         parser.error(stderr.decode("utf-8"))
 
-    stdout.decode("utf-8")
+    try:
+        config = json.loads(stdout.decode("utf-8"))
+    except ValueError:
+        parser.error("Invalid Configuration provided. Make sure only one configuration outputs at a time")
 
+    input_config = configparser.ConfigParser() # TODO: not sure what this does but was used to pass to the add_options function
 
-    config = json.loads(stdout.decode("utf-8"))
-
-    input_config = configparser.ConfigParser()
+    if isinstance(config, list):
+        parser.error("Executing a list of configurations is not available yet")
 
     dynamic_import(parser, config)
     add_constants(parser, config)
