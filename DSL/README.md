@@ -4,7 +4,12 @@ This implementation is extremely easy to use thanks to the custom VS-Code code s
 
 ## Quick Start
 If you only want to use the continuum framework you can simply create a Typescript file and type in one of the predifined code snippets.
-NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules)
+NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules).
+The steps are as follows:
+1. Create a `<filename>.ts file` anywhere under the DSL folder. (we recommend makind a dedicated folder so your files don't get mixed with source code files).
+2. type in one of the code snippets defined. code snippets (we recommend running cfg_basic for a simple working example).
+Note.
+3.
 
 The generics folder contains the different variables in the configuration
 
