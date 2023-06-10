@@ -7,13 +7,15 @@ To make use of the DSL itself any text editor and access to a terminal will do. 
 
 
 ## Quick Start
-If you only want to use the continuum framework you can simply create a Typescript file and type in one of the predifined code snippets.
-NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules).
-The steps are as follows:
 1. Create a `<filename>.ts file` anywhere under the DSL folder. (we recommend makind a dedicated folder so your files don't get mixed with source code files).
 2. Type in the letter cfg.
 3. Select one of the snippets presented in VS-Code
-4. Start 
+4. Type in the name you want to give the configuration and it will automatically fill it in for you every where that its needed.
+5. By pressing `TAB` or `SHIFT + TAB` you can navigate back and forth the different placeholders to quickly fill in the correct values. In cases where you can only specify certain values a dropdown with the possible options will be provided.
+6. 
 
-The generics folder contains the different variables in the configuration
+If you make any mistake when filling in a variable that only accept specific values, delete the quote marks and press `"`. VS-Code with automatically present you with a list of all possible values.
+
+NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules).
+
 
