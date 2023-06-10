@@ -16,7 +16,7 @@ To make use of the DSL itself any text editor and access to a terminal will do. 
 ```bash
 python3 continuum.py <file_path>
 ```
-(NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules))
+NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules)
 
 If you make any mistake when filling in a variable that only accept specific values, delete the quote marks and press `"`. VS-Code with automatically present you with a list of all possible values.
 
