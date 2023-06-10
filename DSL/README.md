@@ -18,7 +18,10 @@ python3 continuum.py <file_path>
 ```
 NOTE: all configuration need to be in the `DSL/` folder so the file has access to npm dependencies (node modules)
 
-If you make any mistake when filling in a variable that only accept specific values, delete the quote marks and press `"`. VS-Code with automatically present you with a list of all possible values.
+If you make any mistake when filling in a variable that only accept specific values, delete the quote marks and type `"`. VS-Code with automatically present you with a list of all possible values.
+
+## Code Snippets
+If you would like the gain a better understanding of the code snippets and how to create them you can refer to `continuum/.vscode/dsl_snippets.code-snippets`
 
 
 
