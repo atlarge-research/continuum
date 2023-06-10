@@ -225,8 +225,8 @@ export default class Configuration {
         console.log(this)
     }
 
-    printJson() {
-        console.log(JSON.stringify({
+    formatted(){
+        return {
             infrastructure: {
                 provider: this.infrastructure.provider,
                 infra_only: this.infrastructure.infraOnly,
@@ -306,7 +306,7 @@ export default class Configuration {
                 gcp_credentials: this.infrastructure.gcpConfig?.credentials,
             },
             mode: this.mode,
-            // the ... is to append these two objects together
+            // the "..." used below is to combine these two objects
             benchmark: {
                 ...{
                     resource_manager: this.benchmark?.resourceManager,
@@ -329,6 +329,11 @@ export default class Configuration {
                     observability: this.benchmark?.observability
                 }, ...this.benchmark?.applicationVars
             }
-        }))
+        }
+        
+    }
+
+    printJson() {
+        console.log(JSON.stringify(this.formatted()))
     }
 }
