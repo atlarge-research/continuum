@@ -76,210 +76,122 @@ The Grafana dashboard requires a username and password, both are `admin` by defa
 In case you run Continuum on a machine without a graphical user interface, connect to the machine from a device with one, and port-forward the 3000 and 9090 ports. 
 For example, to port-forward the 3000 port, use `ssh -L 3000:XXX.XXX.XXX.XXX:3000 username@address -i /path/to/ssh_key`, with XXX.XXX.XXX.XXX the IP of the cloud controller VM that is printed after Continuum has finished (typically 192.168.100.2), username@address the IP address of the server you can Continuum on and the username of your account on the server, and the corresponding SSH key.
 
-## Demo
-This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
-The demo contains three parts:
-
-1. Prepare the environment
-2. Install the framework
-3. Use the framework
-
-In the first part, we prepare an Ubuntu 20.04 virtual machine using QEMU/KVM.
-In part two, we install the Continuum framework inside this VM and finally use the framework in part 3.
-If you have access to a machine with Ubuntu 20.04, you can skip part 1, "Prepare the environment", and start with part 2. 
-Continuum has been tested on Ubuntu 20.04, and correct functioning on other operating systems can not be guaranteed.
-
-If you want to use Continuum for research, you should install it directly on your machine, without using a virtual machine, as this reduces performance.
-The framework does support execution on multiple physical machines through a network bridge.
-We leave this multi-machine execution out of this tutorial; consult the documentation for more information.
-
-Software versions tested:
-
-- QEMU 6.1.0
-- Libvirt 6.0.0
-- Docker 20.10.12
-- Python 3.8.10
-- Ansible 2.13.2
-
-### Part 1: Prepare the environment
-We prepare a virtual machine with Ubuntu 20.04 in this step.
-The only requirement for this part is installing QEMU/KVM and Libvirt.
-You can execute this part on any operating system that supports these software packages; our demo focuses on Ubuntu 20.04.
-
-1. Install requirements
-    1. Install QEMU, KVM, and Libvirt: `sudo apt update && sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils`
-    2. Give permissions to LibVirt and KVM to run virtual machines (use your own username): `sudo adduser [username] libvirt &&` `sudo adduser [username] kvm`. You may need to log in and out to refresh your group memberships.
-    3. Check if the installation was successful: `qemu-system-x86_64 --version`
-    4. Check if libvirt is running: `sudo systemctl status libvirtd`. If not, activate it using `sudo systemctl enable --now libvirtd`
-2. Download the Ubuntu 20.04 server image: `wget https://releases.ubuntu.com/20.04.3/ubuntu-20.04.3-live-server-amd64.iso`
-3. Create a QCOW disk as storage for your VM: `qemu-img create -f qcow2 ubuntu.img 20G`
-    1. At least 20 GB of disk space is required for this tutorial
-4. Boot the VM
-    1. On a system with a GUI: `sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user`
-        1. This should automatically open up a new window for the VM.
-        2. Memory requirements: At least 4 GB (in this example -m 8G = 8 GB)
-        3. CPU requirements: At least 4 (in this example -smp 4 = 4 CPUs)
-    2. On a system without a GUI: `sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user,hostfwd=tcp::7777-:22`
-        1. Open up a new SSH session into the GUI-less machine using `ssh -X`. The machine that you are SSH’ing from should have a GUI.
-        2. Install Remmina on the GUI-less machine: `sudo apt install remmina` and run Remmina `remmina`
-        3. This should open the Remmina screen for you. Click on the + icon to create a new connection. Under protocol, select “VNC”, and then under server, add the VNC address displayed in the terminal where you started the VM (for example, 127.0.0.1:5900). Click save and connect to connect to the VM.
-5. Initialize the VM: Do not forget to install the open-SSH client during the installation! Remember the username and password you create for later. You can ignore all (security) updates for this demo.
-6. Shut the VM down once the initial setup is done, and launch again: `sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -cpu host -net nic -net user,hostfwd=tcp::8888-:22 --name ubuntu`
-    1. On a system with a GUI: A new screen should automatically open, and after some time the VM will be done booting up. If you don’t want to use a GUI for the VM, open up a new terminal and use `ssh [username]@localhost -p 8888`
-    2. On a system without  a GUI: Open up a new terminal and use `ssh [username]@localhost -p 8888`
-
-### Part 2: Install the framework
-We start installing all requirements for the Continuum framework.
-We assume the operating system is Ubuntu 20.04, either natively or via a VM.
-
-1. Install VM requirements
-    1. Install QEMU, KVM and Libvirt: `sudo apt update && sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils`
-    2. Give permissions to LibVirt and KVM to run virtual machines (use your own username): `sudo adduser [username] libvirt` and `sudo adduser [username] kvm`. You may need to log in and out to refresh your group memberships.
-    3. Check if the installation was successful: `qemu-system-x86_64 --version`. 
-    4. Check if libvirt is running: `sudo systemctl status libvirtd`. If not, activate it using `sudo systemctl enable --now libvirtd`
-2. Install Docker (see Docker website for alternative instructions)
-    ```bash
-    sudo apt-get install \
-        ca-certificates \
-        curl \
-        gnupg \
-        lsb-release
-    
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
-    sudo apt-get update
-    sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-    
-    sudo groupadd docker
-    sudo usermod -aG docker $USER
-    sudo systemctl enable docker.service
-    sudo systemctl enable containerd.service
-    # Now refresh you SSH session by logging in / out
-    
-    # support https
-    hostname -I # copy first IP in list, paste in next command under IP_HERE
-    echo '{ "insecure-registries":["IP_HERE:5000"] }' | sudo tee -a /etc/docker/daemon.json
-    sudo systemctl restart docker
-    ```
-    
-3. Get Pip: `sudo apt install python3-pip`
-4. Get Ansible: `sudo apt install ansible`
-    1. Check if Ansible works: `ansible --version`
-    2. Edit the ansible configuration: `sudo vim /etc/ansible/ansible.cfg`
-        1. Under `[ssh_connection]`, add `retries = 5`
-        2. Under `[defaults]`, add `callback_whitelist = profile_tasks`
-        3. Under `[defaults]`, add `command_warnings=False`
-5. Install the Continuum repository
-    1. `git clone https://github.com/atlarge-research/continuum.git`
-    2. Get python requirements: `cd continuum && pip3 install -r requirements.txt`
-    3. Create an .ssh directory: `mkdir ~/.ssh`
-    4. Create a known hosts file: `touch ~/.ssh/known_hosts`
-6. Delete the virtual bridge
-    1. `virsh net-destroy default` and `virsh net-undefine default`
-    2. Check that virbr0 no longer exists: `virsh net-list --all`
-7. Create a network bridge
-    1. Make a backup of the current network configuration: `sudo cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak`
-    2. Edit the network configuration to create a bridge (`sudo vim /etc/netplan/00-installer-config.yaml`). Use `ip a` to get your machine’s network interface (e.g., ens3, enp0s3) and IP (for this example, the IP listed under ens3) and `ip r` to get the gateway address (the first IP on the first line). An example file could look like this:
-        
-        ```bash
-        network:
-          ethernets:
-            ens3:
-              dhcp4: false
-              dhcp6: false
-          bridges:
-            br0:
-              interfaces: [ens3]
-              addresses: [10.0.2.15/16]
-              gateway4: 10.0.2.2
-              nameservers:
-                addresses: [1.1.1.1, 8.8.8.8]
-                search: []
-              parameters:
-                stp: true
-              dhcp4: false
-              dhcp6: false
-          version: 2
-        ```
-        
-    3. Enforce this new network policy with `sudo netplan generate` and `sudo netplan apply`
-    4. Use `brctl show` to check that bridge br0 now exists, and `ip a` to check that ens3 does not have a listed ip anymore, but br0 does instead.
-    5. If your ip listed under “addresses” does not start with 192.168, one change in the framework is required: Edit continuum.py (vim continuum.py), search for the “add_constants” function and change config[”prefixIP”] to your prefix (e.g., for this example “10.0”
-    6. Enable IP forwarding from VMs to the bridge
-        
-        ```bash
-        # This is one command
-        # If permission denied, execute "sudo su" first. 
-        cat >> /etc/sysctl.conf <<EOF
-        net.bridge.bridge-nf-call-ip6tables = 0
-        net.bridge.bridge-nf-call-iptables = 0
-        net.bridge.bridge-nf-call-arptables = 0
-        EOF
-        # If sudo su was used, do "exit" now
-        
-        # Then execute this command
-        sudo sysctl -p /etc/sysctl.conf
-        ```
-
-### Part 3: Use the framework
-Inside the continuum framework:
-
-1. Check the input parameters of the framework: `python3 continuum.py -h`.
-2. The configuration files are stored in /configuration. Check /configuration/template.cfg for the template that these configuration files follow.
-3. Run one of these configurations, such as a simple edge computing benchmark: `python3 continuum.py -v configuration/bench_edge.cfg`
-4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
-
-### Part 4: Install OpenFaaS
-In this part, you will setup [OpenFaaS](https://docs.openfaas.com/), a serverless framework, in the Kubernetes cluster that `Continuum` created for you.  
-For the moment, we only allow OpenFaaS to be installed outside of the framework. In the future, we will integrate it in the framework.
-
-1. Run Continuum with a configuration for OpenFaas. The `resource_manager_only = true` flag and `model = openfaas` in section `execution_model` is critical here.
-    ```bash
-    python3 continuum.py configuration/bench_openfaas.cfg
-    ```
-
-2. From your host-system ssh onto the `cloud_controller` node, for example:
-   ```bash
-   ssh cloud_controller@192.168.100.2 -i ~/.ssh/id_rsa_continuum
-   ```
-
-3. On the `cloudcontroller` make port 8080 from the Kubernetes cluster available on the node:
-   ```bash
-   nohup kubectl port-forward -n openfaas svc/gateway 8080:8080 &
-   ```
-   After execution, hit `Strg+C` to exit the dialog.
-
-4. Give the `fass-cli` access to the OpenFaas deployment:
-   ```bash
-   PASSWORD=$(kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | base64 --decode; echo)
-   echo -n $PASSWORD | faas-cli login --username admin --password-stdin
-   ```
-
-Congratulations! As long as you don't reset the cluster, you can now access the OpenFaas deployment through the `cloudcontroller` node and `faas-cli`.  
-
-You can test your installation by deploying and running a simple function, [figlet](https://github.com/jmkhael/faas-figlet). Figlet echos its input back to the user as an ASCII-banner.  
-For now, we will use the command line to deploy the function. For a real-world scenario, this might not be desireable and you should use a yaml file to do your deployments like Johnny does in [his tutorial](https://jmkhael.io/create-a-serverless-ascii-banner-with-faas/). Why is that?
-
-Deploy figlet to OpenFaaS
-```bash
-faas-cli store deploy figlet
-```
-If everthing went well, you should now see it in the list of functions:
-```bash
-faas-cli list
-```
-
-Now it's time to execute your first serverless function:
-```bash
-curl http://localhost:8080/function/figlet -d 'Hello world!'
-```
-
 ---
-Please read the documentation in /docs when encountering issues during the installation or usage of the framework.
+# Demo
+**This demo is for the BSc Computer Science at the VU Amsterdam, specifically the networks course in the academic year 2022/2023.**
 
----
+**For other users, please use the main branch of the project instead**
+
+This demo consists of three parts:
+1. Access the servers
+2. Deploy Continuum with Kubernetes and KubeEdge
+3. Deploy Continuum with OpenFaaS
+
+### Part 1: Access the servers
+For this demo, you will get access to VU compute servers.
+We currently only support this demo on these servers.
+
+1. Send a public SSH key to the provided email address. You will receive a username `cn-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`.
+2. Add the following to your ssh config, typically in `~/.ssh/config`. Fill in X, Y, and Z.
+```
+Host al01
+	HostName al01.anac.cs.vu.nl
+	User cn-nX-Y <-- Fill in X and Y
+	IdentityFile /path/to/your/ssh/key (example: ~/.ssh/id_rsa. May need .pub if not working)
+
+Host nodeX <-- Fill in X
+	HostName nodeX <-- Fill in X
+	User cn-nX-Y <-- Fill in X and Y
+	ProxyJump al01
+	IdentityFile /path/to/your/ssh/key (example: ~/.ssh/id_rsa. May need .pub if not working)
+```
+3. Access the node where you will work on: `ssh nodeX`
+4. Now you are in your home directory on the node. The Continuum repository should already be cloned for you, you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo.
+
+
+### Part 2: See below
+Run continuum with kube to get the cluster with 1 example running
+
+### Part 3: Observe Kubernetes
+Connect grafana and inspect what is happening
+
+### Part 4: Modify Kubernetes
+Now modify the deployment file, like 20 apps in parallel with 0.05 cpu and 0.5 mem
+
+
+
+
+### Part 2: Deploy Continuum with Kubernetes
+In this part, you will use the Continuum framework to deploy Kubernetes in the Compute Continuum.
+You should already have received an explanation on this during the presentation.
+
+1. Deploy the prepared configuration: `python3 continuum.py configuration/tutorial-cn.cfg`. It will take ~10 minutes to finish, so don't worry if it seems like the program is hanging. Contact the teaching staff if an error appeared.
+2. Open the configuration (`cat configuration/tutorial-cn.cfg`) and inspect it. This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much less resources. On these VMs, the framework will deploy a Kubernetes cluster
+
+1. Use Continuum to create 1 endpoint VM, which is used to run a machine learning application, namely image recognition. With this, you emulate a (security) camera device that generates 5 images per second for 5 minutes (300 seconds), and each image will be analyized using machine learning. You will test how well the application can be run on an endpoint without offloading to cloud or edge. While in the Continuum repository, do `python3 main.py configuration/endpoint.cfg`. This will start the Continuum framework, and may take serveral minutes to complete.
+2. After the framework has completed, you will get output similar to this:
+    ```
+    ------------------------------------
+    ENDPOINT OUTPUT
+    ------------------------------------
+    endpoint_id  total_time (s)  proc_time/data (ms)  latency_avg (ms)  latency_stdev (ms)
+            0          472.41               263.21          62203.04            26674.06
+
+    ```
+    For this particular example, one endpoint was deployed (with ID 0), and it took 472 seconds to finish the ML application. The application is set to only run for 300 seconds, so an execution time of 472 seconds shows that real-time processing is not possible. This is confirmed by looking at the time it took to process a single image, 263.21 ms. With 5 images per second being generated, the endpoint should process each image in 200 ms to achieve real-time processing, which was not possible. This has caused the average end-to-end latency (the time it takes from generating and image to it being processed by a machine learning algorithm) to be 62 seconds, as a queue of workload starts forming.
+3. Repeat step 1 and 2 for deployments where this application is offloaded to cloud and edge resources. By offloading the ML tasks to sites with more processing power, the deployment may achieve real-time processing. However, by offloading computation to a far-away location, end-to-end latency may increase. This is undesired for applications that require low end-to-end latency such as VR or cognitive assistance. Do `python3 main.py configuration/kubernetes-cloud.cfg` and `python3 main.py configuration/kubeedge-edge.cfg`
+4. An example output of offloading to cloud follows below:
+    ```
+    ------------------------------------
+    CLOUD OUTPUT
+    ------------------------------------
+    worker_id  total_time (s)  delay_avg (ms)  delay_stdev (ms)  proc_time/data (ms)
+        0          306.72          127.76             32.77               149.53
+    ------------------------------------
+    ENDPOINT OUTPUT
+    ------------------------------------
+    connected_to  total_time (s)  preproc_time/data (ms)  data_size_avg (kb)  latency_avg (ms)  latency_stdev (ms)
+        0           307.1                    1.29               68.01            317.91               37.55
+
+    ```
+    In this case, 1 cloud worker processes each image in 127 ms, which is well below the deadline of 200 ms. This is possible because of the high compute power in clouds. The end-to-end latency is 317 ms on average, so 0.3 seconds. Depending on the application, this may be or not be sufficient.
+5. After you have finished running your final deployment, and there is still time until the next tutorial, you can further inspect Kubernetes and the application. You can SSH to the `cloud_controller` machine using the SSH command printed at the end of Continuum's output. You are now in the head node of the Kubernetes cluster.
+
+    1. How does your cluster look like? `kubectl get nodes`. There is one cloud controller, and one worker machine. You can inspect the status of each machine by doing `kubectl describe node <name>`, using the names from the first command. This shows the current status of the nodes, their resources, recent events, etc.
+    2. Now we can inspect the applications (called pods) that ran on the cluster. Do `kubectl get pods` to list all applications. You can also get more info on these by doing `kubectl describe pod <podname>`.
+
+## Part 3: Deploy Continuum with OpenFaaS
+1. Start Continuum with Kubernetes and OpenFaaS, while inside the Continuum repository: `python3 main.py configuration/openfaas-cloud.cfg`. Wait for this to complete.
+2. Open an SSH tunnel in a new terminal:
+    1. To the headnode of the cluster, from your local computer: `ssh -L 3000:192.168.ZZZ.2:3000 asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using the X and ZZZ from step 1.
+    3. From the headnode to the specific machine: `ssh -L 3000:192.168.ZZZ.2:3000 nodeX`, using the X and ZZZ from step 1.
+2. No application has started yet in step 1. We will do that now. Go to `cd DS-serverless/deployment`. Here we will start the serverless functions inside our Kubernetes / OpenFaaS cluster, and monitor the state of the applications. Do `pyinfra inventory.py deploy.py`. If it crashes during execution, execute this command again (this may sometimes happen). If it still doesn't work after several retries, please contact the teaching staff. 
+3. If you used the correct SSH commands noted at the start of this demo, you should open the following URL in your browser on your local computer: `http://localhost:3000`. This will open the Grafana dashboard that visualizes the state of your cluster and the applications running in your cluster. Log in with username and password `admin`, skip creating a new password, go to the dashboard (the icon with the 4 boxes in the left navigation bar), and under Default open Function Dashboard DS2022. This will show you a live view of the resource usage of each application. Each application has a different resource usage, and you can inspect how these applications affect each other. 
+4. You can also go to "Logs Fibonacchi" under Dashboard, which shows the average execution time per serverless function, split up per application. Can you see the variation in execution time? Why would this happen?
+5. Go back to the Continuum repository, and run OpenFaas at the edge: `python3 main.py configuration/openfaas-edge.cfg`. Now repeat steps 2-4. Can you see any differences?
+
+
+
+
+
+# TO PROCESS
+```
+------------------------------------
+CLOUD OUTPUT
+------------------------------------
+ worker_id  total_time (s)  delay_avg (ms)  delay_stdev (ms)  proc_time/data (ms)
+         0            61.4          123.85             34.06                125.1
+------------------------------------
+ENDPOINT OUTPUT
+------------------------------------
+ connected_to  total_time (s)  preproc_time/data (ms)  data_size_avg (kb)  latency_avg (ms)  latency_stdev (ms)
+            0           61.73                    1.31               68.01            296.55                38.9
+
+To access the VMs:
+	ssh cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+	ssh cloud0_matthijs@192.168.100.3 -i /home/matthijs/.ssh/id_rsa_continuum
+	ssh endpoint0_matthijs@192.168.100.4 -i /home/matthijs/.ssh/id_rsa_continuum
+
+To access Grafana: ssh -L 3000:192.168.100.3:3000 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+To access Prometheus: ssh -L 9090:192.168.100.3:9090 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+```
