@@ -112,14 +112,6 @@
         kubernetesVersion: {{ kubeversion }}
         networking:
           podSubnet: 10.244.0.0/16
-        controllerManager:
-          extraArgs:
-            kube-api-qps: "100000"
-            kube-api-burst: "100000"
-        scheduler:
-          extraArgs:
-            kube-api-qps: "100000"
-            kube-api-burst: "100000"
         ---
         apiVersion: kubelet.config.k8s.io/v1beta1
         kind: KubeletConfiguration
@@ -132,9 +124,13 @@
     #
     # ---- From ClusterConfiguration
     # controllerManager:
-    #       extraArgs:
-    #         kube-api-qps: "100000"
-    #         kube-api-burst: "100000"
+    #   extraArgs:
+    #     kube-api-qps: "100000"
+    #     kube-api-burst: "100000"
+    # scheduler:
+    #   extraArgs:
+    #     kube-api-qps: "100000"
+    #     kube-api-burst: "100000"
     #
     # ---- From KubeletConfiguration
     # maxPods: 265

@@ -1110,7 +1110,8 @@ class Control(Experiment):
     def __init__(self, resume):
         Experiment.__init__(self, resume)
 
-        self.log = "logs/gcp_new"
+        # self.log = "logs/gcp_new"
+        self.log = "logs"
 
         # Custom list of experiments for in the paper
         # Config: Location of config file
@@ -1211,11 +1212,16 @@ class Control(Experiment):
             #     "log": "node1_pod100_cont100_v127_pod_p24_resource",
             #     "nodes": 1,
             # },
-            {
-                "type": "breakdown-strong",
-                "log": "node16_pod7_cont7_v127_pod_p24_resource",
-                "nodes": 16,
-            },
+            # {
+            #     "type": "breakdown-strong",
+            #     "log": "node16_pod7_cont7_v127_pod_p24_resource",
+            #     "nodes": 16,
+            # },
+            # {
+            #     "type": "breakdown",
+            #     "log": "tmp",
+            #     "nodes": 1,
+            # },
         ]
 
     def __repr__(self):
@@ -1259,7 +1265,7 @@ class Control(Experiment):
         """Input parsing and plotting is done in Continuum itself"""
         for experiment in self.experiments:
             # Get the line containing the metrics
-            i = -7 - experiment["nodes"]
+            i = -7 - experiment["nodes"] + 3
             if "Output in csv format" not in experiment["output"][i - 1]:
                 sys.exit(
                     "Could not find string 'output in csv format' on line -%i: %s"
