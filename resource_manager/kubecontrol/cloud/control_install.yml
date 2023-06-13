@@ -106,7 +106,7 @@
         apiVersion: kubeadm.k8s.io/v1beta3
         kind: ClusterConfiguration
         apiServer:
-          certSANs: 
+          certSANs:
           - {{ cloud_ip }}
         imageRepository: {{ registry_ip }}
         kubernetesVersion: {{ kubeversion }}

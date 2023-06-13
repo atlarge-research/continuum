@@ -58,6 +58,8 @@ def verify_options(parser, config):
         parser.error("ERROR: image_classification app does not support application caching")
     elif config["benchmark"]["resource_manager"] == "kubecontrol":
         parser.error("ERROR: Application image_classification does not support kubecontrol")
+    elif config["benchmark"]["endpoint_nodes"] <= 0:
+        parser.error("ERROR: Application image classification requires at least 1 endpoint")
 
 
 def start_worker(config, machines):

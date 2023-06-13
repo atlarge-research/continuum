@@ -7,8 +7,6 @@ import os
 import sys
 import time
 
-from datetime import datetime
-
 from infrastructure import ansible
 
 
@@ -21,7 +19,10 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
+    settings = [
+        ["cache_worker", bool, lambda x: x in [True, False], False, False],
+        ["kube_version", str, lambda _: ["v1.27.0"], False, "v1.27.0"],
+    ]
     return settings
 
 
@@ -35,9 +36,9 @@ def verify_options(parser, config):
     if (
         config["infrastructure"]["cloud_nodes"] < 2
         or config["infrastructure"]["edge_nodes"] != 0
-        or config["infrastructure"]["endpoint_nodes"] < 1
+        or config["infrastructure"]["endpoint_nodes"] < 0
     ):
-        parser.error("ERROR: Kubernetes requires #clouds>=2, #edges=0, #endpoints>=1")
+        parser.error("ERROR: Kubernetes requires #clouds>=2, #edges=0, #endpoints>=0")
     elif (
         config["infrastructure"]["endpoint_nodes"] % (config["infrastructure"]["cloud_nodes"] - 1)
         != 0
@@ -1026,8 +1027,8 @@ def get_control_output(config, machines, starttime, status):
                 time_str = time_str.split("=")[1][:-1]
                 time_obj_nano = float(time_str)
                 time_obj = time_obj_nano / 10**9
-            except:
-                logging.debug("[WARNING] Could not parse line: %s", line)
+            except Exception as e:
+                logging.debug("[WARNING][%s] Could not parse line: %s", str(e), line)
                 continue
 
             line = line.split("[CONTINUUM] ")[1]

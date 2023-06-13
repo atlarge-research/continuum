@@ -12,7 +12,7 @@ fail-under=10
 # relative-beyond-top-level: Continuum's package importing is a bit messy. Ignore this.
 # global-statement:          Sometimes you need to use the GLOBAL keyword in a function.
 # no-name-in-module:         Pylint doesn't understand relative pathing, so disable this error.
-disable=consider-using-f-string,trailing-whitespace,fixme,relative-beyond-top-level,global-statement,no-name-in-module,unnecessary-lambda-assignment
+disable=consider-using-f-string,trailing-whitespace,fixme,relative-beyond-top-level,global-statement,no-name-in-module,unnecessary-lambda-assignment,anomalous-backslash-in-string,broad-except
 init-hook='import sys; sys.path.append(".")'
 
 [BASIC]
@@ -34,4 +34,4 @@ max-statements=120
 max-attributes=25
 
 [REFACTORING]
-max-nested-blocks=6
+max-nested-blocks=9

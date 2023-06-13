@@ -35,14 +35,6 @@ def add_options(_config):
     """
     settings = [
         ["sleep_time", int, lambda x: x >= 1, True, False],
-        ["kube_deployment", str, lambda x: x in ["pod", "container", "file", "call"], False, "pod"],
-        [
-            "kube_version",
-            str,
-            lambda _: ["v1.27.0", "v1.26.0", "v1.25.0", "v1.24.0", "v1.23.0"],
-            False,
-            "v1.27.0",
-        ],
     ]
     return settings
 
@@ -221,8 +213,13 @@ def plot_status(status):
     plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")
 
 
-def create_control_object(config, worker_description):
-    # Create object to store all metrics in
+def create_control_object(worker_description):
+    """Create the data object to store our final parsed data in.
+    Make one entry for each pod-container combination.
+
+    Args:
+        worker_description (list(list(str))): Extensive description of each container
+    """
     worker_metrics = []
     worker_set = {
         "pod": None,  # Name of the pod for which these metrics are captured
@@ -340,7 +337,7 @@ def check(
                                     if (
                                         metric["pod"] == pod
                                         and metric["container"] == container
-                                        and metric[tag] == None
+                                        and metric[tag] is None
                                     ):
                                         metric[tag] = time_delta(t, starttime)
                             elif "pod=" in line:
@@ -350,15 +347,15 @@ def check(
                                     pod = pod.split("default/")[1]
 
                                 for metric in worker_metrics:
-                                    if metric["pod"] == pod and metric[tag] == None:
+                                    if metric["pod"] == pod and metric[tag] is None:
                                         metric[tag] = time_delta(t, starttime)
                             elif "container=" in line:
                                 # Add to correct container
                                 container = line.strip().split("container=default/")[1]
                                 for metric in worker_metrics:
-                                    if metric["container"] == container and metric[tag] == None:
+                                    if metric["container"] == container and metric[tag] is None:
                                         metric[tag] = time_delta(t, starttime)
-                            elif worker_metrics[i][tag] == None:
+                            elif worker_metrics[i][tag] is None:
                                 # For job (first phase), just add in order
                                 worker_metrics[i][tag] = time_delta(t, starttime)
                                 i += 1
@@ -390,7 +387,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
         worker_description (list(list(str))): Extensive description of each container
     """
     logging.info("Gather metrics on deployment phases")
-    worker_metrics = create_control_object(config, worker_description)
+    worker_metrics = create_control_object(worker_description)
 
     # Start job manager
     check(
@@ -657,7 +654,7 @@ def plot_control(df):
         "P6": "#570408",
         "Deployed": "#198038",
     }
-    cs = [colors[cat] for cat in colors.keys()]
+    cs = list(colors.values())
 
     for column, c in zip(df_plot, cs):
         plt.barh(y, df_plot[column] - left, color=c, left=left, align="edge", height=bar_height)
@@ -757,7 +754,7 @@ def plot_p56(df):
         "P6-2": "#fa4d56",
         "Deployed": "#ffffff",
     }
-    cs = [colors[cat] for cat in colors.keys()]
+    cs = list(colors.values())
 
     for column, c in zip(df_plot, cs):
         plt.barh(y, df_plot[column] - left, color=c, left=left, align="edge", height=bar_height)

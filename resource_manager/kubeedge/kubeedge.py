@@ -37,16 +37,16 @@ def verify_options(parser, config):
     if config["benchmark"]["resource_manager"] == "kubeedge" and (
         config["infrastructure"]["cloud_nodes"] != 1
         or config["infrastructure"]["edge_nodes"] == 0
-        or config["infrastructure"]["endpoint_nodes"] < 1
+        or config["infrastructure"]["endpoint_nodes"] < 0
     ):
-        parser.error("ERROR: KubeEdge requires #clouds=1, #edges>=1, #endpoints>=1")
+        parser.error("ERROR: KubeEdge requires #clouds=1, #edges>=1, #endpoints>=0")
     elif config["benchmark"]["resource_manager"] == "mist" and (
         config["infrastructure"]["cloud_nodes"] != 0
         or config["infrastructure"]["edge_nodes"] == 0
-        or config["infrastructure"]["endpoint_nodes"] < 1
+        or config["infrastructure"]["endpoint_nodes"] == 0
     ):
         # Mist, shares KubeEdge code for now
-        parser.error("ERROR: Mist requires #clouds=1, #edges>=1, #endpoints>=1")
+        parser.error("ERROR: Mist requires #clouds==0, #edges>=1, #endpoints>=1")
 
     if config["infrastructure"]["endpoint_nodes"] % config["infrastructure"]["edge_nodes"] != 0:
         parser.error("ERROR: KubeEdge requires #edges %% #endpoints == 0")

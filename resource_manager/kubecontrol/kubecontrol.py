@@ -18,7 +18,23 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
+    settings = [
+        ["cache_worker", bool, lambda x: x in [True, False], False, False],
+        [
+            "kube_deployment",
+            str,
+            lambda x: x in ["pod", "container", "file", "call"],
+            False,
+            "pod",
+        ],
+        [
+            "kube_version",
+            str,
+            lambda _: ["v1.27.0", "v1.26.0", "v1.25.0", "v1.24.0", "v1.23.0"],
+            False,
+            "v1.27.0",
+        ],
+    ]
     return settings
 
 

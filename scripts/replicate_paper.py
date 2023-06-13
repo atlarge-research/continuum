@@ -11,6 +11,9 @@ import logging
 import subprocess
 import datetime
 import os
+
+from io import StringIO
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import matplotlib.patches as mpatches
@@ -20,7 +23,6 @@ import pandas as pd
 from matplotlib.ticker import ScalarFormatter
 from matplotlib.ticker import NullFormatter
 from matplotlib.ticker import MaxNLocator
-from io import StringIO
 
 # Home dir should be continuum/
 os.chdir("../")
@@ -1235,7 +1237,7 @@ class Control(Experiment):
 
     def generate(self):
         """See comments at the top of this class - we don't execute commands here"""
-        pass
+        return
 
     def check_resume(self):
         """Custom implementation for the Config experiment
@@ -1320,7 +1322,7 @@ class Control(Experiment):
             "P6": "#570408",
             "Deployed": "#198038",
         }
-        cs = [colors[cat] for cat in colors.keys()]
+        cs = list(colors.values())
 
         # Set event order
         current = [0 for _ in range(len(colors))]
@@ -1364,7 +1366,7 @@ class Control(Experiment):
         results2 = list(reversed(results2))
 
         # And plot
-        stacks = ax1.stackplot(times, results2, colors=list(reversed(cs)), step="post")
+        ax1.stackplot(times, results2, colors=list(reversed(cs)), step="post")
 
         # hatch = "."
         # for stack in stacks[3:]:
@@ -1412,7 +1414,7 @@ class Control(Experiment):
 
     def print_result(self):
         """Print results of runs as text - We don't run anything here, in/output is already known"""
-        pass
+        return
 
 
 def main(args):
