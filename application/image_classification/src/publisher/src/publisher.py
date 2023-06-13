@@ -12,9 +12,9 @@ MQTT_LOGS = os.environ["MQTT_LOGS"]
 FREQUENCY = int(os.environ["FREQUENCY"])
 MQTT_TOPIC_PUB = "image-classification-pub"
 MQTT_TOPIC_SUB = "image-classification-sub"
+DURATION = int(os.environ["DURATION"])
 
 # Set how many imgs to send, and how often
-DURATION = 300
 SEC_PER_FRAME = float(1 / FREQUENCY)
 MAX_IMGS = FREQUENCY * DURATION
 

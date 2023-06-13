@@ -85,7 +85,10 @@ def start_endpoint_default(config, machines):
             cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
 
             # TODO Move this to arguments to make it more flexible
-            env = ["FREQUENCY=%i" % (config["benchmark"]["frequency"])]
+            env = [
+                "FREQUENCY=%i" % (config["benchmark"]["frequency"]),
+                "DURATION=%i" % (config["benchmark"]["duration"]),
+            ]
 
             if config["mode"] == "cloud" or config["mode"] == "edge":
                 cont_name = "%s%i_" % (config["mode"], worker_i) + cont_name
@@ -172,7 +175,10 @@ def start_endpoint_baremetal(config, machines):
         cont_name = "endpoint%i" % (endpoint_i)
         cont_name = "%s0_" % (config["mode"]) + cont_name
 
-        env = ["FREQUENCY=%i" % (config["benchmark"]["frequency"])]
+        env = [
+            "FREQUENCY=%i" % (config["benchmark"]["frequency"]),
+            "DURATION=%i" % (config["benchmark"]["duration"]),
+        ]
         env.append("MQTT_LOCAL_IP=%s" % (worker_ip))
         env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
         env.append("MQTT_LOGS=True")

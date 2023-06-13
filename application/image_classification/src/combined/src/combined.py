@@ -15,9 +15,9 @@ import tflite_runtime.interpreter as tflite
 
 CPU_THREADS = int(os.environ["CPU_THREADS"])
 FREQUENCY = int(os.environ["FREQUENCY"])
+DURATION = int(os.environ["DURATION"])
 
 # Set how many imgs to send, and how often
-DURATION = 300
 SEC_PER_FRAME = float(1 / FREQUENCY)
 MAX_IMGS = FREQUENCY * DURATION
 
