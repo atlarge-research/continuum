@@ -68,31 +68,25 @@ Other work on the Continuum framework includes:
 ### Acknowledgment
 This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
 
-## Observability
-Continuum has integrated support for Prometheus and Grafana on top of Kubernetes and OpenFaas.
-Continuum will automatically install these software packages and configure them when using `observability = True` in the configuration file, see `configuration/template.cfg`. 
-After Continuum has finished, you can use your browser to open the Grafana dashboard using `localhost:3000` and Prometheus using `localhost:9090`. 
-The Grafana dashboard requires a username and password, both are `admin` by default.
-In case you run Continuum on a machine without a graphical user interface, connect to the machine from a device with one, and port-forward the 3000 and 9090 ports. 
-For example, to port-forward the 3000 port, use `ssh -L 3000:XXX.XXX.XXX.XXX:3000 username@address -i /path/to/ssh_key`, with XXX.XXX.XXX.XXX the IP of the cloud controller VM that is printed after Continuum has finished (typically 192.168.100.2), username@address the IP address of the server you can Continuum on and the username of your account on the server, and the corresponding SSH key.
-
 ---
 # Demo
-**This demo is for the BSc Computer Science at the VU Amsterdam, specifically the networks course in the academic year 2022/2023.**
+**This demo is for the BSc Computer Science at the VU Amsterdam, specifically the computer networks course in the academic year 2022-2023.**
 
 **For other users, please use the main branch of the project instead**
 
 This demo consists of three parts:
 1. Access the servers
-2. Deploy Continuum with Kubernetes and KubeEdge
-3. Deploy Continuum with OpenFaaS
+2. Deploy Kubernetes with Continuum
+3. Inspect Kubernetes by hand
+4. Observe Kubernetes with Grafana
 
 ### Part 1: Access the servers
 For this demo, you will get access to VU compute servers.
 We currently only support this demo on these servers.
 
-1. Send a public SSH key to the provided email address. You will receive a username `cn-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`.
-2. Add the following to your ssh config, typically in `~/.ssh/config`. Fill in X, Y, and Z.
+1. Send a public SSH key to the provided email address. If you don't yet have a key, genertaing a new one can be as simple as executing `ssh-keygen`. Otherwise, search online on how to generate a new SSH key for you operating system. On Debian/Ubuntu-based systems, ssh keys are stored in `~/.ssh`. The default key is named `id_rsa.pub`, you can dispaly this one using `cat id_rsa.pub`.
+2. You will receive a username `cn-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`. Remember these.
+3. Add the following to your ssh config, typically in `~/.ssh/config`. Fill in the missing parts.
 ```
 Host al01
 	HostName al01.anac.cs.vu.nl
@@ -108,90 +102,105 @@ Host nodeX <-- Fill in X
 3. Access the node where you will work on: `ssh nodeX`
 4. Now you are in your home directory on the node. The Continuum repository should already be cloned for you, you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo.
 
-
-### Part 2: See below
-Run continuum with kube to get the cluster with 1 example running
-
-### Part 3: Observe Kubernetes
-Connect grafana and inspect what is happening
-
-### Part 4: Modify Kubernetes
-Now modify the deployment file, like 20 apps in parallel with 0.05 cpu and 0.5 mem
-
-
-
-
-### Part 2: Deploy Continuum with Kubernetes
+### Part 2: Deploy Kubernetes with Continuum
 In this part, you will use the Continuum framework to deploy Kubernetes in the Compute Continuum.
 You should already have received an explanation on this during the presentation.
 
 1. Deploy the prepared configuration: `python3 continuum.py configuration/tutorial-cn.cfg`. It will take ~10 minutes to finish, so don't worry if it seems like the program is hanging. Contact the teaching staff if an error appeared.
-2. Open the configuration (`cat configuration/tutorial-cn.cfg`) and inspect it. This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much less resources. On these VMs, the framework will deploy a Kubernetes cluster
-
-1. Use Continuum to create 1 endpoint VM, which is used to run a machine learning application, namely image recognition. With this, you emulate a (security) camera device that generates 5 images per second for 5 minutes (300 seconds), and each image will be analyized using machine learning. You will test how well the application can be run on an endpoint without offloading to cloud or edge. While in the Continuum repository, do `python3 main.py configuration/endpoint.cfg`. This will start the Continuum framework, and may take serveral minutes to complete.
-2. After the framework has completed, you will get output similar to this:
-    ```
-    ------------------------------------
-    ENDPOINT OUTPUT
-    ------------------------------------
-    endpoint_id  total_time (s)  proc_time/data (ms)  latency_avg (ms)  latency_stdev (ms)
-            0          472.41               263.21          62203.04            26674.06
-
-    ```
-    For this particular example, one endpoint was deployed (with ID 0), and it took 472 seconds to finish the ML application. The application is set to only run for 300 seconds, so an execution time of 472 seconds shows that real-time processing is not possible. This is confirmed by looking at the time it took to process a single image, 263.21 ms. With 5 images per second being generated, the endpoint should process each image in 200 ms to achieve real-time processing, which was not possible. This has caused the average end-to-end latency (the time it takes from generating and image to it being processed by a machine learning algorithm) to be 62 seconds, as a queue of workload starts forming.
-3. Repeat step 1 and 2 for deployments where this application is offloaded to cloud and edge resources. By offloading the ML tasks to sites with more processing power, the deployment may achieve real-time processing. However, by offloading computation to a far-away location, end-to-end latency may increase. This is undesired for applications that require low end-to-end latency such as VR or cognitive assistance. Do `python3 main.py configuration/kubernetes-cloud.cfg` and `python3 main.py configuration/kubeedge-edge.cfg`
-4. An example output of offloading to cloud follows below:
+2. Open a new SSH connection to nodeX and inspect the configuration (`cat configuration/tutorial-cn.cfg`). This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much less resources. On these VMs, the framework will deploy a Kubernetes cluster of 1 control node and 1 worker node. The control node controls the cluster, and only the worker node can execute applications. Finally, Continuum runs a benchmark with an image-classification application. With this, you emulate a camera device (endpoint) that generates 5 images per second for 1 minute, and each image will be analyized using machine learning on the cloud machine. You will test how well the application can be offloaded to cloud.
+3. After the framework has completed, you will get output similar to this:
     ```
     ------------------------------------
     CLOUD OUTPUT
     ------------------------------------
     worker_id  total_time (s)  delay_avg (ms)  delay_stdev (ms)  proc_time/data (ms)
-        0          306.72          127.76             32.77               149.53
+            0            61.4          123.85             34.06                125.1
     ------------------------------------
     ENDPOINT OUTPUT
     ------------------------------------
-    connected_to  total_time (s)  preproc_time/data (ms)  data_size_avg (kb)  latency_avg (ms)  latency_stdev (ms)
-        0           307.1                    1.29               68.01            317.91               37.55
+    connected_to  total_time (s)  preproc_time/data (ms)  data_size_avg (kb)  latency_avg (ms)
+                0           61.73                    1.31               68.01            296.55
 
+    To access the VMs:
+        ssh cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+        ssh cloud0_matthijs@192.168.100.3 -i /home/matthijs/.ssh/id_rsa_continuum
+        ssh endpoint0_matthijs@192.168.100.4 -i /home/matthijs/.ssh/id_rsa_continuum
+
+    To access Grafana: ssh -L 3000:192.168.100.3:3000 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+    To access Prometheus: ssh -L 9090:192.168.100.3:9090 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
     ```
-    In this case, 1 cloud worker processes each image in 127 ms, which is well below the deadline of 200 ms. This is possible because of the high compute power in clouds. The end-to-end latency is 317 ms on average, so 0.3 seconds. Depending on the application, this may be or not be sufficient.
-5. After you have finished running your final deployment, and there is still time until the next tutorial, you can further inspect Kubernetes and the application. You can SSH to the `cloud_controller` machine using the SSH command printed at the end of Continuum's output. You are now in the head node of the Kubernetes cluster.
+    For this example, 1 endpoint offloads its data to 1 cloud worker for about 1 minute. The endpoint geenrates 5 images per second, preprocesses each image for 1.3 ms on average (think compressing data before sending), sends the data of 68 kb per image to the cloud, which takes 123 ms on average to arrive in the cloud, then the cloud process the image for 125 ms and sends the result back to the endpoint, for a total end-to-end latency of 296 ms. The end-to-end latency is the time between (i) an endpoint generating an image and (ii) the endpoint receiving the processed output for that image. Depending on your application, you can now decide if 296 ms is a good enough latency or not.
 
-    1. How does your cluster look like? `kubectl get nodes`. There is one cloud controller, and one worker machine. You can inspect the status of each machine by doing `kubectl describe node <name>`, using the names from the first command. This shows the current status of the nodes, their resources, recent events, etc.
-    2. Now we can inspect the applications (called pods) that ran on the cluster. Do `kubectl get pods` to list all applications. You can also get more info on these by doing `kubectl describe pod <podname>`.
+### Part 3: Inspect Kubernetes by hand
+In this part, you will inspect the Kubernetes cluster running on the provisioned VMs to see what the cluster actually does. 
 
-## Part 3: Deploy Continuum with OpenFaaS
-1. Start Continuum with Kubernetes and OpenFaaS, while inside the Continuum repository: `python3 main.py configuration/openfaas-cloud.cfg`. Wait for this to complete.
-2. Open an SSH tunnel in a new terminal:
-    1. To the headnode of the cluster, from your local computer: `ssh -L 3000:192.168.ZZZ.2:3000 asci-nX-Y@al01.anac.cs.vu.nl -i <path to your public key>`, using the X and ZZZ from step 1.
-    3. From the headnode to the specific machine: `ssh -L 3000:192.168.ZZZ.2:3000 nodeX`, using the X and ZZZ from step 1.
-2. No application has started yet in step 1. We will do that now. Go to `cd DS-serverless/deployment`. Here we will start the serverless functions inside our Kubernetes / OpenFaaS cluster, and monitor the state of the applications. Do `pyinfra inventory.py deploy.py`. If it crashes during execution, execute this command again (this may sometimes happen). If it still doesn't work after several retries, please contact the teaching staff. 
-3. If you used the correct SSH commands noted at the start of this demo, you should open the following URL in your browser on your local computer: `http://localhost:3000`. This will open the Grafana dashboard that visualizes the state of your cluster and the applications running in your cluster. Log in with username and password `admin`, skip creating a new password, go to the dashboard (the icon with the 4 boxes in the left navigation bar), and under Default open Function Dashboard DS2022. This will show you a live view of the resource usage of each application. Each application has a different resource usage, and you can inspect how these applications affect each other. 
-4. You can also go to "Logs Fibonacchi" under Dashboard, which shows the average execution time per serverless function, split up per application. Can you see the variation in execution time? Why would this happen?
-5. Go back to the Continuum repository, and run OpenFaas at the edge: `python3 main.py configuration/openfaas-edge.cfg`. Now repeat steps 2-4. Can you see any differences?
+1. SSH into the cloud_controller VM, which hosts Kubernetes' control plane. Use the SSH command related to the cloud_controller VM that should be printed at the bottom of Continuum's output. For the provided example above, this is `ssh cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum`.
+2. The main tool for users to inspect the current state of Kubernetes is called `kubectl`, which is installed in the cloud_controller VM. You can find a cheat sheet for kubectl here: https://kubernetes.io/docs/reference/kubectl/cheatsheet/#viewing-and-finding-resources. Try to answer the following questions using kubectl (hint: You need to use `kubectl get ...` or `kubectl describe ...` for all questions):
+    1. How many nodes are in the Kubernetes cluster? And what is their name?
+    2. How many applications are registered in the cluster?
+    3. What is the current state of the application(s)? Are they still running or already finished?
+    4. What is the output of these application(s)?
+    5. How many resources did these applications use in terms of CPU and memory?
+    6. Are there any other applications running on the worker node in the cluster?
+    7. What control plane applications has Kubernetes running on the cloud_controller? Hint: these applications are deployed in the `kube-system` namespace.
 
+### Part 4: Observe Kubernetes with Grafana
+Continuum has installed Prometheus (https://prometheus.io/) and Grafana (https://grafana.com/). The former captures logs from Kubernetes, the latter visualizes these logs. In this step, you will inspect the current state of Kubernetes using Grafana Dashboards, with graphs and tables showing live Kubernetes metrics. You will open these dashboards on your own computer as the cluster obviously does not have a screen to look at.
 
+Grafana is running on the cloud_controller VM, so we have to forward the data it is generating to our own computer using SSH port-forwarding.
+1. In a new terminal, SSH to your assigned node using the command `ssh -L 3000:192.168.ZZZ.2:3000 nodeX`.
+2. Next, SSH from nodeX to the cloud_controller using the Grafana command printed at the bottom of Continuum's output. For the example given in step 2, this is `ssh -L 3000:192.168.100.3:3000 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum`
 
+Now we can interact with Grafana on our own computer
+3. Go to `http://localhost:3000` in a browser. This will open the Grafana dashboard that visualizes the state of your cluster and the applications running in your cluster. Log in with username and password `admin`, and skip creating a new password.
+4. Go to dashboard (the icon with the 4 boxes in the left navigation bar) -> manage -> default to open the available Granafa dashboards (different graphs and overviews).
+5. You can open any dashboard, such as:
 
+    1. Kubernetes/Compute Resources/Cluster: See the resource usage of all pods in the cluster. Pods are grouped here in namespaces -> default contains the user's applications (the one you just deployed), kube-system contains Kubernetes' control plane components, monitoring contains Prometheus' and Grafana's applications used to get the data used in these dashboards, etc. 
+    2. Kubernetes/Compute Resources/Node (Pods): See the resource usage per node. If you select node -> cloud0<username> in the top left corner, you will see the resource usage of the worker node where you deployed your applications. If you select node -> cloudcontroller<username>, you will see the resource usage of the control plane components of Kubernetes. Alternatively, use Default/Node Exporter/Nodes for a different overview.
+    3. Kubernetes/Compute Resources/Pod: See the resource usage of individual pods. You can select what pod you want to analyze in the top left corner.
+    4. Kubernetes/Networking/Cluster: See the network traffic within the cluster and to sources outside of the cluster.
+6. Important: You can select the in the top right corner of each dashboard the time range you want to see data of. You may want to see all data produced in the last hour, or maybe only from the last 5 minutes.
+7. Keep the Grafana dashboard open for the remainder of the tutorial.
 
-# TO PROCESS
+### Part 5: Deploy a new application
+Finally, you will deploy 2 new applications on the Kubernetes cluster. The application you will use still uses image classification, but now processes its own images, so there is no endpoint sending images to the cloud. This approach is similar to big data processing in the cloud, where the cloud already has its own data that needs to be processed, and there is no need for endpoint devices to send live data to the cloud.
+
+1. Create a new Kubernetes deployment file while in the cloud_controller VM:
 ```
-------------------------------------
-CLOUD OUTPUT
-------------------------------------
- worker_id  total_time (s)  delay_avg (ms)  delay_stdev (ms)  proc_time/data (ms)
-         0            61.4          123.85             34.06                125.1
-------------------------------------
-ENDPOINT OUTPUT
-------------------------------------
- connected_to  total_time (s)  preproc_time/data (ms)  data_size_avg (kb)  latency_avg (ms)  latency_stdev (ms)
-            0           61.73                    1.31               68.01            296.55                38.9
-
-To access the VMs:
-	ssh cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
-	ssh cloud0_matthijs@192.168.100.3 -i /home/matthijs/.ssh/id_rsa_continuum
-	ssh endpoint0_matthijs@192.168.100.4 -i /home/matthijs/.ssh/id_rsa_continuum
-
-To access Grafana: ssh -L 3000:192.168.100.3:3000 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
-To access Prometheus: ssh -L 9090:192.168.100.3:9090 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+cat > ~/new_job.yaml <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: image-classification-2
+spec:
+  parallelism: 2
+  template:
+    metadata:
+      name: image-classification
+    spec:
+      containers:
+      - name: image-classification
+        image: 192.168.1.103:5000/image_classification_combined
+        ports:
+        - containerPort: 1883
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "2000Mi"
+            cpu: 1.0
+        env:
+        - name: CPU_THREADS
+          value: "1"
+        - name: DURATION
+          value: "60"
+        - name: FREQUENCY
+          value: "5"
+      restartPolicy: Never
+EOF
 ```
+2. Inspect what the file: You will deploy 2 (`parallelism: 2`) applications, specifically the `image_classification_combined` container image. Each application will have 2 GB of memory (`memory: "2000Mi"`) and 1 CPU core (`cpu: 1.0`). The application will process 5 images per second (`FREQUENCY value: "5"`) for 60 seconds (`DURATION value: "60"`).
+3. Deploy the application: `kubectl apply -f new_job.yml`
+4. Check that the new applications (2 pods) are running using the correct kubectl commands.
+5. Check the application's output using the correct kubectl command.
+6. See in Grafana if you can monitor the live resource usage from the 2 applications. Is there a difference in resource usage between the applications?
