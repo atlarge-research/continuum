@@ -26,6 +26,7 @@ def start(parser, file_path):
 
     try:
         config = json.loads(stdout.decode("utf-8"))
+
     except ValueError:
         parser.error("Invalid Configuration provided. Make sure only one configuration outputs at a time")
 
@@ -47,6 +48,7 @@ def start(parser, file_path):
         # Required here, for possible integration during infrastructure phase
         application.set_container_location(config)
 
+    config["infrastructure"]["base_path"] = os.path.expanduser(config["infrastructure"]["base_path"])
 
     return config
 

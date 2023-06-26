@@ -28,7 +28,7 @@ export type GCPConfig = {
     credentials: string
 }
 
-//made this for now dont know if is needed
+// TODO: made this for now dont know if is needed
 export function defaultGCPConfig(): GCPConfig {
     return {
         cloud: "e2-medium",

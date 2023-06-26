@@ -349,7 +349,8 @@ def parse_infrastructure(parser, input_config, config):
 
     for s in settings:
         option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
-
+    print("basePath: ", config[sec]["base_path"])
+    if config[sec]["base_path"] == "": config[sec]["base_path"] = "~" 
     config[sec]["base_path"] = os.path.expanduser(config[sec]["base_path"])
     if config[sec]["base_path"][-1] == "/":
         config[sec]["base_path"] = config[sec]["base_path"][:-1]

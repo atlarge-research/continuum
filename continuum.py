@@ -158,6 +158,7 @@ if __name__ == "__main__":
     arguments = parser_obj.parse_args()
     print_config(arguments.config)
 
+
     set_logging(arguments)
     configuration_parser.print_config(arguments.config)
 
