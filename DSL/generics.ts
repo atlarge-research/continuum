@@ -66,8 +66,6 @@ export type InfrastructureConfig = {
     cloudEndPointConnection?: Connection
     edgeEndPointConnection?: Connection
 
-    //Continue: validate from here//
-
     externalPhysicalMachines?: string[]
     netperf?: boolean
     basePath?: string
