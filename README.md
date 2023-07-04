@@ -137,6 +137,7 @@ We assume the operating system is Ubuntu 20.04, either natively or via a VM.
     2. Give permissions to LibVirt and KVM to run virtual machines (use your own username): `sudo adduser [username] libvirt` and `sudo adduser [username] kvm`. You may need to log in and out to refresh your group memberships.
     3. Check if the installation was successful: `qemu-system-x86_64 --version`. 
     4. Check if libvirt is running: `sudo systemctl status libvirtd`. If not, activate it using `sudo systemctl enable --now libvirtd`
+    5. Make sure libvirt will use QEMU: Add `export LIBVIRT_DEFAULT_URI="qemu:///system”` to `~/.bashrc`, and then execute `source ~/.bashrc`.
 2. Install Docker (see Docker website for alternative instructions)
     ```bash
     sudo apt-get install \
