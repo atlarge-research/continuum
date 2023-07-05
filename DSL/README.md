@@ -23,6 +23,8 @@ If you make any mistake when filling in a variable that only accept specific val
 ## Using Code Snippets
 If you would like the gain a better understanding of the code snippets and how to create them you can refer to `continuum/.vscode/dsl_snippets.code-snippets` where they are implemented. For the ease of use of this work, plesae only create files in the format of `cfg_<something>`. This is to keep this implementation simple and consistant to use.
 
+`cfg_basic` can be used to generate the basic structure
+
 ## Using Typescript
 This section is made for those who want to gain a deeper understandning of the source-code.
 
@@ -42,8 +44,8 @@ To extend the EDSL to account for new variables there are multiple things that n
 2. Add any needed validation functions to `validate_generics` to make sure the data is correct.
 3. If some fields are mandatory, make sure to modify the existing code snippets so they still work correctly.
 4. Add handling to all of the new types you added to the `configuration.ts` constructor and make sure they are assigned default values if necessary.
-5. add the validations to the `validate()` function ....
-6.........
+5. add the appropriate validations to the `validate()` function.
+6. Done
 
 
 
