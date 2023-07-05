@@ -4,21 +4,6 @@ import { nodesValidator, coresValidator, quotaValidator, readWriteSpeedValidator
 
 export default class Configuration {
 
-
-    infrastructure: InfrastructureConfig = {
-        provider: 'qemu',
-        nodes: { cloud: 0, edge: 0, endpoint: 0 },
-        cores: { cloud: 0, edge: 0, endpoint: 0 },
-        memory: { cloud: 0, edge: 0, endpoint: 0 },
-        quota: { cloud: 0, edge: 0, endpoint: 0 },
-    }
-    mode: string = "cloud"
-    benchmark?: BenchmarkConfig
-
-    executionModel: "openfaas"
-
-
-
     constructor(config: ConfigurationMap) {
 
         this.infrastructure.provider = config.infrastructure.provider;
@@ -41,7 +26,6 @@ export default class Configuration {
                 writeSpeed: { cloud: 0, edge: 0, endpoint: 0 }
             }
 
-        //if null evaluate to false
         this.infrastructure.infraOnly = config.infrastructure.infraOnly === true
         this.infrastructure.cpuPin = config.infrastructure.cpuPin === true
         this.infrastructure.networkEmulation = config.infrastructure.networkEmulation === true
@@ -194,6 +178,20 @@ export default class Configuration {
                 ? config.infrastructure.executionMode
                 : "openfaas"
     }
+
+
+
+    infrastructure: InfrastructureConfig = {
+        provider: 'qemu',
+        nodes: { cloud: 0, edge: 0, endpoint: 0 },
+        cores: { cloud: 0, edge: 0, endpoint: 0 },
+        memory: { cloud: 0, edge: 0, endpoint: 0 },
+        quota: { cloud: 0, edge: 0, endpoint: 0 },
+    }
+    mode: string = "cloud"
+    benchmark?: BenchmarkConfig
+
+    executionModel: "openfaas"
 
     validate() {
         checkValidator(nodesValidator(this.infrastructure.nodes))

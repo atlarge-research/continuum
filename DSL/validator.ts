@@ -1,6 +1,10 @@
 import process from 'process'
 
-export type Validator = { success: boolean, errorMessage: string }
+export type Validator = { 
+    success: boolean,
+    errorMessage: string 
+}
+
 export function successValidator(): Validator {
     return { success: true, errorMessage: "" }
 }

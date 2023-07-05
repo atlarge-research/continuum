@@ -5,7 +5,7 @@ import { applicationVars } from "./generics"
 const newConfiguration = new Configuration(
     {
         infrastructure: {
-            provider: 'qemu',
+            provider: "qemu",
             nodes: { cloud: 2, edge: 0, endpoint: 3 },
             cores: { cloud: 2, edge: 2, endpoint: 2 },
             memory: { cloud: 5, edge: 1, endpoint: 8 },
@@ -14,13 +14,12 @@ const newConfiguration = new Configuration(
             middleIPBase: 246
 
         },
-        //if infra only is set to true benchmarkConfig can be removed
+        
         benchmark: {
             resourceManager: "kubernetes",
-            application: "image_classification", // has to correspond to an existing application module
+            application: "image_classification", 
             applicationVars: applicationVars([
-                ["sleep_time", 60], //variable in the sleep application
-                // key value pair syntax: ["frequency", 5]
+                ["sleep_time", 60],
             ])
         }
     }
