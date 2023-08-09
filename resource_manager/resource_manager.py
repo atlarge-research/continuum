@@ -17,7 +17,8 @@ def start(config, machines):
         config["module"]["resource_manager"].start(config, machines)
 
     # Start RM software on endpoints
-    if config["infrastructure"]["endpoint_nodes"]:
+    # Only when RM=none, otherwise it's a infra_only run and we don't do anything
+    if config["infrastructure"]["endpoint_nodes"] and not config["infrastructure"]["infra_only"]:
         endpoint.start(config, machines)
 
 
