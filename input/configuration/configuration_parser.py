@@ -6,7 +6,6 @@ Handle everything on initializing the config
 import configparser
 import os
 import sys
-import logging
 import socket
 import getpass
 import importlib
@@ -15,39 +14,6 @@ from application import application
 from execution_model import execution_model
 from infrastructure import infrastructure
 from resource_manager import resource_manager
-
-
-def print_config(config):
-    """Print the current configuration
-
-    Args:
-        config (ConfigParser): ConfigParser object
-    """
-    logging.debug("Current config:")
-    s = []
-    header = True
-    for key, value in config.items():
-        if isinstance(value, dict):
-            s.append("[" + key + "]")
-            category = dict(config[key])
-            for k, v in category.items():
-                s.append("%-30s = %s" % (k, v))
-
-            s.append("")
-        else:
-            if header:
-                s.append("[constants]")
-                header = False
-
-            if isinstance(value, list):
-                s.append("%-30s = %s" % (key, value[0]))
-                if len(value) > 1:
-                    for v in value[1:]:
-                        s.append("%-30s   %s" % ("", v))
-            else:
-                s.append("%-30s = %s" % (key, value))
-
-    logging.debug("\n%s", "\n".join(s))
 
 
 def dynamic_import(parser, config):
@@ -141,7 +107,7 @@ def add_constants(parser, config):
     """
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
-    config["base"] = config["base"].rsplit("/", 1)[0]  # We're nested 1 deep currently, remove that
+    config["base"] = config["base"].rsplit("/", 2)[0]  # We're nested 2 deep currently, remove that
     config["username"] = getpass.getuser()
     config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
 
@@ -177,7 +143,7 @@ def option_check(
 
     Args:
         parser (ArgumentParser): Argparse object
-        input_config (ConfigParser): ConfigParser object
+        input_config (ConfigParser): ConfigParser object (conf) or the config objec (DSL)
         config (dict): Parsed configuration
         section (str): Section in the config file
         option (str): Option in a section of the config file
@@ -186,7 +152,11 @@ def option_check(
         mandatory (bool): Is option mandatory
         default (bool): Default value if none is set
     """
-    if input_config.has_option(section, option):
+    if (
+        isinstance(input_config, dict)
+        and section in input_config
+        and option in input_config[section]
+    ) or (not isinstance(input_config, dict) and input_config.has_option(section, option)):
         # If option is empty, but not mandatory, remove option
         if input_config[section][option] == "":
             if mandatory:
@@ -203,18 +173,33 @@ def option_check(
         # Check type
         try:
             if intype == int:
-                val = input_config[section].getint(option)
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section].getint(option)
             elif intype == float:
-                val = input_config[section].getfloat(option)
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section].getfloat(option)
             elif intype == bool:
-                val = input_config[section].getboolean(option)
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section].getboolean(option)
             elif intype == str:
-                val = input_config[section][option]
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section][option]
             elif intype == list:
-                val = input_config[section][option].split(",")
-                val = [s for s in val if s.strip()]
-                if val == []:
-                    return
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section][option].split(",")
+                    val = [s for s in val if s.strip()]
+                    if val == []:
+                        return
             else:
                 parser.error("Config: Invalid type %s" % (intype))
         except ValueError:
@@ -349,6 +334,10 @@ def parse_infrastructure(parser, input_config, config):
 
     for s in settings:
         option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
+
+    # TODO This statement shouldn't be needed, but has to be tested first
+    if config[sec]["base_path"] == "":
+        config[sec]["base_path"] = "~"
 
     config[sec]["base_path"] = os.path.expanduser(config[sec]["base_path"])
     if config[sec]["base_path"][-1] == "/":
@@ -516,9 +505,6 @@ def start(parser, arg):
     Returns:
         configParser: Parsed config file
     """
-    if not (os.path.exists(arg) and os.path.isfile(arg)):
-        parser.error("The given config file does not exist: %s" % (arg))
-
     input_config = configparser.ConfigParser()
     input_config.read(arg)
 

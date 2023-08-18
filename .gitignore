@@ -7,3 +7,5 @@ id_rsa*
 *.tf
 .tmp
 logs/
+*package-lock.json
+*node_modules

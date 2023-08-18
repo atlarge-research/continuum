@@ -13,10 +13,12 @@ import logging
 import time
 
 from application import application
-from configuration_parser import configuration_parser
 from execution_model import execution_model
 from infrastructure import infrastructure
 from resource_manager import resource_manager
+
+# pylint: disable-next=redefined-builtin
+from input import input
 
 
 def make_wide(formatter, w=120, h=36):
@@ -140,15 +142,14 @@ if __name__ == "__main__":
 
     parser_obj.add_argument(
         "config",
-        type=lambda x: configuration_parser.start(parser_obj, x),
+        type=lambda x: input.start(parser_obj, x),
         help="benchmark config file",
     )
     parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 
     arguments = parser_obj.parse_args()
 
-    # Set loggers, print current config
     set_logging(arguments)
-    configuration_parser.print_config(arguments.config)
+    input.print_input(arguments.config)
 
     main(arguments)
