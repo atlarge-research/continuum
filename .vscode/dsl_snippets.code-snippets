@@ -1,0 +1,87 @@
+{
+	// Place your continuum workspace snippets here. Each snippet is defined under a snippet name and has a scope, prefix, body and 
+	// description. Add comma separated ids of the languages where the snippet is applicable in the scope field. If scope 
+	// is left empty or omitted, the snippet gets applied to all languages. The prefix is what is 
+	// used to trigger the snippet and the body will be expanded and inserted. Possible variables are: 
+	// $1, $2 for tab stops, $0 for the final cursor position, and ${1:label}, ${2:another} for placeholders. 
+	// Placeholders with the same ids are connected.
+	// Example:
+	// "Print to console": {
+	// 	"scope": "javascript,typescript",
+	// 	"prefix": "log",
+	// 	"body": [
+	// 		"console.log('$1');",
+	// 		"$2"
+	// 	],
+	// 	"description": "Log output to console"
+	// },
+
+
+
+
+
+	"Create Basic Configuration": {
+		"scope": "typescript",
+		"prefix": "cfg_basic",
+		"body": [
+			"//TODO: press tab to quickly fill in placeholder values. NOTE: make sure only one configuration instance prints at a time",
+			"const ${1:newConfiguration} = new Configuration({",
+				"\tinfrastructure: {",
+				"\t\tprovider: '${2|qemu,gcp,baremetal|}',",
+				"\t\tnodes: { cloud: ${3:0}, edge: ${4:0}, endpoint: ${5:0} },  // Options: x >= 0",
+				"\t\tcores: { cloud: ${6:0}, edge: ${7:0}, endpoint: ${8:0} }, // Options: cloud >= 2, edge & endpoint >= 1 (each)", 
+				"\t\tmemory: { cloud: ${9:0}, edge: ${10:0}, endpoint: ${11:0} }, // x >= 1",
+				"\t\tquota: { cloud: ${12:0}, edge: ${13:0}, endpoint: ${14:0} }, // Options: 0.1 <=x <= 1.0",
+				"\t},",
+				"\t//if infra only is set to true benchmarkConfig can be removed",
+				"\tbenchmark: {",
+					"\t\tresourceManager: \"${15|kubernetes,kubeedge,mist,none,kubecontrol|}\",",
+					"\t\tapplication: \"${16|empty,image_classification|}\", // has to correspond to an existing application module",
+					"\t\tapplicationVars: applicationVars([",
+						"\t\t\t[\"sleep_time\", 60], //variable in the sleep application",
+						"\t\t\t// key value pair syntax: [\"frequency\", 5]",
+					"\t\t])",
+				"\t}",
+			"})",
+			"",
+			"${1:newConfiguration}.validate()",
+			"${1:newConfiguration}.output()",
+		],
+		"description": "Creates basic instance of configuration class"
+	},
+
+	"Create List of Configuration": {
+		"scope": "typescript",
+		"prefix": "cfg_list",
+		"body": [
+			"//TODO: press tab to quickly fill in placeholder values",
+			"const ${1:configList} = [",
+				"\tnew Configuration({",
+					"\t\tinfrastructure: {",
+					"\t\t\tprovider: '${2|qemu,gcp,baremetal|}',",
+					"\t\t\tnodes: { cloud: ${3:0}, edge: ${4:0}, endpoint: ${5:0} },  // Options: x >= 0",
+					"\t\t\tcores: { cloud: ${6:0}, edge: ${7:0}, endpoint: ${8:0} }, // Options: cloud >= 2, edge & endpoint >= 1 (each)", 
+					"\t\t\tmemory: { cloud: ${9:0}, edge: ${10:0}, endpoint: ${11:0} }, // x >= 1",
+					"\t\t\tquota: { cloud: ${12:0}, edge: ${13:0}, endpoint: ${14:0} }, // Options: 0.1 <=x <= 1.0",
+					"\t\t},",
+					"\t\tbenchmark: {",
+						"\t\t\tresourceManager: \"${15|kubernetes,kubeedge,mist,none,kubecontrol|}\",",
+						"\t\t\tapplication: \"${16|empty,image_classification|}\", // has to correspond to an existing application module",
+						"\t\t\tapplicationVars: applicationVars([",
+							"\t\t\t\t[\"sleep_time\", 60], //variable in the sleep application",
+							"\t\t\t\t// key value pair syntax: [\"frequency\", 5]",
+						"\t\t\t])",
+					"\t\t}",
+				"\t}),",
+				"\t// more configurations can be placed below,",
+			"]",
+			
+			"",
+			"${1:configList}.forEach((config) => config.validate())",
+			"console.log(JSON.stringify(configList.map(config => config.formatted())))",
+		],
+		"description": "Creates list of configurations"
+	}
+
+
+}
