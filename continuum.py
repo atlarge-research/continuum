@@ -6,18 +6,14 @@ Check the documentation and help for more information.
 """
 
 import argparse
-import json
 import os
 import os.path
 import sys
 import logging
 import time
-import pprint
-from colorama import Fore
 
 from application import application
-from configuration_parser import configuration_parser
-from dsl_parser import dsl_parser
+from input import input
 from execution_model import execution_model
 from infrastructure import infrastructure
 from resource_manager import resource_manager
@@ -135,11 +131,6 @@ def main(args):
                 args.config["ssh_key"],
             )
 
-def print_config(dict):
-    print(Fore.CYAN + "\nConfiguration provided:\n" + Fore.YELLOW)
-    pprint.pprint(dict)
-    print(Fore.WHITE)
-
 
 if __name__ == "__main__":
     # Get input arguments, and validate those arguments
@@ -149,17 +140,14 @@ if __name__ == "__main__":
 
     parser_obj.add_argument(
         "config",
-        type=lambda x: dsl_parser.start(parser_obj, x),
-        # type=lambda x: configuration_parser.start(parser_obj, x),
+        type=lambda x: input.start(parser_obj, x),
         help="benchmark config file",
     )
     parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 
     arguments = parser_obj.parse_args()
-    print_config(arguments.config)
-
 
     set_logging(arguments)
-    configuration_parser.print_config(arguments.config)
+    input.print_input(arguments.config)
 
     main(arguments)

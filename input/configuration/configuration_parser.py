@@ -6,7 +6,6 @@ Handle everything on initializing the config
 import configparser
 import os
 import sys
-import logging
 import socket
 import getpass
 import importlib
@@ -15,39 +14,6 @@ from application import application
 from execution_model import execution_model
 from infrastructure import infrastructure
 from resource_manager import resource_manager
-
-
-def print_config(config):
-    """Print the current configuration
-
-    Args:
-        config (ConfigParser): ConfigParser object
-    """
-    logging.debug("Current config:")
-    s = []
-    header = True
-    for key, value in config.items():
-        if isinstance(value, dict):
-            s.append("[" + key + "]")
-            category = dict(config[key])
-            for k, v in category.items():
-                s.append("%-30s = %s" % (k, v))
-
-            s.append("")
-        else:
-            if header:
-                s.append("[constants]")
-                header = False
-
-            if isinstance(value, list):
-                s.append("%-30s = %s" % (key, value[0]))
-                if len(value) > 1:
-                    for v in value[1:]:
-                        s.append("%-30s   %s" % ("", v))
-            else:
-                s.append("%-30s = %s" % (key, value))
-
-    logging.debug("\n%s", "\n".join(s))
 
 
 def dynamic_import(parser, config):
@@ -352,7 +318,7 @@ def parse_infrastructure(parser, input_config, config):
 
     # TODO This statement shouldn't be needed, but has to be tested first
     if config[sec]["base_path"] == "":
-        config[sec]["base_path"] = "~" 
+        config[sec]["base_path"] = "~"
 
     config[sec]["base_path"] = os.path.expanduser(config[sec]["base_path"])
     if config[sec]["base_path"][-1] == "/":
@@ -520,9 +486,6 @@ def start(parser, arg):
     Returns:
         configParser: Parsed config file
     """
-    if not (os.path.exists(arg) and os.path.isfile(arg)):
-        parser.error("The given config file does not exist: %s" % (arg))
-
     input_config = configparser.ConfigParser()
     input_config.read(arg)
 
