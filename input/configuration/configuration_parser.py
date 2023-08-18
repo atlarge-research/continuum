@@ -107,7 +107,7 @@ def add_constants(parser, config):
     """
     config["home"] = str(os.getenv("HOME"))
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
-    config["base"] = config["base"].rsplit("/", 1)[0]  # We're nested 1 deep currently, remove that
+    config["base"] = config["base"].rsplit("/", 2)[0]  # We're nested 2 deep currently, remove that
     config["username"] = getpass.getuser()
     config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
 
@@ -143,7 +143,7 @@ def option_check(
 
     Args:
         parser (ArgumentParser): Argparse object
-        input_config (ConfigParser): ConfigParser object
+        input_config (ConfigParser): ConfigParser object (conf) or the config objec (DSL)
         config (dict): Parsed configuration
         section (str): Section in the config file
         option (str): Option in a section of the config file
@@ -152,7 +152,11 @@ def option_check(
         mandatory (bool): Is option mandatory
         default (bool): Default value if none is set
     """
-    if input_config.has_option(section, option):
+    if (
+        isinstance(input_config, dict)
+        and section in input_config
+        and option in input_config[section]
+    ) or (not isinstance(input_config, dict) and input_config.has_option(section, option)):
         # If option is empty, but not mandatory, remove option
         if input_config[section][option] == "":
             if mandatory:
@@ -169,18 +173,33 @@ def option_check(
         # Check type
         try:
             if intype == int:
-                val = input_config[section].getint(option)
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section].getint(option)
             elif intype == float:
-                val = input_config[section].getfloat(option)
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section].getfloat(option)
             elif intype == bool:
-                val = input_config[section].getboolean(option)
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section].getboolean(option)
             elif intype == str:
-                val = input_config[section][option]
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section][option]
             elif intype == list:
-                val = input_config[section][option].split(",")
-                val = [s for s in val if s.strip()]
-                if val == []:
-                    return
+                if isinstance(input_config, dict):
+                    val = input_config[section][option]
+                else:
+                    val = input_config[section][option].split(",")
+                    val = [s for s in val if s.strip()]
+                    if val == []:
+                        return
             else:
                 parser.error("Config: Invalid type %s" % (intype))
         except ValueError:

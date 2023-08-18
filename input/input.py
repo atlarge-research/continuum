@@ -58,7 +58,8 @@ def start(parser, arg):
     _, file_extension = os.path.splitext(arg)
     if file_extension == ".cfg":
         return configuration_parser.start(parser, arg)
-    elif file_extension == ".ts":
+
+    if file_extension == ".ts":
         return dsl_parser.start(parser, arg)
-    else:
-        parser.error("ERROR: Only extentions .cfg and .ts are supported, not %s", file_extension)
+
+    return parser.error("ERROR: Only extentions .cfg and .ts are supported, not %s", file_extension)

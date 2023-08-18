@@ -1,4 +1,7 @@
-# import configparser
+"""\
+Parse the input DSL
+"""
+
 import os
 from subprocess import Popen, PIPE
 import json
@@ -7,14 +10,23 @@ from application import application
 from input.configuration.configuration_parser import (
     add_constants,
     dynamic_import,
-    # add_options,
+    add_options,
     verify_options,
 )
 
 
 def start(parser, file_path):
-    process = Popen(["ts-node", file_path], stdout=PIPE, stderr=PIPE)
-    stdout, stderr = process.communicate()
+    """Parse DSL file, check valid input
+
+    Args:
+        parser (ArgumentParser): Argparse object
+        arg (str): Path to a DSL file
+
+    Returns:
+        config: Parsed DSL file as a config
+    """
+    with Popen(["ts-node", file_path], stdout=PIPE, stderr=PIPE) as process:
+        stdout, stderr = process.communicate()
 
     if len(stderr):
         parser.error(stderr.decode("utf-8"))
@@ -29,19 +41,13 @@ def start(parser, file_path):
     if isinstance(config, list):
         parser.error("Executing a list of configurations is not available yet")
 
-    # TODO: not sure what this does but was used to pass to the add_options function
-    # input_config = (
-    #     configparser.ConfigParser()
-    # )
-
     dynamic_import(parser, config)
     add_constants(parser, config)
 
-    # Add and verify options for each module
-    # TODO why is this disabled?
-    # add_options(parser, input_config, config)
+    # Bit sketchy - we can't compare against the original input, we just use the output
+    # TODO: Needs further testing to see if it actually catches all errors
+    add_options(parser, config, config)
 
-    # I think the issue has to do with the way to module/module varaibles are handled.
     verify_options(parser, config)
 
     if config["module"]["application"]:

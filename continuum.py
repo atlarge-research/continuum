@@ -13,10 +13,12 @@ import logging
 import time
 
 from application import application
-from input import input
 from execution_model import execution_model
 from infrastructure import infrastructure
 from resource_manager import resource_manager
+
+# pylint: disable-next=redefined-builtin
+from input import input
 
 
 def make_wide(formatter, w=120, h=36):
