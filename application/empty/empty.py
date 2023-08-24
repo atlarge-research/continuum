@@ -431,7 +431,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
     for i, output in enumerate(worker_output):
         for line in output:
             if "Start the application" in line:
-                dt = line.split("Z")[0]
+                dt = line.split("+")[0]
                 dt = dt.replace("T", " ")
                 dt = dt[:-3]
                 dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
