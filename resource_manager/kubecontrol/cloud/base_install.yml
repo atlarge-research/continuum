@@ -97,7 +97,7 @@
         dest: /tmp/
         remote_src: true
 
-    - name: Move Kubernetes binaries to bin folder
+    - name: Move Kubernetes binaries to bin folder and overwrite installed binaries
       shell: mv /tmp/kubernetes/node/bin/* /usr/bin/
 
     - name: Remove Kubernetes archive
