@@ -12,17 +12,13 @@ import subprocess
 import datetime
 import os
 
-from io import StringIO
-
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
-import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
 
 from matplotlib.ticker import ScalarFormatter
 from matplotlib.ticker import NullFormatter
-from matplotlib.ticker import MaxNLocator
 
 # Home dir should be continuum/
 os.chdir("../")
@@ -1104,126 +1100,40 @@ class Control(Experiment):
     Kubernetes control plane benchmark
     See /continuum/configuration/experiment_control/README.md for more info
 
-    NOTE
-    - This Config class isn't meant for running experiments at the moment
-    - Its main goal is to plot data from already finished experiments
+    If --resume is not used, the script will run all experiments
+    If --resume is defined, we will use the csv's from those files, and only plot
+        TODO not yet implemented
     """
 
     def __init__(self, resume):
         Experiment.__init__(self, resume)
 
-        # self.log = "logs/gcp_new"
         self.log = "logs"
+        base_path = "configuration/experiment_control/qemu/"
 
-        # Custom list of experiments for in the paper
-        # Config: Location of config file
-        # Log: Location of corresponding log file
+        # Variables that will be added later:
+        # - timestamp: timestamp of the log, used to plot (TODO for --resume)
+        #
+        # Feel free to comment out whatever you don't want to test
+        # Currently not included (yet):
+        # - Kubernetes versions
         self.experiments = [
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod1_cont1_v127_pod",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v127_pod",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown-container",
-            #     "log": "node1_pod1_cont100_v127_cont",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node16_pod100_cont100_v127_pod",
-            #     "nodes": 16,
-            # },
-            # {
-            #     "type": "breakdown-strong",
-            #     "log": "node16_pod7_cont7_v127_pod",
-            #     "nodes": 16,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v126_pod",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v125_pod",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v126_pod",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v125_pod",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v126_file",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v126_call",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v127_call",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v127_file",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v127_pod_p2",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node16_pod100_cont100_v127_pod_p2",
-            #     "nodes": 16,
-            # },
-            # {
-            #     "type": "breakdown-strong",
-            #     "log": "node16_pod7_cont7_v127_pod_p2",
-            #     "nodes": 16,
-            # },
-            # {
-            #     "type": "breakdown-container",
-            #     "log": "node1_pod1_cont100_v127_cont_p2",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node16_pod100_cont100_v127_pod_p24",
-            #     "nodes": 16,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "node1_pod100_cont100_v127_pod_p24_resource",
-            #     "nodes": 1,
-            # },
-            # {
-            #     "type": "breakdown-strong",
-            #     "log": "node16_pod7_cont7_v127_pod_p24_resource",
-            #     "nodes": 16,
-            # },
-            # {
-            #     "type": "breakdown",
-            #     "log": "tmp",
-            #     "nodes": 1,
-            # },
+            {"path": base_path + "constant_total_pods/node_1.cfg"},
+            {"path": base_path + "constant_total_pods/node_2.cfg"},
+            {"path": base_path + "constant_total_pods/node_4.cfg"},
+            {"path": base_path + "constant_total_pods/node_8.cfg"},
+            {"path": base_path + "deployment/call_1.cfg"},
+            {"path": base_path + "deployment/call_100.cfg"},
+            {"path": base_path + "deployment/container_1.cfg"},
+            {"path": base_path + "deployment/container_100.cfg"},
+            {"path": base_path + "deployment/file_1.cfg"},
+            {"path": base_path + "deployment/file_100.cfg"},
+            {"path": base_path + "nodes/node_1.cfg"},
+            {"path": base_path + "nodes/node_2.cfg"},
+            {"path": base_path + "nodes/node_4.cfg"},
+            {"path": base_path + "pods_per_node/pod_1.cfg"},
+            {"path": base_path + "pods_per_node/pod_10.cfg"},
+            {"path": base_path + "pods_per_node/pod_100.cfg"},
         ]
 
     def __repr__(self):
@@ -1236,181 +1146,35 @@ class Control(Experiment):
         return "EXPERIMENTS:\n%s" % ("\n".join(out))
 
     def generate(self):
-        """See comments at the top of this class - we don't execute commands here"""
-        return
+        """Create commands to execute the continuum framework"""
+        for experiment in self.experiments:
+            command = ["python3", "continuum.py", str(experiment["path"])]
+            run = {
+                "command": command,
+                "output": None,
+            }
+            self.runs.append(run)
 
     def check_resume(self):
         """Custom implementation for the Config experiment
         Experiments get manually saved in custom directories - we only need to check
         if these directories exist or not.
+        TODO for resume
         """
-        for experiment in self.experiments:
-            d = "%s/%s" % (self.log, experiment["log"])
-
-            # Check if a .log file exists here, and get its name
-            found_log = False
-            for file in os.listdir(d):
-                if file.endswith(".log"):
-                    found_log = True
-
-                    log = "%s/%s" % (d, file)
-                    with open(log, "r", encoding="utf-8") as f:
-                        output = f.readlines()
-
-                    experiment["output"] = output
-                    break
-
-            if not found_log:
-                sys.exit("Did not find log file in directory: %s" % (d))
+        return
 
     def parse_output(self):
-        """Input parsing and plotting is done in Continuum itself"""
-        for experiment in self.experiments:
-            # Get the line containing the metrics
-            i = -7 - experiment["nodes"] + 3
-            if "Output in csv format" not in experiment["output"][i - 1]:
-                sys.exit(
-                    "Could not find string 'output in csv format' on line -%i: %s"
-                    % (i - 1, experiment["output"][i - 1])
-                )
-
-            csv = str(experiment["output"][i])
-            csv = csv.replace(r"\n", "\n")
-            csv = csv[:-2]  # Remove final \n in the string
-            csv_obj = StringIO(csv)
-            df = pd.read_csv(csv_obj, index_col=0, header=0)
-            experiment["df"] = df
+        """Input parsing and plotting is done in Continuum itself
+        TODO for resume"""
+        return
 
     def plot(self):
-        """Input parsing and plotting is done in Continuum itself"""
-        for experiment in self.experiments:
-            if "strong" in experiment["type"]:
-                experiment["df"] = experiment["df"].head(100)
-
-            exclude_deployed = False
-            if "pod1_cont1_" in experiment["log"]:
-                exclude_deployed = True
-
-            if "breakdown" in experiment["type"]:
-                container = "container" in experiment["type"]
-                self._plot_breakdown(
-                    experiment, container=container, exclude_deployed=exclude_deployed
-                )
-
-    def _plot_breakdown(self, experiment, container=False, exclude_deployed=False):
-        """Plot all X phases"""
-        plt.rcParams.update({"font.size": 20})
-        _, ax1 = plt.subplots(figsize=(12, 4))
-
-        instances = len(experiment["df"]["created_workload_obj (s)"])
-
-        events = []
-        events += [(t, "manager") for t in experiment["df"]["created_workload_obj (s)"]]
-        events += [(t, "object") for t in experiment["df"]["unpacked_workload_obj (s)"]]
-        events += [(t, "scheduler") for t in experiment["df"]["created_pod_obj (s)"]]
-        events += [(t, "pod_create") for t in experiment["df"]["scheduled_pod (s)"]]
-        events += [(t, "container_create") for t in experiment["df"]["created_pod (s)"]]
-        events += [(t, "app") for t in experiment["df"]["created_container (s)"]]
-        events.sort()
-
-        colors = {
-            "P1": "#6929c4",
-            "P2": "#1192e8",
-            "P3": "#005d5d",
-            "P4": "#9f1853",
-            "P5": "#fa4d56",
-            "P6": "#570408",
-            "Deployed": "#198038",
-        }
-        cs = list(colors.values())
-
-        # Set event order
-        current = [0 for _ in range(len(colors))]
-        current[0] = instances  # Every pod starts in the first phase
-        results = [current.copy()]
-        times = [0.0]
-        for t, etype in events:
-            times.append(t)
-            if etype == "manager":
-                current[0] -= 1
-                current[1] += 1
-                results.append(current.copy())
-            elif etype == "object":
-                current[1] -= 1
-                current[2] += 1
-                results.append(current.copy())
-            elif etype == "scheduler":
-                current[2] -= 1
-                current[3] += 1
-                results.append(current.copy())
-            elif etype == "pod_create":
-                current[3] -= 1
-                current[4] += 1
-                results.append(current.copy())
-            elif etype == "container_create":
-                current[4] -= 1
-                current[5] += 1
-                results.append(current.copy())
-            elif etype == "app":
-                current[5] -= 1
-                current[6] += 1
-                results.append(current.copy())
-
-        # Transpose - this is the right format
-        results2 = [[] for _ in range(len(colors))]
-        for result in results:
-            for i, val in enumerate(result):
-                results2[i].append(val)
-
-        # Now invert
-        results2 = list(reversed(results2))
-
-        # And plot
-        ax1.stackplot(times, results2, colors=list(reversed(cs)), step="post")
-
-        # hatch = "."
-        # for stack in stacks[3:]:
-        #     stack.set_hatch(hatch)
-
-        ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
-        ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
-        ax1.invert_yaxis()
-        ax1.grid(True)
-
-        # Set y axis details
-        if container:
-            ax1.set_ylabel("Containers")
-        else:
-            ax1.set_ylabel("Pods")
-
-        ax1.set_ylim(0, instances)
-
-        # Set x axis details
-        ax1.set_xlabel("Time (s)")
-        ax1.set_xlim(0, times[-1])
-
-        # add legend
-        patches = []
-        for i, c in enumerate(cs):
-            # if i < 3:
-            #     patches.append(mpatches.Patch(facecolor=c, edgecolor="k", hatch=hatch * 3))
-            # else:
-            patches.append(mpatches.Patch(facecolor=c, edgecolor="k"))
-
-        texts = colors.keys()
-        if exclude_deployed:
-            # Don't plot the exclude phase in legend
-            patches = patches[:-1]
-            texts = list(texts)[:-1]
-            ax1.legend(patches, texts, loc="lower right", fontsize="16")
-        else:
-            ax1.legend(patches, texts, loc="lower right", fontsize="16")
-
-        # Save plot
-        t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-        file = "%s/%s/%s_control.pdf" % (self.log, experiment["log"], t)
-        plt.savefig(file, bbox_inches="tight")
-        print("Saved plot in: %s" % (file))
+        """Call Continuum plotting code on the dataframe
+        TODO for resume"""
+        return
+        # for experiment in self.experiments:
+        #     plot.plot_control(experiment["df"], experiment["timestamp"])
+        #     plot.plot_p56(experiment["df"], experiment["timestamp"])
 
     def print_result(self):
         """Print results of runs as text - We don't run anything here, in/output is already known"""

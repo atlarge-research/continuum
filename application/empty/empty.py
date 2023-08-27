@@ -123,15 +123,16 @@ def format_output(
     """
     # Plot the status of each pod over time
     if status is not None:
-        plot.plot_status(status)
+        plot.plot_status(status, config["timestamp"])
 
         if control is not None:
             worker_metrics = fill_control(
                 config, control, starttime, worker_output, worker_description
             )
             df = print_control(config, worker_metrics)
-            plot.plot_control(df)
-            plot.plot_p56(df)
+            validate_data(df)
+            plot.plot_control(df, config["timestamp"])
+            plot.plot_p56(df, config["timestamp"])
 
 
 def create_control_object(worker_description, mapping):
@@ -166,8 +167,9 @@ def create_control_object(worker_description, mapping):
                 # All following mentions are container names
                 # The space at the start in the if statement string is important
                 pod_name = line.split("name: ")[1]
-            if "- containerID: " in line:
+            if "- containerID: " in line and container_name == "":
                 # Save containerIDs to guarantee that we take unique containers
+                # Do this only if we haven't selected a container yet
                 container_id = line.split("://")[1]
                 if container_id not in container_ids:
                     container_ids.append(container_id)
@@ -306,17 +308,44 @@ def check(
                         # For prints in kubectl
                         job = line.strip().split("job=")[1] + "-"
 
-                    for metric in worker_metrics:
-                        if job in metric["pod"] and metric[tag] is None:
-                            metric[tag] = time_delta(t, starttime)
-                            i += 1
+                    if "0277" in line and config["benchmark"]["kube_deployment"] == "pod":
+                        # If deployment mode is pod, 0277 will print job=empty but every pod
+                        # is part of the empty job so we don't have any ordering.
+                        # In that case, brute force the ordering by searching for the number
+                        # closest to the next timestamp, 5_scheduler_start
+                        # We swapped insertion so 5_scheduler_start is already inserted
+                        timestamp = time_delta(t, starttime)
 
-                            # Fill the first entry in for all applications, except 0277 in pod mode
-                            # 0277 is right before pod creation, so no pod-specific name exists yet
-                            # but this print is done once per pod nonetheless. In pod mode we
-                            # should therefore break here
-                            if "0277" in line and config["benchmark"]["kube_deployment"] == "pod":
+                        # Sort based on 5_scheduler_start so we can insert at the first value
+                        # bigger than 4_pod_object_create which doesn't have a value yet
+                        sorted_worker_metrics = sorted(
+                            worker_metrics, key=lambda x: x["5_scheduler_start"]
+                        )
+
+                        # Now insert given the criteria above
+                        # Is this 100% correct? No. Is it accurate enough? Yes.
+                        insertion_time = 100000.0
+                        for s in sorted_worker_metrics:
+                            if s[tag] is None and timestamp < s["5_scheduler_start"]:
+                                insertion_time = s["5_scheduler_start"]
                                 break
+
+                        if insertion_time == 100000.0:
+                            logging.error("ERROR: didn't find an entry to insert a 0277 print into")
+                            sys.exit()
+
+                        # Now insert in the real list given by searching for our timestamp
+                        for metric in worker_metrics:
+                            if metric["5_scheduler_start"] == insertion_time:
+                                metric[tag] = timestamp
+                                i += 1
+                                break
+                    else:
+                        # Normal insertion according to job match
+                        for metric in worker_metrics:
+                            if job in metric["pod"] and metric[tag] is None:
+                                metric[tag] = time_delta(t, starttime)
+                                i += 1
 
     # Fill up if there are multiple containers per pod
     if i < len(worker_metrics):
@@ -357,6 +386,14 @@ def fill_control(config, control, starttime, worker_output, worker_description):
     ]
 
     worker_metrics = create_control_object(worker_description, mapping)
+
+    # Swap 4 and 5 for insertion
+    # See 0277 comments in check()
+    tmp = mapping[3]
+    mapping[3] = mapping[4]
+    mapping[4] = tmp
+
+    # Parse and insert
     for component, tag, name in mapping:
         if component is not None:
             check(config, control, starttime, worker_metrics, component, tag, name)
@@ -372,12 +409,29 @@ def fill_control(config, control, starttime, worker_output, worker_description):
                 end_time = datetime.timestamp(dt)
 
                 # Add timestamp to the correct entry
-                # Works perfect when you have 1 container per pod
-                # With >1 container per pod, there is no strict mapping, but we assume that
-                # the iteration used to create the worker_metrics entries per container is the same
-                # iteration as the one used to get worker output, so they match
+                # Variable pod can either be something like "empty-f4lwj" if container/pod == 1
+                # If container/pod > 1, it will be "empty-f4lwj empty-1" being the pod+container
+                #
+                # This mapping should be 100% strictly correct because to get the output, you
+                # need the correct pod/container names as well (which are used to create the
+                # worker_metrics object itself)
+                check_container = False
+                if " " in pod:
+                    check_container = True
+                    line = pod.split(" ")
+                    pod = line[0]
+                    container = line[1]
+
                 for i, metrics in enumerate(worker_metrics):
-                    if metrics["pod"] == pod and metrics["12_app_start"] is None:
+                    if not check_container and metrics["pod"] == pod:
+                        worker_metrics[i]["12_app_start"] = time_delta(end_time, starttime)
+                        # You could add a break here and in the end of the next else, but the
+                        # code's logic should be robust enough so that it isn't required
+                    elif (
+                        check_container
+                        and metrics["pod"] == pod
+                        and metrics["container"] == container
+                    ):
                         worker_metrics[i]["12_app_start"] = time_delta(end_time, starttime)
 
     return worker_metrics
@@ -408,11 +462,15 @@ def print_control(config, worker_metrics):
             "4_pod_object_create": "unpacked_workload_obj (s)",
             "5_scheduler_start": "created_pod_obj (s)",
             "6_kubelet_start": "scheduled_pod (s)",
-            "7_volume_mount": "created_pod (s)",  # TODO maybe better "created_cgroup"
+            # TODO 7: maybe better "created_cgroup"
+            "7_volume_mount": "created_pod (s)",
             "8_sandbox_start": "mounted_volume (s)",
             "9_create_container": "applied_sandbox (s)",
             "10_start_container": "created_container (s)",
-            "11_container_started": "started_container (s)",  # TODO maybe better "finished_pod"
+            # TODO 11: maybe better "finished pod"
+            # 11 is that the entire pod is done and all containers inside
+            # It isn't container specific so 11 > 12 for the fastest containers
+            "11_container_started": "started_container (s)",
             "12_app_start": "started_application (s)",
         },
         inplace=True,
@@ -425,4 +483,23 @@ def print_control(config, worker_metrics):
     # Print ouput in csv format
     logging.debug("Output in csv format\n%s", repr(df.to_csv()))
 
+    # Save as csv file
+    df.to_csv("./logs/%s_dataframe.csv" % (config["timestamp"]), index=False, encoding="utf-8")
+
     return df
+
+
+def validate_data(df):
+    """Validate that all numbers are strictly increasing
+
+    Args:
+        df (DataFrame): Pandas dataframe object with parsed timestamps per category
+    """
+    columns = list(df.columns)
+    for i, col in enumerate(columns[2:-1]):
+        first = col
+        second = columns[i + 3]
+
+        diff = df.loc[(df[first] > df[second])]
+        if not diff.empty:
+            logging.info("WARNING: %s < %s is not true for %i lines", first, second, len(diff))

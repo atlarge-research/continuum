@@ -370,7 +370,7 @@ def wait_worker_ready(config, machines, get_starttime):
         status.append(status_entry)
 
         # Stop if all statuses are running
-        if status_entry["Running"] == total:
+        if status_entry["Running"] + status_entry["Succeeded"] == total:
             break
 
     if get_starttime:
@@ -927,7 +927,7 @@ def get_worker_output_kube(config, machines, get_description):
 
                 command = ["kubectl", "logs", "--timestamps=true", container]
                 commands.append(command)
-                pods.append(pod)
+                pods.append(container)
 
     # Append commands into 1 big command
     big_command = '"'

@@ -1,18 +1,18 @@
 """Create plots for the empty application"""
 
 import logging
-import time
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 
-def plot_status(status):
+def plot_status(status, timestamp):
     """Print and plot controlplane data from external observations
 
     Args:
         status (list(list(str)), optional): Status of started Kubernetes pods over time
+        timestamp (time): Global timestamp used to save all files of this run
     """
     for stat in status:
         logging.debug(stat)
@@ -80,14 +80,13 @@ def plot_status(status):
     ax1.legend(patches, texts, loc="upper right")
 
     # Save plot
-    t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-    plt.savefig("./logs/%s_breakdown.pdf" % (t), bbox_inches="tight")
+    plt.savefig("./logs/%s_breakdown.pdf" % (timestamp), bbox_inches="tight")
 
 
 # TODO - UPDATE NAMES HERE BASED ON CHANGES IN EMPTY.PY
 
 
-def plot_control(df):
+def plot_control(df, timestamp):
     """Plot controlplane data from the source code
 
     Phases:
@@ -135,6 +134,7 @@ def plot_control(df):
 
     Args:
         df (DataFrame): Pandas dataframe object with parsed timestamps per category
+        timestamp (time): Global timestamp used to save all files of this run
     """
     plt.rcParams.update({"font.size": 20})
     _, ax1 = plt.subplots(figsize=(12, 4))
@@ -199,11 +199,10 @@ def plot_control(df):
     ax1.legend(patches, texts, loc="lower right", fontsize="16")
 
     # Save plot
-    t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-    plt.savefig("./logs/%s_breakdown_intern.pdf" % (t), bbox_inches="tight")
+    plt.savefig("./logs/%s_breakdown_intern.pdf" % (timestamp), bbox_inches="tight")
 
 
-def plot_p56(df):
+def plot_p56(df, timestamp):
     """Plot controlplane data from the source code
 
     Phases:
@@ -226,6 +225,7 @@ def plot_p56(df):
 
     Args:
         df (DataFrame): Pandas dataframe object with parsed timestamps per category
+        timestamp (time): Global timestamp used to save all files of this run
     """
     plt.rcParams.update({"font.size": 20})
     _, ax1 = plt.subplots(figsize=(12, 4))
@@ -295,5 +295,4 @@ def plot_p56(df):
     ax1.legend(patches, texts, loc="lower right", fontsize="16")
 
     # Save plot
-    t = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-    plt.savefig("./logs/%s_breakdown_intern_P56.pdf" % (t), bbox_inches="tight")
+    plt.savefig("./logs/%s_breakdown_intern_P56.pdf" % (timestamp), bbox_inches="tight")

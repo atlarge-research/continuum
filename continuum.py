@@ -48,6 +48,9 @@ def set_logging(args):
 
     Args:
         args (Namespace): Argparse object
+
+    Returns:
+        (timestamp): Timestamp of the log file, used for all saved files
     """
     # Log to file parameters
     log_dir = "logs"
@@ -91,6 +94,7 @@ def set_logging(args):
     )
 
     logging.info("Logging has been enabled. Writing to stdout and file %s/%s", log_dir, log_name)
+    return t
 
 
 def main(args):
@@ -149,7 +153,9 @@ if __name__ == "__main__":
 
     arguments = parser_obj.parse_args()
 
-    set_logging(arguments)
+    timestamp = set_logging(arguments)
+    arguments.config["timestamp"] = timestamp
+
     input.print_input(arguments.config)
 
     main(arguments)
