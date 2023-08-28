@@ -211,8 +211,17 @@ BASE_NAMES                  %s""" % (
 
             # Get outputs for this batch of commmands (blocking)
             for j, process in enumerate(processes):
-                output = [line.decode("utf-8") for line in process.stdout.readlines()]
-                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                # Use communicate() to prevent buffer overflows
+                stdout, stderr = process.communicate()
+                output = stdout.decode("utf-8").split("\n")
+                error = stderr.decode("utf-8").split("\n")
+
+                # Byproduct of split
+                if len(output) >= 1 and output[-1] == "":
+                    output = output[:-1]
+                if len(error) >= 1 and error[-1] == "":
+                    error = error[:-1]
+
                 outputs.append([output, error])
 
                 if retryonoutput and not output:
@@ -244,8 +253,16 @@ BASE_NAMES                  %s""" % (
 
             # Get outputs for this batch of commmands (blocking)
             for i, process in zip(retries, processes):
-                output = [line.decode("utf-8") for line in process.stdout.readlines()]
-                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                stdout, stderr = process.communicate()
+                output = stdout.decode("utf-8").split("\n")
+                error = stderr.decode("utf-8").split("\n")
+
+                # Byproduct of split
+                if len(output) >= 1 and output[-1] == "":
+                    output = output[:-1]
+                if len(error) >= 1 and error[-1] == "":
+                    error = error[:-1]
+
                 outputs[i] = [output, error]
 
                 if not output:
