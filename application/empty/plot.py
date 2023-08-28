@@ -239,7 +239,7 @@ def plot_p56(df, timestamp):
             "created_pod (s)",
             "mounted_volume (s)",
             "applied_sandbox (s)",
-            "started_container (s)",
+            "created_container (s)",
             "started_application (s)",
         ]
     ]
