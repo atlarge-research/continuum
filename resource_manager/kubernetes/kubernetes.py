@@ -466,6 +466,27 @@ def launch_with_starttime(config, machines):
     start_list = [entry for entry in kubectl_output if "0400" in entry[1]]
     end_list = [entry for entry in kubectl_output if "0402" in entry[1]]
 
+    # The number of 0400/0402 statements should be the same.
+    # Every time you start kubectl (0400) you need to end it (0401)
+    if len(start_list) != len(end_list):
+        logging.error(
+            "There are more kubectl-start statements than kubectl-end statement - should be equal"
+        )
+        sys.exit()
+
+    # The number of kubectl sends (0401) compared to the number of 0400/0402's depends on how many
+    # files you passed to kubectl in one go. In our case, this is 1 for all cases (so an equal
+    # number of 0400/0401/0402 prints) except if kube_deployment == file because then we pass
+    # multiple files at once so we have many sends. To counter this, we duplicate 0400/0402's.
+    send_length = len([entry for entry in kubectl_output if "0401" in entry[1]])
+    if len(start_list) != send_length:
+        if len(start_list) == 1 and config["benchmark"]["kube_deployment"] == "file":
+            start_list *= send_length
+            end_list *= send_length
+        else:
+            logging.error("The number of 0400/0402 statements != the number of 0401 statements")
+            sys.exit()
+
     for time_obj, line in kubectl_output:
         if "0401" in line:
             kubectl_output_updated.append([time_obj, line])
@@ -947,6 +968,8 @@ def get_worker_output_kube(config, machines, get_description):
     if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
         logging.error("Container %i: %s", i, "".join(error))
         sys.exit()
+
+    logging.debug("Assign output to correct pod/container")
 
     # Split based on custom delimiter, and group output per pod
     worker_output = []
