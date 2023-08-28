@@ -349,12 +349,10 @@ def check(
 
     # Fill up if there are multiple containers per pod
     if i < len(worker_metrics):
-        logging.debug("Fill up from %i to %i", i, len(worker_metrics))
-
-    j = i - 1
-    while i < len(worker_metrics):
-        worker_metrics[i][tag] = worker_metrics[j][tag]
-        i += 1
+        logging.error(
+            "ERROR: Didn't parse output for all pods. Stopped at %i / %i", i, len(worker_metrics)
+        )
+        sys.exit()
 
 
 def fill_control(config, control, starttime, worker_output, worker_description):
@@ -371,6 +369,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
 
     # Component, tag to search for, name
     mapping = [
+        # 0: Timestamp before kubectl command is invoked, in framework
         ["kubectl", "0400", "1_kubectl_start"],  # Start of kubectl command
         ["kubectl", "0401", "2_kubectl_send"],  # Before kubectl sends data to apiserver
         ["controller-manager", "0028", "3_jobcontroller_start"],  # Start of job controller
@@ -381,8 +380,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
         ["kubelet", "0505", "8_sandbox_start"],  # Create sandbox
         ["kubelet", "0514", "9_create_container"],  # Create containers
         ["kubelet", "0517", "10_start_container"],  # Start container
-        ["kubelet", "0523", "11_container_started"],  # Container started
-        [None, None, "12_app_start"],  # First print in the application
+        [None, None, "11_app_start"],  # First print in the application
     ]
 
     worker_metrics = create_control_object(worker_description, mapping)
@@ -398,7 +396,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
         if component is not None:
             check(config, control, starttime, worker_metrics, component, tag, name)
 
-    # 12_app_start: First print in the application
+    # 11_app_start: First print in the application
     for pod, output in worker_output:
         for line in output:
             if "Start the application" in line:
@@ -424,7 +422,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
 
                 for i, metrics in enumerate(worker_metrics):
                     if not check_container and metrics["pod"] == pod:
-                        worker_metrics[i]["12_app_start"] = time_delta(end_time, starttime)
+                        worker_metrics[i]["11_app_start"] = time_delta(end_time, starttime)
                         # You could add a break here and in the end of the next else, but the
                         # code's logic should be robust enough so that it isn't required
                     elif (
@@ -432,7 +430,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
                         and metrics["pod"] == pod
                         and metrics["container"] == container
                     ):
-                        worker_metrics[i]["12_app_start"] = time_delta(end_time, starttime)
+                        worker_metrics[i]["11_app_start"] = time_delta(end_time, starttime)
 
     return worker_metrics
 
@@ -462,16 +460,11 @@ def print_control(config, worker_metrics):
             "4_pod_object_create": "unpacked_workload_obj (s)",
             "5_scheduler_start": "created_pod_obj (s)",
             "6_kubelet_start": "scheduled_pod (s)",
-            # TODO 7: maybe better "created_cgroup"
-            "7_volume_mount": "created_pod (s)",
+            "7_volume_mount": "created_pod (s)",  # TODO 7: maybe better "created_cgroup"
             "8_sandbox_start": "mounted_volume (s)",
             "9_create_container": "applied_sandbox (s)",
             "10_start_container": "created_container (s)",
-            # TODO 11: maybe better "finished pod"
-            # 11 is that the entire pod is done and all containers inside
-            # It isn't container specific so 11 > 12 for the fastest containers
-            "11_container_started": "started_container (s)",
-            "12_app_start": "started_application (s)",
+            "11_app_start": "started_application (s)",
         },
         inplace=True,
     )
