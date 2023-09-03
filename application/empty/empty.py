@@ -472,7 +472,13 @@ def fill_control(config, control, starttime, worker_output, worker_description):
     for pod, output in worker_output:
         for line in output:
             if "Start the application" in line:
-                dt = line.split("+")[0]
+                if config["infrastructure"]["provider"] == "qemu":
+                    # Example: 2023-09-03T11:50:03.183541380+02:00 Start the application
+                    dt = line.split("+")[0]
+                elif config["infrastructure"]["provider"] == "gcp":
+                    # Example: 2023-09-03T11:50:03.183541380Z Start the application
+                    dt = line.split("Z")[0]
+
                 dt = dt.replace("T", " ")
                 dt = dt[:-3]
                 dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S.%f")
