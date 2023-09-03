@@ -123,12 +123,6 @@
           runtime-endpoint: unix:///run/containerd/containerd.sock
           image-endpoint: unix:///run/containerd/containerd.sock
 
-    - name: Get Calico
-      get_url:
-        url: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
-        dest: /
-        mode: "0755"
-
     - name: Install Mosquitto
       apt:
         name: "{{ packages }}"
