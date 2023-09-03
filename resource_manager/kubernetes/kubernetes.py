@@ -495,10 +495,6 @@ def launch_with_starttime(config, machines):
         logging.error("Could not deploy pods, expected custom [CONTINUUM] logs: %s", "".join(error))
         sys.exit()
 
-    logging.debug("====================")
-    logging.debug(error)
-    logging.debug("====================")
-
     # Parse all kubectl output and put it in a flat list
     kubectl_output = []
     for e in error:
@@ -509,10 +505,6 @@ def launch_with_starttime(config, machines):
                 continue
 
             kubectl_output.append([time_obj, line])
-
-    logging.debug("====================")
-    logging.debug(kubectl_output)
-    logging.debug("====================")
 
     # Only print "0401" has a job= string attached. We want this job= attached to a 0400
     # and a 0402 as well for ordering later. The entire list of 0400/0401/0402 is already
@@ -563,10 +555,6 @@ def launch_with_starttime(config, machines):
             kubectl_output_updated.append([t_obj_end, l_end])
 
             i += 1
-
-    logging.debug("====================")
-    logging.debug(kubectl_output_updated)
-    logging.debug("====================")
 
     starttime = float(output[0])
     return starttime, kubectl_output_updated
@@ -1202,10 +1190,6 @@ def get_control_output(config, machines, starttime, status):
                 # Now check for time interval
                 if entry[0] >= starttime and entry[0] <= endtime:
                     parsed_copy[node][component].append(entry)
-
-    logging.debug("=====================")
-    logging.debug(parsed_copy)
-    logging.debug("=====================\n\n\n\n\n\n\n\n\n")
 
     return parsed_copy
 
