@@ -1,0 +1,296 @@
+"""\
+Benchmarks for kubecontrol
+1) Run all benchmarks from scratch using the continuum framework
+2) Given existing logs, only run the plot code
+"""
+
+import argparse
+import sys
+import logging
+import os
+import time
+
+import pandas as pd
+import numpy as np
+
+sys.path.append("../application/empty")
+import replicate_paper  # pylint: disable=wrong-import-position
+import plot  # pylint: disable=wrong-import-position,import-error
+
+
+class MicroBenchmark(replicate_paper.Experiment):
+    """Experiment:
+    Kubernetes control plane benchmark
+    See /continuum/configuration/<qemu/gcp>/experiment_control/README.md for more info
+
+    If --resume is not used, the script will run all experiments
+    If --resume is defined, we will use the csv's from those files, and only plot
+    """
+
+    def __init__(self, args):
+        replicate_paper.Experiment.__init__(self, None)
+
+        self.do_plot = args.plot
+        self.sort = args.sort
+
+        # All nodes used locally - used to kill all VMs to preven IP clashing
+        self.nodes = ["node1", "node4"]
+        self.username = "matthijs"
+        self.infrastructure = args.infrastructure
+        self._kill_all()
+
+        # Save all files that only need re-plotting here
+        self.plots = []
+
+        self.cfg_path = (
+            "configuration/experiment_control/" + args.experiment + "/" + args.infrastructure + "/"
+        )
+
+        self.log_path = "logs/" + args.experiment + "/" + args.infrastructure + "/"
+
+        # Feel free to comment out whatever you don't want to test
+        self.experiments = []
+        if args.experiment == "microbenchmark":
+            self.experiments = [
+                {"path": "constant_total_pods/node_1"},
+                {"path": "constant_total_pods/node_2"},
+                {"path": "constant_total_pods/node_4"},
+                {"path": "constant_total_pods/node_8"},
+                {"path": "deployment/call_1"},
+                {"path": "deployment/call_100"},
+                {"path": "deployment/container_1"},
+                {"path": "deployment/container_100"},
+                {"path": "deployment/file_1"},
+                {"path": "deployment/file_100"},
+                {"path": "nodes/node_1"},
+                {"path": "nodes/node_2"},
+                {"path": "nodes/node_4"},
+                {"path": "pods_per_node/pod_1"},
+                {"path": "pods_per_node/pod_10"},
+                {"path": "pods_per_node/pod_100"},
+            ]
+
+            # GCP has more infrastructure so bigger configurations
+            # if args.infrastructure == "gcp":
+            #     self.experiments.append([])
+
+    def __repr__(self):
+        """Returns this string when called as print(object)"""
+        out = []
+        for experiment in self.experiments:
+            l = ["%s: %s" % (k, v) for k, v in experiment.items()]
+            out.append(" | ".join(l))
+
+        return "EXPERIMENTS:\n%s" % ("\n".join(out))
+
+    def _kill_all(self):
+        if self.infrastructure == "qemu":
+            for node in self.nodes:
+                try:
+                    comm = (
+                        r"virsh list --all | grep -o -E \"(\w*_%s)\" | \
+xargs -I %% sh -c \"virsh destroy %%\""
+                        % (self.username)
+                    )
+                    command = "ssh %s -t 'bash -l -c \"%s\"'" % (node, comm)
+                    replicate_paper.execute(command, shell=True, crash=False)
+                except Exception as e:
+                    logging.error("[ERROR] Could not virsh destroy with %s", e)
+                    sys.exit()
+
+    def _find_file(self, path, is_cfg=False, is_log=False, is_csv=False):
+        """Find a file with a .cfg / .log / .csv extention for an experiment
+        If found, return the file
+
+        Args:
+            path (str): Path to a log or cfg file
+            is_cfg (bool, optional): Append .cfg. Defaults to False.
+            is_log (bool, optional): Append .log. Defaults to False.
+            is_csv (bool, optional): Append .csv. Defaults to False.
+
+        Returns:
+            str: Path with .cfg or .log appended
+        """
+        if sum(x is True for x in [is_cfg, is_log, is_csv]) != 1:
+            logging.error("[ERROR] Exactly one of is_cfg / is_log / is_csv needs to be true")
+            sys.exit()
+
+        if is_cfg:
+            # CFG = pods_per_node/pod_10
+            # Should be pods_per_node/pod_10.cfg
+            # So path = pods_per_node
+            # Slightly different from .log and .csv
+            file_to_check = os.path.basename(path) + ".cfg"
+            path = self.cfg_path + os.path.dirname(path)
+        else:
+            file_to_check = ""
+            path = self.log_path + path
+
+        if not os.path.exists(path):
+            if is_cfg:
+                # Config should alreay exist
+                logging.error("[ERROR] Directory %s does not exist", path)
+                sys.exit()
+
+            # Create directory for log / csv, and return empty because file doesn't exist
+            os.makedirs(path)
+            return ""
+
+        # Find file with specific extention
+        files_of_interest = []
+        for file in os.listdir(path):
+            if file.endswith(".cfg") and is_cfg:
+                files_of_interest.append(file)
+            elif file.endswith(".log") and is_log:
+                files_of_interest.append(file)
+            elif file.endswith(".csv") and is_csv:
+                files_of_interest.append(file)
+
+        if not files_of_interest:
+            if is_cfg:
+                # The cfg file should just exist
+                # We can't run benchmarks on something that doens't exist
+                logging.error("[ERROR] The cfg file %s did not exist", file_to_check)
+                sys.exit()
+
+            # If not file with that extention was found, return an empty string
+            # This means we need to do a new run for this entry
+            return ""
+
+        # If cfg, check if the specific file you were looking for was found
+        if file_to_check != "":
+            if file_to_check in files_of_interest:
+                files_of_interest = [file_to_check]
+            else:
+                logging.error(
+                    "[ERROR] Was searching for %s, found %s instead",
+                    file_to_check,
+                    files_of_interest,
+                )
+                sys.exit()
+
+        # Should only find 1 file
+        if len(files_of_interest) > 1:
+            logging.error(
+                "[ERROR] Should have found only one file, but found: %s",
+                ",".join(files_of_interest),
+            )
+            sys.exit()
+
+        # If a file was found, return the file
+        return path + "/" + files_of_interest[0]
+
+    def generate(self):
+        """Create commands to execute the continuum framework
+        For each experiment, check if the dir where we expect the log file to be already exists
+
+        If so: check if there is a log file
+            If so: only re-plot using the csv
+            If not: re-run the experiment + move the file to that dir
+        If not: re-run the experiment + make dir and move files to that dir
+        """
+        for experiment in self.experiments:
+            # Check if cfg exists
+            cfg = self._find_file(experiment["path"], is_cfg=True)
+
+            # We don't need to check log file, only csv file
+            # csv file is created at the end of a run, log at the start
+            # So if csv exists, log exists -> and we only need the csv file
+            csv = self._find_file(experiment["path"], is_csv=True)
+
+            if csv == "":
+                # File does not exist, run entire framework
+                logging.info("To run: %s", cfg)
+                command = ["python3", "continuum.py", cfg]
+                run = {
+                    "command": command,
+                    "output": None,
+                }
+                self.runs.append(run)
+            else:
+                # File does exist, only run plot code
+                logging.info("To plot: %s", cfg)
+                run = {"file": csv, "destination": os.path.dirname(csv)}
+                self.plots.append(run)
+
+    def check_resume(self):
+        """Not required"""
+
+    def parse_output(self):
+        """Not required"""
+
+    def plot(self):
+        """Run plotting code for those experiments that already existed"""
+        if not self.do_plot:
+            return
+
+        for p in self.plots:
+            logging.info("Plot: %s", p["file"])
+            timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
+
+            df = pd.read_csv(p["file"])
+            if self.sort:
+                # Full sort every category individually
+                df = df.transform(np.sort)
+
+            plot.plot_control(df, timestamp)
+            plot.plot_p56(df, timestamp)
+
+            # Now move PDF back to the correct folder
+            command = "mv logs/%s* %s" % (timestamp, p["destination"])
+            replicate_paper.execute(command, shell=True)
+
+    def print_result(self):
+        """Not required"""
+
+
+def main(args):
+    """Main function
+
+    Args:
+        args (Namespace): Argparse object
+    """
+    if args.experiment == "microbenchmark":
+        logging.info("Experiment: microbenchmark")
+        exp = MicroBenchmark(args)
+    else:
+        logging.error("Invalid experiment: %s", args.experiment)
+        sys.exit()
+
+    logging.info(exp)
+    exp.generate()
+    exp.check_resume()
+    exp.run_commands()
+    exp.parse_output()
+    exp.plot()
+    exp.print_result()
+
+
+if __name__ == "__main__":
+    # Get input arguments and parse them
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "experiment",
+        choices=[
+            "microbenchmark",
+        ],
+        help="Experiment to replicate",
+    )
+    parser.add_argument(
+        "infrastructure",
+        choices=[
+            "qemu",
+        ],
+        help="Infrastructure to deploy on",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
+    parser.add_argument(
+        "-p", "--plot", action="store_true", help="Create new plots for existing data"
+    )
+    parser.add_argument("-s", "--sort", action="store_true", help="Sort all phases")
+
+    arguments = parser.parse_args()
+
+    replicate_paper.enable_logging(arguments.verbose)
+    main(arguments)
