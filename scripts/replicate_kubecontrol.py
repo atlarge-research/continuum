@@ -33,11 +33,12 @@ class MicroBenchmark(replicate_paper.Experiment):
         self.do_plot = args.plot
         self.sort = args.sort
 
+        self.remove_base = args.remove_base
+
         # All nodes used locally - used to kill all VMs to preven IP clashing
-        self.nodes = ["node1", "node4"]
+        self.nodes = ["node1", "node3", "node4"]
         self.username = "matthijs"
         self.infrastructure = args.infrastructure
-        self._kill_all()
 
         # Save all files that only need re-plotting here
         self.plots = []
@@ -51,7 +52,11 @@ class MicroBenchmark(replicate_paper.Experiment):
         # Feel free to comment out whatever you don't want to test
         self.experiments = []
         if args.experiment == "microbenchmark":
+            # This ordering to start with all local nodes -> forces consistent images
             self.experiments = [
+                {"path": "nodes/node_4"},
+                {"path": "nodes/node_2"},
+                {"path": "nodes/node_1"},
                 {"path": "constant_total_pods/node_1"},
                 {"path": "constant_total_pods/node_2"},
                 {"path": "constant_total_pods/node_4"},
@@ -62,17 +67,18 @@ class MicroBenchmark(replicate_paper.Experiment):
                 {"path": "deployment/container_100"},
                 {"path": "deployment/file_1"},
                 {"path": "deployment/file_100"},
-                {"path": "nodes/node_1"},
-                {"path": "nodes/node_2"},
-                {"path": "nodes/node_4"},
                 {"path": "pods_per_node/pod_1"},
                 {"path": "pods_per_node/pod_10"},
                 {"path": "pods_per_node/pod_100"},
             ]
 
             # GCP has more infrastructure so bigger configurations
-            # if args.infrastructure == "gcp":
-            #     self.experiments.append([])
+            if args.infrastructure == "gcp":
+                self.experiments += [
+                    {"path": "constant_total_pods/node_16"},
+                    {"path": "nodes/node_8"},
+                    {"path": "nodes/node_16"},
+                ]
 
     def __repr__(self):
         """Returns this string when called as print(object)"""
@@ -97,6 +103,59 @@ xargs -I %% sh -c \"virsh destroy %%\""
                 except Exception as e:
                     logging.error("[ERROR] Could not virsh destroy with %s", e)
                     sys.exit()
+
+    def _remove_base(self):
+        """Just to be safe, remove all base images before starting.
+        Especially on multi-physical-node runs, there may be consistency problems otherwise."""
+        if self.infrastructure == "qemu":
+            for node in self.nodes:
+                try:
+                    comm = r"rm -rf /mnt/sdc/%s/.continuum" % (self.username)
+                    command = "ssh %s -t 'bash -l -c \"%s\"'" % (node, comm)
+                    replicate_paper.execute(command, shell=True, crash=False)
+                except Exception as e:
+                    logging.error("[ERROR] Could not remove base images with %s", e)
+                    sys.exit()
+
+    def run_commands(self):
+        """Execute all generated commands
+        ADDED HERE SO YOU CAN CALL _KILL_ALL"""
+        if self.remove_base:
+            self._remove_base()
+
+        for run in self.runs:
+            if run["command"] == []:
+                continue
+
+            # Skip runs where we got output with --resume
+            if run["output"] is not None:
+                logging.info("Skip command: %s", " ".join(run["command"]))
+                continue
+
+            self._kill_all()
+
+            output, error = replicate_paper.execute(run["command"])
+
+            logging.debug("------------------------------------")
+            logging.debug("OUTPUT")
+            logging.debug("------------------------------------")
+            logging.debug("\n%s", "".join(output))
+
+            if error != []:
+                logging.debug("------------------------------------")
+                logging.debug("ERROR")
+                logging.debug("------------------------------------")
+                logging.debug("\n%s", "".join(error))
+                sys.exit()
+
+            logging.debug("------------------------------------")
+
+            # Get output from log file
+            logpath = output[0].rstrip().split("and file ")[-1]
+            with open(logpath, "r", encoding="utf-8") as f:
+                output = f.readlines()
+                run["output"] = output
+                f.close()
 
     def _find_file(self, path, is_cfg=False, is_log=False, is_csv=False):
         """Find a file with a .cfg / .log / .csv extention for an experiment
@@ -207,7 +266,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
                     "output": None,
                 }
                 self.runs.append(run)
-            else:
+            elif self.do_plot:
                 # File does exist, only run plot code
                 logging.info("To plot: %s", cfg)
                 run = {"file": csv, "destination": os.path.dirname(csv)}
@@ -221,9 +280,6 @@ xargs -I %% sh -c \"virsh destroy %%\""
 
     def plot(self):
         """Run plotting code for those experiments that already existed"""
-        if not self.do_plot:
-            return
-
         for p in self.plots:
             logging.info("Plot: %s", p["file"])
             timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
@@ -281,6 +337,7 @@ if __name__ == "__main__":
         "infrastructure",
         choices=[
             "qemu",
+            "gcp",
         ],
         help="Infrastructure to deploy on",
     )
@@ -289,8 +346,14 @@ if __name__ == "__main__":
         "-p", "--plot", action="store_true", help="Create new plots for existing data"
     )
     parser.add_argument("-s", "--sort", action="store_true", help="Sort all phases")
+    parser.add_argument("-r", "--remove_base", action="store_true", help="Remove all base images")
 
     arguments = parser.parse_args()
 
     replicate_paper.enable_logging(arguments.verbose)
+
+    if arguments.infrastructure == "gcp":
+        logging.info("Infrastructure == gcp. Make sure to add your GCP info to the config files.")
+        logging.info("This can be automated using continuum/configuration/gcp_update.py")
+
     main(arguments)
