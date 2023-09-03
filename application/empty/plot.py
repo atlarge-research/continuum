@@ -83,9 +83,6 @@ def plot_status(status, timestamp):
     plt.savefig("./logs/%s_breakdown.pdf" % (timestamp), bbox_inches="tight")
 
 
-# TODO - UPDATE NAMES HERE BASED ON CHANGES IN EMPTY.PY
-
-
 def plot_control(df, timestamp):
     """Plot controlplane data from the source code
 
@@ -137,7 +134,7 @@ def plot_control(df, timestamp):
         timestamp (time): Global timestamp used to save all files of this run
     """
     plt.rcParams.update({"font.size": 20})
-    _, ax1 = plt.subplots(figsize=(12, 4))
+    fig, ax1 = plt.subplots(figsize=(12, 4))
 
     bar_height = 1.1
 
@@ -200,6 +197,7 @@ def plot_control(df, timestamp):
 
     # Save plot
     plt.savefig("./logs/%s_breakdown_intern.pdf" % (timestamp), bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_p56(df, timestamp):
@@ -228,7 +226,7 @@ def plot_p56(df, timestamp):
         timestamp (time): Global timestamp used to save all files of this run
     """
     plt.rcParams.update({"font.size": 20})
-    _, ax1 = plt.subplots(figsize=(12, 4))
+    fig, ax1 = plt.subplots(figsize=(12, 4))
 
     bar_height = 1.1
 
@@ -296,3 +294,4 @@ def plot_p56(df, timestamp):
 
     # Save plot
     plt.savefig("./logs/%s_breakdown_intern_P56.pdf" % (timestamp), bbox_inches="tight")
+    plt.close(fig)
