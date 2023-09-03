@@ -83,7 +83,7 @@ def plot_status(status, timestamp):
     plt.savefig("./logs/%s_breakdown.pdf" % (timestamp), bbox_inches="tight")
 
 
-def plot_control(df, timestamp):
+def plot_control(df, timestamp, xmax=None, ymax=None):
     """Plot controlplane data from the source code
 
     Phases:
@@ -132,6 +132,8 @@ def plot_control(df, timestamp):
     Args:
         df (DataFrame): Pandas dataframe object with parsed timestamps per category
         timestamp (time): Global timestamp used to save all files of this run
+        xmax (bool): Optional. Set the xmax of the plot by hand. Defaults to None.
+        ymax (bool): Optional. Set the ymax of the plot by hand. Defaults to None.
     """
     plt.rcParams.update({"font.size": 20})
     fig, ax1 = plt.subplots(figsize=(12, 4))
@@ -182,10 +184,14 @@ def plot_control(df, timestamp):
     # Set y axis details
     ax1.set_ylabel("Pods")
     ax1.set_ylim(0, len(y))
+    if ymax:
+        ax1.set_ylim(0, ymax)
 
     # Set x axis details
     ax1.set_xlabel("Time (s)")
     ax1.set_xlim(0, max_time)
+    if xmax:
+        ax1.set_xlim(0, xmax)
 
     # add legend
     patches = []
@@ -200,7 +206,7 @@ def plot_control(df, timestamp):
     plt.close(fig)
 
 
-def plot_p56(df, timestamp):
+def plot_p56(df, timestamp, xmax=None, ymax=None):
     """Plot controlplane data from the source code
 
     Phases:
@@ -216,14 +222,11 @@ def plot_p56(df, timestamp):
     5. Start application
         - Ends:     created_container (s)
 
-    TODO
-    - TIME FETCH IMAGE
-    - IGNORE START POD PART
-    - IGNORE START APPLICATION, JUST END WHEN KUBE SAYS END
-
     Args:
         df (DataFrame): Pandas dataframe object with parsed timestamps per category
         timestamp (time): Global timestamp used to save all files of this run
+        xmax (bool): Optional. Set the xmax of the plot by hand. Defaults to None.
+        ymax (bool): Optional. Set the ymax of the plot by hand. Defaults to None.
     """
     plt.rcParams.update({"font.size": 20})
     fig, ax1 = plt.subplots(figsize=(12, 4))
@@ -277,10 +280,14 @@ def plot_p56(df, timestamp):
     # Set y axis details
     ax1.set_ylabel("Pods")
     ax1.set_ylim(0, len(y))
+    if ymax:
+        ax1.set_ylim(0, ymax)
 
     # Set x axis details
     ax1.set_xlabel("Time (s)")
     ax1.set_xlim(0, max_time)
+    if xmax:
+        ax1.set_xlim(0, xmax)
 
     # add legend
     patches = []
