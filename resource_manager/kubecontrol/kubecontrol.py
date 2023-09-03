@@ -7,6 +7,7 @@ import logging
 import os
 
 from infrastructure import ansible
+from resource_manager.kubernetes import kubernetes
 
 
 def add_options(_config):
@@ -100,6 +101,8 @@ def start(config, machines):
     for command, (output, error) in zip(commands, results):
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
         ansible.check_output((output, error))
+
+    kubernetes.verify_running_cluster(config, machines)
 
     # Install observability packages (Prometheus, Grafana) if configured by the user
     if config["benchmark"]["observability"]:

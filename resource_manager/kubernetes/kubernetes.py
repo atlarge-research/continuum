@@ -86,6 +86,8 @@ def start(config, machines):
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
         ansible.check_output((output, error))
 
+    verify_running_cluster(config, machines)
+
     # Install observability packages (Prometheus, Grafana) if configured by the user
     if config["benchmark"]["observability"]:
         command = [
@@ -102,6 +104,53 @@ def start(config, machines):
 
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
         ansible.check_output((output, error))
+
+
+def verify_running_cluster(config, machines):
+    """Verify that all nodes in the cluster have status Ready
+    If not, either wait until they are ready or stop the framework
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    logging.info("Verify if all nodes in the cluster are connected")
+
+    pending = True
+    i = 0
+
+    while i < config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]:
+        # Get the list of nodes
+        if pending:
+            command = ["kubectl", "get", "nodes"]
+            output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
+
+            if (error and not all("[CONTINUUM]" in l for l in error)) or not output:
+                logging.error("".join(error))
+                sys.exit()
+
+            # The first couple of lines may have custom prints, skip
+            offset = 0
+            for offset, o in enumerate(output):
+                if "NAME" in o and "STATUS" in o:
+                    break
+
+        # Find the status
+        line = output[i + 1 + offset].rstrip().split(" ")
+        line = [s for s in line if s != ""]
+        node = line[0]
+        status = line[1]
+
+        # Check status of node
+        if status == "Ready":
+            i += 1
+            pending = False
+        elif status == "NotReady":
+            time.sleep(5)
+            pending = True
+        else:
+            logging.error("[ERROR] Node %s has unexpected status %s", node, status)
+            sys.exit()
 
 
 def cache_worker(config, machines, app_vars):
@@ -284,14 +333,24 @@ def wait_worker_ready(config, machines, get_starttime):
     Returns (optional):
         (list(dict)): Status of all pods every second
     """
-    if config["mode"] == "cloud":
-        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
-            "applications_per_worker"
-        ]
-    elif config["mode"] == "edge":
-        worker_apps = (
-            config["infrastructure"]["edge_nodes"] * config["benchmark"]["applications_per_worker"]
-        )
+    # Determine number of workers
+    # In container mode, all applications are gathered in 1 pod, so we only have 1 worker
+    if (
+        "kube_deployment" in config["benchmark"]
+        and config["benchmark"]["kube_deployment"] == "container"
+    ):
+        worker_apps = 1
+    else:
+        # Otherwise, we have 1 pod per application
+        if config["mode"] == "cloud":
+            worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
+                "applications_per_worker"
+            ]
+        elif config["mode"] == "edge":
+            worker_apps = (
+                config["infrastructure"]["edge_nodes"]
+                * config["benchmark"]["applications_per_worker"]
+            )
 
     status = []
     while True:
@@ -307,7 +366,7 @@ def wait_worker_ready(config, machines, get_starttime):
         start_t = float(output[0])
         output = output[1:]
 
-        # Not all pods are yet shown in the 'kubectl get pods' command
+        # No pods are yet shown in the 'kubectl get pods' command
         if error and any("couldn't find any field with path" in line for line in error):
             continue
 
@@ -350,7 +409,7 @@ def wait_worker_ready(config, machines, get_starttime):
             app_name = l[0]
             app_status = l[-1]
 
-            if app_status in ["Failed", "Unknown"]:
+            if app_status in ["Failed", "Unknown", "ErrImageNeverPull"]:
                 logging.error(
                     'Container on cloud/edge %s has status %s, expected "Pending" or "Running"',
                     app_name,
@@ -360,17 +419,17 @@ def wait_worker_ready(config, machines, get_starttime):
 
             status_entry[app_status] += 1
 
-        total = (
+        pods_in_system = (
             status_entry["Pending"]
             + status_entry["Running"]
             + status_entry["Succeeded"]
             + status_entry["ContainerCreating"]
         )
-        status_entry["Arriving"] = worker_apps - total
+        status_entry["Arriving"] = worker_apps - pods_in_system
         status.append(status_entry)
 
-        # Stop if all statuses are running
-        if status_entry["Running"] + status_entry["Succeeded"] == total:
+        # Stop if all statuses are running or succeeded
+        if status_entry["Running"] + status_entry["Succeeded"] == worker_apps:
             break
 
     if get_starttime:
@@ -1143,6 +1202,10 @@ def get_control_output(config, machines, starttime, status):
                 # Now check for time interval
                 if entry[0] >= starttime and entry[0] <= endtime:
                     parsed_copy[node][component].append(entry)
+
+    logging.debug("=====================")
+    logging.debug(parsed_copy)
+    logging.debug("=====================\n\n\n\n\n\n\n\n\n")
 
     return parsed_copy
 
