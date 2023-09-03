@@ -194,15 +194,52 @@ def create_control_object(worker_description, mapping):
     return worker_metrics
 
 
-def check(
-    config,
-    control,
-    starttime,
-    worker_metrics,
-    component,
-    sub_string,
-    tag,
-):
+def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
+    """Insert starttime in the array worker_metrics[tag], in chronological order compared
+    to an already filled series of timestamps worker_metrics[compare_tag]
+
+    Args:
+        starttime (datetime, optional): Invocation time of kubectl apply command
+        worker_metrics (list(dict)): Metrics per worker node
+        tag (str): Dict key to save the found logs under
+        compare_tag (str): Other dict key against which you should sort on time
+        future_compare (bool): Compare to a dataset in the future (<) or past (>)
+    """
+    logging.debug("Insert sort-on-time")
+
+    # Sort previous tag to find the correct order of time
+    sorted_worker_metrics = sorted(worker_metrics, key=lambda x: x[compare_tag])
+
+    # You can't directly insert in worker_metrics like this, so we first
+    # find the timestamp to insert to in the sorted list, and then
+    # find the right entry in worker_metrics to insert into
+    insertion_time = 100000.0
+    for s in sorted_worker_metrics:
+        if s[tag] is None and (
+            (future_compare and timestamp < s[compare_tag])
+            or (not future_compare and timestamp > s[compare_tag])
+        ):
+            insertion_time = s[compare_tag]
+            break
+
+    if insertion_time == 100000.0:
+        logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
+        sys.exit()
+
+    # Now insert in the real list given by searching for our timestamp
+    insert = False
+    for metric in worker_metrics:
+        if metric[compare_tag] == insertion_time:
+            metric[tag] = timestamp
+            insert = True
+            break
+
+    if not insert:
+        logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
+        sys.exit()
+
+
+def check(config, control, starttime, worker_metrics, component, sub_string, tag, compare_tag=""):
     """Parse [timestamp, line (0400 job=X)] pairs to datastructures for plotting
 
     Args:
@@ -213,6 +250,8 @@ def check(
         component (str): Kubernetes component in which logs we look
         sub_string (str): String to check for in each line of component's logs
         tag (str): Dict key to save the found logs under
+        compare_tag (str): Optional. When no tag exists in the output line (like 0400 job=empty-1)
+                           compare against worker_metrics[compare_tag] for chronological insertion.
     """
     logging.debug(
         "Parsing output for component [%s], with tag [%s] and filter: %s",
@@ -249,110 +288,103 @@ def check(
                 if sub_string in line:
                     out_filtered.append([t, line])
 
-            logging.debug("----------------------")
             logging.debug(out_filtered)
-            logging.debug("----------------------")
 
             # Now parse the lines
             for t, line in out_filtered:
                 if i == len(worker_metrics):
-                    logging.debug("WARNING: i == number of deployed pods. Skip")
-                    continue
+                    logging.debug("WARNING: i == number of deployed pods. Stop processing")
+                    break
 
-                if "pod=" in line and "container=" in line:
-                    # Match pod and container
-                    strip = line.strip().split("pod=")[1]
-                    if "default/" in strip:
-                        strip = strip.split("default/")[1]
+                # Sort on time cases
+                if "0277" in line and config["benchmark"]["kube_deployment"] == "pod":
+                    # If deployment mode is pod, 0277 will print job=empty but every pod
+                    # is part of the empty job so we don't have any ordering.
+                    # In that case, brute force the ordering by searching for the number
+                    # closest to the next timestamp, 9_scheduler_start
+                    # We swapped insertion so 9_scheduler_start is already inserted
+                    timestamp = time_delta(t, starttime)
+                    sort_on_time(timestamp, worker_metrics, tag, "9_scheduler_start", True)
+                    i += 1
+                elif component == "apiserver":
+                    timestamp = time_delta(t, starttime)
+                    sort_on_time(timestamp, worker_metrics, tag, compare_tag, False)
+                    i += 1
+                else:
+                    # The cases where a tag exists
+                    if "pod=" in line and "container=" in line:
+                        # Match pod and container
+                        strip = line.strip().split("pod=")[1]
+                        if "default/" in strip:
+                            strip = strip.split("default/")[1]
 
-                    strip = strip.split(" container=")
-                    pod = strip[0]
-                    container = strip[1]
+                        strip = strip.split(" container=")
+                        pod = strip[0]
+                        container = strip[1]
 
-                    for metric in worker_metrics:
-                        if (
-                            metric["pod"] == pod
-                            and metric["container"] == container
-                            and metric[tag] is None
-                        ):
-                            metric[tag] = time_delta(t, starttime)
-                            i += 1
-                elif "pod=" in line:
-                    # Add to correct pod
-                    pod = line.strip().split("pod=")[1]
-                    if "default/" in pod:
-                        pod = pod.split("default/")[1]
-
-                    for metric in worker_metrics:
-                        # Note: logs are already sorted by time, so only just the first entry
-                        #       This applies to all metric[tag] is None in this function
-                        if metric["pod"] == pod and metric[tag] is None:
-                            metric[tag] = time_delta(t, starttime)
-                            i += 1
-                elif "container=" in line:
-                    # Add to correct container
-                    container = line.strip().split("container=default/")[1]
-                    for metric in worker_metrics:
-                        if metric["container"] == container and metric[tag] is None:
-                            metric[tag] = time_delta(t, starttime)
-                            i += 1
-                elif "job=" in line:
-                    # Filter on job
-                    # These job prints only have "empty-5", while pod name is "empty-5-asdfa"
-                    # Therefore, we manually add a "-" here to filter correctly,
-                    # otherwise "empty-1" will be in "empty-10" which should not happen
-                    if "default/" in line:
-                        # For prints inside Kubernetes' control plane
-                        job = line.strip().split("job=default/")[1] + "-"
-                    else:
-                        # For prints in kubectl
-                        job = line.strip().split("job=")[1] + "-"
-
-                    if "0277" in line and config["benchmark"]["kube_deployment"] == "pod":
-                        # If deployment mode is pod, 0277 will print job=empty but every pod
-                        # is part of the empty job so we don't have any ordering.
-                        # In that case, brute force the ordering by searching for the number
-                        # closest to the next timestamp, 5_scheduler_start
-                        # We swapped insertion so 5_scheduler_start is already inserted
-                        timestamp = time_delta(t, starttime)
-
-                        # Sort based on 5_scheduler_start so we can insert at the first value
-                        # bigger than 4_pod_object_create which doesn't have a value yet
-                        sorted_worker_metrics = sorted(
-                            worker_metrics, key=lambda x: x["5_scheduler_start"]
-                        )
-
-                        # Now insert given the criteria above
-                        # Is this 100% correct? No. Is it accurate enough? Yes.
-                        insertion_time = 100000.0
-                        for s in sorted_worker_metrics:
-                            if s[tag] is None and timestamp < s["5_scheduler_start"]:
-                                insertion_time = s["5_scheduler_start"]
-                                break
-
-                        if insertion_time == 100000.0:
-                            logging.error("ERROR: didn't find an entry to insert a 0277 print into")
-                            sys.exit()
-
-                        # Now insert in the real list given by searching for our timestamp
                         for metric in worker_metrics:
-                            if metric["5_scheduler_start"] == insertion_time:
-                                metric[tag] = timestamp
+                            if (
+                                metric["pod"] == pod
+                                and metric["container"] == container
+                                and metric[tag] is None
+                            ):
+                                metric[tag] = time_delta(t, starttime)
                                 i += 1
-                                break
-                    else:
+                    elif "pod=" in line:
+                        # Add to correct pod
+                        pod = line.strip().split("pod=")[1]
+                        if "default/" in pod:
+                            pod = pod.split("default/")[1]
+
+                        for metric in worker_metrics:
+                            # Note: logs are already sorted by time, so only just the first entry
+                            #       This applies to all metric[tag] is None in this function
+                            if metric["pod"] == pod and metric[tag] is None:
+                                metric[tag] = time_delta(t, starttime)
+                                i += 1
+                    elif "container=" in line:
+                        # Add to correct container
+                        container = line.strip().split("container=default/")[1]
+                        for metric in worker_metrics:
+                            if metric["container"] == container and metric[tag] is None:
+                                metric[tag] = time_delta(t, starttime)
+                                i += 1
+                    elif "job=" in line:
+                        # Filter on job
+                        # These job prints only have "empty-5", while pod name is "empty-5-asdfa"
+                        # Therefore, we manually add a "-" here to filter correctly,
+                        # otherwise "empty-1" will be in "empty-10" which should not happen
+                        if "default/" in line:
+                            # For prints inside Kubernetes' control plane
+                            job = line.strip().split("job=default/")[1] + "-"
+                        else:
+                            # For prints in kubectl
+                            job = line.strip().split("job=")[1] + "-"
+
                         # Normal insertion according to job match
                         for metric in worker_metrics:
                             if job in metric["pod"] and metric[tag] is None:
                                 metric[tag] = time_delta(t, starttime)
                                 i += 1
 
-    # Fill up if there are multiple containers per pod
     if i < len(worker_metrics):
-        logging.error(
-            "ERROR: Didn't parse output for all pods. Stopped at %i / %i", i, len(worker_metrics)
-        )
-        sys.exit()
+        if component == "apiserver" and i == 1:
+            # Only fill up the rest if there was only 1 entry and its the apiserver we're parsing
+            logging.debug(
+                "Parsed output for %i / %i pods. Fill up the rest.", i, len(worker_metrics)
+            )
+
+            # Fill up if there are multiple containers per pod
+            if i < len(worker_metrics):
+                j = i - 1
+                while i < len(worker_metrics):
+                    worker_metrics[i][tag] = worker_metrics[j][tag]
+                    i += 1
+        else:
+            # In all other conditions all pods should have been parsed automatically
+            # If that didn't happen, generate an error
+            logging.error("ERROR: Only parsed output for %i / %i pods.", i, len(worker_metrics))
+            sys.exit()
 
 
 def fill_control(config, control, starttime, worker_output, worker_description):
@@ -367,36 +399,53 @@ def fill_control(config, control, starttime, worker_output, worker_description):
     """
     logging.info("Gather metrics on deployment phases")
 
-    # Component, tag to search for, name
+    # Component, tag to search for, name, sort_on_time, future_compare
     mapping = [
         # 0: Timestamp before kubectl command is invoked, in framework
         ["kubectl", "0400", "1_kubectl_start"],  # Start of kubectl command
         ["kubectl", "0401", "2_kubectl_send"],  # Before kubectl sends data to apiserver
-        ["controller-manager", "0028", "3_jobcontroller_start"],  # Start of job controller
-        ["controller-manager", "0277", "4_pod_object_create"],  # After unpacking, per pod start
-        ["scheduler", "0124", "5_scheduler_start"],  # Start of scheduler
-        ["kubelet", "0500", "6_kubelet_start"],  # Start of kubelet (create pod, includes cgroups)
-        ["kubelet", "0504", "7_volume_mount"],  # Start mounting volumes
-        ["kubelet", "0505", "8_sandbox_start"],  # Create sandbox
-        ["kubelet", "0514", "9_create_container"],  # Create containers
-        ["kubelet", "0517", "10_start_container"],  # Start container
-        [None, None, "11_app_start"],  # First print in the application
+        ["apiserver", "0200", "3_api_receive_job"],  # Receive write request for job from kubectl
+        ["apiserver", "0201", "4_api_write_job"],  # Write job
+        ["controller-manager", "0028", "5_jobcontroller_start"],  # Start of job controller
+        ["controller-manager", "0277", "6_pod_object_create"],  # After unpacking, per pod start
+        ["apiserver", "0202", "7_api_receive_pod"],  # Receive write request for pod from controller
+        ["apiserver", "0203", "8_api_write_pod"],  # Write pod
+        ["scheduler", "0124", "9_scheduler_start"],  # Start of scheduler
+        ["apiserver", "0204", "10_api_receive_pod"],  # Receive write request for pod from scheduler
+        ["apiserver", "0205", "11_api_write_pod"],  # Write pod location
+        ["apiserver", "0206", "12_api_receive_pod"],  # Receive read request for pod from kubelet
+        ["apiserver", "0207", "13_api_read_pod"],  # Read pod
+        ["kubelet", "0500", "14_kubelet_start"],  # Start of kubelet (create pod, includes cgroups)
+        ["kubelet", "0504", "15_volume_mount"],  # Start mounting volumes
+        ["kubelet", "0505", "16_sandbox_start"],  # Create sandbox
+        ["kubelet", "0514", "17_create_container"],  # Create containers
+        ["kubelet", "0517", "18_start_container"],  # Start container
+        [None, None, "19_app_start"],  # First print in the application
     ]
 
     worker_metrics = create_control_object(worker_description, mapping)
 
-    # Swap 4 and 5 for insertion
+    # 6_pod_object_create can only be inserted after 9_scheduler_start
+    # 7_api_receive_pod and 8_api_write_pod can only be inserted after 6_pod_object_create
+    # New order: 9 -> 6 -> 7 -> 8
     # See 0277 comments in check()
-    tmp = mapping[3]
-    mapping[3] = mapping[4]
-    mapping[4] = tmp
+    pod_6 = mapping[5]
+    pod_7 = mapping[6]
+    pod_8 = mapping[7]
+    mapping[5] = mapping[8]
+    mapping[6] = pod_6
+    mapping[7] = pod_7
+    mapping[8] = pod_8
 
     # Parse and insert
-    for component, tag, name in mapping:
-        if component is not None:
+    for i, (component, tag, name) in enumerate(mapping):
+        if component == "apiserver":
+            compare_tag = mapping[i - 1][2]
+            check(config, control, starttime, worker_metrics, component, tag, name, compare_tag)
+        elif component is not None:
             check(config, control, starttime, worker_metrics, component, tag, name)
 
-    # 11_app_start: First print in the application
+    # 19_app_start: First print in the application
     for pod, output in worker_output:
         for line in output:
             if "Start the application" in line:
@@ -422,7 +471,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
 
                 for i, metrics in enumerate(worker_metrics):
                     if not check_container and metrics["pod"] == pod:
-                        worker_metrics[i]["11_app_start"] = time_delta(end_time, starttime)
+                        worker_metrics[i]["19_app_start"] = time_delta(end_time, starttime)
                         # You could add a break here and in the end of the next else, but the
                         # code's logic should be robust enough so that it isn't required
                     elif (
@@ -430,7 +479,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
                         and metrics["pod"] == pod
                         and metrics["container"] == container
                     ):
-                        worker_metrics[i]["11_app_start"] = time_delta(end_time, starttime)
+                        worker_metrics[i]["19_app_start"] = time_delta(end_time, starttime)
 
     return worker_metrics
 
@@ -456,15 +505,23 @@ def print_control(config, worker_metrics):
         columns={
             "1_kubectl_start": "kubectl_start (s)",
             "2_kubectl_send": "kubectl_parsed (s)",
-            "3_jobcontroller_start": "created_workload_obj (s)",
-            "4_pod_object_create": "unpacked_workload_obj (s)",
-            "5_scheduler_start": "created_pod_obj (s)",
-            "6_kubelet_start": "scheduled_pod (s)",
-            "7_volume_mount": "created_pod (s)",  # TODO 7: maybe better "created_cgroup"
-            "8_sandbox_start": "mounted_volume (s)",
-            "9_create_container": "applied_sandbox (s)",
-            "10_start_container": "created_container (s)",
-            "11_app_start": "started_application (s)",
+            "3_api_receive_job": "api_workload_arrived (s)",
+            "4_api_write_job": "api_workload_written (s)",
+            "5_jobcontroller_start": "controller_read_workload (s)",
+            "6_pod_object_create": "controller_unpacked_workload (s)",
+            "7_api_receive_pod": "api_pod_created (s)",
+            "8_api_write_pod": "api_pod_written (s)",
+            "9_scheduler_start": "scheduler_read_pod (s)",
+            "10_api_receive_pod": "scheduled_pod (s)",
+            "11_api_write_pod": "api_location_written (s)",
+            "12_api_receive_pod": "api_read_pod_kubelet (s)",
+            "13_api_read_pod": "api_read_pod_finish (s)",
+            "14_kubelet_start": "kubelet_pod_received (s)",
+            "15_volume_mount": "kubelet_created_cgroup (s)",
+            "16_sandbox_start": "kubelet_mounted_volume (s)",
+            "17_create_container": "kubelet_applied_sandbox (s)",
+            "18_start_container": "kubelet_created_container (s)",
+            "19_app_start": "started_application (s)",
         },
         inplace=True,
     )

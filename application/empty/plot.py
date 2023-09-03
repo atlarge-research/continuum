@@ -144,15 +144,15 @@ def plot_control(df, timestamp):
     df_plot = df.copy(deep=True)
     df_plot = df_plot[
         [
-            "created_workload_obj (s)",
-            "unpacked_workload_obj (s)",
-            "created_pod_obj (s)",
-            "scheduled_pod (s)",
-            "applied_sandbox (s)",
+            "controller_read_workload (s)",
+            "controller_unpacked_workload (s)",
+            "scheduler_read_pod (s)",
+            "kubelet_pod_received (s)",
+            "kubelet_applied_sandbox (s)",
             "started_application (s)",
         ]
     ]
-    y = [*range(len(df_plot["created_workload_obj (s)"]))]
+    y = [*range(len(df_plot["started_application (s)"]))]
 
     left = [0 for _ in range(len(y))]
 
@@ -235,11 +235,11 @@ def plot_p56(df, timestamp):
     df_plot = df.copy(deep=True)
     df_plot = df_plot[
         [
-            "scheduled_pod (s)",
-            "created_pod (s)",
-            "mounted_volume (s)",
-            "applied_sandbox (s)",
-            "created_container (s)",
+            "kubelet_pod_received (s)",
+            "kubelet_created_cgroup (s)",
+            "kubelet_mounted_volume (s)",
+            "kubelet_applied_sandbox (s)",
+            "kubelet_created_container (s)",
             "started_application (s)",
         ]
     ]
