@@ -437,9 +437,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
     #        The new order is 7 -> 6 -> 5 and reverse insertion
     #        See 0277 comments in check()
     pod_5 = mapping[4]
-    pod_6 = mapping[5]
     mapping[4] = mapping[6]
-    mapping[5] = pod_6
     mapping[6] = pod_5
 
     # Parse and insert
