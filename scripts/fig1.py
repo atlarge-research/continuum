@@ -29,7 +29,7 @@ def parse_data(df):
         "Managed Kubernetes": [],
         "Containerd (threads=1)": [],
         "Containerd (threads=8)": [],
-        "Our solution": [],
+        "Columbo (our solution)": [],
     }
 
     # First add all time entries
@@ -130,6 +130,8 @@ def plot_data(ax, df):
     texts = df.columns.values[1:]
     ax.legend(patches, texts, loc="lower right", fontsize="16", bbox_to_anchor=(1.01, -0.03))
 
+    plt.text(12.3, 90, "A", fontsize=22)
+
 
 def plot_bar(ax, timestamp):
     """We take the last application/pod from the "Local Kubernetes" line from the main plot
@@ -190,7 +192,7 @@ def plot_bar(ax, timestamp):
         patches.append(mpatches.Patch(facecolor=color, edgecolor="k"))
 
     texts = list(y.keys())
-    ax.legend(patches, texts, loc="upper center", fontsize="16", ncol=3, bbox_to_anchor=(0.5, 1.8))
+    ax.legend(patches, texts, loc="upper center", fontsize="16", ncol=3, bbox_to_anchor=(0.5, 1.68))
 
     # Save plot
     plt.savefig("./%s_fig1.pdf" % (timestamp), bbox_inches="tight")
@@ -206,13 +208,13 @@ def main(df):
     df_out = pd.DataFrame(csv)
 
     timestamp = time.strftime("%Y-%m-%d_%H:%M:%S", time.gmtime())
-    df_out.to_csv("./%s_fig1.csv" % (timestamp), index=False, encoding="utf-8")
+    # df_out.to_csv("./%s_fig1.csv" % (timestamp), index=False, encoding="utf-8")
 
     plt.rcParams.update({"font.size": 20})
     fig, (ax1, ax2) = plt.subplots(
         nrows=2,
         sharex=True,
-        gridspec_kw={"height_ratios": [1, 3.8], "hspace": 0.3},
+        gridspec_kw={"height_ratios": [1, 3.8], "hspace": 0.05},
         figsize=((12, 5)),
     )
     plot_data(ax2, df_out)
