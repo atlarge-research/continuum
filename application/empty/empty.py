@@ -109,6 +109,7 @@ def format_output(
     starttime=None,
     worker_output=None,
     worker_description=None,
+    resource_output=None,
 ):
     """Format processed output to provide useful insights (empty)
 
@@ -130,9 +131,11 @@ def format_output(
                 config, control, starttime, worker_output, worker_description
             )
             df = print_control(config, worker_metrics)
+            df_resources = print_resources(config, resource_output)
             validate_data(df)
             plot.plot_control(df, config["timestamp"])
             plot.plot_p56(df, config["timestamp"])
+            plot.plot_resources(df_resources, config["timestamp"])
 
 
 def create_control_object(worker_description, mapping):
@@ -577,3 +580,40 @@ def validate_data(df):
         diff = df.loc[(df[first] > df[second])]
         if not diff.empty:
             logging.info("[WARNING]: %s < %s is not true for %i lines", first, second, len(diff))
+
+
+def print_resources(config, df):
+    """Modify the resource dataframe and save it to csv
+
+    Example:
+    timestamp cloud0matthijs_cpu  cloud0matthijs_memory  cloudcontrollermatthijs_cpu   ...
+    0.359692                 103                    419                         1481   ...
+    0.534534                 103                    419                         1481   ...
+    0.934234                 103                    419                         1481   ...
+    1.323432                 103                    419                         1481   ...
+
+    etcd_cpu  etcd_memory  apiserver_cpu  apiserver_memory  controller-manager_cpu     ...
+         948           39             28               196                     270     ...
+         948           39             28               196                     270     ...
+         948           39             28               196                     270     ...
+         948           39             28               196                     270     ...
+
+    Args:
+        config (dict): Parsed configuration
+        df (DataFrame): Resource metrics data
+
+    Returns:
+        (DataFrame) Pandas dataframe object with parsed timestamps per category
+    """
+    df.columns = ["Time (s)" if c == "timestamp" else c for c in df.columns]
+    df.columns = ["controller_" + c.split("_")[-1] if "controller" in c else c for c in df.columns]
+    df.columns = [
+        c.replace(config["username"], "") if config["username"] in c else c for c in df.columns
+    ]
+
+    # Save to csv
+    df.to_csv(
+        "./logs/%s_dataframe_resources.csv" % (config["timestamp"]), index=False, encoding="utf-8"
+    )
+
+    return df

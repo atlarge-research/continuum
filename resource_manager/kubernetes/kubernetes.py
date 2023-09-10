@@ -7,6 +7,8 @@ import os
 import sys
 import time
 
+import pandas as pd
+
 from infrastructure import ansible
 
 
@@ -1191,7 +1193,7 @@ def get_control_output(config, machines, starttime, status):
                 if entry[0] >= starttime and entry[0] <= endtime:
                     parsed_copy[node][component].append(entry)
 
-    return parsed_copy
+    return parsed_copy, endtime
 
 
 def parse_custom_kubernetes_splits(line):
@@ -1224,3 +1226,56 @@ def parse_custom_kubernetes_splits(line):
 
     line = line.split("[CONTINUUM] ")[1]
     return time_obj, line
+
+
+def start_resource_metrics(config, machines):
+    """Start the resource metrics server by hand
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+    """
+    command = "nohup python3 resource_usage.py &"
+    machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0], wait=False)
+
+
+def get_resource_output(config, machines, starttime, endtime):
+    """_summary_
+
+    Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
+        starttime (datetime): Invocation time of kubectl apply command that launches the benchmark
+        endtime (datetime): Time at which the final application is deployed
+
+    Returns:
+        (dataframe): Pandas dataframe with resource utilization metrics during our benchmrak deploym
+    """
+    logging.info("Fetch the resource utilization data from the controlplane VM")
+
+    # Move the csv file from the VM to the host
+    command = [
+        "ansible-playbook",
+        "-i",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(
+            config["infrastructure"]["base_path"],
+            ".continuum/cloud/resource_usage_back.yml",
+        ),
+    ]
+
+    output, error = machines[0].process(config, command)[0]
+
+    logging.debug("Check output for Ansible command [%s]", " ".join(command))
+    ansible.check_output((output, error))
+
+    # Now read the file via pandas and:
+    # - Only take the timestamps between the start and end of the benchmark
+    # - Offset these values compared to the start time of the benchmark (so row 1 starts near 0.0s)
+    path = os.path.join(config["infrastructure"]["base_path"], ".continuum/resource_usage.csv")
+    df = pd.read_csv(path)
+    df["timestamp"] = df["timestamp"] / 10**9
+    df_filtered = df.loc[(df["timestamp"] > starttime) & (df["timestamp"] < endtime)]
+    df_filtered["timestamp"] -= starttime
+
+    return df_filtered

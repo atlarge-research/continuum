@@ -124,6 +124,7 @@ BASE_NAMES                  %s""" % (
         ssh=None,
         ssh_key=True,
         retryonoutput=False,
+        wait=True,
     ):
         """Execute a process using the subprocess library, return the output/error of the process
 
@@ -136,6 +137,7 @@ BASE_NAMES                  %s""" % (
             ssh (str, optional): VM to SSH into (instead of physical machine). Default to None
             ssh_key (bool, optional): Use the custom SSH key for VMs. Default to True
             retryonoutput (bool, optional): Retry command on empty output. Default to False
+            wait (bool, optional): Should we wait for output? Default to true
 
         Returns:
             list(list(str), list(str)): Return a list of [output, error] lists, one per command.
@@ -208,6 +210,10 @@ BASE_NAMES                  %s""" % (
                     stderr=subprocess.PIPE,
                 )
                 processes.append(process)
+
+            # We may not be interested in the output at all
+            if not wait:
+                continue
 
             # Get outputs for this batch of commmands (blocking)
             for j, process in enumerate(processes):

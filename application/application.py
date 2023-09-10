@@ -274,6 +274,9 @@ def kube_control(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
+    # Start the resource utilization metrics
+    kubernetes.start_resource_metrics(config, machines)
+
     # Cache the worker to prevent loading
     if config["benchmark"]["cache_worker"]:
         app_vars = config["module"]["application"].cache_worker(config, machines)
@@ -294,7 +297,9 @@ def kube_control(config, machines):
     worker_output = kubernetes.get_worker_output(config, machines)
     worker_description = kubernetes.get_worker_output(config, machines, get_description=True)
 
-    control_output = kubernetes.get_control_output(config, machines, starttime, status)
+    control_output, endtime = kubernetes.get_control_output(config, machines, starttime, status)
+
+    resource_output = kubernetes.get_resource_output(config, machines, starttime, endtime)
 
     # Add kubectl output
     node = config["cloud_ssh"][0].split("@")[0]
@@ -311,4 +316,5 @@ def kube_control(config, machines):
         starttime=starttime,
         worker_output=worker_output,
         worker_description=worker_description,
+        resource_output=resource_output,
     )
