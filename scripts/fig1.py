@@ -24,7 +24,7 @@ def parse_data(df):
         dict: Dict with parsed data
     """
     csv = {
-        "Time (s)": [],
+        "Elapsed Time (s)": [],
         "Default Kubernetes": [],
         "Managed Kubernetes": [],
         "Containerd (threads=1)": [],
@@ -38,19 +38,19 @@ def parse_data(df):
             continue
 
         for t in df[column]:
-            csv["Time (s)"].append(t)
+            csv["Elapsed Time (s)"].append(t)
 
     # Remove duplicate entries and sort
-    csv["Time (s)"] = [0.0] + csv["Time (s)"]
-    csv["Time (s)"] = list(set(csv["Time (s)"]))
-    csv["Time (s)"].sort()
+    csv["Elapsed Time (s)"] = [0.0] + csv["Elapsed Time (s)"]
+    csv["Elapsed Time (s)"] = list(set(csv["Elapsed Time (s)"]))
+    csv["Elapsed Time (s)"].sort()
 
     # Set entire list to zero
     for key in csv:
-        if key == "Time (s)":
+        if key == "Elapsed Time (s)":
             continue
 
-        csv[key] = [0] * len(csv["Time (s)"])
+        csv[key] = [0] * len(csv["Elapsed Time (s)"])
 
     # To prevent a large tail of 100 values
     finished = {}
@@ -58,7 +58,7 @@ def parse_data(df):
         finished[key] = False
 
     # Now add entries
-    for i, timestamp in enumerate(csv["Time (s)"]):
+    for i, timestamp in enumerate(csv["Elapsed Time (s)"]):
         for column in df:
             if column in ["Deployed Containers"]:
                 continue
@@ -98,11 +98,11 @@ def plot_data(ax, df):
     ]
 
     for i, key in enumerate(df):
-        if key == "Time (s)":
+        if key == "Elapsed Time (s)":
             continue
 
         ax.plot(
-            df["Time (s)"],
+            df["Elapsed Time (s)"],
             df[key],
             color=colors[i - 1],
             linewidth=8.0,
@@ -119,8 +119,8 @@ def plot_data(ax, df):
     plt.yticks(np.arange(0, 101, 20))
 
     # Set x axis details
-    ax.set_xlabel("Time (s)")
-    ax.set_xlim(0, math.ceil(df["Time (s)"].values[-1]) + 1)
+    ax.set_xlabel("Elapsed Time (s)")
+    ax.set_xlim(0, math.ceil(df["Elapsed Time (s)"].values[-1]) + 1)
 
     # add legend
     patches = []
