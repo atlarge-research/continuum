@@ -95,7 +95,31 @@
     #             memory: 400Mi
     #     EOF
 
-    - name: Create kubelet config file
+    # - name: Create kubelet config file (udefault)
+    #   shell: |
+    #     cat > "/home/{{ username }}/config.yaml" <<EOF
+    #     apiVersion: kubeadm.k8s.io/v1beta3
+    #     kind: InitConfiguration
+    #     localAPIEndpoint:
+    #       advertiseAddress: {{ cloud_ip }}
+    #     ---
+    #     apiVersion: kubeadm.k8s.io/v1beta3
+    #     kind: ClusterConfiguration
+    #     apiServer:
+    #       certSANs:
+    #       - {{ cloud_ip }}
+    #     imageRepository: {{ registry_ip }}
+    #     kubernetesVersion: {{ kubeversion }}
+    #     networking:
+    #       podSubnet: 10.244.0.0/16
+    #     ---
+    #     apiVersion: kubelet.config.k8s.io/v1beta1
+    #     kind: KubeletConfiguration
+    #     containerLogMaxSize: "100Mi"
+    #     containerLogMaxFiles: 10
+    #     EOF
+
+    - name: Create kubelet config file (optimized)
       shell: |
         cat > "/home/{{ username }}/config.yaml" <<EOF
         apiVersion: kubeadm.k8s.io/v1beta3
@@ -108,39 +132,53 @@
         apiServer:
           certSANs:
           - {{ cloud_ip }}
+          extraArgs:
+            max-mutating-requests-inflight: "100000"
+            max-requests-inflight: "100000"
         imageRepository: {{ registry_ip }}
         kubernetesVersion: {{ kubeversion }}
         networking:
           podSubnet: 10.244.0.0/16
+        controllerManager:
+          extraArgs:
+            kube-api-qps: "100000"
+            kube-api-burst: "100000"
+            concurrent-deployment-syncs: "50"
+            concurrent-endpoint-syncs: "50"
+            concurrent-ephemeralvolume-syncs: "50"
+            concurrent-gc-syncs: "50"
+            concurrent-horizontal-pod-autoscaler-syncs: "50"
+            concurrent-namespace-syncs: "50"
+            concurrent-rc-syncs: "50"
+            concurrent-replicaset-syncs: "50"
+            concurrent-resource-quota-syncs: "50"
+            concurrent-service-endpoint-syncs: "50"
+            concurrent-service-syncs: "50"
+            concurrent-serviceaccount-token-syncs: "50"
+            concurrent-statefulset-syncs: "50"
+            concurrent-ttl-after-finished-syncs: "50"
+            mirroring-concurrent-service-endpoint-syncs: "50"
+        scheduler:
+          extraArgs:
+            kube-api-qps: "100000"
+            kube-api-burst: "100000"
         ---
         apiVersion: kubelet.config.k8s.io/v1beta1
         kind: KubeletConfiguration
         containerLogMaxSize: "100Mi"
         containerLogMaxFiles: 10
+        registryPullQPS: 0
+        eventRecordQPS: 0
+        kubeAPIQPS: 0
+        serializeImagePulls: false
+        maxParallelImagePulls: 100000
+        ---
+        apiVersion: kubeproxy.config.k8s.io/v1alpha1
+        kind: KubeProxyConfiguration
+        clientConnection:
+          qps: 100000
+          burst: 100000
         EOF
-    # ---- From InitConfiguration
-    # patches:
-    #   directory: /home/{{ username }}/patches/
-    #
-    # ---- From ClusterConfiguration
-    # controllerManager:
-    #   extraArgs:
-    #     kube-api-qps: "100000"
-    #     kube-api-burst: "100000"
-    # scheduler:
-    #   extraArgs:
-    #     kube-api-qps: "100000"
-    #     kube-api-burst: "100000"
-    #
-    # ---- From KubeletConfiguration
-    # maxPods: 265
-    # eventRecordQPS: 0
-    # kubeAPIQPS: 0
-    # serializeImagePulls: false
-    # maxParallelImagePulls: 10000
-    # registryPullQPS: 0
-    # featureGates:
-    #   EventedPLEG: true
 
     - name: Initialize the Kubernetes cluster using kubeadm
       command: >

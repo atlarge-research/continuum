@@ -1322,6 +1322,8 @@ def filter_metrics_kube(config, starttime, endtime):
     Returns:
         (dataframe): Pandas dataframe with resource utilization metrics during our benchmrak deploym
     """
+    logging.debug("Filter kube metric stats")
+
     # Now read the file via pandas and:
     # - Only take the timestamps between the start and end of the benchmark
     # - Offset these values compared to the start time of the benchmark (so row 1 starts near 0.0s)
@@ -1351,6 +1353,8 @@ def filter_metrics_os(config, starttime, endtime):
     Returns:
         (dataframe): Pandas dataframe with resource utilization metrics during our benchmrak deploym
     """
+    logging.debug("Filter os metric stats")
+
     # Gather all data from each VM first
     dfs = []
     for vm_name in [vm_name.split("@")[0] for vm_name in config["cloud_ssh"]]:
@@ -1358,15 +1362,12 @@ def filter_metrics_os(config, starttime, endtime):
             config["infrastructure"]["base_path"], ".continuum/resource_usage_os-%s.csv" % (vm_name)
         )
         df = pd.read_csv(path)
-        logging.debug("===================================")
-        logging.debug(df)
         df["timestamp"] = df["timestamp"] / 10**9
 
         df_filtered = df.loc[
             (df["timestamp"] > (starttime - 1.0)) & (df["timestamp"] < (endtime + 1.0))
         ]
         df_filtered["timestamp"] -= starttime
-        logging.debug(df_filtered)
         df_filtered.rename(
             columns={
                 "timestamp": "Time (s)",
@@ -1377,12 +1378,8 @@ def filter_metrics_os(config, starttime, endtime):
         )
 
         # Save with deep copy just to be safe
-        logging.debug(df_filtered)
         dfs.append(df_filtered.copy(deep=True))
-
-    logging.debug("++++++++++++++++++++++++++++++++++++++++")
 
     # Now save in one big dataframe
     df_final = pd.concat(dfs)
-    logging.debug(df_final)
     return df_final

@@ -94,8 +94,8 @@ def time_delta(t, starttime):
         float: Possitive time delta
     """
     delta = t - starttime
-    seconds_per_hour = float(3600)
-    while delta < float(0):
+    seconds_per_hour = 3600.0
+    while delta < 0.0:
         delta += seconds_per_hour
 
     return delta
@@ -221,7 +221,7 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
     # You can't directly insert in worker_metrics like this, so we first
     # find the timestamp to insert to in the sorted list, and then
     # find the right entry in worker_metrics to insert into
-    insertion_time = 100000.0
+    insertion_time = 100000
     for s in sorted_worker_metrics:
         if s[tag] is None and (
             (future_compare and timestamp < s[compare_tag])
@@ -230,7 +230,7 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
             insertion_time = s[compare_tag]
             break
 
-    if insertion_time == 100000.0:
+    if insertion_time == 100000:
         logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
         logging.error(str(worker_metrics))
         sys.exit()
@@ -238,7 +238,7 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
     # Now insert in the real list given by searching for our timestamp
     insert = False
     for metric in worker_metrics:
-        if metric[compare_tag] == insertion_time:
+        if metric[compare_tag] == insertion_time and metric[tag] is None:
             metric[tag] = timestamp
             insert = True
             break
@@ -322,7 +322,7 @@ def check(
                     tag == "5_pod_object_create"
                     and config["benchmark"]["kube_deployment"] in ["pod", "container"]
                 ):
-                    # See comments in next function: insert 5_pod_object_create on 7_scheduler_start
+                    # See comments in next function
                     timestamp = time_delta(t, starttime)
                     sort_on_time(timestamp, worker_metrics, tag, compare_tag, reverse)
                     i += 1
