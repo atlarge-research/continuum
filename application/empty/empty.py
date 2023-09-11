@@ -110,6 +110,7 @@ def format_output(
     worker_output=None,
     worker_description=None,
     resource_output=None,
+    endtime=None,
 ):
     """Format processed output to provide useful insights (empty)
 
@@ -121,6 +122,7 @@ def format_output(
         starttime (datetime, optional): Invocation time of kubectl apply command
         worker_output (list(list(str)), optional): Output of each container ran on the edge
         worker_description (list(list(str)), optional): Extensive description of each container
+        endtime (str, optional): Timestamp of the slowest deployed pod
     """
     # Plot the status of each pod over time
     if status is not None:
@@ -135,7 +137,7 @@ def format_output(
             validate_data(df)
             plot.plot_control(df, config["timestamp"])
             plot.plot_p56(df, config["timestamp"])
-            plot.plot_resources(df_resources, config["timestamp"])
+            plot.plot_resources(df_resources, config["timestamp"], xmax=endtime)
 
 
 def create_control_object(worker_description, mapping):
@@ -605,15 +607,27 @@ def print_resources(config, df):
     Returns:
         (DataFrame) Pandas dataframe object with parsed timestamps per category
     """
-    df.columns = ["Time (s)" if c == "timestamp" else c for c in df.columns]
-    df.columns = ["controller_" + c.split("_")[-1] if "controller" in c else c for c in df.columns]
-    df.columns = [
-        c.replace(config["username"], "") if config["username"] in c else c for c in df.columns
+    df_kube = df[0]
+    df_os = df[1]
+
+    df_kube.columns = ["Time (s)" if c == "timestamp" else c for c in df_kube.columns]
+    df_kube.columns = [
+        "controller_" + c.split("_")[-1] if "controller" in c else c for c in df_kube.columns
+    ]
+    df_kube.columns = [
+        c.replace(config["username"], "") if config["username"] in c else c for c in df_kube.columns
     ]
 
     # Save to csv
-    df.to_csv(
+    df_kube.to_csv(
         "./logs/%s_dataframe_resources.csv" % (config["timestamp"]), index=False, encoding="utf-8"
+    )
+
+    # df os only needs to be saved - we already renamed it beforehand
+    df_os.to_csv(
+        "./logs/%s_dataframe_resources_os.csv" % (config["timestamp"]),
+        index=False,
+        encoding="utf-8",
     )
 
     return df

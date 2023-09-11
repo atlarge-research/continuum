@@ -72,8 +72,10 @@ def plot_status(status, timestamp):
     ax1.set_ylim(0, total_pods)
 
     # Set x axis details
+    # Note: If the pod is deployed in < 1 second, there is only one status entry with time = 0.0
+    #       You can't set xlim to [0 - 0], so we have to set it to at least 1.0
     ax1.set_xlabel("Time (s)")
-    ax1.set_xlim(0, status[-1]["time"])
+    ax1.set_xlim(0, min(status[-1]["time"], 1.0))
 
     # add legend
     patches = [mpatches.Patch(color=c) for c in cs]
@@ -314,6 +316,19 @@ def plot_resources(df, timestamp, xmax=None, ymax=None):
         xmax (bool): Optional. Set the xmax of the plot by hand. Defaults to None.
         ymax (bool): Optional. Set the ymax of the plot by hand. Defaults to None.
     """
+    plot_resources_kube(df[0], timestamp, xmax, ymax)
+    plot_resources_os(df[1], timestamp, xmax, ymax)
+
+
+def plot_resources_kube(df, timestamp, xmax=None, ymax=None):
+    """Plot resources based on kubectl top command
+
+    Args:
+        df (DataFrame): Pandas dataframe object with parsed timestamps per category
+        timestamp (time): Global timestamp used to save all files of this run
+        xmax (bool): Optional. Set the xmax of the plot by hand. Defaults to None.
+        ymax (bool): Optional. Set the ymax of the plot by hand. Defaults to None.
+    """
     # Create one plot for cpu and one for memory
     plt.rcParams.update({"font.size": 20})
     fig, ax1 = plt.subplots(figsize=(12, 4))
@@ -341,8 +356,7 @@ def plot_resources(df, timestamp, xmax=None, ymax=None):
     # add legend
     ax1.legend(loc="best", fontsize="16")
 
-    # plt.savefig("./logs/%s_resources.pdf" % (timestamp), bbox_inches="tight")
-    plt.savefig("%s_resources_cpu.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig("./logs/%s_resources_cpu.pdf" % (timestamp), bbox_inches="tight")
     plt.close(fig)
 
     # ------------------------------
@@ -372,6 +386,74 @@ def plot_resources(df, timestamp, xmax=None, ymax=None):
     # add legend
     ax1.legend(loc="best", fontsize="16")
 
-    # plt.savefig("./logs/%s_resources.pdf" % (timestamp), bbox_inches="tight")
-    plt.savefig("%s_resources_memory.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig("./logs/%s_resources_memory.pdf" % (timestamp), bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_resources_os(df, timestamp, xmax=None, ymax=None):
+    """Plot resources based on os-level resource metric commands
+
+    Args:
+        df (DataFrame): Pandas dataframe object with parsed timestamps per category
+        timestamp (time): Global timestamp used to save all files of this run
+        xmax (bool): Optional. Set the xmax of the plot by hand. Defaults to None.
+        ymax (bool): Optional. Set the ymax of the plot by hand. Defaults to None.
+    """
+    plt.rcParams.update({"font.size": 20})
+    fig, ax1 = plt.subplots(figsize=(12, 4))
+
+    for column in df.columns:
+        if "cpu-used" in column:
+            ax1.plot(df["Time (s)"], df[column], label=column)
+
+    ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.grid(True)
+
+    # Set y axis details
+    ax1.set_ylabel("CPU Usage (%)")
+    ax1.set_ylim(0, 100)
+    if ymax:
+        ax1.set_ylim(0, ymax)
+
+    # Set x axis details
+    ax1.set_xlabel("Time (s)")
+    ax1.set_xlim(0, df["Time (s)"].values.max())
+    if xmax:
+        ax1.set_xlim(0, xmax)
+
+    # add legend
+    ax1.legend(loc="best", fontsize="16")
+
+    plt.savefig("./logs/%s_resources_os_cpu.pdf" % (timestamp), bbox_inches="tight")
+    plt.close(fig)
+
+    # ------------------------------
+    # Now for memory
+    fig, ax1 = plt.subplots(figsize=(12, 4))
+
+    for column in df.columns:
+        if "memory-used" in column:
+            ax1.plot(df["Time (s)"], df[column], label=column)
+
+    ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.grid(True)
+
+    # Set y axis details
+    ax1.set_ylabel("Memory Usage (%)")
+    ax1.set_ylim(0, 100)
+    if ymax:
+        ax1.set_ylim(0, ymax)
+
+    # Set x axis details
+    ax1.set_xlabel("Time (s)")
+    ax1.set_xlim(0, df["Time (s)"].values.max())
+    if xmax:
+        ax1.set_xlim(0, xmax)
+
+    # add legend
+    ax1.legend(loc="best", fontsize="16")
+
+    plt.savefig("./logs/%s_resources_os_memory.pdf" % (timestamp), bbox_inches="tight")
     plt.close(fig)

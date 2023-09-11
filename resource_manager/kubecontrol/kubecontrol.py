@@ -120,6 +120,22 @@ def start(config, machines):
     logging.debug("Check output for Ansible command [%s]", " ".join(command))
     ansible.check_output((output, error))
 
+    # Now the OS server that runs on every VM
+    command = [
+        "ansible-playbook",
+        "-i",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(
+            config["infrastructure"]["base_path"],
+            ".continuum/cloud/resource_usage_os.yml",
+        ),
+    ]
+
+    output, error = machines[0].process(config, command)[0]
+
+    logging.debug("Check output for Ansible command [%s]", " ".join(command))
+    ansible.check_output((output, error))
+
     # Install observability packages (Prometheus, Grafana) if configured by the user
     if config["benchmark"]["observability"]:
         command = [

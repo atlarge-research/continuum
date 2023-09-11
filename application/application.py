@@ -317,4 +317,5 @@ def kube_control(config, machines):
         worker_output=worker_output,
         worker_description=worker_description,
         resource_output=resource_output,
+        endtime=float(endtime - starttime),
     )
