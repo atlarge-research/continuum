@@ -75,7 +75,7 @@ def plot_status(status, timestamp):
     # Note: If the pod is deployed in < 1 second, there is only one status entry with time = 0.0
     #       You can't set xlim to [0 - 0], so we have to set it to at least 1.0
     ax1.set_xlabel("Time (s)")
-    ax1.set_xlim(0, min(status[-1]["time"], 1.0))
+    ax1.set_xlim(0, max(status[-1]["time"], 1.0))
 
     # add legend
     patches = [mpatches.Patch(color=c) for c in cs]

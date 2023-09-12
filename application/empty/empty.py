@@ -223,12 +223,14 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
     # find the right entry in worker_metrics to insert into
     insertion_time = 100000
     for s in sorted_worker_metrics:
-        if s[tag] is None and (
-            (future_compare and timestamp < s[compare_tag])
-            or (not future_compare and timestamp > s[compare_tag])
-        ):
-            insertion_time = s[compare_tag]
-            break
+        if s[tag] is None:
+            if (future_compare and timestamp < s[compare_tag]) or (
+                not future_compare and timestamp > s[compare_tag]
+            ):
+                insertion_time = s[compare_tag]
+                break
+
+            logging.warning("WARNING: Expected insertion didn't succeed")
 
     if insertion_time == 100000:
         logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
