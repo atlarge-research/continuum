@@ -11,3 +11,4 @@ logs/
 *node_modules
 scripts/*.csv
 scripts/*.pdf
+*.out

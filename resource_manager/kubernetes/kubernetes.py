@@ -490,7 +490,10 @@ def launch_with_starttime(config, machines):
 
     # At least one [continuum] statement should be in the error log
     # But, do check if any real error statement is there
-    if error and not all("[CONTINUUM]" in l for l in error):
+    if error and not all(
+        any(x in l for x in ["[CONTINUUM]", "due to client-side throttling", "handshake timeout"])
+        for l in error
+    ):
         logging.error("Could not deploy pods: %s", "".join(error))
         sys.exit()
     elif error and not any("[CONTINUUM]" in l for l in error):
