@@ -143,21 +143,6 @@
           extraArgs:
             kube-api-qps: "100000"
             kube-api-burst: "100000"
-            concurrent-deployment-syncs: "50"
-            concurrent-endpoint-syncs: "50"
-            concurrent-ephemeralvolume-syncs: "50"
-            concurrent-gc-syncs: "50"
-            concurrent-horizontal-pod-autoscaler-syncs: "50"
-            concurrent-namespace-syncs: "50"
-            concurrent-rc-syncs: "50"
-            concurrent-replicaset-syncs: "50"
-            concurrent-resource-quota-syncs: "50"
-            concurrent-service-endpoint-syncs: "50"
-            concurrent-service-syncs: "50"
-            concurrent-serviceaccount-token-syncs: "50"
-            concurrent-statefulset-syncs: "50"
-            concurrent-ttl-after-finished-syncs: "50"
-            mirroring-concurrent-service-endpoint-syncs: "50"
         scheduler:
           extraArgs:
             kube-api-qps: "100000"
@@ -167,9 +152,9 @@
         kind: KubeletConfiguration
         containerLogMaxSize: "100Mi"
         containerLogMaxFiles: 10
-        registryPullQPS: 0
-        eventRecordQPS: 0
-        kubeAPIQPS: 0
+        registryPullQPS: 100000
+        eventRecordQPS: 100000
+        kubeAPIQPS: 100000
         serializeImagePulls: false
         maxParallelImagePulls: 100000
         ---
