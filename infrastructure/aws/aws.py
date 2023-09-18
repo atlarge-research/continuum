@@ -50,6 +50,8 @@ def add_options(config):
         ["aws_region", str, lambda _: True, True, None],
         ["aws_zone", str, lambda _: True, True, None],
         ["aws_credentials", str, os.path.expanduser, True, None],
+        ["aws_access_keys", str, lambda _: True, True, None],
+        ["aws_secret_access_keys", str, lambda _: True, True, None],
     ]
 
     return settings
@@ -92,11 +94,13 @@ def set_ip_names(_config, machines, nodes_per_machine):
     if nodes_per_machine[0]["cloud"] > 0:
         machines[0].cloud_controller = 1
         machines[0].cloud_controller_names.append("cloud0")
+        machines[0].cloud_controller_names.append("ubuntu")
 
         machines[0].clouds = 0
         for i in range(1, nodes_per_machine[0]["cloud"]):
             machines[0].clouds += 1
             machines[0].cloud_names.append("cloud%i" % (i))
+            machines[0].cloud_names.append("ubuntu")
 
     machines[0].edges = 0
     for i in range(nodes_per_machine[0]["edge"]):
@@ -593,7 +597,6 @@ def start(config, machines):
 
     m.gather_ips(config, machines)
     m.gather_ssh(config, machines)
-    infrastructure.add_ssh(config, machines)
 
     for machine in machines:
         logging.debug(machine)
