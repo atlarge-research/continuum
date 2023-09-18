@@ -260,6 +260,7 @@ BASE_NAMES                  %s""" % (
         This automatically functions as reachability check for this machine.
         """
         # GCP uses Terraform (cloud), so the number of local cores won't matter
+        # GCP and AWS uses Terraform (cloud), so the number of local cores won't matter
         # Just set the value extremely high so everything can be scheduled on the
         # same "machine" (your local machine is seen as the cloud provider)
         if config["infrastructure"]["provider"] == "gcp":
