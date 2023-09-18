@@ -7,8 +7,8 @@ terraform {
     required_version = ">= 1.3.6"
     required_providers {
         aws = {
-        source  = "hashicorp/aws"
-        version = "~> 5.0"
+            source  = "hashicorp/aws"
+            version = "~> 5.0"
         }
     }
 }
@@ -16,9 +16,9 @@ terraform {
 
 PROVIDER = """
 provider "aws" {
-  credentials = file(%s)
   region      = %s
-  zone        = %s
+  access_key  = %s
+  secret_key  = %s
 }
 """
 
@@ -35,10 +35,9 @@ def generate_header(config):
         f.write(
             PROVIDER
             % (
-                config["infrastructure"]["gcp_credentials"],
-                config["infrastructure"]["gcp_project"],
-                config["infrastructure"]["gcp_region"],
-                config["infrastructure"]["gcp_zone"],
+                config["infrastructure"]["aws_region"],
+                config["infrastructure"]["aws_access_keys"],
+                config["infrastructure"]["aws_secret_access_keys"]
             )
         )
 
@@ -51,8 +50,17 @@ def generate_header(config):
 
 MAIN_NETWORK = """
 resource "aws_vpc" "vpc_network" {
-    name                    = "vpc-network"
     cidr_block              = "10.0.0.0/16"
+    tags = {
+        Name = "aws_continuum_vpc"
+    }
+}
+
+resource "aws_internet_gateway" "igw" {
+    vpc_id = aws_vpc.vpc_network.id
+    tags = {
+        Name = "aws_continuum_igw"
+    }
 }
 """
 
@@ -60,41 +68,68 @@ resource "aws_vpc" "vpc_network" {
 
 CLOUD_NETWORK = """
 resource "aws_subnet" "subnetwork_cloud" {
-    name          = "subnetwork-cloud"
-    ip_cidr_range = "10.0.0.0/24"
-    vpc_id        = aws_vpc.vpc_network.id
+    cidr_block        = "10.0.0.0/24"
+    vpc_id            = aws_vpc.vpc_network.id
+    availability_zone = "eu-central-1a"
+    tags = {
+        Name = "aws_columbo_cloud_subnet"
+    }
 }
 """
 
 EDGE_NETWORK = """
 resource "aws_subnet" "subnetwork_edge" {
-    name          = "subnetwork-edge"
-    ip_cidr_range = "10.0.1.0/24"
-    vpc_id        = aws_vpc.vpc_network.id
+    cidr_block        = "10.0.1.0/24"
+    vpc_id            = aws_vpc.vpc_network.id
+    availability_zone = "eu-central-1b"
+    tags = {
+        Name = "aws_columbo_edge_subnet"
+    }
 }
 """
 ENDPOINT_NETWORK = """
 resource "aws_subnet" "subnetwork_endpoint" {
-    name          = "subnetwork-endpoint"
-    ip_cidr_range = "10.0.2.0/24"
-    vpc_id        = aws_vpc.vpc_network.id
+    cidr_block        = "10.0.2.0/24"
+    vpc_id            = aws_vpc.vpc_network.id
+    availability_zone = "eu-central-1c"
+    tags = {
+        Name = "aws_columbo_endpoint_subnet"
+    }
+}
+"""
+
+ROUTE_TABLES = """
+resource "aws_route_table" "route_table" {
+    vpc_id = aws_vpc.vpc_network.id
+    tags = {
+        Name = "route_table_cloud"
+    }
+}
+
+resource "aws_route" "route_igw" {
+    route_table_id         = aws_route_table.route_table.id
+    gateway_id             = aws_internet_gateway.igw.id
+    destination_cidr_block = "0.0.0.0/0"
+}
+
+resource "aws_route_table_association" "route_table_associations" {
+    subnet_id      = aws_subnet.subnetwork_cloud.id
+    route_table_id = aws_route_table.route_table.id
 }
 """
 
 # 3️⃣ Security groups
 
-
 SECURITY_GROUP = """
-resource "aws_security_group" "allow_all_ingress" {
+resource "aws_security_group" "allow_all_ingress_egress" {
     name      = "vpc-network-allow-all-ingress"
     vpc_id    = aws_vpc.vpc_network.id
-    direction = "INGRESS"
 
     ingress {
         description = "Allow all inbound connection"
         from_port   = 0
-        to_port     = 65535
-        protocol    = "tcp"
+        to_port     = 0
+        protocol    = "-1"
         cidr_blocks = ["0.0.0.0/0"]
     }
 
@@ -105,7 +140,6 @@ resource "aws_security_group" "allow_all_ingress" {
         protocol    = "-1"
         cidr_blocks = ["0.0.0.0/0"]
     }
-    
 }
 """
 
@@ -117,6 +151,8 @@ def generate_network(config):
     """
     with open(".tmp/network.tf", mode="w", encoding="utf-8") as f:
         f.write(MAIN_NETWORK)
+
+        f.write(ROUTE_TABLES)
 
         if config["infrastructure"]["cloud_nodes"] > 0:
             f.write(CLOUD_NETWORK)
@@ -178,76 +214,64 @@ data "aws_ami" "ubuntu" {
 """
 
 CLOUD = """
-resource "aws_network_interface" "cloud_interface" {
-    count       = %i
-    subnet_id   = aws_subnet.subnetwork_cloud.id
-    private_ips = element(aws_eip.cloud_static_ip.*.address, count.index)
-}
-
 resource "aws_instance" "cloud" {
-    name          = "cloud${count.index}"
-    instance_type = %s
-    ami           = data.aws_ami.ubuntu.id
-    count         = %i
+    count                       = %i
+    instance_type               = %s
+    ami                         = "ami-0ecc600e693553f65"
+    key_name                    = "at_large"
+    security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
+    subnet_id                   = aws_subnet.subnetwork_cloud.id
+    associate_public_ip_address = true
 
     root_block_device {
-        volume_size = 30,
-        volume_type = gp3
+        volume_size = 30
+        volume_type = "gp3"
     }
 
-    network_interface {
-        network_interface_id = aws_network_interface.cloud_interface.id
-        device_index         = 0
+    tags = {
+        Name = "cloud_${count.index}"
     }
 }
 """
 
 EDGE = """
-resource "aws_network_interface" "edge_interface" {
-    count       = %i
-    subnet_id   = aws_subnet.subnetwork_edge.id
-    private_ips = element(aws_eip.edge_static_ip.*.address, count.index)
-}
-
 resource "aws_instance" "edge" {
-    name          = "edge${count.index}"
-    instance_type = %s
-    ami           = data.aws_ami.ubuntu.id
-    count         = %i
+    count                       = %i
+    instance_type               = %s
+    ami                         = "ami-0ecc600e693553f65"
+    key_name                    = "at_large"
+    security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
+    subnet_id                   = aws_subnet.subnetwork_cloud.id
+    associate_public_ip_address = true
 
     root_block_device {
-        volume_size = 30,
-        volume_type = gp3
+        volume_size = 30
+        volume_type = "gp3"
     }
 
-    network_interface {
-        network_interface_id = aws_network_interface.edge_interface.id
-        device_index         = 0
+    tags = {
+        Name = "edge_${count.index}"
     }
 }
 """
 
 ENDPOINT = """
-resource "aws_network_interface" "endpoint_interface" {
-    count       = %i
-    subnet_id   = aws_subnet.subnetwork_endpoint.id
-    private_ips = element(aws_eip.endpoint_static_ip.*.address, count.index)
-}
-
 resource "aws_instance" "endpoint" {
-    name          = "endpoint${count.index}"
-    instance_type = %s
-    ami           = data.aws_ami.ubuntu.id
-    count         = %i
+    count                       = %i
+    instance_type               = %s
+    ami                         = "ami-0ecc600e693553f65"
+    key_name                    = "at_large"
+    security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
+    subnet_id                   = aws_subnet.subnetwork_cloud.id
+    associate_public_ip_address = true
 
     root_block_device {
-        volume_size = 30,
-        volume_type = gp3
+        volume_size = 30
+        volume_type = "gp3"
     }
 
-    network_interface {
-        network_interface_id = aws_network_interface.endpoint_interface.id
-        device_index         = 0
+    tags = {
+        Name = "endpoint_${count.index}"
     }
 }
 """
@@ -265,9 +289,8 @@ def generate_vm(config):
             f.write(
                 CLOUD
                 % (
-                    config["infrastructure"]["gcp_cloud"],
                     config["infrastructure"]["cloud_nodes"],
-                    "%s.pub" % (config["ssh_key"]),
+                    config["infrastructure"]["aws_cloud"]
                 )
             )
 
@@ -300,31 +323,29 @@ def generate_vm(config):
 
 OUTPUT_CLOUD = """
 output "cloud_ip_internal" {
-  value = ["${google_compute_instance.cloud.*.network_interface.0.network_ip}"]
+  value = ["${aws_instance.cloud.*.private_ip}"]
 }
-
 output "cloud_ip_external" {
-  value = ["${google_compute_address.cloud_static_ip.*.address}"]
+  value = ["${aws_instance.cloud.*.public_ip}"]
 }
 """
 
 OUTPUT_EDGE = """
 output "edge_ip_internal" {
-  value = ["${google_compute_instance.edge.*.network_interface.0.network_ip}"]
+  value = ["${aws_instance.edge.*.private_ip}"]
 }
-
 output "edge_ip_external" {
-  value = ["${google_compute_address.edge_static_ip.*.address}"]
+  value = ["${aws_instance.edge.*.public_ip}"]
 }
 """
 
 OUTPUT_ENDPOINT = """
 output "endpoint_ip_internal" {
-  value = ["${google_compute_instance.endpoint.*.network_interface.0.network_ip}"]
+  value = ["${aws_instance.endpoint.*.private_ip}"]
 }
 
 output "endpoint_ip_external" {
-  value = ["${google_compute_address.endpoint_static_ip.*.address}"]
+  value = ["${aws_instance.endpoint.*.public_ip}"]
 }
 """
 
@@ -359,5 +380,6 @@ def start(config, _machines):
     """
     generate_header(config)
     generate_network(config)
+    # ❓ For testing purposes I'm leaving this out
     generate_vm(config)
     generate_output(config)
