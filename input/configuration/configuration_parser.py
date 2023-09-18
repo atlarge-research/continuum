@@ -109,7 +109,7 @@ def add_constants(parser, config):
     config["base"] = str(os.path.dirname(os.path.realpath(__file__)))
     config["base"] = config["base"].rsplit("/", 2)[0]  # We're nested 2 deep currently, remove that
     config["username"] = getpass.getuser()
-    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/at_large.pem")
 
     # 100.100.100.100
     # Prefix .Mid.Post
