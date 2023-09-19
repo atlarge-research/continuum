@@ -49,10 +49,12 @@ def add_options(config):
         ["aws_endpoint", str, lambda _: True, config["infrastructure"]["endpoint_nodes"] > 0, None],
         ["aws_region", str, lambda _: True, True, None],
         ["aws_zone", str, lambda _: True, True, None],
-        ["aws_credentials", str, os.path.expanduser, True, None],
         ["aws_access_keys", str, lambda _: True, True, None],
         ["aws_secret_access_keys", str, lambda _: True, True, None],
+        ["aws_ami", str, lambda _: True, True, None],
+        ["aws_key", str, lambda _: True, True, None]
     ]
+
 
     return settings
 
@@ -67,9 +69,9 @@ def verify_options(parser, config):
     if config["infrastructure"]["provider"] != "aws":
         parser.error("ERROR: Infrastructure provider should be aws")
 
-    sec = "infrastructure"
+    """sec = "infrastructure"
     if len(config[sec]["aws_credentials"]) > 0 and config[sec]["aws_credentials"][-1] == "/":
-        config[sec]["aws_credentials"] = config[sec]["base_paws_credentialsth"][:-1]
+        config[sec]["aws_credentials"] = config[sec]["base_paws_credentialsth"][:-1]"""
 
 
 def set_ip_names(_config, machines, nodes_per_machine):
@@ -93,13 +95,11 @@ def set_ip_names(_config, machines, nodes_per_machine):
 
     if nodes_per_machine[0]["cloud"] > 0:
         machines[0].cloud_controller = 1
-        machines[0].cloud_controller_names.append("cloud0")
         machines[0].cloud_controller_names.append("ubuntu")
 
         machines[0].clouds = 0
         for i in range(1, nodes_per_machine[0]["cloud"]):
             machines[0].clouds += 1
-            machines[0].cloud_names.append("cloud%i" % (i))
             machines[0].cloud_names.append("ubuntu")
 
     machines[0].edges = 0
@@ -589,7 +589,6 @@ def start(config, machines):
     """
     logging.info("Set up AWS")
     logging.info("Generate configuration files for Infrastructure and Ansible")
-    infrastructure.create_keypair(config, machines)
     generate.start(config, machines)
 
     copy(config, machines)
@@ -597,6 +596,7 @@ def start(config, machines):
 
     m.gather_ips(config, machines)
     m.gather_ssh(config, machines)
+    infrastructure.add_ssh(config, machines)
 
     for machine in machines:
         logging.debug(machine)
