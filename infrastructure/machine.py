@@ -267,6 +267,10 @@ BASE_NAMES                  %s""" % (
             self.cores = 100000
             return
 
+        if config["infrastructure"]["provider"] == "aws":
+            self.cores = 100000
+            return
+
         logging.info("Check hardware of node %s", self.name)
         command = "lscpu"
 
