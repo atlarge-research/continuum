@@ -45,7 +45,6 @@ def generate_header(config):
 ###################################################################################################
 
 # 1️⃣ Vpc
-# ❓ What is the cidr block for the network
 
 
 MAIN_NETWORK = """
@@ -120,6 +119,7 @@ resource "aws_route_table_association" "route_table_associations" {
 
 # 3️⃣ Security groups
 
+# for all
 SECURITY_GROUP = """
 resource "aws_security_group" "allow_all_ingress_egress" {
     name      = "vpc-network-allow-all-ingress"
@@ -169,13 +169,6 @@ def generate_network(config):
 ###################################################################################################
 
 # 4️⃣ Elastic IP Addresses
-# ❓ Should there be any associations with the instances here?
-CLOUD_IP = """
-resource "aws_eip" "cloud_static_ip" {
-    name = "cloud${count.index}-static-ip"
-    count = %i
-}
-"""
 
 EDGE_IP = """
 resource "aws_eip" "edge_static_ip" {
@@ -192,8 +185,6 @@ resource "aws_eip" "endpoint_static_ip" {
 """
 
 # 5️⃣ Instances
-# ❓ Would service accounts be necessary
-# ❓ Do you need another block device attached to the instance
 
 AMI = """
 data "aws_ami" "ubuntu" {
@@ -217,8 +208,8 @@ CLOUD = """
 resource "aws_instance" "cloud" {
     count                       = %i
     instance_type               = %s
-    ami                         = "ami-0ecc600e693553f65"
-    key_name                    = "at_large"
+    ami                         = %s
+    key_name                    = %s
     security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
     subnet_id                   = aws_subnet.subnetwork_cloud.id
     associate_public_ip_address = true
@@ -238,8 +229,8 @@ EDGE = """
 resource "aws_instance" "edge" {
     count                       = %i
     instance_type               = %s
-    ami                         = "ami-0ecc600e693553f65"
-    key_name                    = "at_large"
+    ami                         = %s
+    key_name                    = %s
     security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
     subnet_id                   = aws_subnet.subnetwork_cloud.id
     associate_public_ip_address = true
@@ -259,8 +250,8 @@ ENDPOINT = """
 resource "aws_instance" "endpoint" {
     count                       = %i
     instance_type               = %s
-    ami                         = "ami-0ecc600e693553f65"
-    key_name                    = "at_large"
+    ami                         = %s
+    key_name                    = %s
     security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
     subnet_id                   = aws_subnet.subnetwork_cloud.id
     associate_public_ip_address = true
@@ -285,12 +276,13 @@ def generate_vm(config):
     """
     if config["infrastructure"]["cloud_nodes"] > 0:
         with open(".tmp/cloud_vm.tf", mode="w", encoding="utf-8") as f:
-            f.write(CLOUD_IP % (config["infrastructure"]["cloud_nodes"]))
             f.write(
                 CLOUD
                 % (
                     config["infrastructure"]["cloud_nodes"],
-                    config["infrastructure"]["aws_cloud"]
+                    config["infrastructure"]["aws_cloud"],
+                    config["infrastructure"]["aws_ami"],
+                    config["infrastructure"]["aws_key"]
                 )
             )
 
@@ -300,9 +292,10 @@ def generate_vm(config):
             f.write(
                 EDGE
                 % (
-                    config["infrastructure"]["gcp_edge"],
                     config["infrastructure"]["edge_nodes"],
-                    "%s.pub" % (config["ssh_key"]),
+                    config["infrastructure"]["aws_edge"],
+                    config["infrastructure"]["aws_ami"],
+                    config["infrastructure"]["aws_key"]
                 )
             )
 
@@ -312,9 +305,10 @@ def generate_vm(config):
             f.write(
                 ENDPOINT
                 % (
-                    config["infrastructure"]["gcp_endpoint"],
                     config["infrastructure"]["endpoint_nodes"],
-                    "%s.pub" % (config["ssh_key"]),
+                    config["infrastructure"]["aws_endpoint"],
+                    config["infrastructure"]["aws_ami"],
+                    config["infrastructure"]["aws_key"]
                 )
             )
 
@@ -380,6 +374,5 @@ def start(config, _machines):
     """
     generate_header(config)
     generate_network(config)
-    # ❓ For testing purposes I'm leaving this out
     generate_vm(config)
     generate_output(config)
