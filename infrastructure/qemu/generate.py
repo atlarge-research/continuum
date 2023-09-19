@@ -312,7 +312,6 @@ def start(config, machines):
         # Base image(s)
         for ip, name in zip(machine.base_ips, machine.base_names):
             with open(".tmp/domain_%s.xml" % (name), "w", encoding="utf-8") as f:
-
                 f.write(
                     DOMAIN
                     % (
