@@ -153,7 +153,7 @@ qemu-system-x86_64 --version
 sudo systemctl status libvirtd
 
 # 1.3. Force libvirt to use QEMU.
-echo 'export LIBVIRT_DEFAULT_URI="qemu:///system”' >> ~/.bashrc
+echo 'export LIBVIRT_DEFAULT_URI="qemu:///system"' >> ~/.bashrc
 source ~/.bashrc
 
 # 2. Install Docker (see Docker website for alternative instructions)
