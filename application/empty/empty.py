@@ -230,7 +230,13 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
                 insertion_time = s[compare_tag]
                 break
 
-            logging.warning("WARNING: Expected insertion didn't succeed")
+            logging.warning(
+                "WARNING: Expected insertion timestamp %s didn't succeed on %s to %s (future=%i)",
+                str(timestamp),
+                tag,
+                compare_tag,
+                int(future_compare),
+            )
 
     if insertion_time == 100000:
         logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
