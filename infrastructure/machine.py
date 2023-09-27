@@ -259,15 +259,10 @@ BASE_NAMES                  %s""" % (
         """Get the amount of physical cores for this machine.
         This automatically functions as reachability check for this machine.
         """
-        # GCP uses Terraform (cloud), so the number of local cores won't matter
         # GCP and AWS uses Terraform (cloud), so the number of local cores won't matter
         # Just set the value extremely high so everything can be scheduled on the
         # same "machine" (your local machine is seen as the cloud provider)
-        if config["infrastructure"]["provider"] == "gcp":
-            self.cores = 100000
-            return
-
-        if config["infrastructure"]["provider"] == "aws":
+        if config["infrastructure"]["provider"] in ["gcp", "aws"]:
             self.cores = 100000
             return
 
