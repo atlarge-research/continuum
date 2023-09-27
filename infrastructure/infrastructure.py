@@ -428,6 +428,8 @@ def docker_registry(config, machines):
             "-d",
             "-p",
             "%s:%s" % (port, port),
+            "-e",
+            "REGISTRY_STORAGE_DELETE_ENABLED=true",
             "--restart=always",
             "--name",
             "registry",

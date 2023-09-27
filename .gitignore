@@ -9,3 +9,6 @@ id_rsa*
 logs/
 *package-lock.json
 *node_modules
+scripts/*.csv
+scripts/*.pdf
+*.out

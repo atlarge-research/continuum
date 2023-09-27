@@ -78,7 +78,7 @@ def print_raw_output(config, worker_output, endpoint_output):
         logging.debug("------------------------------------")
         logging.debug("%s OUTPUT", config["mode"].upper())
         logging.debug("------------------------------------")
-        for out in worker_output:
+        for _, out in worker_output:
             for line in out:
                 logging.debug(line)
 
@@ -274,6 +274,9 @@ def kube_control(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
+    # Start the resource utilization metrics
+    kubernetes.start_resource_metrics(config, machines)
+
     # Cache the worker to prevent loading
     if config["benchmark"]["cache_worker"]:
         app_vars = config["module"]["application"].cache_worker(config, machines)
@@ -281,7 +284,9 @@ def kube_control(config, machines):
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    starttime, status = kubernetes.start_worker(config, machines, app_vars, get_starttime=True)
+    starttime, kubectl_out, status = kubernetes.start_worker(
+        config, machines, app_vars, get_starttime=True
+    )
 
     # Wait for benchmark to finish
     kubernetes.wait_worker_completion(config, machines)
@@ -292,7 +297,13 @@ def kube_control(config, machines):
     worker_output = kubernetes.get_worker_output(config, machines)
     worker_description = kubernetes.get_worker_output(config, machines, get_description=True)
 
-    control_output = kubernetes.get_control_output(config, machines, starttime, status)
+    control_output, endtime = kubernetes.get_control_output(config, machines, starttime, status)
+
+    resource_output = kubernetes.get_resource_output(config, machines, starttime, endtime)
+
+    # Add kubectl output
+    node = config["cloud_ssh"][0].split("@")[0]
+    control_output[node]["kubectl"] = kubectl_out
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, [])
@@ -305,4 +316,6 @@ def kube_control(config, machines):
         starttime=starttime,
         worker_output=worker_output,
         worker_description=worker_description,
+        resource_output=resource_output,
+        endtime=float(endtime - starttime),
     )

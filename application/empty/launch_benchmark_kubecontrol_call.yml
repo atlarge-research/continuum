@@ -35,15 +35,3 @@
                   value: "{{ sleep_time }}"
         EOF
         done
-
-    - name: Create execution script
-      shell: |
-        cat > "/home/{{ username }}/exec.sh" <<EOF
-        date +'%s.%N'
-        for filename in /home/{{ username }}/jobs/*; do kubectl apply -f \$filename & done
-        EOF
-
-    - name: Make the execution script executable
-      file:
-        dest: /home/{{ username }}/exec.sh
-        mode: +x

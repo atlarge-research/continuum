@@ -52,7 +52,7 @@
     - name: Set KUBECONFIG variable globally
       shell: echo "export KUBECONFIG=/home/{{ username }}/.kube/config" >> /etc/environment
 
-    - name: Enable networking with Calico, only for cloud mode
+    - name: Enable networking with Flannel, only for cloud mode
       shell: |
         if [ "{{ cloud_mode }}" -gt "0" ]; then
           kubectl apply -f /kube-flannel.yml

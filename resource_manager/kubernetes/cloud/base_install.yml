@@ -68,7 +68,7 @@
           - kubeadm=1.21.0-00
           - kubectl=1.21.0-00
 
-    - name: Get Calico
+    - name: Get Flannel
       get_url:
         url: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
         dest: /
