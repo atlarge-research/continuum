@@ -54,31 +54,34 @@ class MicroBenchmark(replicate_paper.Experiment):
         if args.experiment == "microbenchmark":
             # This ordering to start with all local nodes -> forces consistent images
             self.experiments = [
-                {"path": "nodes/node_4"},
-                {"path": "nodes/node_2"},
-                {"path": "nodes/node_1"},
-                {"path": "constant_total_pods/node_1"},
-                {"path": "constant_total_pods/node_2"},
-                {"path": "constant_total_pods/node_4"},
-                {"path": "constant_total_pods/node_8"},
-                {"path": "deployment/call_1"},
-                {"path": "deployment/call_100"},
-                {"path": "deployment/container_1"},
-                {"path": "deployment/container_100"},
-                {"path": "deployment/file_1"},
-                {"path": "deployment/file_100"},
-                {"path": "pods_per_node/pod_1"},
-                {"path": "pods_per_node/pod_10"},
-                {"path": "pods_per_node/pod_100"},
+                # {"path": "nodes/node_4"},
+                # {"path": "nodes/node_2"},
+                # {"path": "nodes/node_1"},
+                # {"path": "constant_total_pods/node_1"},
+                # {"path": "constant_total_pods/node_2"},
+                # {"path": "constant_total_pods/node_4"},
+                # {"path": "constant_total_pods/node_8"},
+                # {"path": "deployment/call_1", "xmax": 1.0, "xinter": 0.2},
+                {"path": "deployment/call_100", "xmax": 28, "xinter": 4},
+                # {"path": "deployment/container_1"},
+                # {"path": "deployment/container_100"},
+                # {"path": "deployment/file_1"},
+                # {"path": "deployment/file_100"},
+                # {"path": "pods_per_node/pod_1"},
+                # {"path": "pods_per_node/pod_10"},
+                # {"path": "pods_per_node/pod_100"},
             ]
 
             # GCP has more infrastructure so bigger configurations
             if args.infrastructure == "gcp":
-                self.experiments += [
-                    {"path": "constant_total_pods/node_16"},
-                    {"path": "nodes/node_8"},
-                    {"path": "nodes/node_16"},
-                ]
+                # If something goes wrong after all executions, only 2 VMs from pod_100 are
+                # running, not the 16 from node_16. This saves money if this script is running
+                # in the night and we can't stop the VMs by hand.
+                self.experiments = [
+                    # {"path": "constant_total_pods/node_16"},
+                    # {"path": "nodes/node_8"},
+                    # {"path": "nodes/node_16"},
+                ] + self.experiments
 
     def __repr__(self):
         """Returns this string when called as print(object)"""
@@ -286,6 +289,14 @@ xargs -I %% sh -c \"virsh destroy %%\""
                     "resource_os": csv_resource_os,
                     "destination": os.path.dirname(csv),
                 }
+
+                # Check for custom plot values
+                for i in ["xmax", "ymax", "xinter", "yinter"]:
+                    if i in experiment:
+                        run[i] = experiment[i]
+                    else:
+                        run[i] = None
+
                 self.plots.append(run)
 
     def check_resume(self):
@@ -305,13 +316,34 @@ xargs -I %% sh -c \"virsh destroy %%\""
                 # Full sort every category individually
                 df = df.transform(np.sort)
 
-            plot.plot_control(df, timestamp)
-            plot.plot_p56(df, timestamp)
+            plot.plot_control(
+                df,
+                timestamp,
+                xmax=p["xmax"],
+                ymax=p["ymax"],
+                xinter=p["xinter"],
+                yinter=p["yinter"],
+            )
+            plot.plot_p56(
+                df,
+                timestamp,
+                xmax=p["xmax"],
+                ymax=p["ymax"],
+                xinter=p["xinter"],
+                yinter=p["yinter"],
+            )
 
             # Now plot resources
             df1 = pd.read_csv(p["resource"])
             df2 = pd.read_csv(p["resource_os"])
-            plot.plot_resources([df1, df2], timestamp)
+            plot.plot_resources(
+                [df1, df2],
+                timestamp,
+                xmax=p["xmax"],
+                ymax=p["ymax"],
+                xinter=p["xinter"],
+                yinter=p["yinter"],
+            )
 
             # Now move PDF back to the correct folder
             command = "mv logs/%s* %s" % (timestamp, p["destination"])
@@ -338,6 +370,10 @@ def main(args):
     exp.generate()
     exp.check_resume()
     exp.run_commands()
+
+    command = ["terraform", "-chdir=/home/matthijs/.continuum/images", "destroy", "--auto-approve"]
+    replicate_paper.execute(command)
+
     exp.parse_output()
     exp.plot()
     exp.print_result()
