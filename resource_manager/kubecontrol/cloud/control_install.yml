@@ -95,7 +95,7 @@
     #             memory: 400Mi
     #     EOF
 
-    # - name: Create kubelet config file (udefault)
+    # - name: Create kubelet config file (optimized)
     #   shell: |
     #     cat > "/home/{{ username }}/config.yaml" <<EOF
     #     apiVersion: kubeadm.k8s.io/v1beta3
@@ -108,18 +108,40 @@
     #     apiServer:
     #       certSANs:
     #       - {{ cloud_ip }}
+    #       extraArgs:
+    #         max-mutating-requests-inflight: "100000"
+    #         max-requests-inflight: "100000"
     #     imageRepository: {{ registry_ip }}
     #     kubernetesVersion: {{ kubeversion }}
     #     networking:
     #       podSubnet: 10.244.0.0/16
+    #     controllerManager:
+    #       extraArgs:
+    #         kube-api-qps: "100000"
+    #         kube-api-burst: "100000"
+    #     scheduler:
+    #       extraArgs:
+    #         kube-api-qps: "100000"
+    #         kube-api-burst: "100000"
     #     ---
     #     apiVersion: kubelet.config.k8s.io/v1beta1
     #     kind: KubeletConfiguration
     #     containerLogMaxSize: "100Mi"
     #     containerLogMaxFiles: 10
+    #     registryPullQPS: 100000
+    #     eventRecordQPS: 100000
+    #     kubeAPIQPS: 100000
+    #     serializeImagePulls: false
+    #     maxParallelImagePulls: 100000
+    #     ---
+    #     apiVersion: kubeproxy.config.k8s.io/v1alpha1
+    #     kind: KubeProxyConfiguration
+    #     clientConnection:
+    #       qps: 100000
+    #       burst: 100000
     #     EOF
 
-    - name: Create kubelet config file (optimized)
+    - name: Create kubelet config file (default)
       shell: |
         cat > "/home/{{ username }}/config.yaml" <<EOF
         apiVersion: kubeadm.k8s.io/v1beta3
@@ -132,37 +154,15 @@
         apiServer:
           certSANs:
           - {{ cloud_ip }}
-          extraArgs:
-            max-mutating-requests-inflight: "100000"
-            max-requests-inflight: "100000"
         imageRepository: {{ registry_ip }}
         kubernetesVersion: {{ kubeversion }}
         networking:
           podSubnet: 10.244.0.0/16
-        controllerManager:
-          extraArgs:
-            kube-api-qps: "100000"
-            kube-api-burst: "100000"
-        scheduler:
-          extraArgs:
-            kube-api-qps: "100000"
-            kube-api-burst: "100000"
         ---
         apiVersion: kubelet.config.k8s.io/v1beta1
         kind: KubeletConfiguration
         containerLogMaxSize: "100Mi"
         containerLogMaxFiles: 10
-        registryPullQPS: 100000
-        eventRecordQPS: 100000
-        kubeAPIQPS: 100000
-        serializeImagePulls: false
-        maxParallelImagePulls: 100000
-        ---
-        apiVersion: kubeproxy.config.k8s.io/v1alpha1
-        kind: KubeProxyConfiguration
-        clientConnection:
-          qps: 100000
-          burst: 100000
         EOF
 
     - name: Initialize the Kubernetes cluster using kubeadm
