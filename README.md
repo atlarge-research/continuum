@@ -186,17 +186,16 @@ sudo systemctl restart docker
 # 3. Install other required packages
 sudo apt install python3-pip
 
-# Install ansible and edit the configuration as follows:
-# Under `[ssh_connection]`, add `retries = 5`
-# Under `[defaults]`, add `callback_whitelist = profile_tasks`
-# Under `[defaults]`, add `command_warnings=False`
-sudo apt install ansible
-sudo vim /etc/ansible/ansible.cfg
-
 # 4. Install the Continuum framework
 git clone https://github.com/atlarge-research/continuum.git
 cd continuum
 pip3 install -r requirements.txt
+
+# Edit the ansible configuration as follows:
+# Under `[ssh_connection]`, add `retries = 5`
+# Under `[defaults]`, add `callback_whitelist = profile_tasks`
+# Under `[defaults]`, add `command_warnings=False`
+sudo vim /etc/ansible/ansible.cfg
 
 mkdir ~/.ssh
 touch ~/.ssh/known_hosts
