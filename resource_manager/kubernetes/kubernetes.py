@@ -622,7 +622,7 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
     if get_starttime:
         return launch_with_starttime(config, machines)
 
-    return None
+    return (None, None)
 
 
 def start_worker_mist(config, machines, app_vars):
