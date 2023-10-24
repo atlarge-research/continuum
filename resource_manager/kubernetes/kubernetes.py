@@ -180,6 +180,7 @@ def cache_worker(config, machines, app_vars):
         "cpu_req": float(cores * 0.5),
         "replicas": worker_apps,
         "pull_policy": "IfNotPresent",
+        "runtime": config["benchmark"]["runtime"],
     }
 
     # Merge the two var dicts
@@ -600,6 +601,7 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
         "cpu_req": config["benchmark"]["application_worker_cpu"],
         "replicas": worker_apps,
         "pull_policy": "Never",
+        "runtime": config["benchmark"]["runtime"]
     }
 
     # Merge the two var dicts

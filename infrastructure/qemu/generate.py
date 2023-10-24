@@ -17,6 +17,7 @@ DOMAIN = """\
         <type>hvm</type>
         <boot dev="hd"/>
     </os>
+    <cpu mode='host-passthrough'/>
     <features>
         <acpi/>
     </features>

@@ -35,6 +35,13 @@ def add_options(_config):
             False,
             "v1.27.0",
         ],
+        [
+            "runtime",
+            str,
+            lambda x: x in ['runc', 'kata-qemu', 'kata-fc'],
+            False,
+            'runc'
+        ]
     ]
     return settings
 
@@ -81,6 +88,17 @@ def start(config, machines):
             ),
         ]
     )
+    commands.append(
+        [
+            "ansible-playbook",
+            "-i",
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/cloud/install_kata_dev_tools.yml",
+            ),
+        ]
+    )
 
     # Setup worker
     commands.append(
@@ -94,6 +112,46 @@ def start(config, machines):
             ),
         ]
     )
+
+    # Setup worker runtime
+    runtime = config['benchmark']['runtime']
+    if runtime == 'kata-qemu':
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/%s/install_kata_qemu.yml" % (config["mode"]),
+                ),
+            ]
+        )
+    elif runtime == 'kata-fc':
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/%s/install_kata_fc.yml" % (config["mode"]),
+                ),
+            ]
+        )
+    if 'kata' in runtime:
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/%s/install_kata_cloud_common.yml" % (config["mode"]),
+                ),
+            ]
+        )
+
 
     results = machines[0].process(config, commands)
 
