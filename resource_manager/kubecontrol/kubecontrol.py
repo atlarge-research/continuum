@@ -115,7 +115,7 @@ def start(config, machines):
 
     # Setup worker runtime
     runtime = config['benchmark']['runtime']
-    if runtime == 'kata-qemu':
+    if "kata" in runtime:
         commands.append(
             [
                 "ansible-playbook",
@@ -123,23 +123,10 @@ def start(config, machines):
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
-                    ".continuum/%s/install_kata_qemu.yml" % (config["mode"]),
+                    f".continuum/{(config['mode'])}/install_{runtime.replace('-','_')}.yml",
                 ),
             ]
         )
-    elif runtime == 'kata-fc':
-        commands.append(
-            [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/%s/install_kata_fc.yml" % (config["mode"]),
-                ),
-            ]
-        )
-    if 'kata' in runtime:
         commands.append(
             [
                 "ansible-playbook",
