@@ -12,7 +12,7 @@
       command: kubectl apply -f components.yaml
 
     - name: Wait for metrics server to be running
-      command: kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system
+      command: kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout 1m
 
     - name: Copy resource metrics script in
       copy:
