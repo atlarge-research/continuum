@@ -4,7 +4,7 @@
   tasks:
     - name: actually install dev tools
       shell: |
-        sudo apt install zsh neovim -y
+        sudo apt install zsh fzf neovim -y
 
     - name: Install ohmyzsh
       shell: |
@@ -21,7 +21,7 @@
       lineinfile:
         path: /home/{{ username }}/.zshrc
         regexp: '^plugins=\(git\)'
-        line: "plugins=(git sudo colored-man-pages kubectl)"
+        line: "plugins=(git sudo colored-man-pages timer kubectl)"
       become: yes
       become_user: "{{ username }}"
 
