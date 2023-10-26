@@ -18,7 +18,8 @@ def set_container_location(config):
     Args:
         config (dict): Parsed configuration
     """
-    source = "redplanet00/kubeedge-applications"
+    # source = "redplanet00/kubeedge-applications"
+    source = "ansk/empty"
     config["images"] = {"worker": "%s:empty" % (source)}
 
 
@@ -61,7 +62,7 @@ def cache_worker(_config, _machines):
         (dict): Application variables
     """
     app_vars = {
-        "sleep_time": 30,
+        "sleep_time": 10,
     }
     return app_vars
 
