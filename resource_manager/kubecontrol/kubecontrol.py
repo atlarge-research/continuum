@@ -115,6 +115,7 @@ def start(config, machines):
 
     # Setup worker runtime
     runtime = config['benchmark']['runtime']
+    use_overlayfs = "true" if config["benchmark"].get("runtime_filesystem") == "overlayfs" else "false"
     if "kata" in runtime:
         commands.append(
             [
@@ -125,17 +126,8 @@ def start(config, machines):
                     config["infrastructure"]["base_path"],
                     f".continuum/{(config['mode'])}/install_kata_containers.yml",
                 ),
-            ]
-        )
-        commands.append(
-            [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/%s/install_kata_cloud_common.yml" % (config["mode"]),
-                ),
+                "-e",
+                f"use_overlayfs={use_overlayfs}"
             ]
         )
         commands.append(
@@ -149,19 +141,6 @@ def start(config, machines):
                 ),
             ]
         )
-        if config["benchmark"].get("runtime_filesystem") == "overlayfs":
-            assert runtime == "kata-qemu"
-            commands.append(
-                [
-                    "ansible-playbook",
-                    "-i",
-                    os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                    os.path.join(
-                        config["infrastructure"]["base_path"],
-                        ".continuum/cloud/install_kata_qemu_overlayfs.yml",
-                    ),
-                ]
-            )
 
 
     results = machines[0].process(config, commands)

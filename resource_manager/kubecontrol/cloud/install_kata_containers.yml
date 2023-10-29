@@ -55,8 +55,66 @@
 
         sudo systemctl restart containerd
 
+    - name: Use overlayfs
+      command: >
+        sudo sed -i 's/snapshotter = "devmapper"/snapshotter = "overlayfs"/g' "/etc/containerd/config.toml"
+      when: use_overlayfs | bool
+
     - name: Enable kata tracing
       shell: |
         # removes the comment from the runtime enable_tracing parameter in the configurations.
         sudo sed -i '324s/#//' /opt/kata/share/defaults/kata-containers/configuration-fc.toml
         sudo sed -i '588s/#//' /opt/kata/share/defaults/kata-containers/configuration-qemu.toml
+
+    - name: Install tracing tools
+      command: sudo snap install docker
+
+    - name: Ensure Docker service is started
+      service:
+        name: snap.docker.dockerd.service
+        state: started
+        enabled: yes
+
+    - name: start tracing daemon
+      shell: |
+        sudo docker run -d --name jaeger \
+          -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
+          -e COLLECTOR_OTLP_ENABLED=true \
+          -p 6831:6831/udp \
+          -p 6832:6832/udp \
+          -p 5778:5778 \
+          -p 16686:16686 \
+          -p 4317:4317 \
+          -p 4318:4318 \
+          -p 14250:14250 \
+          -p 14268:14268 \
+          -p 14269:14269 \
+          -p 9411:9411 \
+          jaegertracing/all-in-one:1.47 --query.max-clock-skew-adjustment=20s
+
+    - name: create resetTracesFile
+      copy:
+        dest: /home/{{ username }}/resetTraces.sh
+        content: |
+          #!/bin/bash
+          sudo docker stop "$(sudo docker ps -aq)"
+          sudo docker rm "$(sudo docker ps -aq)"
+          sudo docker run -d --name jaeger \
+            -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
+            -e COLLECTOR_OTLP_ENABLED=true \
+            -p 6831:6831/udp \
+            -p 6832:6832/udp \
+            -p 5778:5778 \
+            -p 16686:16686 \
+            -p 4317:4317 \
+            -p 4318:4318 \
+            -p 14250:14250 \
+            -p 14268:14268 \
+            -p 14269:14269 \
+            -p 9411:9411 \
+            jaegertracing/all-in-one:1.47 #--query.max-clock-skew-adjustment=20s
+
+    - name: chmod_x resetTraces
+      file:
+        path: /home/{{ username }}/resetTraces.sh
+        mode: 'a+x'

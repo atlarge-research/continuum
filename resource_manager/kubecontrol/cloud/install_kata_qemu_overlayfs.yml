@@ -1,7 +1,0 @@
----
-- hosts: clouds
-  become: true
-  tasks:
-    - name: Install kata-qemu
-      command: >
-        sudo sed -i 's/snapshotter = "devmapper"/snapshotter = "overlayfs"/g' "$file_path"

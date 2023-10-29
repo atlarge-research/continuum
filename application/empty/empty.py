@@ -162,7 +162,6 @@ def format_output(
                 # subprocess.run(cmd2, shell=True)
                 # tmp end -------------------------------------------------------------
 
-                # plot.plot_kata_only(df_kata, config["timestamp"])
 
 
 def get_kata_df(df: pd.DataFrame, kata_ts: List[List[int]], starttime) -> pd.DataFrame:
@@ -192,7 +191,7 @@ def get_kata_df(df: pd.DataFrame, kata_ts: List[List[int]], starttime) -> pd.Dat
 
     df = pd.DataFrame(df_lists, columns=df_columns)
     l = [sorted(l) == l for l in df_lists]
-    print(f"are all ascending? {all(x > 0 for x in l)}")
+    # print(f"are all ascending? {all(x > 0 for x in l)}")
 
     return df
 
