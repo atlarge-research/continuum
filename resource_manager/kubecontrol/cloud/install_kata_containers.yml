@@ -41,23 +41,6 @@
 
         sudo chmod +x /usr/local/bin/containerd-shim-kata-fc-v2
 
-        line_number=$(grep -n 'containerd.runtimes]' "$file_path" | cut -d ":" -f 1)
-
-        sed -i "$((line_number + 1)) a\         [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.kata-fc]" "$file_path"
-        sed -i "$((line_number + 2)) a\           runtime_type = \"io.containerd.kata-fc.v2\"\n" "$file_path"
-
-        sudo systemctl restart containerd
-
-    - name: Enable kata tracing
-      shell: |
-        # removes the comment from the runtime enable_tracing parameter in the configurations.
-        sudo sed -i '324s/#//' /opt/kata/share/defaults/kata-containers/configuration-fc.toml
-
-    # TODO Antonis remove for release
-    - name: (dev) aslo install kata-qemu
-      shell: |
-        file_path='/etc/containerd/config.toml'
-
         echo '#!/bin/bash' | sudo tee -a /usr/local/bin/containerd-shim-kata-qemu-v2 > /dev/null
         echo 'KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-qemu.toml /opt/kata/bin/containerd-shim-kata-v2 $@' | sudo tee -a /usr/local/bin/containerd-shim-kata-qemu-v2 > /dev/null
 
@@ -65,8 +48,15 @@
 
         line_number=$(grep -n 'containerd.runtimes]' "$file_path" | cut -d ":" -f 1)
 
-        sed -i "$((line_number + 1)) a\         [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.kata-qemu]" "$file_path"
-        sed -i "$((line_number + 2)) a\           runtime_type = \"io.containerd.kata-qemu.v2\"\n" "$file_path"
+        sed -i "$((line_number + 1)) a\         [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.kata-fc]" "$file_path"
+        sed -i "$((line_number + 2)) a\           runtime_type = \"io.containerd.kata-fc.v2\"\n" "$file_path"
+        sed -i "$((line_number + 3)) a\         [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.kata-qemu]" "$file_path"
+        sed -i "$((line_number + 4)) a\           runtime_type = \"io.containerd.kata-qemu.v2\"\n" "$file_path"
 
         sudo systemctl restart containerd
+
+    - name: Enable kata tracing
+      shell: |
+        # removes the comment from the runtime enable_tracing parameter in the configurations.
+        sudo sed -i '324s/#//' /opt/kata/share/defaults/kata-containers/configuration-fc.toml
         sudo sed -i '588s/#//' /opt/kata/share/defaults/kata-containers/configuration-qemu.toml

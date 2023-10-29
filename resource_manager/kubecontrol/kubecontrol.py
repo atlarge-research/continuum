@@ -41,7 +41,14 @@ def add_options(_config):
             lambda x: x in ['runc', 'kata-qemu', 'kata-fc'],
             False,
             'runc'
-        ]
+        ],
+        [
+            "runtime_filesystem",
+            str,
+            lambda x: x in ['overlayfs', 'devmapper'],
+            False,
+            'devmapper'
+        ],
     ]
     return settings
 
@@ -64,6 +71,10 @@ def verify_options(parser, config):
         != 0
     ):
         parser.error(r"ERROR: Kubernetes requires (#clouds-1) % #endpoints == 0 (-1 for control)")
+    elif (
+        config["benchmark"]["runtime"] == "kata-fc" and config["benchmark"]["runtime_filesystem"] == "overlayfs"
+    ):
+        parser.error(f"ERROR: Overlay FS cannot be used with kata-fc - use option runtime_filesystem = devmapper")
 
 
 def start(config, machines):
@@ -85,17 +96,6 @@ def start(config, machines):
             os.path.join(
                 config["infrastructure"]["base_path"],
                 ".continuum/cloud/control_install.yml",
-            ),
-        ]
-    )
-    commands.append(
-        [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/cloud/install_kata_dev_tools.yml",
             ),
         ]
     )
@@ -123,7 +123,7 @@ def start(config, machines):
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
-                    f".continuum/{(config['mode'])}/install_{runtime.replace('-','_')}.yml",
+                    f".continuum/{(config['mode'])}/install_kata_containers.yml",
                 ),
             ]
         )
@@ -138,6 +138,30 @@ def start(config, machines):
                 ),
             ]
         )
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/cloud/install_kata_dev_tools.yml",
+                ),
+            ]
+        )
+        if config["benchmark"].get("runtime_filesystem") == "overlayfs":
+            assert runtime == "kata-qemu"
+            commands.append(
+                [
+                    "ansible-playbook",
+                    "-i",
+                    os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                    os.path.join(
+                        config["infrastructure"]["base_path"],
+                        ".continuum/cloud/install_kata_qemu_overlayfs.yml",
+                    ),
+                ]
+            )
 
 
     results = machines[0].process(config, commands)
