@@ -143,25 +143,11 @@ def format_output(
             plot.plot_resources(df_resources, config["timestamp"], xmax=endtime)
             if kata_ts is not None:
                 df_kata = get_kata_df(df, kata_ts, starttime)
-                # print(list(df_kata))
-                # df_kata = pd.DataFrame(
-                #     [[time_delta(t * 1e-6, starttime) for t in l] for l in kata_ts],
-                #     columns=["P0", "P1", "P2", "P3"]
-                # )
 
                 path = f"./logs/{(config['timestamp'])}_dataframe_kata.csv"
                 df_kata.to_csv(path, index=False, encoding="utf-8")
 
-                # tmp start -----------------------------------------------------------
-                # import subprocess
-                # cmd1 = f"head -n 1 {path}"
-                # output = f"{config['benchmark']['runtime']}_{config['infrastructure']['cloud_nodes']-1}_{config['benchmark']['applications_per_worker']}.csv"
-                # cmd2 = f"tail -n +2 {path} | tac >> {output}"
-                # first_line = subprocess.check_output(cmd1, shell=True).decode('utf-8')
-                # with open('output.txt', 'w') as f: f.write(first_line)
-                # subprocess.run(cmd2, shell=True)
-                # tmp end -------------------------------------------------------------
-
+                plot.plot_p56_kata(df_kata, config["timestamp"])
 
 
 def get_kata_df(df: pd.DataFrame, kata_ts: List[List[int]], starttime) -> pd.DataFrame:

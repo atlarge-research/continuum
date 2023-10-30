@@ -335,6 +335,84 @@ def plot_p56(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     plt.savefig("./logs/%s_breakdown_intern_P56.pdf" % (timestamp), bbox_inches="tight")
     plt.close(fig)
 
+def plot_p56_kata(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
+    plt.rcParams.update({"font.size": 20})
+    fig, ax1 = plt.subplots(figsize=(12, 4))
+
+    bar_height = 1.1
+
+    df_plot = df.copy(deep=True)
+
+    df_plot = df_plot.sort_values(by=["started_application (s)"])
+
+    y = [*range(len(df_plot["started_application (s)"]))]
+
+    left = [0 for _ in range(len(y))]
+
+    colors = {
+        "EMPTY": "#ffffff",
+        "kubelet_pod_received (s)": "#6929c4",
+        "kubelet_created_cgroup (s)": "#1192e8",
+        "kubelet_mounted_volume (s)": "#005d5d",
+        "kata_create_runtime (s)": "#9f1853",
+        "kata_create_vm (s)": "#fa4d56",
+        "kata_connect_to_vm (s)": "#1192e8",
+        "kata_create_container_and_launch (s)": "#005d5d",
+        "started_application (s)": "#9f1853",
+        "Deployed": "#ffffff",
+    }
+    cs = list(colors.values())
+
+    for column, c in zip(df_plot, cs):
+        plt.barh(y, df_plot[column] - left, color=c, left=left, align="edge", height=bar_height)
+        left = df_plot[column]
+
+    # Calculate final bar to make all bars the same length
+    max_time = df_plot["started_application (s)"].max()
+    left = df_plot["started_application (s)"]
+    diff = [max_time - l for l in left]
+    plt.barh(y, diff, color=cs[-1], left=left, align="edge", height=bar_height)
+
+    # Set plot details
+    ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.grid(True)
+
+    # Set y axis details
+    ax1.set_ylabel("Pods")
+    y_max = len(y)
+    # if ymax:
+    #     y_max = ymax
+
+    ax1.set_ylim(0, y_max)
+
+    # Set x axis details
+    ax1.set_xlabel("Time (s)")
+    x_max = max(1.0, max_time)
+    if xmax:
+        x_max = xmax
+
+    ax1.set_xlim(0, x_max)
+
+    # Set x/y ticks if argument passed
+    if xinter:
+        ax1.set_xticks(np.arange(0, x_max + 0.1, xinter))
+    if yinter:
+        ax1.set_yticks(np.arange(0, y_max + 0.1, yinter))
+
+    # add legend
+    patches = []
+    for c in cs[1:-1]:
+        patches.append(mpatches.Patch(facecolor=c, edgecolor="k"))
+
+    colors.pop("EMPTY")
+    colors.pop("Deployed")
+    texts = colors.keys()
+    ax1.legend(patches, texts, loc="lower right", fontsize="8")
+
+    # Save plot
+    plt.savefig(f"./logs/{timestamp}_breakdown_intern_P56_kata.pdf", bbox_inches="tight")
+    plt.close(fig)
 
 def plot_resources(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     """Plot resource utilization data
