@@ -6,6 +6,8 @@ import logging
 import os
 import sys
 import time
+import json
+from datetime import datetime
 
 import pandas as pd
 
@@ -1202,6 +1204,21 @@ def get_control_output(config, machines, starttime, status):
 
     return parsed_copy, endtime
 
+def get_deployment_duration(config, machines):
+    try:
+        command = "kubectl get job stress -o json"
+        results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
+        results = ''.join(results[0][0])
+
+        results_json = json.loads(results)
+
+        end, start = results_json["status"]["completionTime"], results_json["status"]["startTime"]
+        duration = datetime.strptime(end, '%Y-%m-%dT%H:%M:%SZ') - datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ')
+
+        return duration.total_seconds()
+    except Exception as e:
+        logging.debug(f"[WARNING][{e}] error in function get_deployment_duration")
+        return -1
 
 def parse_custom_kubernetes_splits(line):
     """Parse lines from Kubernetes custom output, like:
