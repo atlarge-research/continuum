@@ -56,8 +56,9 @@
         sudo systemctl restart containerd
 
     - name: Use overlayfs
-      command: >
+      shell: |
         sudo sed -i 's/snapshotter = "devmapper"/snapshotter = "overlayfs"/g' "/etc/containerd/config.toml"
+        sudo systemctl restart containerd
       when: use_overlayfs | bool
 
     - name: Enable kata tracing
