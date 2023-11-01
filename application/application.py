@@ -286,6 +286,9 @@ def kube_control(config, machines):
         app_vars = config["module"]["application"].cache_worker(config, machines)
         kubernetes.cache_worker(config, machines, app_vars)
 
+    if config["benchmark"]["application"] == "mem_usage":
+        return config["module"]["application"].get_mem_usage(config, machines, kubernetes)
+    
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
     starttime, kubectl_out, status = kubernetes.start_worker(
