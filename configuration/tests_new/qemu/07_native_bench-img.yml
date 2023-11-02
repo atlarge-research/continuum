@@ -1,0 +1,17 @@
+---
+base_path: /mnt/sdc/matthijs
+provider_init:
+  qemu:
+    middleIP: 70
+    middleIP_base: 71
+layer:
+  - name: endpoint
+    infrastructure:
+      qemu:
+        nodes: 3
+        cores: 3
+        memory: 5
+benchmark:
+  - application: image_classifcation
+    software: none
+    frequency: 3

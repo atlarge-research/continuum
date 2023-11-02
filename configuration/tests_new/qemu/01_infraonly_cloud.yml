@@ -1,0 +1,13 @@
+---
+base_path: /mnt/sdc/matthijs
+provider_init:
+  qemu:
+    middleIP: 70
+    middleIP_base: 71
+layer:
+  - name: cloud
+    infrastructure:
+      qemu:
+        nodes: 1
+        cores: 2
+        memory: 2

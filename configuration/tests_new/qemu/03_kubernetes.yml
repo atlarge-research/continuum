@@ -1,0 +1,19 @@
+---
+base_path: /mnt/sdc/matthijs
+delete: True
+docker_pull: True
+provider_init:
+  qemu:
+    cpu_pin: True
+    middleIP: 70
+    middleIP_base: 71
+layer:
+  - name: cloud
+    infrastructure:
+      qemu:
+        nodes: 2
+        cores: 4
+        memory: 8
+    software:
+      - name: kubernetes
+        observability: True

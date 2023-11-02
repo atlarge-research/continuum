@@ -1,0 +1,45 @@
+---
+base_path: /mnt/sdc/matthijs
+delete: True
+docker_pull: True
+provider_init:
+  qemu:
+    cpu_pin: True
+    middleIP: 70
+    middleIP_base: 71
+layer:
+  - name: cloud
+    infrastructure:
+      qemu:
+        nodes: 1
+        cores: 2
+        memory: 2
+        storage:
+          read: 200
+          write: 100
+  - name: edge
+    infrastructure:
+      qemu:
+        nodes: 1
+        cores: 2
+        memory: 3
+        quota: 0.8
+        network:
+          preset: 4G
+          link:
+            - destination: cloud
+              latency:avg: 10
+            - destination: edge
+              throughput: 75
+  - name: endpoint
+    infrastructure:
+      qemu:
+        nodes: 2
+        cores: 1
+        memory: 1
+        quota: 0.5
+        storage:
+          read: 250
+          write: 150
+        network:
+          preset: 5G

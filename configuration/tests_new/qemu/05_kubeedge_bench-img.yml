@@ -1,0 +1,38 @@
+---
+base_path: /mnt/sdc/matthijs
+provider_init:
+  qemu:
+    middleIP: 70
+    middleIP_base: 71
+layer:
+  - name: cloud
+    infrastructure:
+      qemu:
+        nodes: 1
+        cores: 4
+        memory: 8
+  - name: edge
+    infrastructure:
+      qemu:
+        nodes: 1
+        cores: 4
+        memory: 8
+    software:
+      - name: kubeedge
+  - name: endpoint
+    infrastructure:
+      qemu:
+        nodes: 1
+        cores: 2
+        memory: 2
+benchmark:
+  - application: image_classifcation
+    software: kubeedge
+    frequency: 5
+    layer:
+      - name: edge
+        cores: 3
+        memory: 6
+      - name: endpoint
+        cores: 1.5
+        memory: 1
