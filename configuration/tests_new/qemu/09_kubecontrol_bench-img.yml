@@ -1,11 +1,11 @@
 ---
 # Only execute this if you have access to the kubecontrol resources
 base_path: /mnt/sdc/matthijs
-delete: True
-docker_pull: True
+delete: true
+docker_pull: true
 provider_init:
   qemu:
-    cpu_pin: True
+    cpu_pin: true
     middleIP: 70
     middleIP_base: 71
 layer:
@@ -23,7 +23,7 @@ benchmark:
     software: kubecontrol
     sleep_time: 30
     kube_deployment: pod
-    cache_worker: True
+    cache_worker: true
     layer:
       - name: cloud
         cores: 0.1

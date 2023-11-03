@@ -4,6 +4,8 @@ extends: default
 rules:
   line-length:
     max: 125
+  comments:
+    min-spaces-from-content: 1
 
 ignore: |
   .tmp

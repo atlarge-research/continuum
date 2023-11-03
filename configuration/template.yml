@@ -18,13 +18,13 @@
 # - Run your configuration with Continuum - its parser gives detailed feedback
 #
 base_path: "~" # Location to store generated Continuum files. Default: ~
-delete: False # Delete any provisioned infrastructure after benchmark execution. Default: False
+delete: false # Delete any provisioned infrastructure after benchmark execution. Default: false
 # Continuum creates a Docker registry on the host machine to save any container image required
-docker_pull: True # Pull container image updates for all required container images
-netperf: True # Install and run a netperf network benchmark across all infrastructure
+docker_pull: true # Pull container image updates for all required container images
+netperf: true # Install and run a netperf network benchmark across all infrastructure
 provider_init: # Global provider settings
   qemu: # QEMU virtual machine provider. Only required when qemu is used in any layer
-    cpu_pin: True # Pin VM CPU cores to physical host cores (1-on-1 mapping only). Default: False
+    cpu_pin: true # Pin VM CPU cores to physical host cores (1-on-1 mapping only). Default: false
     prefixIP: 192.168 # IP range "XXX.XXX.___.___" to access VMs. Default: 192.168
     middleIP: 100 # IP range "___.___.XXX.___" to access VMs, with 1 <= XXX <= 254. Default: 100
     middleIP_base: 90 # See middleIP but now for base VMs. Default: 90
@@ -95,21 +95,21 @@ layer:
       # Deploy Kubernetes - a cloud resource manager
       # Kubernetes can be deployed by itself on any layer
       - name: kubernetes
-        observability: False # Deploy Prometheus and Grafana for Kubernetes. Default: False
+        observability: false # Deploy Prometheus and Grafana for Kubernetes. Default: false
       # Deploy KubeEdge - a lightweight Kubernetes package
       # KubeEdge should be deployed on the edge. KubeEdge requires Kubernetes, which will
       # automatically be deployed on the cloud. The user doesn't need to configure Kubernetes.
       - name: kubeedge
-        observability: False # Deploy Prometheus and Grafana for Kubernetes. Default: False
+        observability: false # Deploy Prometheus and Grafana for Kubernetes. Default: false
       # Deploy OpenFaaS - a resource manager on top of Kubernetes
       # Similar to KubeEdge, OpenFaaS relies on Kubernetes. Kubernetes will be deployed on the
       # cloud, and OpenFaaS on top of it. The user doesn't need to configure Kubernetes.
       - name: openfaas
-        observability: False # Deploy Prometheus and Grafana for Kubernetes. Default: False
+        observability: false # Deploy Prometheus and Grafana for Kubernetes. Default: false
       # Custom version of Kubernetes to benchmark its control path
       # Used for "Columbo"
       - name: kubecontrol
-        observability: False # Deploy Prometheus and Grafana for Kubernetes. Default: False
+        observability: false # Deploy Prometheus and Grafana for Kubernetes. Default: false
         version: v1.27.0 # Kubernetes version to use. Options: v1.[23-27].0. Default: v1.27.0
 benchmark: # Can be ommited if you don't want to benchmark anything
   # The benchmark layer handles the deployment of applications across all infrastructure layers
@@ -192,7 +192,7 @@ benchmark: # Can be ommited if you don't want to benchmark anything
     # - file:       10 YAML files, describing 10 total pods. Use 1 kubectl command to deploy
     # - call        Same as file, but now 1 kubectl call per file
     kube_deployment: pod
-    cache_worker: False # Pre-run the benchmark to warm-up Kubernetes. Default: False
+    cache_worker: false # Pre-run the benchmark to warm-up Kubernetes. Default: false
     layer:
       - name: cloud
         cores: 1 # Number of cores per application deployment
