@@ -313,12 +313,11 @@ def kube_control(config, machines):
     control_output[node]["kubectl"] = kubectl_out
 
     kata_ts = None
-    if "kata" in config["benchmark"]["runtime"] :
-        if config["benchmark"]["application"] == "empty":
-            kata_ts = get_kata_timestamps(config, worker_output)
-        elif config["benchmark"]["application"] == "stress":
-            stress_dur = kubernetes.get_deployment_duration(config, machines)
-            logging.info(f"Total stress duration: {stress_dur}")
+    if "kata" in config["benchmark"]["runtime"] and config["benchmark"]["application"] == "empty":
+        kata_ts = get_kata_timestamps(config, worker_output)
+    elif config["benchmark"]["application"] == "stress":
+        stress_dur = kubernetes.get_deployment_duration(config, machines)
+        logging.info(f"Total stress duration: {stress_dur}")
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, [])
