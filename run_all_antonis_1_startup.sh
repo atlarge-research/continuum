@@ -1,9 +1,10 @@
 #!/bin/bash
 
-folder="configuration/antonis_thesis/1_startup_performance"
+folder="configuration/antonis_thesis/1_startup_performance/weak_scalability"
 
 for file_path in "$folder"/*.cfg; do
         
+    echo python3 continuum.py "$file_path"
     python3 continuum.py "$file_path"
 
     file_name=$(basename "$file_path" .cfg)
