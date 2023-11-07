@@ -4,6 +4,7 @@ folder="configuration/antonis_thesis/3_resource_usage/b_cpu_micro/strong_scalabi
 
 for file_path in "$folder"/*.cfg; do
 
+    echo python3 continuum.py "$file_path"
     python3 continuum.py "$file_path"
 
     file_name=$(basename "$file_path" .cfg)

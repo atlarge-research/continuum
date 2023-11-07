@@ -40,7 +40,7 @@ def cache_worker(_config, _machines):
         (dict): Application variables
     """
     app_vars = {
-        "stress_app_timeout": 1,
+        "stress_app_timeout": 10,
     }
     return app_vars
 
