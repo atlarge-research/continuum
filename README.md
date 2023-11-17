@@ -87,10 +87,9 @@ Grafana is running on the cloud_controller VM, so we have to forward the data it
     ssh -L 3000:192.168.ZZZ.2:3000 nodeX
 
     # Then, from the node where Continuum runs to the cloud controller VM
-    ssh -L 3000:192.168.100.3:3000 -i /home/matthijs/.ssh/id_rsa_continuum cloud_controller_matthijs@192.168.100.2 
+    ssh -L 3000:192.168.ZZZ.2:3000 cloud_controller_ds-nX-Y@192.168.ZZZ.2 -i ~/.ssh/id_rsa_continuum
     ```
-    The first two SSH commands are similar to those you use to access the cluster, as described in section 1.3. \
-    For more information on the variables X, Y, and Z, see section 1.2.
+    The first two SSH commands are similar to those you use to access the cluster, as described in section 1.3. The last command is printed at the end of the Continuum run, see `continuum/logs/`. NOTE: The IP in the -L argument should end with .2, not .3 as printed by Continuum, this is a bug. For more information on the variables X, Y, and Z, see section 1.2.
 3. Now, you can interact with Grafana on your own computer. Go to `http://localhost:3000` in a browser. This will open the Grafana dashboard that visualizes the state of your cluster and the applications running in your cluster. Log in with username and password `admin`, and skip creating a new password.
 4. Go to 'dashboard' (the icon with the 4 boxes in the left navigation bar) -> manage -> default to open the available Granafa dashboards (different graphs and overviews).
 5. You can open any dashboard, such as:
