@@ -1,0 +1,190 @@
+---
+# This template shows all options for the Continuum framework
+# Continuum's configuration has 3 main components:
+# - Infrastructure provisioning
+# - Software installation and configuration
+# - Benchmark execution and data gathering
+#
+# The infrastructure and software settings can, mostly, be freely combined with each other.
+# The benchmarks, however, have strict requirements on what hardware and software can be used
+# because benchmark execution and data gathering requires very specific deployments.
+#
+# The following applies to all configuration settings:
+# - Options with a default value are not mandatory
+# - Options without a default value are mandatory, unless explicitly mentioned otherwise
+#
+# [IMPORTANT] For more information:
+# - See the configuration parser in /input_parser/configuration/configuration_parser.py
+#   - Search for "Schema"
+# - See the /config directory for many example configurations
+# - Run your configuration with Continuum - its parser gives detailed feedback
+#
+base_path: "~" # Location to store generated Continuum files. Default: ~
+delete: false # Delete any provisioned infrastructure after benchmark execution. Default: false
+# Continuum creates a Docker registry on the host machine to save any container image required
+docker_pull: true # Pull container image updates for all required container images. Default: false
+netperf: true # Install and run a netperf network benchmark across all infrastructure. Default:false
+provider_init: # Global provider settings
+  qemu: # QEMU virtual machine provider. Only required when qemu is used in any layer
+    cpu_pin: true # Pin VM CPU cores to physical host cores (1-on-1 mapping only). Default: false
+    prefixIP: 192.168 # IP range "XXX.XXX.___.___" to access VMs. Default: 192.168
+    middleIP: 100 # IP range "___.___.XXX.___" to access VMs, with 1 <= XXX <= 254. Default: 100
+    middleIP_base: 90 # See middleIP but now for base VMs. Default: 99
+    # Use multiple physical machines to deploy QEMU VMs on.
+    # Any SSH address will work as long as no SSH flags are needed to execute
+    external_physical_machines: # SSH addresses like 'user@host'
+      - name: user@host
+  gcp: # Google Cloud Platform - Compute Engine VMs. Only mandatory if GCP is used in any layer
+    region: europe-west4 # Options: Any GCP region
+    zone: europe-west4-a # Options: Any GCP zone
+    project: continuum-123456 # Options: Any GCP project name
+    credentials: "~/.ssh/continuum-123456-12a34b56c78d" # Options: Any GCP service account creds.
+  aws: # AWS - EC2 VMs. Only mandatory if AWS is used in any layer
+    region: eu-central-1 # Options: Any AWS region
+    zone: eu-central-1a # Options: Any AWS zone
+layer:
+  # Define the infrastructure, software, and benchmarks of the cloud, edge, and endpoint layers
+  # You need to define at least 1 layer from cloud/edge/endpoint, and at most all 3. No duplicates.
+  - name: cloud # Layer to set up with Continuum. Options: cloud/edge/endpoint
+    infrastructure: # Exactly 1 infrastructure provider per layer is required
+      qemu:
+        nodes: 2 # Number of VMs to provision. Options: >= 1
+        cores: 4 # CPU cores per VM. Options: >= 1
+        memory: 4 # Memory per VM in GB. Options: >= 1
+        # CPU bandwidth quota (0.25 means CPU is only active 25% of the time)
+        quota: 1.0 # Options: 0.1 <=x <= 1.0. Default: 1.0
+      gcp:
+        nodes: 2 # Number of VMs to provision. Options: >= 1
+        cores: 4 # Should be the number of cores the targeted GCP VM has
+        memory: 4 # Should be the amount of memory the targeted GCP VM has
+        name: "e2-medium" # Any GCP Compute Engine VM. Examples: e2-medium/e2-small/e2-micro
+      aws:
+        nodes: 2 # Number of VMs to provision. Options: >= 1
+        cores: 4 # Should be the number of cores the targeted GCP VM has
+        memory: 4 # Should be the amount of memory the targeted GCP VM has
+        name: "t2-medium" # Any AWS EC2 VM. Examples: t2.medium/t2.small/t2.micro
+      storage: # Storage emulation
+        # TODO: Needs to be implemented. Will function similarly in nature to network emulation.
+        read: 0 # Read throughput in MB/s. Options: >= 0. Default: -1 (disable)
+        write: 0 # Write throughput in MB/s. Options: >= 0. Default: -1 (disable)
+      network: # Network emulation
+        # Only define network emulation in this layer if the infrastructure provider supports it.
+        # Currently, QEMU, GCP, and AWS support this. Compatability is explicitly checked.
+        #
+        # Emulation presets create symmetrical networks (cloud->edge and back are identical)
+        # For emulation preset values, see continuum/infrastructure/network.py
+        preset: 4G # Emulation preset. Options: 4G, 5G
+        # You can customize the emulation of specific links if needed
+        # These definitions are unidirectional, so you can emulate asymmetrical networks.
+        # Example: In the cloud layer, link destination "edge" will emulate from cloud to edge
+        link:
+          - destination: cloud # Emulation from layer to destination. Options: cloud/edge/endpoint
+            latency_avg: 0 # Average latency (in ms). Options: >= 0.0. Default: -1 (disable)
+            latency_var: 0 # Latency variation (in ms). Options: >= 0.0. Default: -1 (disable)
+            throughput: 0 # Throughput (in mbit). Options: >= 0.0. Default: -1 (disable)
+    software: # Can be omitted if you don't want to install any software on the infrastructure
+      # Install specific software packages in various configurations on this layer of infrastructure
+      # You can select no, one, or multiple packages, but no duplicates
+      #
+      # Some packages require the installation of other packages. For example, the serverless
+      # system "OpenFaaS" can only be deployed on top of the resource manager Kubernetes, and
+      # therefore always requires Kubernetes. In this case, you only have to define "OpenFaaS"
+      # as a software package to install, and it will automatically install all dependencies,
+      # such as Kubernetes, for you. Also mentioning Kubernetes in the config file will most
+      # likely result in a crash - try the configuration yourself and see what happens
+      # For more information, also check example configurations in the /config folder
+      #
+      # In general, this software layer should be used to install and configure software packages.
+      # The deployment of workloads on infrastructure using specific software packages
+      # (like Kubernetes) gets handled in the benchmark layer. See comments there for more info
+      #
+      # ---
+      # Deploy Kubernetes - a cloud resource manager
+      # Kubernetes can be deployed by itself on any layer
+      kubernetes:
+        observability: false # Deploy Prometheus and Grafana for Kubernetes. Default: false
+      #
+      # Deploy KubeEdge - a lightweight Kubernetes package
+      # KubeEdge should be deployed on the edge. KubeEdge requires Kubernetes, which will
+      # automatically be deployed on the cloud. The user doesn't need to configure Kubernetes.
+      kubeedge:
+        observability: false
+      #
+      # Deploy OpenFaaS - a resource manager on top of Kubernetes
+      # Similar to KubeEdge, OpenFaaS relies on Kubernetes. Kubernetes will be deployed on the
+      # cloud, and OpenFaaS on top of it. The user doesn't need to configure Kubernetes.
+      openfaas:
+        observability: false
+      #
+      # Custom version of Kubernetes to benchmark its control path (used for Columbo)
+      kubecontrol:
+        observability: false
+        version: v1.27.0 # Kubernetes version to use. Options: v1.[23-27].0. Default: v1.27.0
+benchmark: # Can be omitted if you don't want to benchmark anything
+  # The benchmark layer handles the deployment of workloads across all infrastructure layers
+  # Applications are deployed on infrastructure using software such as a container engine
+  # (e.g., Docker) or a resource manager (e.g., Kubernetes).
+  #
+  # Unlike the infrastructure and software configurations, Continuum only supports benchmarks
+  # with specific configuration settings. The reason is that benchmark deployment, execution,
+  # and the gathering and processing of data afterward, requires lots of custom code.
+  # Therefore, we cannot support all combinations of infrastructure and software benchmarks.
+  # You can deploy no or one benchmark; not multiple
+  #
+  # ---
+  # The image classification workload has a server-side application and a client-side application
+  # You can configure on which compute continuum layer each application gets deployed, and each
+  # application can only be assigned to 1 layer at most
+  #
+  # This application supports the following deployments:
+  # Kubernetes: Deploy the server in the cloud with Kubernetes, and the client on the endpoints
+  #             with Docker. Only an instance value of 1 is accepted
+  # KubeEdge:   Deploy the server on the edge with KubeEdge, and the client on the endpoints
+  #             with Docker. Similar to Kubernetes in all other aspects
+  # Mist:       Deploy the server on the edge with Docker, and the client on the endpoints
+  #             with Docker. This mimics Mist Computing, where clients offload to more powerful
+  #             endpoint devices, here mimicked as edge nodes without any resource manager.
+  #             Only an instance value of 1 is accepted
+  # Native      Do not do any offloading. The client and server are run in a single binary
+  #             on the endpoint with Docker.
+  # OpenFaaS    Deploy the server on the cloud with OpenFaaS, and the client on the endpoints
+  #             with Docker. Similar to Kubernetes in all other aspects
+  image_classification:
+    frequency: 5 # No. of datapoints each client sends to the server per second. Options: >= 1. D: 1
+    layer:
+      - name: cloud/edge/endpoint # Name of the layer. Should align with layers defined earlier
+        kubernetes: # Use kubernetes to deploy
+        kubeedge: # Use kubeedge to deploy
+        docker: # Use docker to deploy
+        openfaas: # Use openfaas to deploy
+        instances: 1 # No. of applications per machine. Options: >= 1. Default: 1
+        #
+        # No. of CPU cores per app. Options: >= 0.1
+        # Default for server application on cloud/edge/endpoint: layer->infra->cores - 0.5
+        # Default for client application on endpoint: layer->infra->cores
+        cores: 1
+        #
+        # Alloc. memory (GB) per app. Options: >= 0.1
+        # Default for server application on cloud/edge/endpoint: layer->infra->memory - 0.5
+        # Default for client application on endpoint: layer->infra->cores
+        memory: 1
+  #
+  # The empty workload consists of a single application that just sleeps for X seconds and stops
+  # It can only be deployed on kubecontrol at the moment to benchmark Kubernetes' control plane
+  # When no description or values are mentioned, the same settings as image_classification apply
+  empty:
+    sleep_time: 30 # Time to sleep in seconds. Options: >= 1. Default: 30
+    layer:
+      - name: cloud # kubecontrol is only allowed in cloud, so this option as well
+        kubecontrol:
+          # The deployment granularity of the application on Kubernetes
+          # Example: Split 10 parallel applications per:
+          # - container:  10 containers in 1 pod
+          # - pod:        10 pods with 1 container each (default)
+          # - file:       10 YAML files, describing 10 total pods. Use 1 kubectl command to deploy
+          # - call        Same as file, but now 1 kubectl call per file
+          kube_deployment: pod
+          cache_worker: false # Pre-run the benchmark to warm-up Kubernetes. Default: false
+        instances: 1
+        cores: 1
+        memory: 1

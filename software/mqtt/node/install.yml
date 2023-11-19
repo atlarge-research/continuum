@@ -1,0 +1,6 @@
+---
+- hosts: endpoints
+  become: true
+  tasks:
+    - name: Run Mosquitto
+      command: mosquitto -d -p 1883

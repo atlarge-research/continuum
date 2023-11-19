@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+            }
+        },
+        {
+            "name": "Python: Continuum - infra_only",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/continuum.py",
+            "args": [
+                "-v",
+                "input/yml/tests/qemu/01_infraonly_cloud.yml"
+            ],
+            "autoReload": {
+                "enable": true
+            },
+            "cwd": "${workspaceFolder}",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+            }
+        }
+    ]
+}

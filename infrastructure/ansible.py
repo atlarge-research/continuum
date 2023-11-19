@@ -2,10 +2,11 @@
 Generate Ansible inventory files
 """
 
-import sys
 import logging
 import os
-import re
+import sys
+
+import settings
 
 
 def check_output(out):
@@ -13,11 +14,11 @@ def check_output(out):
     Shared by all files launching Ansible playbooks
 
     Args:
-        output (list(str), list(str)): List of process stdout and stderr
+        out (list(str), list(str)): List of process stdout and stderr
     """
     output, error = out
 
-    # Print summary of executioo times
+    # Print summary of execution times
     summary = False
     lines = [""]
     for line in output:
@@ -30,8 +31,8 @@ def check_output(out):
     if lines != [""]:
         logging.debug("\n".join(lines))
 
-    # Check if executino was succesful
-    if error != []:
+    # Check if execution was successful
+    if error:
         logging.error("".join(error))
         sys.exit()
     elif any("FAILED!" in out for out in output):
@@ -39,383 +40,173 @@ def check_output(out):
         sys.exit()
 
 
-def create_inventory_machine(config, machines):
-    """Create ansible inventory for creating VMs, so ssh to all physical machines is needed
+def create_inventory_host(layer_name):
+    """Create an Ansible inventory file with all hosts. This will be used by providers that operate
+    on local infrastructure (like QEMU), not on remote infrastructure (like GCP, AWS). We assume
+    that the IP and name of every Host connected to Continuum is already known.
+
+    Besides the general all_host group, also create groups for specific layers, containing only
+    those hosts that operate machines that live in that layer.
 
     Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+        layer_name (str): Name of the layer to create a host group for (e.g., "cloud")
+
+    TODO (high priority)
+     - we removed combined host groups (like all_hosts). Instead, multiple host groups should be
+       passed to the Ansible playbook file, like "host: cloud:edge:endpoint.
+     - make sure the all_host group, and base groups in the inventory_vm aren't used anymore
+     - see deploy.py for qemu for a to do on how to pass host groups to YML files
+
+    TODO (high priority)
+     - remove the cloud_controller VM completely
+     - just make cloudX VMs and assign in metadata one or multiple machines as
+       the controller. Don't create a machine that is literally named "controller"
+     - that makes us more flexible, we can even create multiple controllers
+     - I DON'T WANT TO SEE THE WORD CONTROLLER IN /INFRASTRUCTURE*
+     - I DON'T WANT TO SEE DEDICATED CLOUD/EDGE/ENDPOINT CODE - LAYER NAMES ARE JUST TAGS
     """
-    logging.info("Generate Ansible inventory file for physical machines")
-    with open(".tmp/inventory", "w", encoding="utf-8") as f:
-        # Shared variables between all groups
-        f.write("[all:vars]\n")
-        f.write("ansible_python_interpreter=/usr/bin/python3\n")
-        f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
-        f.write("base_path=%s\n" % (config["infrastructure"]["base_path"]))
-        f.write("username=%s\n" % (config["username"]))
+    logging.info("Generate Ansible inventory file for hosts")
+    dest = os.path.join(settings.config["base_path"], ".continuum/inventory_host")
 
-        # All hosts group
-        f.write("\n[all_hosts]\n")
+    exists = False
+    if os.path.exists(dest):
+        exists = True
 
-        for machine in machines:
-            base = ""
-            if config["infrastructure"]["infra_only"]:
-                base = "base=%s" % (machine.base_names[0])
+    with open(dest, "a", encoding="utf-8") as f:
+        # Write shared variables between all groups once, if inventory did not yet exist
+        if not exists:
+            f.write("[all:vars]\n")
+            f.write("ansible_python_interpreter=/usr/bin/python3\n")
+            f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
+            f.write(f"base_path={settings.config['base_path']}\n")
+            f.write(f"username={settings.config['username']}\n")
 
-            if machine.is_local:
-                f.write(
-                    "localhost ansible_connection=local username=%s %s\n" % (machine.user, base)
+        # Write host groups per layer - with extra input to start (base) machines per layer
+        for layer in settings.get_layers(layer_name=layer_name):
+            f.write(f"\n[{layer['name']}]\n")
+            machines = 0
+
+            for host, base_machine in zip(
+                settings.config["hosts"], settings.get_machines(layer_name=layer["name"], base=True)
+            ):
+                if not base_machine:
+                    logging.error(f"ERROR: Can't find base machine in layer {layer['name']}")
+                    sys.exit()
+
+                base_machine = base_machine[0]
+                machines_in_layer = len(settings.get_machines(layer_name=layer["name"]))
+
+                # TODO (low priority)
+                #  - this start/end/base_name is QEMU specific (perhaps)
+                #  - in the future we might want to move this to the qemu code, similar to how
+                #    we moved software parameters to the software packages via
+                #    ansible-playbook --extra-vars ...
+                custom_vars = (
+                    f"layer={layer['name']} start={machines} "
+                    f"end={machines + machines_in_layer - 1} base_name={base_machine.name}\n"
                 )
-            else:
-                f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n"
-                    % (
-                        machine.name_sanitized,
-                        machine.ip,
-                        machine.user,
-                        machine.user,
-                        base,
-                    )
-                )
 
-        # Specific cloud/edge/endpoint groups for installing RM software
-        # For machines with cloud VMs
-        if config["infrastructure"]["cloud_nodes"]:
-            f.write("\n[clouds]\n")
-            clouds = 0
+                machines += machines_in_layer
 
-            for machine in machines:
-                if machine.cloud_controller + machine.clouds == 0:
-                    continue
-
-                base = machine.base_names[0]
-                if not config["infrastructure"]["infra_only"]:
-                    base = [name for name in machine.base_names if "_cloud_" in name][0]
-
-                if machine.is_local:
-                    f.write(
-                        "localhost ansible_connection=local cloud_controller=%i \
-cloud_start=%i cloud_end=%i base_cloud=%s\n"
-                        % (
-                            machine.cloud_controller,
-                            clouds,
-                            clouds + machine.clouds - 1,
-                            base,
-                        )
-                    )
+                if host.is_local:
+                    f.write(f"localhost ansible_connection=local " + custom_vars)
                 else:
                     f.write(
-                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-cloud_controller=%i cloud_start=%i cloud_end=%i base_cloud=%s\n"
-                        % (
-                            machine.name_sanitized,
-                            machine.ip,
-                            machine.user,
-                            machine.cloud_controller,
-                            clouds,
-                            clouds + machine.clouds - 1,
-                            base,
-                        )
+                        f"{host.name_sanitized} ansible_connection=ssh ansible_host={host.ip} "
+                        f"ansible_user={host.name} " + custom_vars
                     )
 
-                clouds += machine.clouds
 
-        # For machines with edge VMs
-        if config["infrastructure"]["edge_nodes"]:
-            f.write("\n[edges]\n")
-            edges = 0
-
-            for machine in machines:
-                if machine.edges == 0:
-                    continue
-
-                base = machine.base_names[0]
-                if not config["infrastructure"]["infra_only"]:
-                    base = [name for name in machine.base_names if "_edge_" in name][0]
-
-                if machine.is_local:
-                    f.write(
-                        "localhost ansible_connection=local edge_start=%i \
-edge_end=%i base_edge=%s\n"
-                        % (edges, edges + machine.edges - 1, base)
-                    )
-                else:
-                    f.write(
-                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-edge_start=%i edge_end=%i base_edge=%s\n"
-                        % (
-                            machine.name_sanitized,
-                            machine.ip,
-                            machine.user,
-                            edges,
-                            edges + machine.edges - 1,
-                            base,
-                        )
-                    )
-
-                edges += machine.edges
-
-        # For machines with endpoint VMs
-        if config["infrastructure"]["endpoint_nodes"]:
-            f.write("\n[endpoints]\n")
-            endpoints = 0
-            for machine in machines:
-                if machine.endpoints == 0:
-                    continue
-
-                base = machine.base_names[0]
-                if not config["infrastructure"]["infra_only"]:
-                    base = [name for name in machine.base_names if "_endpoint" in name][0]
-
-                if machine.is_local:
-                    f.write(
-                        "localhost ansible_connection=local endpoint_start=%i \
-endpoint_end=%i base_endpoint=%s\n"
-                        % (endpoints, endpoints + machine.endpoints - 1, base)
-                    )
-                else:
-                    f.write(
-                        "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-endpoint_start=%i endpoint_end=%i base_endpoint=%s\n"
-                        % (
-                            machine.name_sanitized,
-                            machine.ip,
-                            machine.user,
-                            endpoints,
-                            endpoints + machine.endpoints - 1,
-                            base,
-                        )
-                    )
-
-                endpoints += machine.endpoints
-
-
-def create_inventory_vm(config, machines):
+def create_inventory_machine(layer_name):
     """Create inventory for installing and configuring software in VMs
 
     Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+        layer_name (str): Name of the layer to create a host group for (e.g., "cloud")
+
+    TODO (high priority)
+     - see the first to do from the previous function
+     - don't create compound groups like 'base' which are all base groups
+     - providers can dynamically add their own arguments using the command
+        - each provider uses their own layer anyway, and not any other layers
+        - we will only need the full inventory_vms file in /software anyway
+        - what I mean: providers call this function for their layer(s), that's fine
+
+    TODO (high priority)
+     - move variables that were previously in the inventory file but are software package
+       specific, to the software packages. They can pass something like this:
+       ansible-playbook --extra-vars "host=cloud:edge:endpoint" -i inventory file.yml
+     - this again disentangles software nicely from infrastructure.
+            if (config["mode"] == "cloud" or config["mode"] == "edge") and (
+                "benchmark" in config and config["benchmark"]["resource_manager"] != "mist"
+            ):
+                f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips_internal[0]))
+                f.write("cloud_ip_external=%s\n" % (machines[0].cloud_controller_ips[0]))
+     .
+     For details on what to move (li
+     https://github.com/atlarge-research/continuum/blob/main/infrastructure/ansible.py#L218
     """
-    logging.info("Generate Ansible inventory file for VMs")
+    logging.info("Generate Ansible inventory file for machine")
+    dest = os.path.join(settings.config["base_path"], ".continuum/inventory_machine")
 
-    with open(".tmp/inventory_vms", "w", encoding="utf-8") as f:
-        f.write("[all:vars]\n")
-        f.write("ansible_python_interpreter=/usr/bin/python3\n")
-        f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
-        f.write("ansible_ssh_private_key_file=%s\n" % (config["ssh_key"]))
+    exists = False
+    if os.path.exists(dest):
+        exists = True
 
-        if "registry" in config:
-            f.write("registry_ip=%s\n" % (config["registry"]))
+    with open(dest, "a", encoding="utf-8") as f:
+        # Write shared variables between all groups once, if inventory did not yet exist
+        if not exists:
+            f.write("[all:vars]\n")
+            f.write("ansible_python_interpreter=/usr/bin/python3\n")
+            f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
 
-        f.write(
-            "continuum_home=%s\n"
-            % (os.path.join(config["infrastructure"]["base_path"], ".continuum"))
-        )
+            provider = settings.get_providers(layer_name=layer_name)
+            ssh_key = settings.config["provider_init"][provider["name"]]["ssh_key"]
+            f.write(f"ansible_ssh_private_key_file={ssh_key}\n")
 
-        # Tier specific groups
-        if (config["mode"] == "cloud" or config["mode"] == "edge") and (
-            "benchmark" in config and config["benchmark"]["resource_manager"] != "mist"
-        ):
-            f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips_internal[0]))
-            f.write("cloud_ip_external=%s\n" % (machines[0].cloud_controller_ips[0]))
+            f.write("registry_ip=%s\n" % (settings.config["registry"]))
 
-            # Cloud controller (is always on machine 0)
-            f.write("\n[cloudcontroller]\n")
-            f.write(
-                "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-username=%s cloud_mode=%i kubeversion=%s\n"
-                % (
-                    machines[0].cloud_controller_names[0],
-                    machines[0].cloud_controller_ips[0],
-                    machines[0].cloud_controller_names[0],
-                    machines[0].cloud_controller_names[0],
-                    config["mode"] == "cloud",
-                    config["benchmark"]["kube_version"][1:],
-                )
-            )
+            home = os.path.join(settings.config["base_path"], ".continuum")
+            f.write(f"continuum_home={home}\n")
 
-        # Cloud worker VM group
-        if config["mode"] == "cloud":
-            f.write("\n[clouds]\n")
+        # Write host groups per layer - with extra input to start (base) machines per layer
+        for layer in settings.get_layers(layer_name=layer_name):
+            f.write(f"\n[{layer['name']}]\n")
 
-            for machine in machines:
-                for name, ip in zip(machine.cloud_names, machine.cloud_ips):
+            for host, machines in zip(
+                settings.config["hosts"], settings.get_machines(layer_name=layer["name"])
+            ):
+                for machine in machines:
+                    if machine.base:
+                        continue
+
                     f.write(
-                        "%s ansible_connection=ssh ansible_host=%s \
-ansible_user=%s username=%s\n"
-                        % (name, ip, name, name)
+                        f"{machine.name} ansible_connection=ssh ansible_host={machine.ip} "
+                        f"ansible_user={machine.name} username={machine.name}"
                     )
 
-        # Edge VM group
-        if config["mode"] == "edge":
-            f.write("\n[edges]\n")
+        # Now do the same, but write host groups for base images
+        for layer in settings.get_layers(layer_name=layer_name):
+            f.write(f"\n[base_{layer['name']}]\n")
 
-            for machine in machines:
-                for name, ip in zip(machine.edge_names, machine.edge_ips):
+            for host, machines in zip(
+                settings.config["hosts"], settings.get_machines(layer_name=layer["name"])
+            ):
+                for machine in machines:
+                    if not machine.base:
+                        continue
+
                     f.write(
-                        "%s ansible_connection=ssh ansible_host=%s \
-ansible_user=%s username=%s\n"
-                        % (name, ip, name, name)
+                        f"{machine.name} ansible_connection=ssh ansible_host={machine.ip} "
+                        f"ansible_user={machine.name} username={machine.name}"
                     )
 
-        # Endpoint VM group
-        if config["infrastructure"]["endpoint_nodes"]:
-            f.write("\n[endpoints]\n")
-            for machine in machines:
-                for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
-                    f.write(
-                        "%s ansible_connection=ssh ansible_host=%s \
-ansible_user=%s username=%s\n"
-                        % (name, ip, name, name)
-                    )
 
-        # Only include base VM logic if there are base VMs
-        if not machines[0].base_ips:
-            return
-
-        # Make group with all base VMs for netperf installation
-        f.write("\n[base]\n")
-        for machine in machines:
-            for name, ip in zip(machine.base_names, machine.base_ips):
-                f.write(
-                    "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s\n"
-                    % (name, ip, name, name)
-                )
-
-        # Make specific groups for cloud/edge/endpoint base VM
-        if not config["infrastructure"]["infra_only"]:
-            if config["mode"] == "cloud" or config["mode"] == "edge":
-                f.write("\n[base_cloud]\n")
-                for machine in machines:
-                    for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "cloud" in name:
-                            f.write(
-                                "%s ansible_connection=ssh ansible_host=%s \
-ansible_user=%s username=%s kubeversion=%s kubeversionstrp=%s\n"
-                                % (
-                                    name,
-                                    ip,
-                                    name,
-                                    name,
-                                    config["benchmark"]["kube_version"][1:],
-                                    config["benchmark"]["kube_version"].replace(".", ""),
-                                )
-                            )
-
-            if config["mode"] == "edge":
-                f.write("\n[base_edge]\n")
-                for machine in machines:
-                    for name, ip in zip(machine.base_names, machine.base_ips):
-                        # The resource manager "kubeedge" has "edge" in the name,
-                        # so cloud_kubeedge may be caught as "edge", filter this out.
-                        # Only occurs for Qemu, because GCP doesn't really use base images.
-                        # And: Mist computing uses kubeedge base images
-                        occurences = len([i.start() for i in re.finditer("edge", name)])
-                        is_qemu_kubeedge = int(
-                            config["infrastructure"]["provider"] == "qemu"
-                            and (
-                                config["benchmark"]["resource_manager"] == "kubeedge"
-                                or config["benchmark"]["resource_manager"] == "mist"
-                            )
-                        )
-
-                        if occurences == 1 + is_qemu_kubeedge:
-                            f.write(
-                                "%s ansible_connection=ssh ansible_host=%s \
-ansible_user=%s username=%s\n"
-                                % (name, ip, name, name)
-                            )
-
-            if config["infrastructure"]["endpoint_nodes"]:
-                f.write("\n[base_endpoint]\n")
-                for machine in machines:
-                    for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "endpoint" in name:
-                            f.write(
-                                "%s ansible_connection=ssh ansible_host=%s \
-ansible_user=%s username=%s\n"
-                                % (name, ip, name, name)
-                            )
-
-
-def copy(config, machines):
-    """Copy Ansible files to the local machine, base_path directory
-    Machines other than the local one don't need Ansible files, Ansible itself will make it work.
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Start copying Ansible files to all nodes")
-
-    dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
-    out = []
-
-    # Copy inventory files
-    if any("base" in base_name for base_name in machines[0].base_names):
-        out.append(
-            machines[0].copy_files(config, os.path.join(config["base"], ".tmp/inventory"), dest)
-        )
-
-    out.append(
-        machines[0].copy_files(config, os.path.join(config["base"], ".tmp/inventory_vms"), dest)
-    )
-
-    # Copy the benchmark file if needed
-    if (
-        "benchmark" in config
-        and config["benchmark"]["application"] is not None
-        and (config["mode"] == "cloud" or config["mode"] == "edge")
-        and config["benchmark"]["resource_manager"] != "mist"
-    ):
-        suffix = config["benchmark"]["resource_manager"]
-        if "execution_model" in config:
-            suffix = config["execution_model"]["model"]
-
-        # Different deployment models for kubeconfig, with different config files
-        if "kube_deployment" in config["benchmark"]:
-            suffix += "_%s" % (config["benchmark"]["kube_deployment"])
-
-        path = os.path.join(
-            config["base"],
-            "application",
-            config["benchmark"]["application"],
-            "launch_benchmark_%s.yml" % (suffix),
-        )
-        d = dest + "launch_benchmark.yml"
-        out.append(machines[0].copy_files(config, path, d))
-
-    # Copy playbooks for installing resource managers and execution_models
-    if not config["infrastructure"]["infra_only"]:
-        if config["mode"] == "cloud" or config["mode"] == "edge":
-            # Use Kubeedge setup code for mist computing
-            rm = config["benchmark"]["resource_manager"]
-            if config["benchmark"]["resource_manager"] == "mist":
-                rm = "kubeedge"
-
-            path = os.path.join(config["base"], "resource_manager", rm, "cloud")
-            out.append(machines[0].copy_files(config, path, dest, recursive=True))
-
-            if config["mode"] == "edge":
-                path = os.path.join(config["base"], "resource_manager", rm, "edge")
-                out.append(machines[0].copy_files(config, path, dest, recursive=True))
-
-        if "execution_model" in config:
-            path = os.path.join(
-                config["base"], "execution_model", config["execution_model"]["model"], "cloud"
-            )
-            out.append(machines[0].copy_files(config, path, dest, recursive=True))
-
-        if config["infrastructure"]["endpoint_nodes"]:
-            path = os.path.join(config["base"], "resource_manager/endpoint/endpoint/")
-            out.append(machines[0].copy_files(config, path, dest, recursive=True))
-
-    for output, error in out:
-        if error:
-            logging.error("".join(error))
-            sys.exit()
-        elif output:
-            logging.error("".join(output))
-            sys.exit()
+# TODO (high priority)
+#  - See original copy() function:
+#    https://github.com/atlarge-research/continuum/blob/main/infrastructure/ansible.py#L343
+#  - For the latter half of the function: Move the copying of software and benchmark files
+#    to those modules instead of here in infrastructure.
+#  - We need to call their modules anyway to install stuff in base images, so why can't we add
+#    an extra call to copy their files over to "base_path/.continuum".
+#    - Create a new mandatory interface function for these modules
+#    - Call those functions in infrastructure.py -> let the infra modules do as little as possible

@@ -4,12 +4,12 @@ In this file we list facts, commands, and other information that could be of use
 ## Files
 We generate different files during execution, and store them in various places on the host machine(s).
 
-| **What**            | **Location**             | **Description**                                |
-|---------------------|--------------------------|------------------------------------------------|
-| VM images           | /var/lib/libvirt/images/ | Virtual machine images and configuration files |
-| Configuration files | ~/.continuum/            | All configuration files used for the framework |
+| **What**            | **Location**             | **Description**                                      |
+|---------------------|--------------------------|------------------------------------------------------|
+| VM images           | /var/lib/libvirt/images/ | Virtual machine images and configuration files       |
+| Configuration files | ~/.continuum/            | All configuration files used for the framework       |
 | Logs                | continuum/logs/          | Saves a log file for each time you use the framework |
-| SSH key             | ~/.ssh/id_rsa_continuum  | SSH key used to access the VMs
+| SSH key             | ~/.ssh/id_rsa_continuum  | SSH key used to access the VMs                       |
 
 ## Containers
 A Docker registry is created, listening at ip ${host_ip} and port 5000. All required application docker images are pulled to this Docker registry once, and can be updated using the "docker_pull" option in the configuration file. All VMs get the application's images from this registry. This is done because pulling images across possible 100s of VMs is expensive, and will most likely result in a block from the docker registry such as DockerHub (they have a pull limited per X hours).
@@ -22,12 +22,12 @@ A list of commands that can help you navigate the different parts of the framewo
 Commands for accessing and creating VMs
 The SSH commands needed to access the VMs will be printed at the end of each Continuum run, unless the "delete" option from the configuration file is used as deleted VMs can no longer be accessed anymore.
 
-| **Command**              | **Description**                                         |
-|--------------------------|---------------------------------------------------------|
-| ssh user@ip -i key       | SSH into a VM                                           |
-| virsh list               | List all active VMs (possible with the --all flag)      |
-| virsh destroy vm_name    | Kill a VM                                               |
-| virsh list --all \| \ <br> grep -o -E "(cloud\w*\|edge\w*\|endpoint\w*\|base\w*)" \| \ <br> xargs -I % sh -c 'virsh destroy %' | Kill all VMs created by the Continuum framework       |
+| **Command**                                                                                                                    | **Description**                                    |
+|--------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
+| ssh user@ip -i key                                                                                                             | SSH into a VM                                      |
+| virsh list                                                                                                                     | List all active VMs (possible with the --all flag) |
+| virsh destroy vm_name                                                                                                          | Kill a VM                                          |
+| virsh list --all \| \ <br> grep -o -E "(cloud\w*\|edge\w*\|endpoint\w*\|base\w*)" \| \ <br> xargs -I % sh -c 'virsh destroy %' | Kill all VMs created by the Continuum framework    |
 
 ### Docker
 Commands for the Docker container service

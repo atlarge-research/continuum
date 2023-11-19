@@ -1,5 +1,96 @@
 """Baremetal provider - uses physical hardware without any virtualization"""
 
+from infrastructure import infrastructure
+
+
+class Module(infrastructure.Infrastructure):
+    @staticmethod
+    def add_options():
+        """Add config options for a particular module
+
+        Returns:
+            tuple(schema): schema x2 to validate input yml
+        """
+        return {}, {}
+
+    @staticmethod
+    def verify_options(_parser):
+        """Verify the config from the module's requirements
+
+        Args:
+            _parser (ArgumentParser): Argparse object
+        """
+        pass
+
+    @staticmethod
+    def is_external():
+        """Does this infrastructure provider provision in local or remote hardware (e.g., clouds)
+
+        Returns:
+            bool: Provisions on external hardware
+        """
+        return False
+
+    @staticmethod
+    def has_base():
+        """Does this infrastructure provider support dedicated base images, such as QEMU where we
+        can generate backing images, containing the OS and required software, which are used by all
+        cloud/edge/endpoint VMs subsequently.
+
+        Returns:
+            bool: Provisions on external hardware
+        """
+        return False
+
+    @staticmethod
+    def supports_network_emulation():
+        """Does this infrastructure provider support network emulation?
+
+        Returns:
+            bool: Support of network emulation
+        """
+        return True
+
+    @staticmethod
+    def supports_storage_emulation():
+        """Does this infrastructure provider support network emulation?
+
+        Returns:
+            bool: Support of network emulation
+        """
+        return True
+
+    @staticmethod
+    def set_ip_names(layer):
+        """Set the names and IP addresses of each machine on a specific layer
+
+        Args:
+            layer (dict): A single layer described in the global config
+        """
+        pass
+
+    @staticmethod
+    def start():
+        """Manage infrastructure provider QEMU"""
+        pass
+
+    @staticmethod
+    def delete_vms():
+        """Delete infrastructure created by this provider in the current or previous Continuum run
+        (this depends on whether this function is invoked at the start or end of Continuum).
+        Execution at the end of Continuum is optional, if the user wants to delete all provided
+        infrastructure after benchmarking or doesn't.
+
+        For bare metal, there is nothing provisioned so we don't need to delete anything as well
+        """
+        pass
+
+    @staticmethod
+    def finish():
+        """Optional: Execute code or print information to users at the end of a Continuum run"""
+        pass
+
+
 # import logging
 # import sys
 

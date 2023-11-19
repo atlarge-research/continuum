@@ -24,7 +24,6 @@
 		"scope": "typescript",
 		"prefix": "cfg_basic",
 		"body": [
-			"//TODO: press tab to quickly fill in placeholder values. NOTE: make sure only one configuration instance prints at a time",
 			"const ${1:newConfiguration} = new Configuration({",
 				"\tinfrastructure: {",
 				"\t\tprovider: '${2|qemu,gcp,baremetal|}',",
@@ -54,7 +53,6 @@
 		"scope": "typescript",
 		"prefix": "cfg_list",
 		"body": [
-			"//TODO: press tab to quickly fill in placeholder values",
 			"const ${1:configList} = [",
 				"\tnew Configuration({",
 					"\t\tinfrastructure: {",

@@ -1,0 +1,21 @@
+---
+- hosts: endpoints
+  become: true
+  tasks:
+    - name: Ensure docker service is running
+      systemd:
+        name: docker
+        state: started
+
+    - name: Add user to docker group
+      user:
+        name: "{{ username }}"
+        groups: docker,systemd-journal
+        append: true
+
+    - name: Restart docker service
+      command: systemctl restart docker
+
+  handlers:
+    - name: docker status
+      service: name=docker state=started

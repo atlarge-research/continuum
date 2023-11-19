@@ -1,16 +1,16 @@
 ---
-- hosts: all_hosts
+- hosts: "{{ host }}"
   tasks:
     - name: Remove old base image from {{ base_path }}/.continuum/images
       shell: |
-        rm -f "{{ base_path }}/.continuum/images/{{ base }}.qcow2"
+        rm -f "{{ base_path }}/.continuum/images/{{ base_name }}.qcow2"
       args:
         warn: false
 
     - name: Create base image
       command: >
         qemu-img create -f qcow2 -F qcow2 -b "{{ base_path }}/.continuum/images/ubuntu2004.qcow2"
-        "{{ base_path }}/.continuum/images/{{ base }}.qcow2"
+        "{{ base_path }}/.continuum/images/{{ base_name }}.qcow2"
 
     - name: Install cloudinit requirements
       package:
@@ -28,5 +28,5 @@
 
     - name: Add cloudinit disk for base
       command: >
-        cloud-localds "{{ base_path }}/.continuum/images/user_data_{{ base }}.img"
-        "{{ base_path }}/.continuum/user_data_{{ base }}.yml"
+        cloud-localds "{{ base_path }}/.continuum/images/user_data_{{ base_name }}.img"
+        "{{ base_path }}/.continuum/user_data_{{ base_name }}.yml"

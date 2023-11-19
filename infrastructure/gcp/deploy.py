@@ -1,4 +1,4 @@
-"""Create infrastructure for AWS by applying a Terraform configuration"""
+"""Create infrastructure for GCP by applying a Terraform configuration"""
 
 import logging
 import os
@@ -7,127 +7,13 @@ import sys
 from infrastructure import ansible
 from infrastructure import infrastructure
 from infrastructure import machine as m
-from schema import And
 
 from . import generate
 
 
-def delete_vms(config, machines):
-    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
-    and possilby at the end if the run if configured by the user.
-
-    Terraform destroy only works if the old configs are still around,
-    and destroy hasn't been called before on these configs.
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Start deleting VMs")
-    path = os.path.join(config["infrastructure"]["base_path"], ".continuum/images")
-    command = ["terraform", "-chdir=%s" % (path), "destroy", "--auto-approve"]
-    output, error = machines[0].process(config, command)[0]
-
-    if error and not any("Error: Inconsistent dependency lock file" in line for line in error):
-        logging.warning("Could not destroy old configuration: %s", "".join(error))
-    elif not any("Destroy complete!" in out for out in output):
-        logging.warning("Could not destroy the old Terraform configuration: %s", "".join(output))
-
-
-def add_options():
-    """Add config options for a particular module
-
-    Args:
-        config (ConfigParser): ConfigParser object
-
-    Returns:
-        tuple(schema): schema x2 to validate input yml
-    """
-    # Missing:
-    # ["aws_access_keys", str, lambda _: True, True, None],
-    # ["aws_secret_access_keys", str, lambda _: True, True, None],
-    # ["aws_ami", str, lambda _: True, True, None],
-    # ["aws_key", str, lambda _: True, True, None],
-
-    provider_init = {
-        "region": str,
-        "zone": str,
-    }
-
-    layer_infrastructure = {
-        "nodes": And(int, lambda x: x >= 1),
-        "cores": And(int, lambda x: x >= 1),
-        "memory": And(int, lambda x: x >= 1),
-        "name": str,
-    }
-
-    return provider_init, layer_infrastructure
-
-
-def verify_options(parser, config):
-    """Verify the config from the module's requirements
-
-    Args:
-        parser (ArgumentParser): Argparse object
-        config (ConfigParser): ConfigParser object
-    """
-    if config["infrastructure"]["provider"] != "aws":
-        parser.error("ERROR: Infrastructure provider should be aws")
-
-    # sec = "infrastructure"
-    # if len(config[sec]["aws_credentials"]) > 0 and config[sec]["aws_credentials"][-1] == "/":
-    #     config[sec]["aws_credentials"] = config[sec]["base_paws_credentialsth"][:-1]
-
-
-def set_ip_names(_config, machines, nodes_per_machine):
-    """Set amount of cloud / edge / endpoints nodes per machine, and their usernames.
-    For AWS with Terraform, there is only 1 machine.
-    The IPs are set by AWS, and we only know them after the VMs are started, contrary to QEMU.
-    We will set the IPs later.
-    The naming scheme is bound to what Terraform can do.
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-        nodes_per_machine (list(set)): List of 'cloud', 'edge', 'endpoint' sets containing
-            the number of those machines per physical node
-    """
-    logging.info("Set the names of all VMs for each physical machine")
-
-    if len(machines) > 1 or len(nodes_per_machine) > 1:
-        logging.error("ERROR: AWS/Terraform only uses 1 machine")
-        sys.exit()
-
-    if nodes_per_machine[0]["cloud"] > 0:
-        machines[0].cloud_controller = 1
-        machines[0].cloud_controller_names.append("ubuntu")
-
-        machines[0].clouds = 0
-        for i in range(1, nodes_per_machine[0]["cloud"]):
-            machines[0].clouds += 1
-            machines[0].cloud_names.append("ubuntu")
-
-    machines[0].edges = 0
-    for i in range(nodes_per_machine[0]["edge"]):
-        machines[0].edges += 1
-        machines[0].edge_names.append("edge%i" % (i))
-
-    machines[0].endpoints = 0
-    for i in range(nodes_per_machine[0]["endpoint"]):
-        machines[0].endpoints += 1
-        machines[0].endpoint_names.append("endpoint%i" % (i))
-
-    machines[0].base_names = (
-        machines[0].cloud_controller_names
-        + machines[0].cloud_names
-        + machines[0].edge_names
-        + machines[0].endpoint_names
-    )
-
-
 def set_ips(machines, output):
     """Set internal and external IPs of VMs based on output from Terraform.
-    AWS sets IPs dynamically with the current configuration, so we can only get the IPs
+    GCP sets IPs dynamically with the current configuration, so we can only get the IPs
     after the VMs have been started
 
     Args:
@@ -274,17 +160,17 @@ def copy(config, machines):
 
 
 def netperf_install(config, machines):
-    """Install NetPerf on AWS with Terraform.
+    """Install NetPerf on GCP with Terraform.
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info("Install NetPerf on AWS with Terraform")
+    logging.info("Install NetPerf on GCP with Terraform")
     command = [
         "ansible-playbook",
         "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
         os.path.join(
             config["infrastructure"]["base_path"],
             ".continuum/infrastructure/netperf.yml",
@@ -334,8 +220,8 @@ def set_timezone(config, machines):
 
 def move_registry(config, machines):
     """Move the Docker Registry from your local machine to the cloud_controller VM (cloud0)
-    in AWS. For the VMs in AWS to make use of the registry on the local machine, you need to
-    open port 5000 to these specific IPs. This will result in all AWS VMs pulling Docker containers
+    in GCP. For the VMs in GCP to make use of the registry on the local machine, you need to
+    open port 5000 to these specific IPs. This will result in all GCP VMs pulling Docker containers
     over the internet to the cloud, which can be slow with many VMs.
     Therefore, we move the registry to the cloud_controller VM in the cloud, so containers
     can be quickly shared between VMs in the same cloud datacenter.
@@ -474,7 +360,7 @@ def base_install(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
                     ".continuum/cloud/base_install.yml",
@@ -486,7 +372,7 @@ def base_install(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
                     ".continuum/edge/base_install.yml",
@@ -498,7 +384,7 @@ def base_install(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
                     ".continuum/endpoint/base_install.yml",
@@ -534,19 +420,19 @@ def base_install(config, machines):
                 base_name for base_name in docker_base_names if "endpoint" in base_name
             ]
 
-        infrastructure.docker_pull(config, machines, docker_base_names)
+        infrastructure.docker_pull_base(docker_base_names)
 
     set_timezone(config, machines)
 
 
 def start_vms(config, machines):
-    """Create and launch AWS VMs using Terraform
+    """Create and launch GCP VMs using Terraform
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.info("Start VM creation using Terraform with AWS")
+    logging.info("Start VM creation using Terraform with GCP")
 
     # Init, format, and validate
     path = os.path.join(config["infrastructure"]["base_path"], ".continuum/images")
@@ -585,28 +471,24 @@ def start_vms(config, machines):
         set_registry(config, machines, control=is_control)
 
 
-def start(config, machines):
-    """Manage infrastructure provider AWS / Terraform
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Set up AWS")
+def start():
+    """Manage infrastructure provider GCP / Terraform"""
+    logging.info("Set up GCP")
     logging.info("Generate configuration files for Infrastructure and Ansible")
-    generate.start(config, machines)
+    infrastructure.create_keypair()
+    generate.start()
 
-    copy(config, machines)
-    start_vms(config, machines)
+    copy()
+    start_vms()
 
-    m.gather_ips(config, machines)
-    m.gather_ssh(config, machines)
-    infrastructure.add_ssh(config, machines)
+    m.gather_ips()
+    m.gather_ssh()
+    infrastructure.add_ssh()
 
     for machine in machines:
         logging.debug(machine)
 
-    ansible.create_inventory_machine(config, machines)
-    ansible.copy(config, machines)
+    ansible.create_inventory_machine()
+    ansible.copy()
 
-    base_install(config, machines)
+    base_install()

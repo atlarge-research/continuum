@@ -12,6 +12,60 @@ from schema import And
 from . import generate
 
 
+class Module(infrastructure.Infrastructure):
+    def add_options(self):
+        """Add config options for a particular module
+
+        Returns:
+            tuple(schema): schema x2 to validate input yml
+        """
+        return {}, {}
+
+    def verify_options(self, _parser):
+        """Verify the config from the module's requirements
+
+        Args:
+            parser (ArgumentParser): Argparse object
+        """
+        pass
+
+    def is_external(self):
+        """Does this infrastructure provider provision in local or remote hardware (e.g., clouds)
+
+        Returns:
+            bool: Provisions on external hardware
+        """
+        return False
+
+    def has_base(self):
+        """Does this infrastructure provider support dedicated base images, such as QEMU where we
+        can generate backing images, containing the OS and required software, which are used by all
+        cloud/edge/endpoint VMs subsequently.
+
+        Returns:
+            bool: Provisions on external hardware
+        """
+        return False
+
+    def set_ip_names(self):
+        """Set the names and IP addresses of each machine"""
+        pass
+
+    def start(self):
+        """Manage infrastructure provider QEMU"""
+        pass
+
+    def delete_vms(self):
+        """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
+        and possilby at the end if the run if configured by the user
+        """
+        pass
+
+    def finish(self):
+        """Optional: Execute code or print information to users at the end of a Continuum run"""
+        pass
+
+
 def delete_vms(config, machines):
     """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
     and possilby at the end if the run if configured by the user.
@@ -284,7 +338,7 @@ def netperf_install(config, machines):
     command = [
         "ansible-playbook",
         "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
         os.path.join(
             config["infrastructure"]["base_path"],
             ".continuum/infrastructure/netperf.yml",
@@ -474,7 +528,7 @@ def base_install(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
                     ".continuum/cloud/base_install.yml",
@@ -486,7 +540,7 @@ def base_install(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
                     ".continuum/edge/base_install.yml",
@@ -498,7 +552,7 @@ def base_install(config, machines):
             command = [
                 "ansible-playbook",
                 "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_machine"),
                 os.path.join(
                     config["infrastructure"]["base_path"],
                     ".continuum/endpoint/base_install.yml",
@@ -534,7 +588,7 @@ def base_install(config, machines):
                 base_name for base_name in docker_base_names if "endpoint" in base_name
             ]
 
-        infrastructure.docker_pull(config, machines, docker_base_names)
+        infrastructure.docker_pull_base(docker_base_names)
 
     set_timezone(config, machines)
 

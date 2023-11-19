@@ -5,9 +5,10 @@ too many things can change depending on user input.
 """
 
 import logging
-import sys
 import re
+import sys
 
+import settings
 
 DOMAIN = """\
 <domain type='kvm'>
@@ -100,83 +101,90 @@ final_message: "The system is finally up, after $UPTIME seconds"
 """
 
 
-def find_bridge(config, machine, bridge):
+def _find_bridge(bridge):
     """Check if bridge <bridge> is available on the system.
 
     Args:
-        config (dict): Parsed configuration
-        machine (Machine object): Object representing the physical machine we currently use
         bridge (str): Bridge name to check
 
     Returns:
         int: Bool representing if we found the bridge on this machine
     """
-    output, error = machine.process(
-        config, "brctl show | grep '^%s' | wc -l" % (bridge), shell=True
-    )[0]
-    if error != [] or output == []:
+    command = f"brctl show | grep '^{bridge}' | wc -l"
+    output, error = settings.process(command, shell=True)[0]
+    if error or not output:
         logging.error("ERROR: Could not find a network bridge")
         sys.exit()
 
     return int(output[0].rstrip())
 
 
-def start(config, machines):
-    """Create QEMU config files for each machine
+def _bridge():
+    """Fetch the network bridge used to connect the host to QEMU VMs
+    The bridge can either be physical (e.g., br0) or virtual (e.g., virbr0)
 
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+    If an error occurs in the following lines, please:
+        1. Comment the code in this function
+        2. Set the "bridge_name" variable to the name of your bridge (e.g. br0, virbr0, etc.)
+        3. Set the gateway variable to the IP of your gateway (e.g. 10.0.2.2, 192.168.122.1, etc.)
+
+    Returns:
+        str, str: Bridge name and gateway name
     """
-    logging.info("Start writing QEMU config files for cloud / edge")
-
-    # Get the SSH public key
-    with open("%s.pub" % (config["ssh_key"]), "r", encoding="utf-8") as f:
-        ssh_key = f.read().rstrip()
-        f.close()
-
-    # --------------------------------------------------------------------------------------------
-    # NOTE
-    # If an error occurs in the following lines, please:
-    # 1. Comment this part of the code between the two ---- lines out
-    # 2. Set the "bridge_name" variable to the name of your bridge (e.g. br0, virbr0, etc.)
-    # 3. Set the gateway variable to the IP of your gateway (e.g. 10.0.2.2, 192.168.122.1, etc)
-    # --------------------------------------------------------------------------------------------
     # Find out what bridge to use
-    bridge = find_bridge(config, machines[0], "br0")
     bridge_name = "br0"
-    if bridge == 0:
-        bridge = find_bridge(config, machines[0], "virbr0")
+    bridge = _find_bridge(bridge_name)
+    if not bridge:
         bridge_name = "virbr0"
-        if bridge == 0:
+        bridge = _find_bridge(bridge_name)
+        if not bridge:
             logging.error("ERROR: Could not find a network bridge")
             sys.exit()
 
     # Get gateway address
-    output, error = machines[0].process(
-        config, "ip route | grep ' %s '" % (bridge_name), shell=True
-    )[0]
-    if error != [] or output == []:
+    command = f"ip route | grep ' {bridge_name} '"
+    output, error = settings.process(command, shell=True)
+    if error or not output:
         logging.error("ERROR: Could not find gateway address")
         sys.exit()
 
     gateway = 0
     pattern = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
-    gatewaylists = [pattern.findall(line) for line in output]
+    gateway_lists = [pattern.findall(line) for line in output]
 
     if bridge_name == "br0":
         # For br0, pick gateway of machine
-        gateway = gatewaylists[0][0]
+        gateway = gateway_lists[0][0]
     else:
         # For virbr0
-        for gatewaylist in gatewaylists:
-            if len(gatewaylist) > 1:
+        for gateway_list in gateway_lists:
+            if len(gateway_list) > 1:
                 if gateway != 0:
                     logging.error("ERROR: Found multiple gateways")
                     sys.exit()
 
-                gateway = gatewaylist[1].rstrip()
-    # --------------------------------------------------------------------------------------------
+                gateway = gateway_list[1].rstrip()
+
+    return bridge_name, gateway
+
+
+def start():
+    """Create QEMU config files for each machine"""
+    #
+    #
+    #
+    # TODO update this function after updating main.py
+    #   how do we handle the multiple layers in infra? one by one? all together?
+    #
+    logging.info("Start writing QEMU config files for cloud / edge")
+
+    # Get the SSH public key
+    key_file = settings.config["provider_init"]["qemu"]["ssh_key"]
+    with open(f"{key_file}.pub", "r", encoding="utf-8") as f:
+        ssh_key = f.read().rstrip()
+        f.close()
+
+    bridge_name, gateway = _bridge()
 
     cc = config["infrastructure"]["cloud_cores"]
     ec = config["infrastructure"]["edge_cores"]

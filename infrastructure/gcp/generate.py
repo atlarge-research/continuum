@@ -1,4 +1,6 @@
-"""Generate a Terraform configuration for GCP"""
+"""Generate a Terraform  settings.configuration for GCP"""
+
+import settings
 
 ###################################################################################################
 
@@ -24,22 +26,18 @@ provider "google" {
 """
 
 
-def generate_header(config):
-    """Write the Terraform config header
-
-    Args:
-        config (dict): Parsed configuration
-    """
+def generate_header():
+    """Write the Terraform config header"""
     with open(".tmp/header.tf", mode="w", encoding="utf-8") as f:
         f.write(HEADER)
 
         f.write(
             PROVIDER
             % (
-                config["infrastructure"]["gcp_credentials"],
-                config["infrastructure"]["gcp_project"],
-                config["infrastructure"]["gcp_region"],
-                config["infrastructure"]["gcp_zone"],
+                settings.config["infrastructure"]["gcp_credentials"],
+                settings.config["infrastructure"]["gcp_project"],
+                settings.config["infrastructure"]["gcp_region"],
+                settings.config["infrastructure"]["gcp_zone"],
             )
         )
 
@@ -105,22 +103,18 @@ resource "google_compute_firewall" "allow_all_egress" {
 """
 
 
-def generate_network(config):
-    """Write the Terraform config network
-
-    Args:
-        config (dict): Parsed configuration
-    """
+def generate_network():
+    """Write the Terraform  settings.config network"""
     with open(".tmp/network.tf", mode="w", encoding="utf-8") as f:
         f.write(MAIN_NETWORK)
 
-        if config["infrastructure"]["cloud_nodes"] > 0:
+        if settings.config["infrastructure"]["cloud_nodes"] > 0:
             f.write(CLOUD_NETWORK)
 
-        if config["infrastructure"]["edge_nodes"] > 0:
+        if settings.config["infrastructure"]["edge_nodes"] > 0:
             f.write(EDGE_NETWORK)
 
-        if config["infrastructure"]["endpoint_nodes"] > 0:
+        if settings.config["infrastructure"]["endpoint_nodes"] > 0:
             f.write(ENDPOINT_NETWORK)
 
         f.write(INGRESS)
@@ -253,45 +247,41 @@ resource "google_compute_instance" "endpoint" {
 """
 
 
-def generate_vm(config):
-    """Write the Terraform config cloud VM configuration
-
-    Args:
-        config (dict): Parsed configuration
-    """
-    if config["infrastructure"]["cloud_nodes"] > 0:
+def generate_vm():
+    """Write the Terraform cloud VM configuration"""
+    if settings.config["infrastructure"]["cloud_nodes"] > 0:
         with open(".tmp/cloud_vm.tf", mode="w", encoding="utf-8") as f:
-            f.write(CLOUD_IP % (config["infrastructure"]["cloud_nodes"]))
+            f.write(CLOUD_IP % (settings.config["infrastructure"]["cloud_nodes"]))
             f.write(
                 CLOUD
                 % (
-                    config["infrastructure"]["gcp_cloud"],
-                    config["infrastructure"]["cloud_nodes"],
-                    "%s.pub" % (config["ssh_key"]),
+                    settings.config["infrastructure"]["gcp_cloud"],
+                    settings.config["infrastructure"]["cloud_nodes"],
+                    "%s.pub" % (settings.config["ssh_key"]),
                 )
             )
 
-    if config["infrastructure"]["edge_nodes"] > 0:
+    if settings.config["infrastructure"]["edge_nodes"] > 0:
         with open(".tmp/edge_vm.tf", mode="w", encoding="utf-8") as f:
-            f.write(EDGE_IP % (config["infrastructure"]["edge_nodes"]))
+            f.write(EDGE_IP % (settings.config["infrastructure"]["edge_nodes"]))
             f.write(
                 EDGE
                 % (
-                    config["infrastructure"]["gcp_edge"],
-                    config["infrastructure"]["edge_nodes"],
-                    "%s.pub" % (config["ssh_key"]),
+                    settings.config["infrastructure"]["gcp_edge"],
+                    settings.config["infrastructure"]["edge_nodes"],
+                    "%s.pub" % (settings.config["ssh_key"]),
                 )
             )
 
-    if config["infrastructure"]["endpoint_nodes"] > 0:
+    if settings.config["infrastructure"]["endpoint_nodes"] > 0:
         with open(".tmp/endpoint_vm.tf", mode="w", encoding="utf-8") as f:
-            f.write(ENDPOINT_IP % (config["infrastructure"]["endpoint_nodes"]))
+            f.write(ENDPOINT_IP % (settings.config["infrastructure"]["endpoint_nodes"]))
             f.write(
                 ENDPOINT
                 % (
-                    config["infrastructure"]["gcp_endpoint"],
-                    config["infrastructure"]["endpoint_nodes"],
-                    "%s.pub" % (config["ssh_key"]),
+                    settings.config["infrastructure"]["gcp_endpoint"],
+                    settings.config["infrastructure"]["endpoint_nodes"],
+                    "%s.pub" % (settings.config["ssh_key"]),
                 )
             )
 
@@ -329,35 +319,27 @@ output "endpoint_ip_external" {
 """
 
 
-def generate_output(config):
-    """Write the Terraform config output definition
-
-    Args:
-        config (dict): Parsed configuration
-    """
+def generate_output():
+    """Write the Terraform  settings.config output definition"""
     with open(".tmp/outputs.tf", mode="w", encoding="utf-8") as f:
-        if config["infrastructure"]["cloud_nodes"] > 0:
+        if settings.config["infrastructure"]["cloud_nodes"] > 0:
             f.write(OUTPUT_CLOUD)
 
-        if config["infrastructure"]["edge_nodes"] > 0:
+        if settings.config["infrastructure"]["edge_nodes"] > 0:
             f.write(OUTPUT_EDGE)
 
-        if config["infrastructure"]["endpoint_nodes"] > 0:
+        if settings.config["infrastructure"]["endpoint_nodes"] > 0:
             f.write(OUTPUT_ENDPOINT)
 
 
 ###################################################################################################
 
 
-def start(config, _machines):
-    """Generate Terraform configuration files for the Continuum configuration
-    The configuration is spread over multiple files to make reading easier.
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+def start():
+    """Generate Terraform  settings.configuration files for the Continuum  settings.configuration
+    The  settings.configuration is spread over multiple files to make reading easier.
     """
-    generate_header(config)
-    generate_network(config)
-    generate_vm(config)
-    generate_output(config)
+    generate_header()
+    generate_network()
+    generate_vm()
+    generate_output()

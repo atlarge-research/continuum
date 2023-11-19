@@ -12,3 +12,4 @@ logs/
 scripts/*.csv
 scripts/*.pdf
 *.out
+,vscode
