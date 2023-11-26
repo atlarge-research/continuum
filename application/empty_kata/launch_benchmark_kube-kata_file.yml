@@ -1,0 +1,42 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Create job file
+      shell: |
+        cat > "/home/{{ username }}/job-template.yaml" <<EOF
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: {{ app_name }}-%ITEM
+        spec:
+          template:
+            metadata:
+              name: {{ app_name }}-%ITEM
+            spec:
+              containers:
+              - name: {{ app_name }}-%ITEM
+                image: {{ image }}
+                imagePullPolicy: {{ pull_policy }}
+                resources:
+                  requests:
+                    memory: "{{ memory_req }}Mi"
+                    cpu: {{ cpu_req }}
+                env:
+                - name: SLEEP_TIME
+                  value: "{{ sleep_time }}"
+              restartPolicy: Never
+        EOF
+
+    - name: Create job directory
+      file:
+        path: /home/{{ username }}/jobs
+        state: directory
+
+    - name: Create job multiple times
+      shell: |
+        for i in `seq 1 {{ replicas }}`
+        do
+          cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" \
+          > "/home/{{ username }}/jobs/job-$i.yaml"
+        done
