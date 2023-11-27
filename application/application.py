@@ -5,15 +5,10 @@ Mostly used for calling specific application code
 
 import logging
 import sys
-import subprocess
-import requests
 
 from datetime import datetime
-from statistics import mean
-from typing import Dict, List
 
 from resource_manager.kubernetes import kubernetes
-from resource_manager.kube_kata import kube_kata
 from resource_manager.endpoint import endpoint
 from execution_model.openfaas import openfaas
 
@@ -313,23 +308,26 @@ def kube_control(config, machines):
     node = config["cloud_ssh"][0].split("@")[0]
     control_output[node]["kubectl"] = kubectl_out
 
-    if "runtime" in config["benchmark"] and "kata" in config["benchmark"]["runtime"] and config["benchmark"]["application"] == "empty":
-        kata_ts = get_kata_timestamps(config, worker_output)
-        config["module"]["application"].format_output(
-            config,
-            None,
-            status=status,
-            control=control_output,
-            starttime=starttime,
-            worker_output=worker_output,
-            worker_description=worker_description,
-            resource_output=resource_output,
-            endtime=float(endtime - starttime),
-            kata_ts=kata_ts
-        )
-    elif config["benchmark"]["application"] == "stress":
-        stress_dur = kube_kata.get_deployment_duration(config, machines)
-        logging.info(f"Total stress duration: {stress_dur}")
+    if "runtime" in config["benchmark"] and "kata" in config["benchmark"]["runtime"]:
+        from resource_manager.kube_kata import kube_kata
+
+        if config["benchmark"]["application"] == "empty":
+            kata_ts = kube_kata.get_kata_timestamps(config, worker_output)
+            config["module"]["application"].format_output(
+                config,
+                None,
+                status=status,
+                control=control_output,
+                starttime=starttime,
+                worker_output=worker_output,
+                worker_description=worker_description,
+                resource_output=resource_output,
+                endtime=float(endtime - starttime),
+                kata_ts=kata_ts
+            )
+        elif config["benchmark"]["application"] == "stress":
+            stress_dur = kube_kata.get_deployment_duration(config, machines)
+            logging.info(f"Total stress duration: {stress_dur}")
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, [])
@@ -345,100 +343,3 @@ def kube_control(config, machines):
         resource_output=resource_output,
         endtime=float(endtime - starttime),
     )
-
-
-# --------------------------------------------------------------------------------------
-# Kata stuff
-# --------------------------------------------------------------------------------------
-# TODO this is kata specific - move to rm folder
-
-
-def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
-    """(internal) curl request to jaeger server on `ip` to get the traces produced by the kata runtime.
-
-    Args:
-        ip (str): Jaeger endpoint ip
-        port (str, optional): Jaeger endpoint port. Defaults to "16686".
-
-    Returns:
-        List[List[Dict]]: a sorted list of traces for each kata deployment on `ip`.
-    """
-    jaeger_api_url = f"http://{ip}:{port}/api/traces?service=kata&operation=rootSpan&limit=10000"
-    response = requests.get(jaeger_api_url)
-    response_data = response.json()
-
-    traces = response_data["data"]
-
-    # Sort each trace's spans based on starTime and sort traces based on startTime
-    traces = sorted(
-        [sorted(trace["spans"], key=lambda x: x["startTime"]) for trace in traces],
-        key=lambda x: x[0]["startTime"],
-    )
-
-    print(f"gather_kata_traces({ip}, {port}) -> got {len(traces)} traces")
-    return traces
-
-
-def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
-    """TODO
-
-    T0 -> T1 : create kata runtime
-    T1 -> T2 : create VM
-    T2 -> T3 : connect to VM
-    T3 -> T4 : create container and launch
-
-    Args:
-        traces (List[List[Dict]]): _description_
-
-    Returns:
-        List[List[int]]: _description_
-    """
-
-    timestamps: List[List[int]] = []
-
-    for trace in traces:
-        ts: List[int] = []
-        skip_first = True
-        for span in trace:
-            assert len([span for span in trace if span["operationName"] == "StartVM"]) == 2
-            assert len([span for span in trace if span["operationName"] == "connect"]) == 1
-            # T0
-            if len(ts) == 0:
-                ts.append(span["startTime"])
-            # T1, T2
-            elif len(ts) == 1 and span["operationName"] == "StartVM":
-                ts.append(span["startTime"])  # T1
-                ts.append(span["startTime"] + span["duration"])  # T2
-            # T3
-            elif len(ts) == 3 and span["operationName"] == "connect":
-                ts.append(span["startTime"] + span["duration"])  # T3
-            # T4
-            elif (
-                len(ts) == 4
-                and span["operationName"] == "ttrpc.StartContainer"
-            ):
-                if skip_first is False:
-                    ts.append(span["startTime"] + span["duration"])  # T4
-                    break
-                else:
-                    skip_first = False
-
-        assert len(ts) == 5
-        timestamps.append(ts)
-
-    return timestamps
-
-# Kata entry point.
-def get_kata_timestamps(config, worker_output) -> List[List[int]]:
-    logging.info("----------------------------------------------------------------------------------------")
-    logging.info("get_kata_timestamps")
-    logging.info("----------------------------------------------------------------------------------------")
-
-    nodes_names, nodes_ips = map(list, zip(*[str.split(x, "@") for x in config["cloud_ssh"][1:]]))
-
-    traces = [_gather_kata_traces(ip)[1:] for ip in nodes_ips]
-    # Flatten list of lists
-    traces = [a for b in traces for a in b]
-
-    kata_ts = get_kata_period_timestamps(traces)
-    return kata_ts
