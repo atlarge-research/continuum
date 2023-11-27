@@ -13,6 +13,7 @@ from statistics import mean
 from typing import Dict, List
 
 from resource_manager.kubernetes import kubernetes
+from resource_manager.kube_kata import kube_kata
 from resource_manager.endpoint import endpoint
 from execution_model.openfaas import openfaas
 
@@ -62,7 +63,7 @@ def start(config, machines):
         endpoint_only(config, machines)
     elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
         kube(config, machines)
-    elif config["benchmark"]["resource_manager"] in["kubecontrol", "kube-kata"]:
+    elif config["benchmark"]["resource_manager"] in["kubecontrol", "kube_kata"]:
         kube_control(config, machines)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")
@@ -327,7 +328,7 @@ def kube_control(config, machines):
             kata_ts=kata_ts
         )
     elif config["benchmark"]["application"] == "stress":
-        stress_dur = kubernetes.get_deployment_duration(config, machines)
+        stress_dur = kube_kata.get_deployment_duration(config, machines)
         logging.info(f"Total stress duration: {stress_dur}")
 
     # Parse output into dicts, and print result

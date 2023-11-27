@@ -47,8 +47,8 @@ def verify_options(parser, config):
     """
     if config["benchmark"]["application"] != "empty_kata":
         parser.error("ERROR: Application should be empty")
-    elif config["benchmark"]["resource_manager"] != "kube-kata":
-        parser.error("ERROR: Application empty-kata requires resource_manager kube-kata")
+    elif config["benchmark"]["resource_manager"] != "kube_kata":
+        parser.error("ERROR: Application empty-kata requires resource_manager kube_kata")
 
 
 def cache_worker(_config, _machines):

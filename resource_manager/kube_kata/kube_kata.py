@@ -200,3 +200,19 @@ def start(config, machines):
 
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
         ansible.check_output((output, error))
+        
+def get_deployment_duration(config, machines):
+    try:
+        command = "kubectl get job stress -o json"
+        results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
+        results = ''.join(results[0][0])
+
+        results_json = json.loads(results)
+
+        end, start = results_json["status"]["completionTime"], results_json["status"]["startTime"]
+        duration = datetime.strptime(end, '%Y-%m-%dT%H:%M:%SZ') - datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ')
+
+        return duration.total_seconds()
+    except Exception as e:
+        logging.debug(f"[WARNING][{e}] error in function get_deployment_duration")
+        return -1
