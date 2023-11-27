@@ -311,7 +311,7 @@ def kube_control(config, machines):
     if "runtime" in config["benchmark"] and "kata" in config["benchmark"]["runtime"]:
         from resource_manager.kube_kata import kube_kata
 
-        if config["benchmark"]["application"] == "empty":
+        if config["benchmark"]["application"] == "empty_kata":
             kata_ts = kube_kata.get_kata_timestamps(config, worker_output)
             config["module"]["application"].format_output(
                 config,
