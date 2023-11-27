@@ -458,7 +458,7 @@ def docker_registry(config, machines):
     images = list(config["images"].values())
 
     # TODO This is RM specific, move this to the RM code
-    if config["benchmark"]["resource_manager"] in ["kubecontrol-2", "kube-kata"]:
+    if config["benchmark"]["resource_manager"] in ["kubecontrol", "kube-kata"]:
         version = str(config["benchmark"]["kube_version"])
 
         # Get specific etcd and pause versions per Kubernetes version
@@ -497,7 +497,7 @@ def docker_registry(config, machines):
             continue
 
         # Kubecontrol images need different splitting
-        if config["benchmark"]["resource_manager"] in ["kubecontrol-2", "kube-kata"] and i >= (len(images) - 6):
+        if config["benchmark"]["resource_manager"] in ["kubecontrol", "kube-kata"] and i >= (len(images) - 6):
             dest = os.path.join(config["registry"], image.split("/")[1])
         else:
             dest = os.path.join(config["registry"], image.split(":")[1])
