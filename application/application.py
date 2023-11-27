@@ -62,7 +62,7 @@ def start(config, machines):
         endpoint_only(config, machines)
     elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
         kube(config, machines)
-    elif config["benchmark"]["resource_manager"] == "kubecontrol":
+    elif config["benchmark"]["resource_manager"] in["kubecontrol", "kube-kata"]:
         kube_control(config, machines)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")
@@ -312,9 +312,20 @@ def kube_control(config, machines):
     node = config["cloud_ssh"][0].split("@")[0]
     control_output[node]["kubectl"] = kubectl_out
 
-    kata_ts = None
-    if "kata" in config["benchmark"]["runtime"] and config["benchmark"]["application"] == "empty":
+    if "runtime" in config["benchmark"] and "kata" in config["benchmark"]["runtime"] and config["benchmark"]["application"] == "empty":
         kata_ts = get_kata_timestamps(config, worker_output)
+        config["module"]["application"].format_output(
+            config,
+            None,
+            status=status,
+            control=control_output,
+            starttime=starttime,
+            worker_output=worker_output,
+            worker_description=worker_description,
+            resource_output=resource_output,
+            endtime=float(endtime - starttime),
+            kata_ts=kata_ts
+        )
     elif config["benchmark"]["application"] == "stress":
         stress_dur = kubernetes.get_deployment_duration(config, machines)
         logging.info(f"Total stress duration: {stress_dur}")
@@ -332,13 +343,13 @@ def kube_control(config, machines):
         worker_description=worker_description,
         resource_output=resource_output,
         endtime=float(endtime - starttime),
-        kata_ts=kata_ts if kata_ts is not None else None,
     )
 
 
 # --------------------------------------------------------------------------------------
 # Kata stuff
 # --------------------------------------------------------------------------------------
+# TODO this is kata specific - move to rm folder
 
 
 def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
@@ -373,7 +384,7 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
     T0 -> T1 : create kata runtime
     T1 -> T2 : create VM
     T2 -> T3 : connect to VM
-    T3 -> T4 : create and container and launch
+    T3 -> T4 : create container and launch
 
     Args:
         traces (List[List[Dict]]): _description_

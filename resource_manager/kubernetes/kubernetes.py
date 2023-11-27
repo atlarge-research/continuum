@@ -182,9 +182,14 @@ def cache_worker(config, machines, app_vars):
         "cpu_req": float(cores * 0.5),
         "replicas": worker_apps,
         "pull_policy": "IfNotPresent",
-        "runtime": config["benchmark"]["runtime"],
-        "runtime_filesystem": config["benchmark"]["runtime_filesystem"],
+        # "runtime": config["benchmark"]["runtime"],
+        # "runtime_filesystem": config["benchmark"]["runtime_filesystem"],
     }
+    
+    if "runtime" in config["benchmark"]:
+        global_vars["runtime"] = config["benchmark"]["runtime"]
+    if "runtime_filesystem" in config["benchmark"]:
+        global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
 
     # Merge the two var dicts
     all_vars = {**global_vars, **app_vars}
@@ -604,9 +609,14 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
         "cpu_req": config["benchmark"]["application_worker_cpu"],
         "replicas": worker_apps,
         "pull_policy": "Never",
-        "runtime": config["benchmark"]["runtime"],
-        "runtime_filesystem": config["benchmark"]["runtime_filesystem"],
+        # "runtime": config["benchmark"]["runtime"],
+        # "runtime_filesystem": config["benchmark"]["runtime_filesystem"],
     }
+    
+    if "runtime" in config["benchmark"]:
+        global_vars["runtime"] = config["benchmark"]["runtime"]
+    if "runtime_filesystem" in config["benchmark"]:
+        global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
 
     # Merge the two var dicts
     all_vars = {**global_vars, **app_vars}

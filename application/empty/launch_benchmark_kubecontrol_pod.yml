@@ -15,7 +15,6 @@
             metadata:
               name: {{ app_name }}
             spec:
-              runtimeClassName: {{ runtime }}
               containers:
               - name: {{ app_name }}
                 image: {{ image }}

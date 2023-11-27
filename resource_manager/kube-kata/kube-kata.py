@@ -35,6 +35,20 @@ def add_options(_config):
             False,
             "v1.27.0",
         ],
+        [
+            "runtime",
+            str,
+            lambda x: x in ['runc', 'kata-qemu', 'kata-fc'],
+            False,
+            'runc'
+        ],
+        [
+            "runtime_filesystem",
+            str,
+            lambda x: x in ['overlayfs', 'devmapper'],
+            False,
+            'devmapper'
+        ],
     ]
     return settings
 
@@ -57,6 +71,10 @@ def verify_options(parser, config):
         != 0
     ):
         parser.error(r"ERROR: Kubernetes requires (#clouds-1) % #endpoints == 0 (-1 for control)")
+    elif (
+        config["benchmark"]["runtime"] == "kata-fc" and config["benchmark"]["runtime_filesystem"] == "overlayfs"
+    ):
+        parser.error(f"ERROR: Overlay FS cannot be used with kata-fc - use option runtime_filesystem = devmapper")
 
 
 def start(config, machines):
@@ -94,6 +112,36 @@ def start(config, machines):
             ),
         ]
     )
+
+    # Setup worker runtime
+    runtime = config['benchmark']['runtime']
+    use_overlayfs = "true" if config["benchmark"].get("runtime_filesystem") == "overlayfs" else "false"
+    if "kata" in runtime:
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    f".continuum/{(config['mode'])}/install_kata_containers.yml",
+                ),
+                "-e",
+                f"use_overlayfs={use_overlayfs}"
+            ]
+        )
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/cloud/install_kata_dev_tools.yml",
+                ),
+            ]
+        )
+
 
     results = machines[0].process(config, commands)
 

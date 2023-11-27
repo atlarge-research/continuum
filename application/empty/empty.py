@@ -5,7 +5,6 @@ import sys
 import copy
 
 from datetime import datetime
-from typing import List
 
 import pandas as pd
 
@@ -18,8 +17,7 @@ def set_container_location(config):
     Args:
         config (dict): Parsed configuration
     """
-    # source = "redplanet00/kubeedge-applications"
-    source = "ansk/empty"
+    source = "redplanet00/kubeedge-applications"
     config["images"] = {"worker": "%s:empty" % (source)}
 
 
@@ -62,7 +60,7 @@ def cache_worker(_config, _machines):
         (dict): Application variables
     """
     app_vars = {
-        "sleep_time": 10,
+        "sleep_time": 30,
     }
     return app_vars
 
@@ -113,7 +111,6 @@ def format_output(
     worker_description=None,
     resource_output=None,
     endtime=None,
-    kata_ts=None,
 ):
     """Format processed output to provide useful insights (empty)
 
@@ -141,45 +138,6 @@ def format_output(
             plot.plot_control(df, config["timestamp"])
             plot.plot_p56(df, config["timestamp"])
             plot.plot_resources(df_resources, config["timestamp"], xmax=endtime)
-            if kata_ts is not None:
-                df_kata = get_kata_df(df, kata_ts, starttime)
-
-                path = f"./logs/{(config['timestamp'])}_dataframe_kata.csv"
-                df_kata.to_csv(path, index=False, encoding="utf-8")
-
-                plot.plot_p56_kata(df_kata, config["timestamp"])
-
-
-def get_kata_df(df: pd.DataFrame, kata_ts: List[List[int]], starttime) -> pd.DataFrame:
-    df_columns = [
-        "kubelet_pod_received (s)",
-        "kubelet_created_cgroup (s)",
-        "kubelet_mounted_volume (s)",
-        "started_application (s)",
-    ]
-
-    df = df[df_columns]
-    kata_ts = sorted(kata_ts, key=lambda x: x[-1])
-    kata_p = [[time_delta(t * 1e-6, starttime) for (i, t) in enumerate(l) if i != 0] for l in kata_ts]
-    kata_p = [list(l) for l in zip(*kata_p)]  # pivot to append to df_lists
-
-    kata_columns = [
-        "kata_create_runtime (s)",
-        "kata_create_vm (s)",
-        "kata_connect_to_vm (s)",
-        "kata_create_container_and_launch (s)",
-    ]
-
-    df_lists = [df[col].tolist() for col in df.columns]
-    df_lists = df_lists[:-1] + kata_p + [df_lists[-1]]
-    df_lists = [list(l) for l in zip(*df_lists)]  # pivot for pd.DataFrame
-    df_columns = df_columns[:-1] + kata_columns + [df_columns[-1]]
-
-    df = pd.DataFrame(df_lists, columns=df_columns)
-    l = [sorted(l) == l for l in df_lists]
-    # print(f"are all ascending? {all(x > 0 for x in l)}")
-
-    return df
 
 
 def create_control_object(worker_description, mapping):
