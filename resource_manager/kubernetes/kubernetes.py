@@ -6,6 +6,8 @@ import logging
 import os
 import sys
 import time
+import json
+from datetime import datetime
 
 import pandas as pd
 
@@ -181,6 +183,11 @@ def cache_worker(config, machines, app_vars):
         "replicas": worker_apps,
         "pull_policy": "IfNotPresent",
     }
+    
+    if "runtime" in config["benchmark"]:
+        global_vars["runtime"] = config["benchmark"]["runtime"]
+    if "runtime_filesystem" in config["benchmark"]:
+        global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
 
     # Merge the two var dicts
     all_vars = {**global_vars, **app_vars}
@@ -601,6 +608,11 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
         "replicas": worker_apps,
         "pull_policy": "Never",
     }
+    
+    if "runtime" in config["benchmark"]:
+        global_vars["runtime"] = config["benchmark"]["runtime"]
+    if "runtime_filesystem" in config["benchmark"]:
+        global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
 
     # Merge the two var dicts
     all_vars = {**global_vars, **app_vars}

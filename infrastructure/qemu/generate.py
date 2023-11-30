@@ -17,6 +17,7 @@ DOMAIN = """\
         <type>hvm</type>
         <boot dev="hd"/>
     </os>
+%s
     <features>
         <acpi/>
     </features>
@@ -129,6 +130,7 @@ def start(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Start writing QEMU config files for cloud / edge")
+    using_kata = 'runtime' in config['benchmark'] and 'kata' in config['benchmark']['runtime']
 
     # Get the SSH public key
     with open("%s.pub" % (config["ssh_key"]), "r", encoding="utf-8") as f:
@@ -209,6 +211,7 @@ def start(config, machines):
                     % (
                         name,
                         memory,
+                        "    <cpu mode='host-passthrough'/>" if using_kata else "",
                         cc,
                         period,
                         int(period * config["infrastructure"]["cloud_quota"]),
@@ -248,6 +251,7 @@ def start(config, machines):
                     % (
                         name,
                         memory,
+                        "    <cpu mode='host-passthrough'/>" if using_kata else "",
                         ec,
                         period,
                         int(period * config["infrastructure"]["edge_quota"]),
@@ -287,6 +291,7 @@ def start(config, machines):
                     % (
                         name,
                         memory,
+                        "    <cpu mode='host-passthrough'/>" if using_kata else "",
                         pc,
                         period,
                         int(period * config["infrastructure"]["endpoint_quota"]),
@@ -317,6 +322,7 @@ def start(config, machines):
                     % (
                         name,
                         1048576,
+                        "    <cpu mode='host-passthrough'/>" if using_kata else "",
                         1,
                         0,
                         0,

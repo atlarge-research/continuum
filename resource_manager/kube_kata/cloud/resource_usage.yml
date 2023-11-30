@@ -1,0 +1,20 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Download the metrics server
+      command: wget https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+    - name: Allow communication between nodes without signatures
+      command: sed -i 's/--metric-resolution=15s/--metric-resolution=15s\n        - --kubelet-insecure-tls/' components.yaml
+
+    - name: Apply the metrics server
+      command: kubectl apply -f components.yaml
+
+    - name: Wait for metrics server to be running
+      command: kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout 1m
+
+    - name: Copy resource metrics script in
+      copy:
+        src: "{{ continuum_home }}/cloud/resource_usage.py"
+        dest: /home/{{ username }}

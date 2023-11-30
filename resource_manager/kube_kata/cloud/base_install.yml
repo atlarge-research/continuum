@@ -1,0 +1,151 @@
+---
+- hosts: base_cloud
+  become: true
+  tasks:
+    - name: Install packages that allow apt to be used over HTTPS
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - software-properties-common
+
+    - name: Update containerd to 1.6+ for Kubernetes
+      shell: |
+        sudo mkdir -p /etc/apt/keyrings
+
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+          https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+        sudo apt update
+        sudo apt -y install containerd.io
+
+    - name: Create containerd directory
+      file:
+        path: /etc/containerd
+        state: directory
+
+    - name: Copy containerd config from local to target
+      copy:
+        src: "{{ continuum_home }}/cloud/config.toml"
+        dest: /etc/containerd/config.toml
+
+    - name: Replace registry ip in containerd config file
+      command: sed -i 's#REGISTRY-IP#{{ registry_ip }}#g' /etc/containerd/config.toml
+
+    - name: Restart containerd service
+      command: systemctl restart containerd
+
+    - name: Disable swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Make sure swap is disabled even after reboot
+      command: sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+    - name: Enable ipv4 forwarding
+      shell: echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+
+    - name: Reload ip settings
+      command: sysctl -p
+
+    - name: Add an apt signing key for Kubernetes
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Adding apt repository for Kubernetes
+      apt_repository:
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        state: present
+        filename: kubernetes.list
+
+    - name: Install Kubernetes binaries
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - kubelet={{ kubeversion }}-00
+          - kubeadm={{ kubeversion }}-00
+          - kubectl={{ kubeversion }}-00
+
+    - name: Stop Kubelet service
+      service:
+        name: kubelet
+        daemon_reload: true
+        state: stopped
+
+    - name: Get Kubernetes binaries from host machine
+      copy:
+        src: /mnt/sdb/matthijs/kubernetes-node-linux-amd64-{{ kubeversionstrp }}.tar.gz
+        dest: /tmp/kubernetes-node-linux-amd64.tar.gz
+
+    - name: Extract Kubernetes binary archive
+      unarchive:
+        src: /tmp/kubernetes-node-linux-amd64.tar.gz
+        dest: /tmp/
+        remote_src: true
+
+    - name: Move Kubernetes binaries to bin folder and overwrite installed binaries
+      shell: mv /tmp/kubernetes/node/bin/* /usr/bin/
+
+    - name: Remove Kubernetes archive
+      file:
+        path: /tmp/kubernetes-node-linux-amd64.tar.gz
+        state: absent
+
+    - name: Remove extracted Kubernetes archive
+      file:
+        path: /tmp/kubernetes
+        state: absent
+
+    - name: Start Kubelet service
+      service:
+        name: kubelet
+        daemon_reload: true
+        state: started
+
+    - name: Set endpoints for crictl
+      copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+
+    - name: Install Mosquitto
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - mosquitto=1.6.9-1
+
+    - name: Update SSH settings to allow many parallel sessions
+      blockinfile:
+        path: /etc/ssh/sshd_config
+        block: |
+          MaxSessions 10000
+          MaxStartups 10000
+
+    - name: Clone kube-prometheus
+      command: git clone https://github.com/prometheus-operator/kube-prometheus.git /kube-prometheus
+
+    - name: Git checkout
+      command: git checkout release-0.12
+      args:
+        chdir: /kube-prometheus
+
+    - name: Reset SSH client
+      command: systemctl restart sshd

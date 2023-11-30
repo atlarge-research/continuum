@@ -58,7 +58,7 @@ def start(config, machines):
         endpoint_only(config, machines)
     elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
         kube(config, machines)
-    elif config["benchmark"]["resource_manager"] == "kubecontrol":
+    elif config["benchmark"]["resource_manager"] in["kubecontrol", "kube_kata"]:
         kube_control(config, machines)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")
@@ -106,7 +106,7 @@ def to_datetime(s):
     """
     s = s.split(" ")[0]
     s = s.replace("T", " ")
-    s = s.replace("Z", "")
+    s = s.replace("+", "") # Sometimes it's a Z, sometimes a +, it's confusing
     s = s[: s.find(".") + 7]
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 
@@ -282,6 +282,9 @@ def kube_control(config, machines):
         app_vars = config["module"]["application"].cache_worker(config, machines)
         kubernetes.cache_worker(config, machines, app_vars)
 
+    if config["benchmark"]["application"] == "mem_usage":
+        return config["module"]["application"].get_mem_usage(config, machines, kubernetes)
+    
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
     starttime, kubectl_out, status = kubernetes.start_worker(
@@ -304,6 +307,27 @@ def kube_control(config, machines):
     # Add kubectl output
     node = config["cloud_ssh"][0].split("@")[0]
     control_output[node]["kubectl"] = kubectl_out
+
+    if "runtime" in config["benchmark"] and "kata" in config["benchmark"]["runtime"]:
+        from resource_manager.kube_kata import kube_kata
+
+        if config["benchmark"]["application"] == "empty_kata":
+            kata_ts = kube_kata.get_kata_timestamps(config, worker_output)
+            config["module"]["application"].format_output(
+                config,
+                None,
+                status=status,
+                control=control_output,
+                starttime=starttime,
+                worker_output=worker_output,
+                worker_description=worker_description,
+                resource_output=resource_output,
+                endtime=float(endtime - starttime),
+                kata_ts=kata_ts
+            )
+        elif config["benchmark"]["application"] == "stress":
+            stress_dur = kube_kata.get_deployment_duration(config, machines)
+            logging.info(f"Total stress duration: {stress_dur}")
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, [])

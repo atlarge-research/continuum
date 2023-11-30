@@ -1,0 +1,36 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Create job file
+      shell: |
+        cat > "/home/{{ username }}/job-template.yaml" <<EOF
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: {{ app_name }}
+        spec:
+          template:
+            metadata:
+              name: {{ app_name }}
+            spec:
+              restartPolicy: Never
+              containers:
+
+    - name: Add container descriptions
+      shell: |
+        for i in `seq 1 {{ replicas }}`
+        do
+          cat >> "/home/{{ username }}/job-template.yaml" <<EOF
+              - name: {{ app_name }}-$i
+                image: {{ image }}
+                imagePullPolicy: {{ pull_policy }}
+                resources:
+                  requests:
+                    memory: "{{ memory_req }}Mi"
+                    cpu: {{ cpu_req }}
+                env:
+                - name: SLEEP_TIME
+                  value: "{{ sleep_time }}"
+        EOF
+        done

@@ -539,7 +539,7 @@ def base_image(config, machines):
         # These RM will automatically pull images, so we can skip this here.
         # Only pull endpoint images instead
         docker_base_names = base_names
-        if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubecontrol"]:
+        if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubecontrol", "kube_kata"]:
             docker_base_names = [
                 base_name for base_name in docker_base_names if "endpoint" in base_name
             ]

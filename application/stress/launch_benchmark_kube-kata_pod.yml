@@ -1,0 +1,27 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Create job file
+      shell: |
+        cat > "/home/{{ username }}/job-template.yaml" <<EOF
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: {{ app_name }}
+        spec:
+          parallelism: {{ replicas }}
+          template:
+            metadata:
+              name: {{ app_name }}
+            spec:
+              runtimeClassName: {{ runtime }}
+              containers:
+              - name: {{ app_name }}
+                image: {{ image }}
+                imagePullPolicy: {{ pull_policy }}
+                env:
+                - name: TIMEOUT
+                  value: "{{ stress_app_timeout }}"
+              restartPolicy: Never
+        EOF
