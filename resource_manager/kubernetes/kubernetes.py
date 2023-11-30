@@ -1210,6 +1210,7 @@ def get_control_output(config, machines, starttime, status):
 
     return parsed_copy, endtime
 
+
 def parse_custom_kubernetes_splits(line):
     """Parse lines from Kubernetes custom output, like:
     I0824 22:23:21.269974    5026 kubectl.go:32] %!s(int64=1692908601269961032) [CONTINUUM] 0400\n
