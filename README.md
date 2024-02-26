@@ -183,15 +183,18 @@ http_ip=$(hostname -I | awk '{print $1;}')
 echo '{ "insecure-registries":["${http_ip}:5000"] }' | sudo tee -a /etc/docker/daemon.json
 sudo systemctl restart docker
 
-# 3. Install Python and a package manager
-sudo apt install python3 python3-pip
+# 3. Install the Continuum framework
+mkdir ~/.ssh
+touch ~/.ssh/known_hosts
 
-# 4. Install the Continuum framework
 git clone https://github.com/atlarge-research/continuum.git
 cd continuum
+
+# 4. Install Python and some packages
+sudo apt install python3 python3-pip
 pip3 install -r requirements.txt
 
-# Install Ansible
+# 5. Install Ansible
 sudo apt install ansible
 
 # Edit the ansible configuration as follows:
@@ -199,10 +202,7 @@ sudo apt install ansible
 # Under `[defaults]`, add `command_warnings = False`
 sudo vim /etc/ansible/ansible.cfg
 
-mkdir ~/.ssh
-touch ~/.ssh/known_hosts
-
-# 5. Setup up bridged networking on the machine
+# 6. Setup up bridged networking on the machine
 # First, delete any virtual bridges
 virsh net-destroy default
 virsh net-undefine default
