@@ -335,6 +335,7 @@ def plot_p56(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     plt.savefig("./logs/%s_breakdown_intern_P56.pdf" % (timestamp), bbox_inches="tight")
     plt.close(fig)
 
+
 def plot_p56_kata(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     plt.rcParams.update({"font.size": 20})
     fig, ax1 = plt.subplots(figsize=(12, 4))
@@ -413,6 +414,7 @@ def plot_p56_kata(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None)
     # Save plot
     plt.savefig(f"./logs/{timestamp}_breakdown_intern_P56_kata.pdf", bbox_inches="tight")
     plt.close(fig)
+
 
 def plot_resources(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     """Plot resource utilization data

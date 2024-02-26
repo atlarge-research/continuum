@@ -37,7 +37,7 @@ def generate_header(config):
             % (
                 config["infrastructure"]["aws_region"],
                 config["infrastructure"]["aws_access_keys"],
-                config["infrastructure"]["aws_secret_access_keys"]
+                config["infrastructure"]["aws_secret_access_keys"],
             )
         )
 
@@ -142,6 +142,7 @@ resource "aws_security_group" "allow_all_ingress_egress" {
     }
 }
 """
+
 
 def generate_network(config):
     """Write the Terraform config network
@@ -282,7 +283,7 @@ def generate_vm(config):
                     config["infrastructure"]["cloud_nodes"],
                     config["infrastructure"]["aws_cloud"],
                     config["infrastructure"]["aws_ami"],
-                    config["infrastructure"]["aws_key"]
+                    config["infrastructure"]["aws_key"],
                 )
             )
 
@@ -295,7 +296,7 @@ def generate_vm(config):
                     config["infrastructure"]["edge_nodes"],
                     config["infrastructure"]["aws_edge"],
                     config["infrastructure"]["aws_ami"],
-                    config["infrastructure"]["aws_key"]
+                    config["infrastructure"]["aws_key"],
                 )
             )
 
@@ -308,7 +309,7 @@ def generate_vm(config):
                     config["infrastructure"]["endpoint_nodes"],
                     config["infrastructure"]["aws_endpoint"],
                     config["infrastructure"]["aws_ami"],
-                    config["infrastructure"]["aws_key"]
+                    config["infrastructure"]["aws_key"],
                 )
             )
 

@@ -160,7 +160,9 @@ def get_kata_df(df: pd.DataFrame, kata_ts: List[List[int]], starttime) -> pd.Dat
 
     df = df[df_columns]
     kata_ts = sorted(kata_ts, key=lambda x: x[-1])
-    kata_p = [[time_delta(t * 1e-6, starttime) for (i, t) in enumerate(l) if i != 0] for l in kata_ts]
+    kata_p = [
+        [time_delta(t * 1e-6, starttime) for (i, t) in enumerate(l) if i != 0] for l in kata_ts
+    ]
     kata_p = [list(l) for l in zip(*kata_p)]  # pivot to append to df_lists
 
     kata_columns = [

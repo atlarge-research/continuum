@@ -58,7 +58,7 @@ def start(config, machines):
         endpoint_only(config, machines)
     elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
         kube(config, machines)
-    elif config["benchmark"]["resource_manager"] in["kubecontrol", "kube_kata"]:
+    elif config["benchmark"]["resource_manager"] in ["kubecontrol", "kube_kata"]:
         kube_control(config, machines)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")
@@ -106,7 +106,7 @@ def to_datetime(s):
     """
     s = s.split(" ")[0]
     s = s.replace("T", " ")
-    s = s.replace("+", "") # Sometimes it's a Z, sometimes a +, it's confusing
+    s = s.replace("+", "")  # Sometimes it's a Z, sometimes a +, it's confusing
     s = s[: s.find(".") + 7]
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 
@@ -284,7 +284,7 @@ def kube_control(config, machines):
 
     if config["benchmark"]["application"] == "mem_usage":
         return config["module"]["application"].get_mem_usage(config, machines, kubernetes)
-    
+
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
     starttime, kubectl_out, status = kubernetes.start_worker(
@@ -323,7 +323,7 @@ def kube_control(config, machines):
                 worker_description=worker_description,
                 resource_output=resource_output,
                 endtime=float(endtime - starttime),
-                kata_ts=kata_ts
+                kata_ts=kata_ts,
             )
         elif config["benchmark"]["application"] == "stress":
             stress_dur = kube_kata.get_deployment_duration(config, machines)

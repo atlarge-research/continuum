@@ -40,20 +40,8 @@ def add_options(_config):
             False,
             "v1.27.0",
         ],
-        [
-            "runtime",
-            str,
-            lambda x: x in ['runc', 'kata-qemu', 'kata-fc'],
-            False,
-            'runc'
-        ],
-        [
-            "runtime_filesystem",
-            str,
-            lambda x: x in ['overlayfs', 'devmapper'],
-            False,
-            'devmapper'
-        ],
+        ["runtime", str, lambda x: x in ["runc", "kata-qemu", "kata-fc"], False, "runc"],
+        ["runtime_filesystem", str, lambda x: x in ["overlayfs", "devmapper"], False, "devmapper"],
     ]
     return settings
 
@@ -77,9 +65,12 @@ def verify_options(parser, config):
     ):
         parser.error(r"ERROR: Kubernetes requires (#clouds-1) % #endpoints == 0 (-1 for control)")
     elif (
-        config["benchmark"]["runtime"] == "kata-fc" and config["benchmark"]["runtime_filesystem"] == "overlayfs"
+        config["benchmark"]["runtime"] == "kata-fc"
+        and config["benchmark"]["runtime_filesystem"] == "overlayfs"
     ):
-        parser.error(f"ERROR: Overlay FS cannot be used with kata-fc - use option runtime_filesystem = devmapper")
+        parser.error(
+            f"ERROR: Overlay FS cannot be used with kata-fc - use option runtime_filesystem = devmapper"
+        )
 
 
 def start(config, machines):
@@ -119,8 +110,10 @@ def start(config, machines):
     )
 
     # Setup worker runtime
-    runtime = config['benchmark']['runtime']
-    use_overlayfs = "true" if config["benchmark"].get("runtime_filesystem") == "overlayfs" else "false"
+    runtime = config["benchmark"]["runtime"]
+    use_overlayfs = (
+        "true" if config["benchmark"].get("runtime_filesystem") == "overlayfs" else "false"
+    )
     if "kata" in runtime:
         commands.append(
             [
@@ -132,7 +125,7 @@ def start(config, machines):
                     f".continuum/{(config['mode'])}/install_kata_containers.yml",
                 ),
                 "-e",
-                f"use_overlayfs={use_overlayfs}"
+                f"use_overlayfs={use_overlayfs}",
             ]
         )
         commands.append(
@@ -146,7 +139,6 @@ def start(config, machines):
                 ),
             ]
         )
-
 
     results = machines[0].process(config, commands)
 
@@ -205,22 +197,26 @@ def start(config, machines):
 
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
         ansible.check_output((output, error))
-        
+
+
 def get_deployment_duration(config, machines):
     try:
         command = "kubectl get job stress -o json"
         results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
-        results = ''.join(results[0][0])
+        results = "".join(results[0][0])
 
         results_json = json.loads(results)
 
         end, start = results_json["status"]["completionTime"], results_json["status"]["startTime"]
-        duration = datetime.strptime(end, '%Y-%m-%dT%H:%M:%SZ') - datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ')
+        duration = datetime.strptime(end, "%Y-%m-%dT%H:%M:%SZ") - datetime.strptime(
+            start, "%Y-%m-%dT%H:%M:%SZ"
+        )
 
         return duration.total_seconds()
     except Exception as e:
         logging.debug(f"[WARNING][{e}] error in function get_deployment_duration")
         return -1
+
 
 def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
     """(internal) curl request to jaeger server on `ip` to get the traces produced by the kata runtime.
@@ -282,10 +278,7 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
             elif len(ts) == 3 and span["operationName"] == "connect":
                 ts.append(span["startTime"] + span["duration"])  # T3
             # T4
-            elif (
-                len(ts) == 4
-                and span["operationName"] == "ttrpc.StartContainer"
-            ):
+            elif len(ts) == 4 and span["operationName"] == "ttrpc.StartContainer":
                 if skip_first is False:
                     ts.append(span["startTime"] + span["duration"])  # T4
                     break
@@ -297,11 +290,16 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
 
     return timestamps
 
+
 # Kata entry point.
 def get_kata_timestamps(config, worker_output) -> List[List[int]]:
-    logging.info("----------------------------------------------------------------------------------------")
+    logging.info(
+        "----------------------------------------------------------------------------------------"
+    )
     logging.info("get_kata_timestamps")
-    logging.info("----------------------------------------------------------------------------------------")
+    logging.info(
+        "----------------------------------------------------------------------------------------"
+    )
 
     nodes_names, nodes_ips = map(list, zip(*[str.split(x, "@") for x in config["cloud_ssh"][1:]]))
 

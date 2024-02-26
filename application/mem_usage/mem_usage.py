@@ -61,7 +61,9 @@ def get_mem_usage(config, machines, start_worker_kube):
 
         running_pods = 0
         while running_pods != replicas:
-            output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+            output, error = machines[0].process(
+                config, command, shell=True, ssh=config["cloud_ssh"][0]
+            )[0]
 
             # if error:
             #     logging.error("error while checking for runing pods")
@@ -69,24 +71,27 @@ def get_mem_usage(config, machines, start_worker_kube):
 
             running_pods = int(output[0])
             time.sleep(5)
-            
 
     def undeploy_memory_deployment(config, machines):
         logging.info("deleting k8s memory deployment")
 
         command = f"kubectl delete job.batch --all"
 
-        output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+        output, error = machines[0].process(
+            config, command, shell=True, ssh=config["cloud_ssh"][0]
+        )[0]
 
         # if error:
         #     logging.error("deleting k8s memory test deployment failed")
         #     sys.exit(1)
 
-        logging.info(f"output: {output}")       
+        logging.info(f"output: {output}")
 
     def get_free_memory(config, machines) -> int:
         command = "free -m | awk 'NR==2{print $4}'"
-        output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][1])[0]
+        output, error = machines[0].process(
+            config, command, shell=True, ssh=config["cloud_ssh"][1]
+        )[0]
 
         if error:
             logging.error("could not get free memory of worker node")

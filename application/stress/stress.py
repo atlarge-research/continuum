@@ -1,5 +1,6 @@
 """Manage the stress application"""
 
+
 def set_container_location(config):
     """Set registry location/path of containerized applications
 
@@ -7,6 +8,7 @@ def set_container_location(config):
         config (dict): Parsed configuration
     """
     config["images"] = {"worker": "ansk/empty:stress"}
+
 
 def add_options(_config):
     """Add config options for a particular module
@@ -21,6 +23,7 @@ def add_options(_config):
         ["stress_app_timeout", int, lambda x: x >= 1, True, False],
     ]
     return settings
+
 
 def verify_options(parser, config):
     if config["benchmark"]["application"] != "stress":
@@ -44,6 +47,7 @@ def cache_worker(_config, _machines):
     }
     return app_vars
 
+
 def start_worker(config, _machines):
     print("")
     """Set variables needed when launching the app on workers
@@ -59,6 +63,7 @@ def start_worker(config, _machines):
         "stress_app_timeout": config["benchmark"]["stress_app_timeout"],
     }
     return app_vars
+
 
 def format_output(
     config,
@@ -89,5 +94,6 @@ def format_output(
         if control is not None:
             from ..empty.empty import print_resources
             from ..empty.plot import plot_resources
+
             df_resources = print_resources(config, resource_output)
             plot_resources(df_resources, config["timestamp"], xmax=endtime)

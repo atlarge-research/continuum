@@ -497,7 +497,9 @@ def docker_registry(config, machines):
             continue
 
         # Kubecontrol images need different splitting
-        if config["benchmark"]["resource_manager"] in ["kubecontrol", "kube_kata"] and i >= (len(images) - 6):
+        if config["benchmark"]["resource_manager"] in ["kubecontrol", "kube_kata"] and i >= (
+            len(images) - 6
+        ):
             dest = os.path.join(config["registry"], image.split("/")[1])
         else:
             dest = os.path.join(config["registry"], image.split(":")[1])

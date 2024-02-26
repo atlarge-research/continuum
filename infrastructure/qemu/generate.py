@@ -130,7 +130,14 @@ def start(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Start writing QEMU config files for cloud / edge")
-    using_kata = 'runtime' in config['benchmark'] and 'kata' in config['benchmark']['runtime']
+
+    using_kata = False
+    if (
+        "benchmark" in config
+        and "runtime" in config["benchmark"]
+        and "kata" in config["benchmark"]["runtime"]
+    ):
+        using_kata = True
 
     # Get the SSH public key
     with open("%s.pub" % (config["ssh_key"]), "r", encoding="utf-8") as f:

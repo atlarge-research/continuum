@@ -52,9 +52,8 @@ def add_options(config):
         ["aws_access_keys", str, lambda _: True, True, None],
         ["aws_secret_access_keys", str, lambda _: True, True, None],
         ["aws_ami", str, lambda _: True, True, None],
-        ["aws_key", str, lambda _: True, True, None]
+        ["aws_key", str, lambda _: True, True, None],
     ]
-
 
     return settings
 

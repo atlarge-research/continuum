@@ -183,7 +183,7 @@ def cache_worker(config, machines, app_vars):
         "replicas": worker_apps,
         "pull_policy": "IfNotPresent",
     }
-    
+
     if "runtime" in config["benchmark"]:
         global_vars["runtime"] = config["benchmark"]["runtime"]
     if "runtime_filesystem" in config["benchmark"]:
@@ -608,7 +608,7 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
         "replicas": worker_apps,
         "pull_policy": "Never",
     }
-    
+
     if "runtime" in config["benchmark"]:
         global_vars["runtime"] = config["benchmark"]["runtime"]
     if "runtime_filesystem" in config["benchmark"]:
