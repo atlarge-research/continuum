@@ -183,18 +183,20 @@ http_ip=$(hostname -I | awk '{print $1;}')
 echo '{ "insecure-registries":["${http_ip}:5000"] }' | sudo tee -a /etc/docker/daemon.json
 sudo systemctl restart docker
 
-# 3. Install other required packages
-sudo apt install python3-pip
+# 3. Install Python and a package manager
+sudo apt install python3 python3-pip
 
 # 4. Install the Continuum framework
 git clone https://github.com/atlarge-research/continuum.git
 cd continuum
 pip3 install -r requirements.txt
 
+# Install Ansible
+sudo apt install ansible
+
 # Edit the ansible configuration as follows:
-# Under `[ssh_connection]`, add `retries = 5`
-# Under `[defaults]`, add `callback_whitelist = profile_tasks`
-# Under `[defaults]`, add `command_warnings=False`
+# Under `[defaults]`, add `callback_enabled = profile_tasks`
+# Under `[defaults]`, add `command_warnings = False`
 sudo vim /etc/ansible/ansible.cfg
 
 mkdir ~/.ssh
