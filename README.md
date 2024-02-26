@@ -199,6 +199,7 @@ sudo apt install ansible
 
 # Edit the ansible configuration as follows:
 # Under `[defaults]`, add `callback_enabled = profile_tasks`
+# Under `[defaults]`, add `command_warnings = False`
 sudo vim /etc/ansible/ansible.cfg
 
 # 6. Setup up bridged networking on the machine
