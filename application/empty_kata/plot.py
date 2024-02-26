@@ -336,7 +336,17 @@ def plot_p56(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     plt.close(fig)
 
 
-def plot_p56_kata(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
+def plot_p56_kata(df, timestamp, xmax=None, _ymax=None, xinter=None, yinter=None):
+    """_summary_
+
+    Args:
+        df (_type_): _description_
+        timestamp (_type_): _description_
+        xmax (_type_, optional): _description_. Defaults to None.
+        ymax (_type_, optional): _description_. Defaults to None.
+        xinter (_type_, optional): _description_. Defaults to None.
+        yinter (_type_, optional): _description_. Defaults to None.
+    """
     plt.rcParams.update({"font.size": 20})
     fig, ax1 = plt.subplots(figsize=(12, 4))
 

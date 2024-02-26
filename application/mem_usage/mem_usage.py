@@ -1,20 +1,42 @@
 """Manage the stress application"""
 
+import logging
+import time
+
+from resource_manager.kubernetes import kubernetes
+
+from ..empty.empty import set_container_location as empty_set_container_location
+from ..empty.empty import cache_worker as empty_cache_worker
+
 
 def set_container_location(config):
-    from ..empty.empty import set_container_location as empty_set_container_location
+    """Set registry location/path of containerized applications
 
+    Args:
+        config (dict): Parsed configuration
+    """
     return empty_set_container_location(config)
 
 
 def add_options(_config):
-    # from ..empty.empty import add_options as empty_add_options
+    """Add config options for a particular module
 
-    # return empty_add_options(_config)
+    Args:
+        config (ConfigParser): ConfigParser object
+
+    Returns:
+        list(list()): Options to add
+    """
     return []
 
 
 def verify_options(parser, config):
+    """Verify the config from the module's requirements
+
+    Args:
+        parser (ArgumentParser): Argparse object
+        config (ConfigParser): ConfigParser object
+    """
     if config["benchmark"]["application"] != "mem_usage":
         parser.error("ERROR: Application should be mem_usage")
     elif config["benchmark"]["resource_manager"] != "kubecontrol":
@@ -24,12 +46,19 @@ def verify_options(parser, config):
 
 
 def cache_worker(_config, _machines):
-    from ..empty.empty import cache_worker as empty_cache_worker
+    """See called function
 
+    Args:
+        _config (_type_): _description_
+        _machines (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     return empty_cache_worker(_config, _machines)
 
 
-def start_worker(config, _machines):
+def start_worker(_config, _machines):
     """Set variables needed when launching the app on workers
 
     Args:
@@ -45,12 +74,14 @@ def start_worker(config, _machines):
     return app_vars
 
 
-def get_mem_usage(config, machines, start_worker_kube):
-    import logging
-    import sys
-    import time
+def get_mem_usage(config, machines, _start_worker_kube):
+    """Get memory usage
 
-    from resource_manager.kubernetes import kubernetes
+    Args:
+        config (_type_): _description_
+        machines (_type_): _description_
+        _start_worker_kube (_type_): _description_
+    """
 
     def deploy_memory_deployment(config, machines, replicas: int):
         app_vars = start_worker(config, machines)
@@ -61,7 +92,7 @@ def get_mem_usage(config, machines, start_worker_kube):
 
         running_pods = 0
         while running_pods != replicas:
-            output, error = machines[0].process(
+            output, _ = machines[0].process(
                 config, command, shell=True, ssh=config["cloud_ssh"][0]
             )[0]
 
@@ -75,17 +106,15 @@ def get_mem_usage(config, machines, start_worker_kube):
     def undeploy_memory_deployment(config, machines):
         logging.info("deleting k8s memory deployment")
 
-        command = f"kubectl delete job.batch --all"
+        command = "kubectl delete job.batch --all"
 
-        output, error = machines[0].process(
-            config, command, shell=True, ssh=config["cloud_ssh"][0]
-        )[0]
+        output, _ = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
         # if error:
         #     logging.error("deleting k8s memory test deployment failed")
         #     sys.exit(1)
 
-        logging.info(f"output: {output}")
+        logging.info("output: %s", output)
 
     def get_free_memory(config, machines) -> int:
         command = "free -m | awk 'NR==2{print $4}'"
@@ -102,14 +131,14 @@ def get_mem_usage(config, machines, start_worker_kube):
     replicas = config["benchmark"]["applications_per_worker"]
 
     mem_before = get_free_memory(config, machines)
-    logging.info(f"Worker free memory before deployment: {mem_before} MB")
+    logging.info("Worker free memory before deployment: %i MB", mem_before)
 
     deploy_memory_deployment(config, machines, replicas)
 
     mem_after = get_free_memory(config, machines)
-    logging.info(f"Worker free memory after deployment -> {mem_after} MB")
+    logging.info("Worker free memory after deployment -> %i MB", mem_after)
 
     mem_per_cont = (mem_before - mem_after) / replicas
-    logging.info(f"mem usage per container -> {mem_per_cont} MB")
+    logging.info("mem usage per container -> %i MB", mem_per_cont)
 
     undeploy_memory_deployment(config, machines)

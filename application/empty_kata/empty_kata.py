@@ -151,6 +151,16 @@ def format_output(
 
 
 def get_kata_df(df: pd.DataFrame, kata_ts: List[List[int]], starttime) -> pd.DataFrame:
+    """_summary_
+
+    Args:
+        df (pd.DataFrame): _description_
+        kata_ts (List[List[int]]): _description_
+        starttime (_type_): _description_
+
+    Returns:
+        pd.DataFrame: _description_
+    """
     df_columns = [
         "kubelet_pod_received (s)",
         "kubelet_created_cgroup (s)",

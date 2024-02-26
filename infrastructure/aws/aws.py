@@ -68,9 +68,9 @@ def verify_options(parser, config):
     if config["infrastructure"]["provider"] != "aws":
         parser.error("ERROR: Infrastructure provider should be aws")
 
-    """sec = "infrastructure"
-    if len(config[sec]["aws_credentials"]) > 0 and config[sec]["aws_credentials"][-1] == "/":
-        config[sec]["aws_credentials"] = config[sec]["base_paws_credentialsth"][:-1]"""
+    # """sec = "infrastructure"
+    # if len(config[sec]["aws_credentials"]) > 0 and config[sec]["aws_credentials"][-1] == "/":
+    # config[sec]["aws_credentials"] = config[sec]["base_paws_credentialsth"][:-1]"""
 
 
 def set_ip_names(_config, machines, nodes_per_machine):

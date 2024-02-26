@@ -37,12 +37,14 @@
         sudo sed -i 's/snapshotter = "overlayfs"/snapshotter = "devmapper"/g' "$file_path"
 
         echo '#!/bin/bash' | sudo tee -a /usr/local/bin/containerd-shim-kata-fc-v2 > /dev/null
-        echo 'KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-fc.toml /opt/kata/bin/containerd-shim-kata-v2 $@' | sudo tee -a /usr/local/bin/containerd-shim-kata-fc-v2 > /dev/null
+        echo 'KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-fc.toml /opt/kata/bin/containerd-shim-kata-v2 $@' | \
+          sudo tee -a /usr/local/bin/containerd-shim-kata-fc-v2 > /dev/null
 
         sudo chmod +x /usr/local/bin/containerd-shim-kata-fc-v2
 
         echo '#!/bin/bash' | sudo tee -a /usr/local/bin/containerd-shim-kata-qemu-v2 > /dev/null
-        echo 'KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-qemu.toml /opt/kata/bin/containerd-shim-kata-v2 $@' | sudo tee -a /usr/local/bin/containerd-shim-kata-qemu-v2 > /dev/null
+        echo 'KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-qemu.toml /opt/kata/bin/containerd-shim-kata-v2 $@' | \
+          sudo tee -a /usr/local/bin/containerd-shim-kata-qemu-v2 > /dev/null
 
         sudo chmod +x /usr/local/bin/containerd-shim-kata-qemu-v2
 
@@ -74,7 +76,7 @@
       service:
         name: snap.docker.dockerd.service
         state: started
-        enabled: yes
+        enabled: true
 
     - name: start tracing daemon
       shell: |
@@ -118,4 +120,4 @@
     - name: chmod_x resetTraces
       file:
         path: /home/{{ username }}/resetTraces.sh
-        mode: 'a+x'
+        mode: "a+x"

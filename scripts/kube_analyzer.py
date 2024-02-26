@@ -6,7 +6,7 @@ Assumes all log files already exist
 import sys
 import argparse
 
-import pandas as pd
+# import pandas as pd
 
 import replicate_kubecontrol
 
@@ -23,6 +23,7 @@ class Analyzer(replicate_kubecontrol.MicroBenchmark):
     def __init__(self, args):
         replicate_kubecontrol.MicroBenchmark.__init__(self, args)
         self.data = []
+        self.baseline = None
 
     def gather_csv(self):
         """Todo"""
@@ -68,31 +69,44 @@ class Analyzer(replicate_kubecontrol.MicroBenchmark):
             self.data.append(data)
 
     def _get_baseline(self):
-        df = pd.read_csv(self.baseline["file"])
+        pass
 
-        per_job = ["kubectl_start (s)", "kubectl_parsed (s)", "api_workload_arrived (s)", "controller_read_workload (s)"]
-        per_pod = ["controller_unpacked_workload (s)", "api_pod_created (s)", "scheduler_read_pod (s)", "scheduled_pod (s)", "kubelet_pod_received (s)", "kubelet_created_cgroup (s)", "kubelet_mounted_volume (s)", "kubelet_applied_sandbox (s)"]
-        per_container = ["kubelet_created_container (s)", "started_application (s)"]
+        # df = pd.read_csv(self.baseline["file"])
 
-        for i in range():
-            entry = {}
+        # per_job = [
+        #     "kubectl_start (s)",
+        #     "kubectl_parsed (s)",
+        #     "api_workload_arrived (s)",
+        #     "controller_read_workload (s)"
+        # ]
+        # per_pod = [
+        #     "controller_unpacked_workload (s)",
+        #     "api_pod_created (s)",
+        #     "scheduler_read_pod (s)",
+        #     "scheduled_pod (s)",
+        #     "kubelet_pod_received (s)",
+        #     "kubelet_created_cgroup (s)",
+        #     "kubelet_mounted_volume (s)",
+        #     "kubelet_applied_sandbox (s)"
+        # ]
+        # per_container = ["kubelet_created_container (s)", "started_application (s)"]
 
-            # We only do 1 job for now
-            for cat in per_job:
-                entry[cat] = df[cat].iloc(0)
-            
-            # We only do 1 container per pod for now
-            for cat in per_pod + per_container:
+        # for i in range():
+        #     entry = {}
 
+        #     # We only do 1 job for now
+        #     for cat in per_job:
+        #         entry[cat] = df[cat].iloc(0)
 
-        entry = {
-            "kubectl_start (s)": 
-        }
+        #     # We only do 1 container per pod for now
+        #     for cat in per_pod + per_container:
 
+        # entry = {
+        #     "kubectl_start (s)":
+        # }
 
-        new_row = {'Courses':'Hyperion', 'Fee':24000, 'Duration':'55days', 'Discount':1800}
-df2 = df.append(new_row, ignore_index=True)
-
+        # new_row = {'Courses':'Hyperion', 'Fee':24000, 'Duration':'55days', 'Discount':1800}
+        # df2 = df.append(new_row, ignore_index=True)
 
     def predict(self):
         """
@@ -103,7 +117,7 @@ df2 = df.append(new_row, ignore_index=True)
         - ((time for phase with 1 pod) x max_pods) / total_cores
             - gives a good approximation of expected time complexity
             - total_cores = 8 if control plane action or 8*worker_nodes for kubelet stuff
-        
+
         Strong points:
         - Accurate in bottleneck detection
         - Baseline can be run once and predict best-case scenario for any scenario
@@ -144,7 +158,7 @@ df2 = df.append(new_row, ignore_index=True)
 
         OLDER SIMPLE MODEL
         - If we predict a duration for pod=100 for a step, and the actual duration is much lower,
-          this either means that (i) there is a one-off cost for the pod=1 baseline or (ii) the 
+          this either means that (i) there is a one-off cost for the pod=1 baseline or (ii) the
           previous phase is bottlenecked and isn't using CPU efficiently.
         - that's a great conclusion for us as you can't detect this via a CPU graph, as that will
           say that total CPU usage is 90%. That may seem fine, but there still is a bottleneck
@@ -152,21 +166,18 @@ df2 = df.append(new_row, ignore_index=True)
         USE THE OLD MODEL - IT SHOULD BE GOOD ENOUGH
         - the problem mentioned earlier that stuff doesn't work is incorrect. The model is only
           accurate up to the first found bottleneck. But our tool works iterative so that's fine.
-          However: If in a next phase actual time >> predicted time, that still is a detected 
+          However: If in a next phase actual time >> predicted time, that still is a detected
           bottleneck. It's more that new bottlenecks will show up if you solve the current one.
         - The model can predict best-case total deployment time. Not the time of the first app
           because there suddenly is extra concurrency that wasn't in the baseline and we don't
           calculate that per-pod, only in total.
         """
-        for data in self.data:
-            baseline = self._get_baseline(data["pods"])
+        # for data in self.data:
+        #     baseline = self._get_baseline(data["pods"])
 
+        #     if data['kind'] == 'strong':
 
-            if data['kind'] == 'strong':
-
-
-
-        """Something"""
+        # """Something"""
 
 
 def main(args):

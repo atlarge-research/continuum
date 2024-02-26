@@ -8,6 +8,7 @@ import sys
 
 from datetime import datetime
 
+from resource_manager.kube_kata import kube_kata
 from resource_manager.kubernetes import kubernetes
 from resource_manager.endpoint import endpoint
 from execution_model.openfaas import openfaas
@@ -283,7 +284,7 @@ def kube_control(config, machines):
         kubernetes.cache_worker(config, machines, app_vars)
 
     if config["benchmark"]["application"] == "mem_usage":
-        return config["module"]["application"].get_mem_usage(config, machines, kubernetes)
+        config["module"]["application"].get_mem_usage(config, machines, kubernetes)
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
@@ -309,8 +310,6 @@ def kube_control(config, machines):
     control_output[node]["kubectl"] = kubectl_out
 
     if "runtime" in config["benchmark"] and "kata" in config["benchmark"]["runtime"]:
-        from resource_manager.kube_kata import kube_kata
-
         if config["benchmark"]["application"] == "empty_kata":
             kata_ts = kube_kata.get_kata_timestamps(config, worker_output)
             config["module"]["application"].format_output(
@@ -327,7 +326,7 @@ def kube_control(config, machines):
             )
         elif config["benchmark"]["application"] == "stress":
             stress_dur = kube_kata.get_deployment_duration(config, machines)
-            logging.info(f"Total stress duration: {stress_dur}")
+            logging.info("Total stress duration: %s", stress_dur)
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, [])

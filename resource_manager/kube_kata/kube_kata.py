@@ -5,11 +5,12 @@ This resource manager doesn't have any/many help functions, see the /kubernetes 
 
 import logging
 import os
-import requests
+import json
 
 from datetime import datetime
-import json
 from typing import Dict, List
+
+import requests
 
 from infrastructure import ansible
 from resource_manager.kubernetes import kubernetes
@@ -69,7 +70,8 @@ def verify_options(parser, config):
         and config["benchmark"]["runtime_filesystem"] == "overlayfs"
     ):
         parser.error(
-            f"ERROR: Overlay FS cannot be used with kata-fc - use option runtime_filesystem = devmapper"
+            "ERROR: Overlay FS cannot be used with kata-fc - "
+            + "use option runtime_filesystem = devmapper"
         )
 
 
@@ -200,6 +202,15 @@ def start(config, machines):
 
 
 def get_deployment_duration(config, machines):
+    """_summary_
+
+    Args:
+        config (_type_): _description_
+        machines (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     try:
         command = "kubectl get job stress -o json"
         results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
@@ -207,19 +218,20 @@ def get_deployment_duration(config, machines):
 
         results_json = json.loads(results)
 
-        end, start = results_json["status"]["completionTime"], results_json["status"]["startTime"]
+        end, st = results_json["status"]["completionTime"], results_json["status"]["startTime"]
         duration = datetime.strptime(end, "%Y-%m-%dT%H:%M:%SZ") - datetime.strptime(
-            start, "%Y-%m-%dT%H:%M:%SZ"
+            st, "%Y-%m-%dT%H:%M:%SZ"
         )
 
         return duration.total_seconds()
     except Exception as e:
-        logging.debug(f"[WARNING][{e}] error in function get_deployment_duration")
+        logging.debug("[WARNING][%s] error in function get_deployment_duration", e)
         return -1
 
 
 def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
-    """(internal) curl request to jaeger server on `ip` to get the traces produced by the kata runtime.
+    """(internal) curl request to jaeger server on `ip` to
+    get the traces produced by the kata runtime.
 
     Args:
         ip (str): Jaeger endpoint ip
@@ -229,7 +241,7 @@ def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
         List[List[Dict]]: a sorted list of traces for each kata deployment on `ip`.
     """
     jaeger_api_url = f"http://{ip}:{port}/api/traces?service=kata&operation=rootSpan&limit=10000"
-    response = requests.get(jaeger_api_url)
+    response = requests.get(jaeger_api_url, timeout=600)
     response_data = response.json()
 
     traces = response_data["data"]
@@ -282,8 +294,8 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
                 if skip_first is False:
                     ts.append(span["startTime"] + span["duration"])  # T4
                     break
-                else:
-                    skip_first = False
+
+                skip_first = False
 
         assert len(ts) == 5
         timestamps.append(ts)
@@ -292,7 +304,16 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
 
 
 # Kata entry point.
-def get_kata_timestamps(config, worker_output) -> List[List[int]]:
+def get_kata_timestamps(config, _worker_output) -> List[List[int]]:
+    """_summary_
+
+    Args:
+        config (_type_): _description_
+        _worker_output (_type_): _description_
+
+    Returns:
+        List[List[int]]: _description_
+    """
     logging.info(
         "----------------------------------------------------------------------------------------"
     )
@@ -301,7 +322,7 @@ def get_kata_timestamps(config, worker_output) -> List[List[int]]:
         "----------------------------------------------------------------------------------------"
     )
 
-    nodes_names, nodes_ips = map(list, zip(*[str.split(x, "@") for x in config["cloud_ssh"][1:]]))
+    _nodes_names, nodes_ips = map(list, zip(*[str.split(x, "@") for x in config["cloud_ssh"][1:]]))
 
     traces = [_gather_kata_traces(ip)[1:] for ip in nodes_ips]
     # Flatten list of lists

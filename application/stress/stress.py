@@ -1,5 +1,8 @@
 """Manage the stress application"""
 
+from ..empty.empty import print_resources
+from ..empty.plot import plot_resources
+
 
 def set_container_location(config):
     """Set registry location/path of containerized applications
@@ -26,6 +29,12 @@ def add_options(_config):
 
 
 def verify_options(parser, config):
+    """Verify the config from the module's requirements
+
+    Args:
+        parser (ArgumentParser): Argparse object
+        config (ConfigParser): ConfigParser object
+    """
     if config["benchmark"]["application"] != "stress":
         parser.error("ERROR: Application should be stress")
     elif config["benchmark"]["resource_manager"] != "kubecontrol":
@@ -49,7 +58,6 @@ def cache_worker(_config, _machines):
 
 
 def start_worker(config, _machines):
-    print("")
     """Set variables needed when launching the app on workers
 
     Args:
@@ -67,15 +75,15 @@ def start_worker(config, _machines):
 
 def format_output(
     config,
-    worker_metrics,
+    _worker_metrics,
     status=None,
     control=None,
-    starttime=None,
-    worker_output=None,
-    worker_description=None,
+    _starttime=None,
+    _worker_output=None,
+    _worker_description=None,
     resource_output=None,
     endtime=None,
-    kata_ts=None,
+    _kata_ts=None,
 ):
     """Format processed output to provide useful insights (empty)
 
@@ -92,8 +100,5 @@ def format_output(
     # Plot the status of each pod over time
     if status is not None:
         if control is not None:
-            from ..empty.empty import print_resources
-            from ..empty.plot import plot_resources
-
             df_resources = print_resources(config, resource_output)
             plot_resources(df_resources, config["timestamp"], xmax=endtime)

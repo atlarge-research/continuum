@@ -9,7 +9,7 @@
     - name: Install ohmyzsh
       shell: |
         sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-      become: yes
+      become: true
       become_user: "{{ username }}"
 
     - name: Set default shell to zsh
@@ -22,7 +22,7 @@
         path: /home/{{ username }}/.zshrc
         regexp: '^plugins=\(git\)'
         line: "plugins=(git sudo colored-man-pages timer kubectl)"
-      become: yes
+      become: true
       become_user: "{{ username }}"
 
     - name: Update ZSH theme in .zshrc
@@ -30,7 +30,7 @@
         path: /home/{{ username }}/.zshrc
         regexp: '^ZSH_THEME="robbyrussell"'
         line: 'ZSH_THEME="pmcgee"'
-      become: yes
+      become: true
       become_user: "{{ username }}"
 
     - name: Clone vim-surround
