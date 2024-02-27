@@ -31,7 +31,7 @@ def check_output(out):
         logging.debug("\n".join(lines))
 
     # Check if executino was succesful
-    if error != []:
+    if error != [] and not all("WARNING" in line for line in error):
         logging.error("".join(error))
         sys.exit()
     elif any("FAILED!" in out for out in output):
