@@ -190,15 +190,13 @@ touch ~/.ssh/known_hosts
 git clone https://github.com/atlarge-research/continuum.git
 cd continuum
 
-# 4. Install Python and some packages
+# 4. Install Python and some packages, including Ansible
 sudo apt install python3 python3-pip
 pip3 install -r requirements.txt
 
-# 5. Install Ansible
-sudo apt install ansible
-
-# Edit the ansible configuration as follows:
+# 5. Edit the Ansible configuration as follows:
 # Under `[defaults]`, add `callback_enabled = profile_tasks`
+# Under `[defaults]`, add `command_warnings = False`
 sudo vim /etc/ansible/ansible.cfg
 
 # 6. Setup up bridged networking on the machine
