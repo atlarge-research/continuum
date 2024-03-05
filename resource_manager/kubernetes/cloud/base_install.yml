@@ -45,18 +45,23 @@
     - name: Reload ip settings
       command: sysctl -p
 
-    - name: Add an apt signing key for Kubernetes
-      apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-        state: present
+    - name: Create keyring directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
 
-    - name: Adding apt repository for Kubernetes
+    - name: Add an apt signing key for Kubernetes - no need to ever change the version number here
+      apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+        keyring: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Adding apt repository for Kubernetes - change version number if needed
       apt_repository:
-        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.27/deb/ /
         state: present
         filename: kubernetes.list
 
-    # Use this version with KubeEdge 1.6.1
     - name: Install Kubernetes binaries
       apt:
         name: "{{ packages }}"
@@ -64,9 +69,9 @@
         update_cache: true
       vars:
         packages:
-          - kubelet=1.27.0-00
-          - kubeadm=1.27.0-00
-          - kubectl=1.27.0-00
+          - kubelet
+          - kubeadm
+          - kubectl
 
     - name: Get Flannel
       get_url:
