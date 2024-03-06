@@ -15,22 +15,35 @@
           - gnupg-agent
           - software-properties-common
 
-    - name: Install docker
-      apt:
-        name: docker.io
-        state: present
+    - name: Update containerd to 1.6+ for Kubernetes
+      shell: |
+        sudo mkdir -p /etc/apt/keyrings
 
-    - name: Add cloud user to docker group
-      user:
-        name: "{{ username }}"
-        groups: docker
-        append: true
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-    - name: Allow HTTP pulling from private docker registry
-      shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+          https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-    - name: Restart docker service
-      command: systemctl restart docker
+        sudo apt update
+        sudo apt -y install containerd.io
+
+    - name: Create containerd directory
+      file:
+        path: /etc/containerd
+        state: directory
+
+    - name: Copy containerd config from local to target
+      copy:
+        src: "{{ continuum_home }}/cloud/config.toml"
+        dest: /etc/containerd/config.toml
+
+    - name: Replace registry ip in containerd config file
+      command: sed -i 's#REGISTRY-IP#{{ registry_ip }}#g' /etc/containerd/config.toml
+
+    - name: Restart containerd service
+      command: systemctl restart containerd
 
     - name: Disable swap
       command: swapoff -a

@@ -2,22 +2,26 @@
 - hosts: clouds
   become: true
   tasks:
-    - name: Ensure docker service is running
-      systemd:
-        name: docker
-        state: started
-
-    - name: Add cloud user to docker group
-      user:
-        name: "{{ username }}"
-        groups: docker
-        append: true
-
-    - name: Restart docker service
-      command: systemctl restart docker
-
     - name: Run Mosquitto
       command: mosquitto -d -p 1883
+
+    - name: Forward IPv4 and let iptables see bridged traffic
+      shell: |
+        cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+        overlay
+        br_netfilter
+        EOF
+
+        sudo modprobe overlay
+        sudo modprobe br_netfilter
+
+        cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+        net.bridge.bridge-nf-call-iptables  = 1
+        net.bridge.bridge-nf-call-ip6tables = 1
+        net.ipv4.ip_forward                 = 1
+        EOF
+
+        sudo sysctl --system
 
     - name: Wait for join command to be finished on cloud controller
       local_action:
@@ -44,7 +48,3 @@
         state: absent
       with_items:
         - /tmp/join-command.txt
-
-  handlers:
-    - name: docker status
-      service: name=docker state=started

@@ -107,7 +107,14 @@ def to_datetime(s):
     """
     s = s.split(" ")[0]
     s = s.replace("T", " ")
-    s = s.replace("+", "")  # Sometimes it's a Z, sometimes a +, it's confusing
+
+    # This + and Z business changes often. Now we're using this
+    # It was (for +): s = s.replace("+", "")
+    if "+" in s:
+        s = s.split("+")[0]
+    elif "Z" in s:
+        s = s.split("Z")[0]
+
     s = s[: s.find(".") + 7]
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 

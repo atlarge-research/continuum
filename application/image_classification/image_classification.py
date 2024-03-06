@@ -183,6 +183,7 @@ def gather_worker_metrics(_machines, _config, worker_output, _starttime):
     lower_percentile = 0.05
     upper_percentile = 0.90
 
+    # Worker_output = [[pod_name, [output_line, ...]], ...]
     for i, out in enumerate(worker_output):
         logging.info("Parse output from worker node %i", i)
         worker_metrics.append(copy.deepcopy(worker_set))
@@ -195,7 +196,7 @@ def gather_worker_metrics(_machines, _config, worker_output, _starttime):
         start_time = 0
         end_time = 0
         negatives = []
-        for line in out:
+        for line in out[1]:
             if start_time == 0 and "Read image and apply ML" in line:
                 start_time = application.to_datetime(line)
             elif "Get item" in line:
@@ -312,7 +313,13 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     unit = line[line.find("(") + 1 : line.find(")")]
                     number = int(line.rstrip().split(":")[-1])
                 except ValueError as e:
-                    logging.warning("Got an error while parsing line: %s. Exception: %s", line, e)
+                    # Sometimes a sending and receiving line get appended in the docker log
+                    # We just ignore this for now - it happens very infrequently
+                    if not ("Sending data" in line and "Received PUBLISH" in line):
+                        logging.warning(
+                            "Got an error while parsing line: %s. Exception: %s", line, e
+                        )
+
                     continue
 
                 units = ["ns", "bytes"]
