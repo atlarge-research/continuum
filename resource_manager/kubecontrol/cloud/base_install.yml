@@ -58,14 +58,20 @@
     - name: Reload ip settings
       command: sysctl -p
 
-    - name: Add an apt signing key for Kubernetes
-      apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-        state: present
+    - name: Create keyring directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
 
-    - name: Adding apt repository for Kubernetes
+    - name: Add an apt signing key for Kubernetes - no need to ever change the version number here
+      apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+        keyring: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Adding apt repository for Kubernetes - change version number if needed
       apt_repository:
-        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ kubeversion_major }}/deb/ /
         state: present
         filename: kubernetes.list
 
@@ -76,9 +82,9 @@
         update_cache: true
       vars:
         packages:
-          - kubelet={{ kubeversion }}-00
-          - kubeadm={{ kubeversion }}-00
-          - kubectl={{ kubeversion }}-00
+          - kubelet
+          - kubeadm
+          - kubectl
 
     - name: Stop Kubelet service
       service:
