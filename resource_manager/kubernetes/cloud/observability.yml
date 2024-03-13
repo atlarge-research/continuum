@@ -4,7 +4,7 @@
   tasks:
     - name: Set up kube-prometheus on Kubernetes
       command: |
-        kubectl apply -f /kube-prometheus/manifests/setup
+        kubectl create -f /kube-prometheus/manifests/setup
 
     - name: Wait for namespace to exist
       command: |
@@ -30,3 +30,4 @@
         nohup kubectl port-forward --namespace=monitoring \
           --address={{ cloud_ip }},{{ cloud_ip_external }} \
           svc/prometheus-k8s 9090:9090 > /dev/null 2>&1 &
+
