@@ -276,7 +276,7 @@ The framework has been extensively tested on Ubuntu 20.04.
 In this part, we show how to create an Ubuntu 20.04 VM that you can use to run Continuum in.
 This example is supposed to be executed on a Linux machine.
 ```bash
-# Install the VM software QEMU, KVM, and Libvirt
+# 1. Install the VM software QEMU, KVM, and Libvirt
 sudo apt update 
 sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
 
@@ -297,26 +297,25 @@ wget https://releases.ubuntu.com/20.04.3/ubuntu-20.04.3-live-server-amd64.iso
 # Create a QCOW disk as storage for your VM (at least 20 GB of disk space is advised)
 qemu-img create -f qcow2 ubuntu.img 20G
 
+#############
 # Boot the VM
+#############
 # 1. On a system with a GUI
 # - This will open a new window for the VM
 # - Use at least 4 GB of RAM and 4 CPUs
 sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user
-
+#############
 # 2. On a system without a GUI
 sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user,hostfwd=tcp::7777-:22
-
 # 2.1. Access the VM from an OS with GUI: You can now SSH in to machine
 ssh -p 7777 ubuntu@127.0.0.1
-
 # 2.2 On the VM, execute remmina so you can see the GUI of the VM on your machine
 sudo apt install remmina
 remmina
-
 # 2.3 This should open the Remmina screen for you. Click on the + icon to create a new connection. Under protocol, select “VNC”, and then under server, add the VNC address displayed in the terminal where you started the VM (for example, 127.0.0.1:5900). Click save and connect to connect to the VM.
+#############
 
------
-# Fininish the initialization of the VM
+# Finish the initialization of the VM
 # Don't forget to install the open-SSH client during the installation
 # Then, shut the VM down and re-launch
 sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -cpu host -net nic -net user,hostfwd=tcp::7777-:22 --name ubuntu
