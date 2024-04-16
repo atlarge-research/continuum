@@ -284,6 +284,8 @@ sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
 sudo adduser $USER libvirt
 sudo adduser $USER kvm
 
+# Exit your shell and open a new one for the permissions to take effect
+
 # Check if the installation was succesful
 # If not, you may need to use `sudo systemctl enable --now libvirtd`
 qemu-system-x86_64 --version
