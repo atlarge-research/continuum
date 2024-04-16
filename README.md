@@ -278,7 +278,7 @@ This example is supposed to be executed on a Linux machine.
 ```bash
 # Install the VM software QEMU, KVM, and Libvirt
 sudo apt update 
-sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils`
+sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
 
 # Give your user sufficient permissions - this may require you to refresh your session
 sudo adduser $USER libvirt
