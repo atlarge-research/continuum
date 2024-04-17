@@ -17,7 +17,7 @@ This demo consists of three parts:
 For this demo, you will get access to servers at the VU (not the DAS). \
 We currently only support this demo on these servers.
 
-1. Send a public SSH key to the email address mentioned in the presentation of this demo. If you don't yet have a key, generating a new one can be as simple as executing `ssh-keygen`. Otherwise, search online on how to generate a new SSH key for your operating system or ask another student in the demo session. On Debian/Ubuntu-based systems, ssh keys are stored in `~/.ssh`. The default key is named `id_rsa.pub`, you can display the key with `cat id_rsa.pub`.
+1. Send a public SSH key to the email address mentioned in the presentation of this demo. If you don't yet have a key, generating a new one can be as simple as executing `ssh-keygen`. Otherwise, search online on how to generate a new SSH key for your operating system or ask another student in the demo session. On Debian/Ubuntu-based systems, ssh keys are stored in `~/.ssh`. The default key is named `id_rsa.pub`; you can display the key with `cat id_rsa.pub`.
 2. You will receive a username `ds-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`. Remember these.
 3. Access the cluster as follows:
     ```
@@ -36,8 +36,8 @@ We currently only support this demo on these servers.
 In this part, you will use the Continuum framework to deploy Kubernetes in the Compute Continuum.
 You should already have received an explanation about this during the presentation.
 
-1. Deploy the prepared configuration: `python3 continuum.py configuration/tutorial-ds.cfg`. It will take ~10 minutes to finish, so don't worry if it seems like the program is hanging. Contact the teaching staff if an error appears.
-2. Open an SSH connection in a new terminal to nodeX and inspect the configuration (`cat configuration/tutorial-ds.cfg`). This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much fewer resources. On these VMs, Continuum will deploy a Kubernetes cluster of 1 control node and 1 worker node. The control node controls the cluster, and only the worker node can execute applications. Finally, Continuum runs a benchmark with an image-classification application. With this, you emulate a camera device (endpoint) that generates 5 images per second for 1 minute, and each image will be analyzed using machine learning on the cloud machine. You will test how well the application can be offloaded to the cloud.
+1. Deploy the prepared configuration: `python3 continuum.py configuration/tutorial-ds.cfg`. It will take ~10 minutes to finish, so don't worry if the program seems to be hanging. Contact the teaching staff if an error appears.
+2. Open an SSH connection in a new terminal to nodeX and inspect the configuration (`cat configuration/tutorial-ds.cfg`). This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much fewer resources. On the cloud VMs, Continuum will deploy a Kubernetes cluster of 1 control node and 1 worker node. The control node controls the cluster, and only the worker node can execute applications. Finally, Continuum runs a benchmark with an image classification application. This application emulates a camera (endpoint VM) that generates 5 images per second for 1 minute, and each image is analyzed using machine learning on the cloud worker node. You will test how well the application can be offloaded to the cloud.
 3. After the framework run has been completed, you will get output similar to this:
     ```
     ------------------------------------
