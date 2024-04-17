@@ -41,7 +41,11 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    settings = [["frequency", int, lambda x: x >= 1, True, None]]
+    settings = [
+        ["frequency", int, lambda x: x >= 1, True, None],
+        ["duration", int, lambda x: x >= 1, False, 300],
+    ]
+
     return settings
 
 

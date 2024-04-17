@@ -12,8 +12,12 @@ import requests
 FREQUENCY = int(os.environ["FREQUENCY"])
 CLOUD_CONTROLLER_IP = os.environ["CLOUD_CONTROLLER_IP"]
 
+if "DURATION" in os.environ:
+    DURATION = int(os.environ["DURATION"])
+else:
+    DURATION = 300
+
 # Set how many imgs to send, and how often
-DURATION = 300
 SEC_PER_FRAME = float(1 / FREQUENCY)
 MAX_IMGS = FREQUENCY * DURATION
 
