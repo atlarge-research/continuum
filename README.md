@@ -1,329 +1,142 @@
 # Continuum
-Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
-Continuum offers the following features:
+For information on how the Continuum framework works, please see the main branch of this repository.
 
-1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
-2. Users can freely configure the specifications of the virtual machines and the network connecting them through a single configuration file.
-3. Continuum automatically installs operating services, resource managers, and applications inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
-4. Continuum can automatically benchmark the resource managers and applications installed in the emulated cluster, and report metrics and logs back to the user.
-5. Continuum is easily extendable, allowing users to add support for more infrastructure providers, operating services, resource managers, and applications.
+---
+# Demo
+**This demo is meant to be given in person.** \
+**If you are interested in using Continuum and not attending an in-person demo, please see the main branch.**
 
-## Features
-Continuum supports the following software:
+This demo consists of three parts:
+1. Access the servers
+2. Deploy Kubernetes with Continuum
+3. Inspect Kubernetes by hand
+4. Observe Kubernetes with Grafana
 
-1. **Infrastructure**: Virtual machine provisioning through QEMU/KVM on local bare-metal devices.
-2. **Operating Services**: Continuum can set up an MQTT broker on edge device for lightweight communication to endpoint users.
-3. **Resource Manager**: Continuum can deploy containerized applications via Docker and Containerd using the resource managers Kubernetes and KubeEdge. OpenFaaS is supported for deploying serverless functions.
-4. **Applications and application back-ends**: Continuum supports any application that can be deployed on VMs, containers, or serverless functions. As an example, a machine learning application is included.
+### Part 1: Access the servers
+For this demo, you will get access to servers at the VU. \
+We currently only support this demo on these servers.
 
-## How it works
-Continuum has the following architecture:
+1. Send a public SSH key to the email address mentioned in the presentation of this demo. If you don't yet have a key, generating a new one can be as simple as executing `ssh-keygen`. Otherwise, search online on how to generate a new SSH key for your operating system or ask another student in the demo session. On Debian/Ubuntu-based systems, ssh keys are stored in `~/.ssh`. The default key is named `id_rsa.pub`; you can display the key with `cat id_rsa.pub`.
+2. You will receive a username `cont-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`. Remember these.
+3. Access the cluster as follows:
+    ```
+    ssh -i /path/to/your/ssh/key/key.pub cont-nX-Y@al01.anac.cs.vu.nl
+    # Example: ssh -i ~/.ssh/id_rsa.pub cont-n6-2@al01.anac.cs.vu.nl
 
-<div align="center">
-    <img src="./docs/images/architecture.png" width = "50%" align="center">
-</div>
-<br>
+    # Now you are on the head node of the cluster, which should not be used for the demo.
+    # From here, you need to jump to the server you will use for the demo
+    ssh nodeX
+    ```
+    Fill in the missing parts of the commands (e.g., X, Y, the path to your key). \
+    You may need to pass your key with or without the .pub extension, this is operating systems-specific.
+4. Now you are in your home directory on the node. The Continuum repository should already be cloned for you, you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo.
 
-The execution flow consists of three phases, each having a configuration and execution step. These phases are **infrastructure deployment**, **software installation**, and **benchmarking**. Each phase is optional, i.e., the framework can be used for infrastructure deployment without any pre-installed software if so desired.
+### Part 2: Deploy Kubernetes with Continuum
+In this part, you will use the Continuum framework to deploy Kubernetes in the Compute Continuum.
+You should already have received an explanation about this during the presentation.
 
-1. **Infrastructure configuration:** Libvirt configuration files for QEMU/KVM are created based on the user's preferences.
-2. **Infrastructure execution:** The configuration files are executed, creating QEMU/KVM virtual machines connected through network bridges.
-3. **Software configuration:** Ansible is configured for software installation based on the configured infrastructure.
-4. **Software execution:** Ansible playbooks are executed, installing operating services and resource management software on each machine. This step includes setting up resource management clusters such as Kubernetes.
-5. **Benchmark configuration** The benchmark is configured and prepared based on the user's preferences.
-6. **Benchmark execution:** Applications (encapsulated in containers) are executed using resource managers running on the emulated infrastructure (Kubernetes, KubeEdge, etc.). Meanwhile, application- and system-level metrics are captured, processed, and presented to the user.
+1. Deploy the prepared configuration: `python3 continuum.py configuration/tutorial.cfg`. It will take ~10 minutes to finish, so don't worry if the program seems to be hanging. Contact the teaching staff if an error appears.
+2. Open an SSH connection in a new terminal to nodeX and inspect the configuration (`cat configuration/tutorial.cfg`). This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much fewer resources. On the cloud VMs, Continuum will deploy a Kubernetes cluster of 1 control node and 1 worker node. The control node controls the cluster, and only the worker node can execute applications. Finally, Continuum runs a benchmark with an image classification application. This application emulates a camera (endpoint VM) that generates 5 images per second for 1 minute, and each image is analyzed using machine learning on the cloud worker node. You will test how well the application can be offloaded to the cloud.
+3. After the framework run has been completed, you will get output similar to this:
+    ```
+    ------------------------------------
+    CLOUD OUTPUT
+    ------------------------------------
+    worker_id  total_time (s)  delay_avg (ms)  delay_stdev (ms)  proc_time/data (ms)
+            0            61.4          123.85             34.06                125.1
+    ------------------------------------
+    ENDPOINT OUTPUT
+    ------------------------------------
+    connected_to  total_time (s)  preproc_time/data (ms)  data_size_avg (kb)  latency_avg (ms)
+                0           61.73                    1.31               68.01            296.55
 
-## Who Uses Continuum
-The Continuum framework has been used for scientific research, leading to (i) publications, (ii) Bachelor and Master of Science projects and theses, (iii) has been the topic of multiple demos, and (iv) has been awarded artifact reproducibility badges. More information on the Continuum project and its contributors can be found [here](https://atlarge-research.com/continuum/).
+    To access the VMs:
+        ssh cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+        ssh cloud0_matthijs@192.168.100.3 -i /home/matthijs/.ssh/id_rsa_continuum
+        ssh endpoint0_matthijs@192.168.100.4 -i /home/matthijs/.ssh/id_rsa_continuum
 
-### Citation
-When using Continuum for research, please cite the work as follows:
+    To access Grafana: ssh -L 3000:192.168.100.3:3000 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+    To access Prometheus: ssh -L 9090:192.168.100.3:9090 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
+    ```
+    For this example, 1 endpoint offloads its data to 1 cloud worker for 1 minute. The endpoint generates 5 images per second, preprocesses each image for 1.3 ms on average (e.g., compressing data before sending), and sends the data of 68 kb per image on average to the cloud, which takes 123 ms on average to arrive in the cloud. Then, the cloud processes the image for 125 ms and sends the result back to the endpoint, for a total end-to-end latency of 296 ms. The end-to-end latency is the time between (i) an endpoint generating an image and (ii) the endpoint receiving the processed output for that image. Depending on your application, you can now decide if 296 ms is a good enough latency or not.
+
+### Part 3: Inspect Kubernetes by hand
+In this part, you will inspect the Kubernetes cluster running on the provisioned VMs to see what the cluster does under the hood. 
+
+1. SSH into the cloud_controller VM, which hosts Kubernetes' control plane. Use the SSH command related to the cloud_controller VM that should be printed at the bottom of Continuum's output. For the provided example above, this is `ssh cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum`. If you can't find the output of your Continuum run anymore, it is also saved in `continuum/logs/`.
+2. The main tool for users to inspect the current state of Kubernetes is called `kubectl`, which is installed in the cloud_controller VM. You can find a cheat sheet for kubectl here: https://kubernetes.io/docs/reference/kubectl/cheatsheet/#viewing-and-finding-resources. Try to answer the following questions using kubectl (hint: You need to use `kubectl get ...` or `kubectl describe ...` for all questions):
+    1. How many nodes are in the Kubernetes cluster? And what is their name?
+    2. How many applications are registered in the cluster?
+    3. What is the current state of the application(s)? Are they still running or already finished?
+    4. What is the output of these application(s)?
+    5. How many resources did these applications use in terms of CPU and memory?
+    6. Are there any other applications running on the worker node in the cluster?
+    7. What control plane applications has Kubernetes running on the cloud_controller? Hint: these applications are deployed in the `kube-system` namespace.
+
+### Part 4: Observe Kubernetes with Grafana
+Continuum has installed Prometheus (https://prometheus.io/) and Grafana (https://grafana.com/) in the VM where Kubernetes' control plane runs. The former captures logs from Kubernetes, the latter visualizes these logs. In this step, you will inspect the current state of Kubernetes using Grafana Dashboards, with graphs and tables showing live Kubernetes metrics. You will open these dashboards on your own computer as the cluster does not have a screen to look at.
+
+Grafana is running on the cloud_controller VM, so we have to forward the data it is generating to your own computer using SSH port-forwarding.
+1. In a new terminal, SSH to your assigned node using these commands:
+    ```
+    # From your local computer to the head node of the VU cluster:
+    ssh -L 3000:192.168.ZZZ.2:3000 -i /path/to/your/ssh/key/key.pub cont-nX-Y@al01.anac.cs.vu.nl
+
+    # Then, to the node where you run Continuum:
+    ssh -L 3000:192.168.ZZZ.2:3000 nodeX
+
+    # Then, from the node where Continuum runs to the cloud controller VM
+    ssh -L 3000:192.168.ZZZ.2:3000 cloud_controller_cont-nX-Y@192.168.ZZZ.2 -i ~/.ssh/id_rsa_continuum
+    ```
+    The first two SSH commands are similar to those you use to access the cluster, as described in section 1.3. The last command is printed at the end of the Continuum run, see `continuum/logs/`. NOTE: The IP in the -L argument should end with .2, not .3 as printed by Continuum, this is a bug. For more information on the variables X, Y, and Z, see section 1.2.
+3. Now, you can interact with Grafana on your own computer. Go to `http://localhost:3000` in a browser. This will open the Grafana dashboard that visualizes the state of your cluster and the applications running in your cluster. Log in with username and password `admin`, and skip creating a new password.
+4. Go to 'dashboard' (the icon with the 4 boxes in the left navigation bar) -> manage -> default to open the available Granafa dashboards (different graphs and overviews).
+5. You can open any dashboard, such as:
+    1. Kubernetes/Compute Resources/Cluster: See the resource usage of all pods in the cluster. Pods are grouped here in namespaces -> default contains the user's applications (the one you just deployed), kube-system contains Kubernetes' control plane components, monitoring contains Prometheus' and Grafana's applications used to get the data used in these dashboards, etc. 
+    2. Kubernetes/Compute Resources/Node (Pods): See the resource usage per node. If you select node -> cloud0<username> in the top left corner, you will see the resource usage of the worker node where you deployed your applications. If you select node -> cloudcontroller<username>, you will see the resource usage of the control plane components of Kubernetes. Alternatively, use Default/Node Exporter/Nodes for a different overview.
+    3. Kubernetes/Compute Resources/Pod: See the resource usage of individual pods. You can select what pod you want to analyze in the top left corner.
+    4. Kubernetes/Networking/Cluster: See the network traffic within the cluster and to sources outside of the cluster.
+6. Important: You can select in the top right corner of each dashboard the time range you want to see data in. You may want to see all data produced in the last hour, or maybe only from the last 5 minutes.
+7. Keep the Grafana dashboard open for the remainder of the tutorial.
+
+### Part 5: Deploy a new application
+Finally, you will deploy a new application on the Kubernetes cluster. We will not use the endpoint virtual machine anymore. The application still uses image classification but generates and processes data all by itself. This approach is similar to big data processing in the cloud, where the cloud already has data that needs to be processed and there is no need for endpoint devices to send live data to the cloud.
+
+1. Create a new Kubernetes deployment file while in the cloud_controller VM:
 ```
-@inproceedings{2023-jansen-continuum,
-    author    = {Matthijs Jansen and
-                 Linus Wagner and
-                 Animesh Trivedi and
-                 Alexandru Iosup},
-    title     = {Continuum: Automate Infrastructure Deployment and Benchmarking in the Compute Continuum},
-    booktitle = {Proceedings of the First FastContinuum Workshop, in conjuncrtion with ICPE, Coimbra, Portugal, April, 2023},
-    year      = {2023},
-    url       = {https://atlarge-research.com/pdfs/2023-fastcontinuum-continuum.pdf},
-}
-```
-The presentation slides of this work can be found [here](https://atlarge-research.com/talks/2023-continuum-framework-fastcontinuum.html)
-
-Other work on the Continuum framework includes:
-```
-@inproceedings{2023-jansen-refarch,
-    author    = {Matthijs Jansen and
-                 Auday Al-Duilamy and
-                 Allesandro Vittorio Papadopoulos and
-                 Animesh Trivedi and
-                 Alexandru Iosup},
-    title     = {The {SPEC-RG} Reference Architecture for the Compute Continuum},
-    booktitle = {The 23rd IEEE/ACM International Symposium on Cluster, Cloud and Internet Computing, CCGRID 2023, Bangalore, India, May 1-4, 2023},
-    year      = {2023},
-    url       = {https://atlarge-research.com/pdfs/2023-ccgrid-refarch.pdf},
-}
-```
-The presentation slides of this work can be found [here](https://atlarge-research.com/talks/pres-2022-compsys-mjansen.html) and [here](https://atlarge-research.com/talks/poster-2022-ictopen-mjansen.html).
-
-### Student Work
-The Continuum framework has been used by many students from the Vrije University Amsterdam:
-
-**Bachelor Thesis**
-* Daniel Berzak: Embedded Domain Specific Language: A Streamlined Approach for Framework Abstraction
-
-**Master Thesis**
-* Edgardo Reinoso Campos: Serverless Computing at the Edge in Precise Agriculture (ongoing)
-* Antonios Sklavos: Exploring the Performance-Isolation Trade-off for Isolation Mechanisms (ongoing)
-* Tim van Kemenade: A Comparison of Scheduling Algorithms in the Compute Continuum (ongoing)
-
-**Student Research Projects**
-* Felix Goosens: Edge Continuum Framework on an ARM Raspberry Pi Cluster
-* David Freina et al: Serverless Computing in the Edge Continuum
-* Andreas Frangos et al: Performance Variability and Resource Analysis in Serverless Applications
-
-### Demo
-The Continuum framework has been part of four classes with a demo, organized by the VU Amsterdam Bachelor and Master program Computer Science, as well as the Dutch Research School for high-quality research and education in computer systems and Imaging (ASCI).
-
-for over 100 students and researchers in total. Specifically, it has been demoed in the following occasions:
-* Distributed Systems (2021) - Part of the VU Amsterdam MSc program Computer Science
-* ASCI A24 (2022) - A course in the Dutch Research School for high-quality research and education in computer systems and Imaging (ASCI)
-* Distributed Systems (2022) - Part of the VU Amsterdam MSc program Computer Science
-* ASCI A22 (2023) - A course in the Dutch Research School for high-quality research and education in computer systems and Imaging (ASCI)
-* Computer Networks (2023) - Part of the VU Amsterdam BSc program Computer Science
-
-<p>
-  <img src="./docs/images/Open_Research.png" width="100" align="right" />
-  <img src="./docs/images/Research_Objects.png" width="100" align="right" />
-</p>
-
-### Artifact
-The Continuum framework has been awarded the IEEE reproducibility badges for Open Research Objects (ORO) and Reusable/Research Objects Reviewed (ROR).
-These badges have been awarded by independent reviewers as part of the CCGRID 2023 Artifact Track.
-For more information on these badges, see [here](https://ccgrid2023.iisc.ac.in/call-for-artifacts/).
-The code and instructions for this artifact are available on GitHub [here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation). 
-
-## Demo
-Continuum supports multiple virtual machine infrastructure deployment platforms, most notably QEMU for execution on local hardware or Google Cloud for execution in the cloud.
-In this demo, we present how to use Continuum using QEMU. 
-If you want to use Google Cloud instead, which requires much fewer installation steps, please see the extensive README [here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation).
-
-This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
-We recommend running the demo on an Ubuntu 20.04 machine. 
-If you don't have access to such a machine, see the Appendix for tips on how to install this in a VM.
-We recommend installing the framework bare-metal for more reliable performance metrics.
-
-The demo contains two parts:
-
-1. Install the framework
-2. Use the framework
-
-In part one, we install the Continuum framework and use the framework in part 2.
-The framework does support execution on multiple physical machines through a network bridge.
-We leave this multi-machine execution out of this tutorial; consult the documentation for more information.
-For more questions, open a GitHub Issue or mail m.s.jansen@vu.nl.
-
-Software versions tested:
-
-- QEMU 6.1.0
-- Libvirt 6.0.0
-- Docker 20.10.12
-- Python 3.8.10
-- Ansible 2.13.2
-
-### Part 1: Install the framework
-We start by installing all requirements for the Continuum framework.
-We assume the operating system is Ubuntu 20.04, either natively or via a VM.
-
-```bash
-# 1. Install the VM requirements
-sudo apt update
-sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
-
-# 1.1. Give your user sufficient permissions
-# After these steps, refresh you session to make the group addition take effect.
-sudo adduser $USER libvirt
-sudo adduser $USER kvm
-
-# 1.2. Check if the installation was succesful
-# If not, you may need to use `sudo systemctl enable --now libvirtd`
-qemu-system-x86_64 --version
-sudo systemctl status libvirtd
-
-# 1.3. Force libvirt to use QEMU.
-echo 'export LIBVIRT_DEFAULT_URI="qemu:///system"' >> ~/.bashrc
-source ~/.bashrc
-
-# 2. Install Docker (see Docker website for alternative instructions)
-sudo apt-get install ca-certificates curl gnupg lsb-release
-
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-
-echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
-    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt-get update
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-# After these steps, refresh you session to make the group addition take effect.
-sudo groupadd docker
-sudo usermod -aG docker $USER
-sudo systemctl enable docker.service
-sudo systemctl enable containerd.service
-# Now refresh you SSH session by logging in / out
-
-# Continuum creates a local docker registry using http
-# Http support needs to be enabled
-http_ip=$(hostname -I | awk '{print $1;}')
-echo '{ "insecure-registries":["${http_ip}:5000"] }' | sudo tee -a /etc/docker/daemon.json
-sudo systemctl restart docker
-
-# 3. Install the Continuum framework
-mkdir ~/.ssh
-touch ~/.ssh/known_hosts
-
-git clone https://github.com/atlarge-research/continuum.git
-cd continuum
-
-# 4. Install Python and some packages, including Ansible
-sudo apt install python3 python3-pip
-pip3 install -r requirements.txt
-
-# 5. Edit the Ansible configuration as follows:
-# Under `[defaults]`, add `callback_enabled = profile_tasks`
-# Under `[defaults]`, add `command_warnings = False`
-sudo vim /etc/ansible/ansible.cfg
-
-# 6. Setup up bridged networking on the machine
-# First, delete any virtual bridges
-virsh net-destroy default
-virsh net-undefine default
-
-# Check that no bridges exist anymore
-virsh net-list --all
-
-# Now create the new bridge itself
-# Make a backup of the old network settings, then edit the new one
-# Use `ip -a` to find the name of your network interface, for example, ens3
-# and to find its IP, for example, 10.0.2.15
-# Find the gateway address using `ip r` (the first IP on the first line)
-# An example command could look like this:
-sudo cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak
-
-sudo su
-cat > /etc/netplan/00-installer-config.yaml <<EOF
-network:
-    ethernets:
-    ens3:
-        dhcp4: false
-        dhcp6: false
-    bridges:
-    br0:
-        interfaces: [ens3]
-        addresses: [10.0.2.15/16]
-        gateway4: 10.0.2.2
-        nameservers:
-        addresses: [1.1.1.1, 8.8.8.8]
-        search: []
-        parameters:
-        stp: true
-        dhcp4: false
-        dhcp6: false
-    version: 2
+cat > ~/new_job.yaml <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: image-classification-2
+spec:
+  parallelism: 2
+  template:
+    metadata:
+      name: image-classification
+    spec:
+      containers:
+      - name: image-classification
+        image: 192.168.1.103:5000/image_classification_combined
+        ports:
+        - containerPort: 1883
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "2000Mi"
+            cpu: 1.0
+        env:
+        - name: CPU_THREADS
+          value: "1"
+        - name: DURATION
+          value: "60"
+        - name: FREQUENCY
+          value: "5"
+      restartPolicy: Never
 EOF
-exit
-
-# Apply the changes
-sudo netplan generate
-sudo netplan apply
-
-# Check if the bridge br0 was successfully created
-# And check that the network interface, for example, ens3, doesn't have an IP listed anymore, but br0 does instead.
-brctl show
-ip a
-
-# Enable IP forwarding
-sudo su
-cat >> /etc/sysctl.conf <<EOF
-net.bridge.bridge-nf-call-ip6tables = 0
-net.bridge.bridge-nf-call-iptables = 0
-net.bridge.bridge-nf-call-arptables = 0
-EOF
-exit
-
-# Then execute this command
-sudo sysctl -p /etc/sysctl.conf
 ```
-
-### Part 2: Use the framework
-Continuum comes with many pre-made configuration files that can be used to deploy infrastructures and benchmark with Continuum. You can find these files in `/configuration`.
-For example:
-1. Go the the continuum framework: `cd continuum`
-2. Check how the framework can be used: `python3 continuum.py --help`
-3. We use a configuration that deploys 2 virtual machines, installs Kubernetes on them, and starts a third machine that emulates an IoT device that sends data periodically to the Kubernetes cluster for processing. The framework starts a processing application on the cluster, which processes the incoming data and sends the result back to the IoT device: `python3 continuum.py configuration/bench_cloud.cfg`.
-4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
-
-Please explore what the Continuum framework can do, see `configuration/template.cfg` for a list of all configuration parameters. These include deploying infrastructure on Google Cloud, installing Prometheus and Grafana on VMs, or running serverless benchmarks. All components can be easily extended - open a GitHub Issue or send us a mail at m.s.jansen@vu.nl if you have any questions.
-
-### Appendix
-The Continuum framework is supposed to be run from an Ubuntu-like operating system.
-The framework has been extensively tested on Ubuntu 20.04.
-In this part, we show how to create an Ubuntu 20.04 VM that you can use to run Continuum in.
-This example is supposed to be executed on a Linux machine.
-```bash
-# 1. Install the VM software QEMU, KVM, and Libvirt
-sudo apt update 
-sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
-
-# Give your user sufficient permissions - this may require you to refresh your session
-sudo adduser $USER libvirt
-sudo adduser $USER kvm
-
-# Exit your shell and open a new one for the permissions to take effect
-
-# Check if the installation was succesful
-# If not, you may need to use `sudo systemctl enable --now libvirtd`
-qemu-system-x86_64 --version
-sudo systemctl status libvirtd
-
-# Download the Ubuntu 20.04 server image
-wget https://releases.ubuntu.com/20.04.3/ubuntu-20.04.3-live-server-amd64.iso
-
-# Create a QCOW disk as storage for your VM (at least 20 GB of disk space is advised)
-qemu-img create -f qcow2 ubuntu.img 20G
-
-#############
-# Boot the VM
-#############
-# 1. On a system with a GUI
-# - This will open a new window for the VM
-# - Use at least 4 GB of RAM and 4 CPUs
-sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user
-#############
-# 2. On a system without a GUI
-sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -boot d -cdrom ubuntu-20.04.3-live-server-amd64.iso -cpu host -net nic -net user,hostfwd=tcp::7777-:22
-# 2.1. Access the VM from an OS with GUI: You can now SSH in to machine
-ssh -p 7777 ubuntu@127.0.0.1
-# 2.2 On the VM, execute remmina so you can see the GUI of the VM on your machine
-sudo apt install remmina
-remmina
-# 2.3 This should open the Remmina screen for you. Click on the + icon to create a new connection. Under protocol, select “VNC”, and then under server, add the VNC address displayed in the terminal where you started the VM (for example, 127.0.0.1:5900). Click save and connect to connect to the VM.
-#############
-
-# Finish the initialization of the VM
-# Don't forget to install the open-SSH client during the installation
-# Then, shut the VM down and re-launch
-sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -cpu host -net nic -net user,hostfwd=tcp::7777-:22 --name ubuntu
-
-# On a system with a GUI: The VM should open automatically
-# On a system without a GUI: 
-ssh [username]@localhost -p 7777
-```
-
-# Acknowledgment
-This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
+2. Inspect the file: You will deploy 2 (`parallelism: 2`) applications, specifically the `image_classification_combined` container image. Each application will have 2 GB of memory (`memory: "2000Mi"`) and 1 CPU core (`cpu: 1.0`). The application will process 5 images per second (`FREQUENCY value: "5"`) for 60 seconds (`DURATION value: "60"`).
+3. Deploy the application: `kubectl apply -f new_job.yml`
+4. Check that the new applications (2 pods) are running using the correct kubectl commands.
+5. Check the application's output using the correct kubectl command.
+6. See in Grafana if you can monitor the live resource usage from the 2 applications. Is there a difference in resource usage between the applications?
