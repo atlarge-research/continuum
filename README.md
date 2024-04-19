@@ -1,43 +1,40 @@
-# Continuum
-For information on how the Continuum framework works, please see the main branch of this repository.
-
----
-# Demo
+# Continuum Demo
 **This demo is meant to be given in person.** \
-**If you are interested in using Continuum and not attending an in-person demo, please see the main branch.**
+**Please see the main branch if you want to use Continuum and are not attending an in-person demo.**
 
-This demo consists of three parts:
+This demo consists of five parts:
 1. Access the servers
 2. Deploy Kubernetes with Continuum
 3. Inspect Kubernetes by hand
 4. Observe Kubernetes with Grafana
+5. Deploy a new application on Kubernetes
 
 ### Part 1: Access the servers
-For this demo, you will get access to servers at the VU. \
+For this demo, you will get access to servers at the VU Amsterdam. \
 We currently only support this demo on these servers.
 
-1. Send a public SSH key to the email address mentioned in the presentation of this demo. If you don't yet have a key, generating a new one can be as simple as executing `ssh-keygen`. Otherwise, search online on how to generate a new SSH key for your operating system or ask another student in the demo session. On Debian/Ubuntu-based systems, ssh keys are stored in `~/.ssh`. The default key is named `id_rsa.pub`; you can display the key with `cat id_rsa.pub`.
+1. Send a public SSH key to the email address mentioned in the presentation of this demo. If you don't yet have an SSH key, generating a new one can be as simple as executing `ssh-keygen` in a terminal. Otherwise, search online how to generate an SSH key for your operating system or ask another student in the demo session. On Debian/Ubuntu-based systems, ssh keys are stored in `~/.ssh`. The default key is named `id_rsa.pub`; you can display this key with `cat id_rsa.pub`.
 2. You will receive a username `cont-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`. Remember these.
 3. Access the cluster as follows:
     ```
     ssh -i /path/to/your/ssh/key/key.pub cont-nX-Y@al01.anac.cs.vu.nl
     # Example: ssh -i ~/.ssh/id_rsa.pub cont-n6-2@al01.anac.cs.vu.nl
 
-    # Now you are on the head node of the cluster, which should not be used for the demo.
+    # Now, you are on the head node of the cluster, which should not be used for the demo.
     # From here, you need to jump to the server you will use for the demo
     ssh nodeX
     ```
     Fill in the missing parts of the commands (e.g., X, Y, the path to your key). \
-    You may need to pass your key with or without the .pub extension, this is operating systems-specific.
-4. Now you are in your home directory on the node. The Continuum repository should already be cloned for you, you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo.
+    You may need to pass your key with or without the .pub extension; this is operating systems-specific.
+4. Now, you are in your home directory on the node. The Continuum repository should already be cloned for you; you can check this with `ls`. Move into the repository with `cd continuum` and continue with part 2 of the demo. If the Continuum repository is not present, please contact the teaching staff.
 
 ### Part 2: Deploy Kubernetes with Continuum
 In this part, you will use the Continuum framework to deploy Kubernetes in the Compute Continuum.
-You should already have received an explanation about this during the presentation.
+You should have received an explanation about this in the presentation before the demo.
 
 1. Deploy the prepared configuration: `python3 continuum.py configuration/tutorial.cfg`. It will take ~10 minutes to finish, so don't worry if the program seems to be hanging. Contact the teaching staff if an error appears.
-2. Open an SSH connection in a new terminal to nodeX and inspect the configuration (`cat configuration/tutorial.cfg`). This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much fewer resources. On the cloud VMs, Continuum will deploy a Kubernetes cluster of 1 control node and 1 worker node. The control node controls the cluster, and only the worker node can execute applications. Finally, Continuum runs a benchmark with an image classification application. This application emulates a camera (endpoint VM) that generates 5 images per second for 1 minute, and each image is analyzed using machine learning on the cloud worker node. You will test how well the application can be offloaded to the cloud.
-3. After the framework run has been completed, you will get output similar to this:
+2. While Continuum is starting VMs, open an SSH connection to nodeX in a new terminal and inspect the configuration (`cat configuration/tutorial.cfg`). This configuration tells Continuum to create 2 VMs of type cloud, with 4 CPU cores and 16 GB memory each, and one VM of type endpoint with much fewer resources. On the cloud VMs, Continuum will deploy a Kubernetes cluster of 1 control node and 1 worker node. The control node controls the cluster, and the worker node executes applications. Finally, Continuum runs a benchmark with an image classification application. This application emulates a camera on the endpoint VM that generates 5 images per second for 1 minute. Each image is analyzed using machine learning on the cloud worker node. You will test how well the application can be offloaded to the cloud.
+3. After Continuum has provisioned the VMs and executed the benchmark, you will get output similar to this:
     ```
     ------------------------------------
     CLOUD OUTPUT
@@ -58,7 +55,11 @@ You should already have received an explanation about this during the presentati
     To access Grafana: ssh -L 3000:192.168.100.3:3000 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
     To access Prometheus: ssh -L 9090:192.168.100.3:9090 cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum
     ```
-    For this example, 1 endpoint offloads its data to 1 cloud worker for 1 minute. The endpoint generates 5 images per second, preprocesses each image for 1.3 ms on average (e.g., compressing data before sending), and sends the data of 68 kb per image on average to the cloud, which takes 123 ms on average to arrive in the cloud. Then, the cloud processes the image for 125 ms and sends the result back to the endpoint, for a total end-to-end latency of 296 ms. The end-to-end latency is the time between (i) an endpoint generating an image and (ii) the endpoint receiving the processed output for that image. Depending on your application, you can now decide if 296 ms is a good enough latency or not.
+    Here, we see benchmark statistics for the image classification application that offloaded images from 1 endpoint VM to 1 cloud worker VM with Kubernetes.
+    The endpoint preprocesses each generated image for 1.3 ms on average (e.g., compressing data before sending) before sending the image, which has an average size of 68 kb, to the cloud, which takes 123 ms on average to arrive.
+    Then, the cloud processes the image for 125 ms and sends the result back to the endpoint for a total end-to-end latency of 296 ms.
+    The end-to-end latency is the time between (i) an endpoint generating an image and (ii) the endpoint receiving the processed output for that image.
+    Depending on your application, we can decide whether 296 ms latency is satisfactory or not.
 
 ### Part 3: Inspect Kubernetes by hand
 In this part, you will inspect the Kubernetes cluster running on the provisioned VMs to see what the cluster does under the hood. 
@@ -99,7 +100,7 @@ Grafana is running on the cloud_controller VM, so we have to forward the data it
 6. Important: You can select in the top right corner of each dashboard the time range you want to see data in. You may want to see all data produced in the last hour, or maybe only from the last 5 minutes.
 7. Keep the Grafana dashboard open for the remainder of the tutorial.
 
-### Part 5: Deploy a new application
+### Part 5: Deploy a new application on Kubernetes
 Finally, you will deploy a new application on the Kubernetes cluster. We will not use the endpoint virtual machine anymore. The application still uses image classification but generates and processes data all by itself. This approach is similar to big data processing in the cloud, where the cloud already has data that needs to be processed and there is no need for endpoint devices to send live data to the cloud.
 
 1. Create a new Kubernetes deployment file while in the cloud_controller VM:
