@@ -66,13 +66,13 @@ In this part, you will inspect the Kubernetes cluster running on the provisioned
 
 1. SSH into the cloud_controller VM, which hosts Kubernetes' control plane. Use the SSH command related to the cloud_controller VM that should be printed at the bottom of Continuum's output. For the provided example above, this is `ssh cloud_controller_matthijs@192.168.100.2 -i /home/matthijs/.ssh/id_rsa_continuum`. If you can't find the output of your Continuum run anymore, it is also saved in `continuum/logs/`.
 2. The main tool for users to inspect the current state of Kubernetes is called `kubectl`, which is installed in the cloud_controller VM. You can find a cheat sheet for kubectl here: https://kubernetes.io/docs/reference/kubectl/cheatsheet/#viewing-and-finding-resources. Try to answer the following questions using kubectl (hint: You need to use `kubectl get ...` or `kubectl describe ...` for all questions):
-    1. How many nodes are in the Kubernetes cluster? And what is their name?
-    2. How many applications are registered in the cluster?
+    1. How many nodes are in the Kubernetes cluster? And what are their names?
+    2. How many applications are running or have run in the cluster?
     3. What is the current state of the application(s)? Are they still running or already finished?
     4. What is the output of these application(s)?
-    5. How many resources did these applications use in terms of CPU and memory?
-    6. Are there any other applications running on the worker node in the cluster?
-    7. What control plane applications has Kubernetes running on the cloud_controller? Hint: these applications are deployed in the `kube-system` namespace.
+    5. How many CPU and memory resources did these applications use?
+    6. Are there any other applications running on the worker node? (hint: look in a different namespace)
+    7. Are there any applications running on the cloud_controller VM? If so, what is their function? (hint: look in a different namespace)
 
 ### Part 4: Observe Kubernetes with Grafana
 Continuum has installed Prometheus (https://prometheus.io/) and Grafana (https://grafana.com/) in the VM where Kubernetes' control plane runs. The former captures logs from Kubernetes, the latter visualizes these logs. In this step, you will inspect the current state of Kubernetes using Grafana Dashboards, with graphs and tables showing live Kubernetes metrics. You will open these dashboards on your own computer as the cluster does not have a screen to look at.
