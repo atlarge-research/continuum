@@ -21,13 +21,6 @@ Continuum supports the following software:
 4. **Applications and application back-ends**: Continuum supports any application that can be deployed on VMs, containers, or serverless functions. As an example, a machine learning application is included.
 
 ## How it works
-Continuum has the following architecture:
-
-<div align="center">
-    <img src="./docs/images/architecture.png" width = "50%" align="center">
-</div>
-<br>
-
 The execution flow consists of three phases, each having a configuration and execution step. These phases are **infrastructure deployment**, **software installation**, and **benchmarking**. Each phase is optional, i.e., the framework can be used for infrastructure deployment without any pre-installed software if so desired.
 
 1. **Infrastructure configuration:** Libvirt configuration files for QEMU/KVM are created based on the user's preferences.
