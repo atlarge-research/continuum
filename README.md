@@ -1,5 +1,9 @@
-# Continuum
-Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
+# Columbo
+Columbo is a reasoning framework to detect and resolve performance bottlenecks in pipeline stages using Kubernetes' configuration parameters.
+
+**NOTE** This is an anonymized GitHub repository. Parts of the README and framework may have been hidden to keep anonymity. Thank you for your understanding.
+
+Columbo is built on top of Continuum. Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
 Continuum offers the following features:
 
 1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
@@ -33,82 +37,10 @@ The execution flow consists of three phases, each having a configuration and exe
 5. **Benchmark configuration** The benchmark is configured and prepared based on the user's preferences.
 6. **Benchmark execution:** Applications (encapsulated in containers) are executed using resource managers running on the emulated infrastructure (Kubernetes, KubeEdge, etc.). Meanwhile, application- and system-level metrics are captured, processed, and presented to the user.
 
-## Who Uses Continuum
-The Continuum framework has been used for scientific research, leading to (i) publications, (ii) Bachelor and Master of Science projects and theses, (iii) has been the topic of multiple demos, and (iv) has been awarded artifact reproducibility badges. More information on the Continuum project and its contributors can be found [here](https://atlarge-research.com/continuum/).
-
-### Citation
-When using Continuum for research, please cite the work as follows:
-```
-@inproceedings{2023-jansen-continuum,
-    author    = {Matthijs Jansen and
-                 Linus Wagner and
-                 Animesh Trivedi and
-                 Alexandru Iosup},
-    title     = {Continuum: Automate Infrastructure Deployment and Benchmarking in the Compute Continuum},
-    booktitle = {Proceedings of the First FastContinuum Workshop, in conjuncrtion with ICPE, Coimbra, Portugal, April, 2023},
-    year      = {2023},
-    url       = {https://atlarge-research.com/pdfs/2023-fastcontinuum-continuum.pdf},
-}
-```
-The presentation slides of this work can be found [here](https://atlarge-research.com/talks/2023-continuum-framework-fastcontinuum.html)
-
-Other work on the Continuum framework includes:
-```
-@inproceedings{2023-jansen-refarch,
-    author    = {Matthijs Jansen and
-                 Auday Al-Duilamy and
-                 Allesandro Vittorio Papadopoulos and
-                 Animesh Trivedi and
-                 Alexandru Iosup},
-    title     = {The {SPEC-RG} Reference Architecture for the Compute Continuum},
-    booktitle = {The 23rd IEEE/ACM International Symposium on Cluster, Cloud and Internet Computing, CCGRID 2023, Bangalore, India, May 1-4, 2023},
-    year      = {2023},
-    url       = {https://atlarge-research.com/pdfs/2023-ccgrid-refarch.pdf},
-}
-```
-The presentation slides of this work can be found [here](https://atlarge-research.com/talks/pres-2022-compsys-mjansen.html) and [here](https://atlarge-research.com/talks/poster-2022-ictopen-mjansen.html).
-
-### Student Work
-The Continuum framework has been used by many students from the Vrije University Amsterdam:
-
-**Bachelor Thesis**
-* Daniel Berzak: Embedded Domain Specific Language: A Streamlined Approach for Framework Abstraction
-
-**Master Thesis**
-* Edgardo Reinoso Campos: Serverless Computing at the Edge in Precise Agriculture (ongoing)
-* Antonios Sklavos: Exploring the Performance-Isolation Trade-off for Isolation Mechanisms (ongoing)
-* Tim van Kemenade: A Comparison of Scheduling Algorithms in the Compute Continuum (ongoing)
-
-**Student Research Projects**
-* Felix Goosens: Edge Continuum Framework on an ARM Raspberry Pi Cluster
-* David Freina et al: Serverless Computing in the Edge Continuum
-* Andreas Frangos et al: Performance Variability and Resource Analysis in Serverless Applications
-
-### Demo
-The Continuum framework has been part of four classes with a demo, organized by the VU Amsterdam Bachelor and Master program Computer Science, as well as the Dutch Research School for high-quality research and education in computer systems and Imaging (ASCI).
-
-for over 100 students and researchers in total. Specifically, it has been demoed in the following occasions:
-* Distributed Systems (2021) - Part of the VU Amsterdam MSc program Computer Science
-* ASCI A24 (2022) - A course in the Dutch Research School for high-quality research and education in computer systems and Imaging (ASCI)
-* Distributed Systems (2022) - Part of the VU Amsterdam MSc program Computer Science
-* ASCI A22 (2023) - A course in the Dutch Research School for high-quality research and education in computer systems and Imaging (ASCI)
-* Computer Networks (2023) - Part of the VU Amsterdam BSc program Computer Science
-
-<p>
-  <img src="./docs/images/Open_Research.png" width="100" align="right" />
-  <img src="./docs/images/Research_Objects.png" width="100" align="right" />
-</p>
-
-### Artifact
-The Continuum framework has been awarded the IEEE reproducibility badges for Open Research Objects (ORO) and Reusable/Research Objects Reviewed (ROR).
-These badges have been awarded by independent reviewers as part of the CCGRID 2023 Artifact Track.
-For more information on these badges, see [here](https://ccgrid2023.iisc.ac.in/call-for-artifacts/).
-The code and instructions for this artifact are available on GitHub [here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation). 
-
 ## Demo
 Continuum supports multiple virtual machine infrastructure deployment platforms, most notably QEMU for execution on local hardware or Google Cloud for execution in the cloud.
 In this demo, we present how to use Continuum using QEMU. 
-If you want to use Google Cloud instead, which requires much fewer installation steps, please see the extensive README [here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation).
+Continuum also supports Google Cloud - explanation has been omitted for anonymity.
 
 This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
 We recommend running the demo on an Ubuntu 20.04 machine. 
@@ -123,7 +55,6 @@ The demo contains two parts:
 In part one, we install the Continuum framework and use the framework in part 2.
 The framework does support execution on multiple physical machines through a network bridge.
 We leave this multi-machine execution out of this tutorial; consult the documentation for more information.
-For more questions, open a GitHub Issue or mail m.s.jansen@vu.nl.
 
 Software versions tested:
 
@@ -268,7 +199,7 @@ For example:
 3. We use a configuration that deploys 2 virtual machines, installs Kubernetes on them, and starts a third machine that emulates an IoT device that sends data periodically to the Kubernetes cluster for processing. The framework starts a processing application on the cluster, which processes the incoming data and sends the result back to the IoT device: `python3 continuum.py configuration/bench_cloud.cfg`.
 4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
 
-Please explore what the Continuum framework can do, see `configuration/template.cfg` for a list of all configuration parameters. These include deploying infrastructure on Google Cloud, installing Prometheus and Grafana on VMs, or running serverless benchmarks. All components can be easily extended - open a GitHub Issue or send us a mail at m.s.jansen@vu.nl if you have any questions.
+Please explore what the Continuum framework can do, see `configuration/template.cfg` for a list of all configuration parameters. These include deploying infrastructure on Google Cloud, installing Prometheus and Grafana on VMs, or running serverless benchmarks. All components can be easily extended - open a GitHub Issue or send us a mail at XXXX if you have any questions.
 
 ### Appendix
 The Continuum framework is supposed to be run from an Ubuntu-like operating system.
@@ -323,6 +254,3 @@ sudo qemu-system-x86_64 -hda ubuntu.img --enable-kvm -m 8G -smp 4 -cpu host -net
 # On a system without a GUI: 
 ssh [username]@localhost -p 7777
 ```
-
-# Acknowledgment
-This work is funded by NWO TOP OffSense (OCENW.KLEIN.209).
