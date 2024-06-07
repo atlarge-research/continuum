@@ -1,5 +1,7 @@
 #!/bin/bash
 
+mkdir -p jobs
+
 offset=$(date +%s%3N)
 while IFS=$'\t' read -r starttime bincount; do  
     # Skip initial header
@@ -32,12 +34,14 @@ while IFS=$'\t' read -r starttime bincount; do
         echo -e "\tToo late by $interval seconds"
     fi
 
+    rm -f ./jobs/*
+
     # Now execute kubectl
     echo -e "\t$bincount"
     for i in $(seq 1 $bincount); do
         id="${starttime}-$i"
 
-        cat <<EOF | kubectl apply -f - >/dev/null 2>&1 &
+        cat > ./jobs/job-$i.yaml <<EOF
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -62,9 +66,12 @@ spec:
 EOF
     done
 
+    # This can't be async, or the files get removed in the next iteration!
+    kubectl apply -f ./jobs/ >/dev/null 2>&1
+
     # Wait for all kubectl's to finish
     # If they haven't we can't replay a trace for hours because work keeps stacking up
-    wait $(jobs -p)
+    # wait $(jobs -p)
 
     if (( starttime == 10 )); then
         break
