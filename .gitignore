@@ -13,3 +13,5 @@ scripts/*.csv
 scripts/*.pdf
 *.out
 .idea
+*.csv
+*.sqlite
