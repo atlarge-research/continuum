@@ -15,12 +15,12 @@ echo "Create all config files required by CURL"
 
 while IFS=$'\t' read -r starttime bincount; do
     # Skip initial header
-    if [ $starttime = "starttime" ]; then
+    if [ "$starttime" == "starttime" ]; then
         continue
     fi
 
     # Skip 0
-    if [ $bincount = "0" ]; then
+    if [ "$bincount" == "0" ]; then
         continue
     fi
 
@@ -58,9 +58,12 @@ echo "Start executing CURL"
 #    bin, and execute CURL with the amount of jobs present in that bin.
 offset=$(date +%s%3N)
 total_jobs=0
+
+echo "Start (UTC timestamp in seconds): $(date +'%s.%N')"
+
 while IFS=$'\t' read -r starttime bincount; do  
     # Skip initial header
-    if [ $starttime = "starttime" ]; then
+    if [ "$starttime" == "starttime" ]; then
         continue
     fi
 
@@ -94,7 +97,7 @@ while IFS=$'\t' read -r starttime bincount; do
     echo -e "\tJobs: $bincount"
 
     # Skip 0
-    if [ $bincount = "0" ]; then
+    if [ "$bincount" == "0" ]; then
         continue
     fi
 
@@ -143,7 +146,7 @@ spec:
 '
 
     # For now, stop after X seconds
-    if (( starttime == $CUTOFF )); then
+    if [ "$starttime" == "$CUTOFF" ]; then
         break
     fi
 
@@ -156,3 +159,4 @@ echo "Done, wait for all background processes to finish"
 wait $(jobs -p)
 
 echo "$total_jobs jobs launched in $starttime seconds"
+echo "End (UTC timestamp in seconds): $(date +'%s.%N')"
