@@ -2,8 +2,8 @@
 
 import argparse
 import logging
-import sys
 import subprocess
+import sys
 import time
 
 
