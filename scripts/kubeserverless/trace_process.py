@@ -57,19 +57,25 @@ def plot_hist(df):
     print("Maximum: " + str(df["starttime"].max()))
     print("=========================================\n")
 
-    # 1 bin = 1/100 of a day = 14.4 minutes
-    plt.hist(df["starttime"], bins=1400)
+    # 1 bin = 15 minutes
+    plt.title("Raw data: 15 minute bins")
+    plt.hist(df["starttime"], bins=14 * 24 * 4)
     plt.show()
 
 
-def plot_line(df):
+def plot_line(df, args):
     print("=========================================")
     print(df.info)
     print("Minimum: " + str(df["starttime"].min()))
     print("Maximum: " + str(df["starttime"].max()))
     print("=========================================\n")
 
+    plt.title("All processed data: %i second bins" % (args.bin))
     plt.plot(df["starttime"], df["bincount"])
+    plt.show()
+
+    plt.title("First 100 processed data points: %i second bins" % (args.bin))
+    plt.plot(df["starttime"][:100], df["bincount"][:100])
     plt.show()
 
 
@@ -80,13 +86,7 @@ def main(arguments):
     con = sqlite3.connect(FILE)
     df = pd.read_sql_query("SELECT starttime FROM vm", con)
 
-    print("Original dataset")
-    plot_hist(df)
-
     # ----------------------------------------------------------
-    # Correct negative starttimes to positives
-    # df["starttime"] += df["starttime"][0] * -1
-
     # Ignore negative starttimes
     df = df.loc[df["starttime"] > 0.0]
     print("Removed all starttimes <0")
@@ -96,18 +96,16 @@ def main(arguments):
     # Transform from fractional days to seconds
     df["starttime"] *= 3600 * 24
     print("Transformed from fractional days to seconds")
-    plot_hist(df)
 
     # ----------------------------------------------------------
     # Bin per second
     bins = [i for i in range(0, 14 * 3600 * 24 + 1, arguments.bin)]
     bincount = df.groupby(pd.cut(df["starttime"], bins=bins)).size()
+
     df_bins = pd.DataFrame({"starttime": bincount.index, "bincount": bincount.values})
-
     df_bins["starttime"] = df_bins["starttime"].apply(lambda x: x.left)
-
-    print("Convert to bincount for %i seconds" % (arguments.bin))
-    plot_line(df_bins)
+    print("Converted to bins of %i seconds" % (arguments.bin))
+    plot_line(df_bins, arguments)
 
     # ----------------------------------------------------------
     df_bins.to_csv("packing.csv", sep="\t", encoding="utf-8", index=False)
