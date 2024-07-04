@@ -111,7 +111,7 @@ In this demo, we present how to use Continuum using QEMU.
 If you want to use Google Cloud instead, which requires much fewer installation steps, please see the extensive README [here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation).
 
 This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
-We recommend running the demo on an Ubuntu 20.04 machine. 
+We recommend running the demo on an Ubuntu 20.04 machine but have also tested on Ubuntu 22.04. 
 If you don't have access to such a machine, see the Appendix for tips on how to install this in a VM.
 We recommend installing the framework bare-metal for more reliable performance metrics.
 
@@ -136,6 +136,7 @@ Software versions tested:
 ### Part 1: Install the framework
 We start by installing all requirements for the Continuum framework.
 We assume the operating system is Ubuntu 20.04, either natively or via a VM.
+Ubuntu 22.04 should also work, but commands and packages might slightly differ.
 
 ```bash
 # 1. Install the VM requirements
@@ -194,9 +195,10 @@ cd continuum
 sudo apt install python3 python3-pip
 pip3 install -r requirements.txt
 
-# 5. Edit the Ansible configuration as follows:
+# 5. Edit the Ansible configuration as follows on Ubuntu 20.04:
 # Under `[defaults]`, add `callback_enabled = profile_tasks`
 # Under `[defaults]`, add `command_warnings = False`
+# For Ubuntu 22.04, add just the following: callbacks_enabled=profile_tasks
 sudo vim /etc/ansible/ansible.cfg
 
 # 6. Setup up bridged networking on the machine
