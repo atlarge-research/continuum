@@ -4,11 +4,11 @@ Handle everything on initializing the config
 """
 
 import configparser
-import os
-import sys
-import socket
 import getpass
 import importlib
+import os
+import socket
+import sys
 
 from application import application
 from execution_model import execution_model
