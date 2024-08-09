@@ -1,6 +1,6 @@
-"""Generate a Terraform configuration for GCP"""
+"""Generate a Terraform configuration for AWS"""
 
-###################################################################################################
+# 0. Header
 
 HEADER = """
 terraform {
@@ -42,10 +42,7 @@ def generate_header(config):
         )
 
 
-###################################################################################################
-
-# 1️⃣ Vpc
-
+# 1️. Vpc
 
 MAIN_NETWORK = """
 resource "aws_vpc" "vpc_network" {
@@ -63,15 +60,15 @@ resource "aws_internet_gateway" "igw" {
 }
 """
 
-# 2️⃣ Subnets
+# 2️. Subnets
 
 CLOUD_NETWORK = """
 resource "aws_subnet" "subnetwork_cloud" {
     cidr_block        = "10.0.0.0/24"
     vpc_id            = aws_vpc.vpc_network.id
-    availability_zone = "eu-central-1a"
+    availability_zone = %s
     tags = {
-        Name = "aws_columbo_cloud_subnet"
+        Name = "aws_continuum_cloud_subnet"
     }
 }
 """
@@ -80,9 +77,9 @@ EDGE_NETWORK = """
 resource "aws_subnet" "subnetwork_edge" {
     cidr_block        = "10.0.1.0/24"
     vpc_id            = aws_vpc.vpc_network.id
-    availability_zone = "eu-central-1b"
+    availability_zone = %s
     tags = {
-        Name = "aws_columbo_edge_subnet"
+        Name = "aws_continuum_edge_subnet"
     }
 }
 """
@@ -90,9 +87,9 @@ ENDPOINT_NETWORK = """
 resource "aws_subnet" "subnetwork_endpoint" {
     cidr_block        = "10.0.2.0/24"
     vpc_id            = aws_vpc.vpc_network.id
-    availability_zone = "eu-central-1c"
+    availability_zone = %s
     tags = {
-        Name = "aws_columbo_endpoint_subnet"
+        Name = "aws_continuum_endpoint_subnet"
     }
 }
 """
@@ -117,9 +114,8 @@ resource "aws_route_table_association" "route_table_associations" {
 }
 """
 
-# 3️⃣ Security groups
+# 3️. Security groups
 
-# for all
 SECURITY_GROUP = """
 resource "aws_security_group" "allow_all_ingress_egress" {
     name      = "vpc-network-allow-all-ingress"
@@ -156,61 +152,45 @@ def generate_network(config):
         f.write(ROUTE_TABLES)
 
         if config["infrastructure"]["cloud_nodes"] > 0:
-            f.write(CLOUD_NETWORK)
+            f.write(CLOUD_NETWORK % (config["infrastructure"]["aws_zone"]))
 
         if config["infrastructure"]["edge_nodes"] > 0:
-            f.write(EDGE_NETWORK)
+            f.write(EDGE_NETWORK % (config["infrastructure"]["aws_zone"]))
 
         if config["infrastructure"]["endpoint_nodes"] > 0:
-            f.write(ENDPOINT_NETWORK)
+            f.write(ENDPOINT_NETWORK % (config["infrastructure"]["aws_zone"]))
 
         f.write(SECURITY_GROUP)
 
 
-###################################################################################################
+# 4. SSH key
 
-# 4️⃣ Elastic IP Addresses
-
-EDGE_IP = """
-resource "aws_eip" "edge_static_ip" {
-    name = "edge${count.index}-static-ip"
-    count = %i
+KEY = """
+resource "aws_key_pair" "public_ssh_key" {
+  key_name   = "public_ssh_key"
+  public_key = file("%s")
 }
 """
 
-ENDPOINT_IP = """
-resource "aws_eip" "endpoint_static_ip" {
-    name = "endpoint${count.index}-static-ip"
-    count = %i
-}
-"""
 
-# 5️⃣ Instances
+def generate_key(config):
+    """Write the public SSH key to use to access VMs
 
-AMI = """
-data "aws_ami" "ubuntu" {
-  most_recent = true
+    Args:
+        config (dict): Parsed configuration
+    """
+    with open(".tmp/sshkey.tf", mode="w", encoding="utf-8") as f:
+        f.write(KEY % (config["ssh_key"]))
 
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
-  }
 
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  owners = ["099720109477"] # Canonical
-}
-"""
+# 5. Instances
 
 CLOUD = """
 resource "aws_instance" "cloud" {
     count                       = %i
     instance_type               = %s
     ami                         = %s
-    key_name                    = %s
+    key_name                    = aws_key_pair.public_ssh_key.key_name
     security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
     subnet_id                   = aws_subnet.subnetwork_cloud.id
     associate_public_ip_address = true
@@ -231,7 +211,7 @@ resource "aws_instance" "edge" {
     count                       = %i
     instance_type               = %s
     ami                         = %s
-    key_name                    = %s
+    key_name                    = aws_key_pair.public_ssh_key.key_name
     security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
     subnet_id                   = aws_subnet.subnetwork_cloud.id
     associate_public_ip_address = true
@@ -252,7 +232,7 @@ resource "aws_instance" "endpoint" {
     count                       = %i
     instance_type               = %s
     ami                         = %s
-    key_name                    = %s
+    key_name                    = aws_key_pair.public_ssh_key.key_name
     security_groups             = [ aws_security_group.allow_all_ingress_egress.id ]
     subnet_id                   = aws_subnet.subnetwork_cloud.id
     associate_public_ip_address = true
@@ -283,38 +263,33 @@ def generate_vm(config):
                     config["infrastructure"]["cloud_nodes"],
                     config["infrastructure"]["aws_cloud"],
                     config["infrastructure"]["aws_ami"],
-                    config["infrastructure"]["aws_key"],
                 )
             )
 
     if config["infrastructure"]["edge_nodes"] > 0:
         with open(".tmp/edge_vm.tf", mode="w", encoding="utf-8") as f:
-            f.write(EDGE_IP % (config["infrastructure"]["edge_nodes"]))
             f.write(
                 EDGE
                 % (
                     config["infrastructure"]["edge_nodes"],
                     config["infrastructure"]["aws_edge"],
                     config["infrastructure"]["aws_ami"],
-                    config["infrastructure"]["aws_key"],
                 )
             )
 
     if config["infrastructure"]["endpoint_nodes"] > 0:
         with open(".tmp/endpoint_vm.tf", mode="w", encoding="utf-8") as f:
-            f.write(ENDPOINT_IP % (config["infrastructure"]["endpoint_nodes"]))
             f.write(
                 ENDPOINT
                 % (
                     config["infrastructure"]["endpoint_nodes"],
                     config["infrastructure"]["aws_endpoint"],
                     config["infrastructure"]["aws_ami"],
-                    config["infrastructure"]["aws_key"],
                 )
             )
 
 
-###################################################################################################
+# 5. Output
 
 OUTPUT_CLOUD = """
 output "cloud_ip_internal" {
@@ -375,5 +350,6 @@ def start(config, _machines):
     """
     generate_header(config)
     generate_network(config)
+    generate_key(config)
     generate_vm(config)
     generate_output(config)
