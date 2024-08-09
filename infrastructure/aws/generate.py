@@ -185,6 +185,26 @@ def generate_key(config):
 
 # 5. Instances
 
+USER = """
+provisioner "remote-exec" {
+    inline = [
+        "sudo useradd -d /home/%s${count.index}/ -G ubuntu,adm,sudo,lxd -s/bin/bash -m %s${count.index}",
+        "sudo mkdir -p /home/%s${count.index}/.ssh",
+        "sudo cp /home/ubuntu/.ssh/authorized_keys /home/%s${count.index}/.ssh/authorized_keys",
+        "sudo chown -R %s${count.index}:%s${count.index} /home/%s${count.index}/.ssh",
+        "sudo chmod 700 /home/%s${count.index}/.ssh",
+        "echo '%%sudo ALL=(ALL:ALL) NOPASSWD:ALL' | sudo EDITOR='tee -a' visudo",
+   ]
+
+    connection {
+        type        = "ssh"
+        user        = "ubuntu"
+        private_key = "${file("%s")}"
+        host        = self.public_ip
+    }
+}
+"""
+
 CLOUD = """
 resource "aws_instance" "cloud" {
     count                       = %i
@@ -203,6 +223,7 @@ resource "aws_instance" "cloud" {
     tags = {
         Name = "cloud_${count.index}"
     }
+    %s
 }
 """
 
@@ -224,6 +245,7 @@ resource "aws_instance" "edge" {
     tags = {
         Name = "edge_${count.index}"
     }
+    %s
 }
 """
 
@@ -245,6 +267,7 @@ resource "aws_instance" "endpoint" {
     tags = {
         Name = "endpoint_${count.index}"
     }
+    %s
 }
 """
 
@@ -263,6 +286,7 @@ def generate_vm(config):
                     config["infrastructure"]["cloud_nodes"],
                     config["infrastructure"]["aws_cloud"],
                     config["infrastructure"]["aws_ami"],
+                    USER % (8 * ("cloud",) + (config["ssh_key"],)),
                 )
             )
 
@@ -274,6 +298,7 @@ def generate_vm(config):
                     config["infrastructure"]["edge_nodes"],
                     config["infrastructure"]["aws_edge"],
                     config["infrastructure"]["aws_ami"],
+                    USER % (8 * ("edge",) + (config["ssh_key"],)),
                 )
             )
 
@@ -285,6 +310,7 @@ def generate_vm(config):
                     config["infrastructure"]["endpoint_nodes"],
                     config["infrastructure"]["aws_endpoint"],
                     config["infrastructure"]["aws_ami"],
+                    USER % (8 * ("endpoint",) + (config["ssh_key"],)),
                 )
             )
 
