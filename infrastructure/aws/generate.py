@@ -180,7 +180,7 @@ def generate_key(config):
         config (dict): Parsed configuration
     """
     with open(".tmp/sshkey.tf", mode="w", encoding="utf-8") as f:
-        f.write(KEY % (config["ssh_key"]))
+        f.write(KEY % (config["ssh_key"] + ".pub"))
 
 
 # 5. Instances
