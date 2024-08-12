@@ -100,6 +100,21 @@
       vars:
         packages:
           - mosquitto=1.6.9-1
+      when:
+        - ansible_os_family == "Debian"
+        - ansible_distribution_major_version == "20"
+
+    - name: Install Mosquitto
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - mosquitto=2.0.11-1ubuntu1.1
+      when:
+        - ansible_os_family == "Debian"
+        - ansible_distribution_major_version == "22"
 
     - name: Update SSH settings to allow many parallel sessions
       blockinfile:
@@ -118,4 +133,3 @@
 
     - name: Reset SSH client
       command: systemctl restart sshd
-

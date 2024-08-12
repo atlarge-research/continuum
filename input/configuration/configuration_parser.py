@@ -4,11 +4,11 @@ Handle everything on initializing the config
 """
 
 import configparser
-import os
-import sys
-import socket
 import getpass
 import importlib
+import os
+import socket
+import sys
 
 from application import application
 from execution_model import execution_model
@@ -110,12 +110,8 @@ def add_constants(parser, config):
     config["base"] = config["base"].rsplit("/", 2)[0]  # We're nested 2 deep currently, remove that
     config["username"] = getpass.getuser()
 
-    # AWS requires .pem or .ppk
-    # For all other providers we use regular ssh keys
-    if config["infrastructure"]["provider"] == "aws":
-        config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum.pem")
-    else:
-        config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
+    # We also use AWS and GCP with regular OpenSSH SSH keys
+    config["ssh_key"] = os.path.join(config["home"], ".ssh/id_rsa_continuum")
 
     # 100.100.100.100
     # Prefix .Mid.Post

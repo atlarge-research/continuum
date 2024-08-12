@@ -1,11 +1,10 @@
 """Create infrastructure for GCP by applying a Terraform configuration"""
 
+import logging
 import os
 import sys
-import logging
 
-from infrastructure import infrastructure
-from infrastructure import ansible
+from infrastructure import ansible, infrastructure
 from infrastructure import machine as m
 
 from . import generate
