@@ -116,13 +116,6 @@
         - ansible_os_family == "Debian"
         - ansible_distribution_major_version == "22"
 
-    - name: Update SSH settings to allow many parallel sessions
-      blockinfile:
-        path: /etc/ssh/sshd_config
-        block: |
-          MaxSessions 10000
-          MaxStartups 10000
-
     - name: Clone kube-prometheus
       command: git clone https://github.com/prometheus-operator/kube-prometheus.git /kube-prometheus
 
@@ -130,6 +123,3 @@
       command: git checkout release-0.13
       args:
         chdir: /kube-prometheus
-
-    - name: Reset SSH client
-      command: systemctl restart sshd
