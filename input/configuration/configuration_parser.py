@@ -159,7 +159,7 @@ def option_check(
         and section in input_config
         and option in input_config[section]
     ) or (not isinstance(input_config, dict) and input_config.has_option(section, option)):
-        # If option is empty, but not mandatory, remove option
+        # Set default value if option was defined but left empty
         if input_config[section][option] == "":
             if mandatory:
                 parser.error("Config: Missing option %s->%s" % (section, option))
@@ -461,6 +461,8 @@ def parse_benchmark(parser, input_config, config):
     ec = config["infrastructure"]["endpoint_cores"]
     em = config["infrastructure"]["endpoint_memory"]
 
+    observability = ["prometheus", "telegraf"]
+
     settings = [
         # Option | Type | Condition | Mandatory | Default
         ["application_worker_cpu", float, lambda x: x >= 0.001, False, default_cpu],
@@ -468,7 +470,7 @@ def parse_benchmark(parser, input_config, config):
         ["application_endpoint_cpu", float, lambda x: x >= 0.001, False, ec],
         ["application_endpoint_memory", float, lambda x: x >= 0.001, False, em],
         ["applications_per_worker", int, lambda x: x >= 1, False, 1],
-        ["observability", bool, lambda x: x in [True, False], False, False],
+        ["observability", str, lambda x: x in observability, False, None],
     ]
     # TODO: Observability only works with Kubernetes / KubeControl at the moment
     #       Enforce this check or not?

@@ -3,10 +3,9 @@ Setup Kubernetes on cloud
 This resource manager doesn't have any/many help functions, see the /kubernetes folder instead
 """
 
+import json
 import logging
 import os
-import json
-
 from datetime import datetime
 from typing import Dict, List
 
@@ -184,14 +183,14 @@ def start(config, machines):
     ansible.check_output((output, error))
 
     # Install observability packages (Prometheus, Grafana) if configured by the user
-    if config["benchmark"]["observability"]:
+    if config["benchmark"]["observability"] is not None:
         command = [
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
             os.path.join(
                 config["infrastructure"]["base_path"],
-                ".continuum/cloud/observability.yml",
+                ".continuum/cloud/observe_%syml" % (config["benchmark"]["observability"]),
             ),
         ]
 

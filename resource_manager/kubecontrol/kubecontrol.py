@@ -137,14 +137,14 @@ def start(config, machines):
     ansible.check_output((output, error))
 
     # Install observability packages (Prometheus, Grafana) if configured by the user
-    if config["benchmark"]["observability"]:
+    if config["benchmark"]["observability"] is not None:
         command = [
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
             os.path.join(
                 config["infrastructure"]["base_path"],
-                ".continuum/cloud/observability.yml",
+                ".continuum/cloud/observe_%syml" % (config["benchmark"]["observability"]),
             ),
         ]
 
