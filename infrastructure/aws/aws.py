@@ -1,11 +1,10 @@
 """Create infrastructure for AWS by applying a Terraform configuration"""
 
+import logging
 import os
 import sys
-import logging
 
-from infrastructure import infrastructure
-from infrastructure import ansible
+from infrastructure import ansible, infrastructure
 from infrastructure import machine as m
 
 from . import generate
@@ -52,7 +51,6 @@ def add_options(config):
         ["aws_access_keys", str, lambda _: True, True, None],
         ["aws_secret_access_keys", str, lambda _: True, True, None],
         ["aws_ami", str, lambda _: True, True, None],
-        ["aws_key", str, lambda _: True, True, None],
     ]
 
     return settings
@@ -94,12 +92,12 @@ def set_ip_names(_config, machines, nodes_per_machine):
 
     if nodes_per_machine[0]["cloud"] > 0:
         machines[0].cloud_controller = 1
-        machines[0].cloud_controller_names.append("ubuntu")
+        machines[0].cloud_controller_names.append("cloud0")
 
         machines[0].clouds = 0
         for i in range(1, nodes_per_machine[0]["cloud"]):
             machines[0].clouds += 1
-            machines[0].cloud_names.append("ubuntu")
+            machines[0].cloud_names.append("cloud%i" % (i))
 
     machines[0].edges = 0
     for i in range(nodes_per_machine[0]["edge"]):
@@ -230,7 +228,7 @@ def copy(config, machines):
 
         out = []
 
-        tf_files = ["header", "network", "outputs"]
+        tf_files = ["header", "network", "sshkey", "outputs"]
 
         if config["infrastructure"]["cloud_nodes"] > 0:
             tf_files.append("cloud_vm")

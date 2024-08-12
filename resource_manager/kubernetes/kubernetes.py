@@ -7,9 +7,6 @@ import os
 import sys
 import time
 
-# import json
-# from datetime import datetime
-
 import pandas as pd
 
 from infrastructure import ansible
@@ -39,12 +36,12 @@ def verify_options(parser, config):
         config (ConfigParser): ConfigParser object
     """
     if (
-        config["infrastructure"]["cloud_nodes"] < 2
+        config["infrastructure"]["cloud_nodes"] < 1
         or config["infrastructure"]["edge_nodes"] != 0
         or config["infrastructure"]["endpoint_nodes"] < 0
     ):
-        parser.error("ERROR: Kubernetes requires #clouds>=2, #edges=0, #endpoints>=0")
-    elif (
+        parser.error("ERROR: Kubernetes requires #clouds>=1, #edges=0, #endpoints>=0")
+    elif config["infrastructure"]["cloud_nodes"] > 1 and (
         config["infrastructure"]["endpoint_nodes"] % (config["infrastructure"]["cloud_nodes"] - 1)
         != 0
     ):
