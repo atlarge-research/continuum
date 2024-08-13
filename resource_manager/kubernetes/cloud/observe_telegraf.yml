@@ -1,0 +1,6 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Download Telegraf
+      command: ...
