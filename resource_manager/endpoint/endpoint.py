@@ -54,6 +54,9 @@ def start_endpoint_default(config, machines):
     Returns:
         list(list(str)): Names of docker containers launched per machine
     """
+    if not config["infrastructure"]["endpoint_nodes"]:
+        return []
+
     logging.info("Deploy Docker containers on endpoints with publisher application")
 
     commands = []
@@ -159,6 +162,9 @@ def start_endpoint_baremetal(config, machines):
     Returns:
         list(list(str)): Names of docker containers launched per machine
     """
+    if not config["infrastructure"]["endpoint_nodes"]:
+        return []
+
     logging.info("Deploy Docker containers on endpoints with publisher application as baremetal")
 
     commands = []
@@ -242,6 +248,9 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
         sshs (list(str)): SSH addresses to edge or endpoint VMs
         container_names (list(str)): Names of docker containers launched
     """
+    if not config["infrastructure"]["endpoint_nodes"]:
+        return
+
     logging.info("Wait on all endpoint or mist containers to finish")
     time.sleep(10)
 
@@ -311,6 +320,9 @@ def get_endpoint_output(config, machines, container_names, use_ssh=True):
     Returns:
         list(list(str)): Output of each endpoint container
     """
+    if not config["infrastructure"]["endpoint_nodes"]:
+        return []
+
     logging.info("Extract output from endpoint publishers")
 
     # Alternatively, use docker logs -t container_name for detailed timestamps
