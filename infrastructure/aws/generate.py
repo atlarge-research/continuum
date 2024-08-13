@@ -194,6 +194,7 @@ provisioner "remote-exec" {
         "sudo chown -R %s${count.index}:%s${count.index} /home/%s${count.index}/.ssh",
         "sudo chmod 700 /home/%s${count.index}/.ssh",
         "echo '%%sudo ALL=(ALL:ALL) NOPASSWD:ALL' | sudo EDITOR='tee -a' visudo",
+        "sudo hostnamectl set-hostname %s${count.index}"
    ]
 
     connection {
@@ -286,7 +287,7 @@ def generate_vm(config):
                     config["infrastructure"]["cloud_nodes"],
                     config["infrastructure"]["aws_cloud"],
                     config["infrastructure"]["aws_ami"],
-                    USER % (8 * ("cloud",) + (config["ssh_key"],)),
+                    USER % (9 * ("cloud",) + (config["ssh_key"],)),
                 )
             )
 
@@ -298,7 +299,7 @@ def generate_vm(config):
                     config["infrastructure"]["edge_nodes"],
                     config["infrastructure"]["aws_edge"],
                     config["infrastructure"]["aws_ami"],
-                    USER % (8 * ("edge",) + (config["ssh_key"],)),
+                    USER % (9 * ("edge",) + (config["ssh_key"],)),
                 )
             )
 
@@ -310,7 +311,7 @@ def generate_vm(config):
                     config["infrastructure"]["endpoint_nodes"],
                     config["infrastructure"]["aws_endpoint"],
                     config["infrastructure"]["aws_ami"],
-                    USER % (8 * ("endpoint",) + (config["ssh_key"],)),
+                    USER % (9 * ("endpoint",) + (config["ssh_key"],)),
                 )
             )
 
