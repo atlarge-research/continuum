@@ -1,0 +1,9 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Copy the resource_usage csv to local storage
+      fetch:
+        src: "/home/{{ username }}/resource_usage.csv"
+        dest: "{{ continuum_home }}/"
+        flat: true
