@@ -388,14 +388,22 @@ def copy(config, machines):
         if "kube_deployment" in config["benchmark"]:
             suffix += "_%s" % (config["benchmark"]["kube_deployment"])
 
-        path = os.path.join(
-            config["base"],
-            "application",
-            config["benchmark"]["application"],
-            "launch_benchmark_%s.yml" % (suffix),
-        )
-        d = dest + "launch_benchmark.yml"
-        out.append(machines[0].copy_files(config, path, d))
+        # Then, for each worker img
+        worker_imgs = [img for img in config["images"] if "worker" in img]
+        for img in worker_imgs:
+            # If there is only 1 worker image, it doesn't have its specific name appended
+            suffix2 = ""
+            if len(worker_imgs) > 1:
+                suffix2 = "_%s" % (img.split("_")[-1])
+
+            path = os.path.join(
+                config["base"],
+                "application",
+                config["benchmark"]["application"],
+                "launch_benchmark_%s%s.yml" % (suffix, suffix2),
+            )
+            d = dest + "launch_benchmark%s.yml" % (suffix2)
+            out.append(machines[0].copy_files(config, path, d))
 
     # Copy playbooks for installing resource managers and execution_models
     if not config["infrastructure"]["infra_only"]:
