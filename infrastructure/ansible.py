@@ -2,10 +2,10 @@
 Generate Ansible inventory files
 """
 
-import sys
 import logging
 import os
 import re
+import sys
 
 
 def check_output(out):
@@ -221,11 +221,18 @@ def create_inventory_vm(config, machines):
             f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips_internal[0]))
             f.write("cloud_ip_external=%s\n" % (machines[0].cloud_controller_ips[0]))
 
+            # Number of worker nodes in the cluster
+            workers = 0
+            if config["mode"] == "cloud":
+                workers = config["infrastructure"]["cloud_nodes"] - 1
+            elif config["mode"] == "edge":
+                workers = config["infrastructure"]["edge_nodes"]
+
             # Cloud controller (is always on machine 0)
             f.write("\n[cloudcontroller]\n")
             f.write(
                 "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s\n"
+username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s workers=%i\n"
                 % (
                     machines[0].cloud_controller_names[0],
                     machines[0].cloud_controller_ips[0],
@@ -234,6 +241,7 @@ username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s\n"
                     config["mode"] == "cloud",
                     config["benchmark"]["kube_version"][1:],
                     config["benchmark"]["kube_version"][:-2],
+                    workers,
                 )
             )
 

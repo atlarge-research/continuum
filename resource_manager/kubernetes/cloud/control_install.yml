@@ -79,3 +79,9 @@
         state: absent
       with_items:
         - /tmp/join-command.txt
+
+    - name: Allow scheduling of apps on control plane if there are no workers
+      command: kubectl taint nodes --all  node-role.kubernetes.io/control-plane-
+      when: item | int == 0
+      with_items:
+        - "{{ workers }}"
