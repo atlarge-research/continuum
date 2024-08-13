@@ -98,7 +98,7 @@ def start(config, machines):
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
             os.path.join(
                 config["infrastructure"]["base_path"],
-                ".continuum/cloud/observe_%syml" % (config["benchmark"]["observability"]),
+                ".continuum/cloud/observe_%s.yml" % (config["benchmark"]["observability"]),
             ),
         ]
 
