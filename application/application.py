@@ -242,6 +242,9 @@ def kube(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
+    # Start the resource utilization metrics
+    kubernetes.start_resource_metrics(config, machines)
+
     # Cache the worker to prevent loading
     if config["benchmark"]["cache_worker"]:
         app_vars = config["module"]["application"].cache_worker(config, machines)
@@ -263,8 +266,24 @@ def kube(config, machines):
     endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
     worker_output = kubernetes.get_worker_output(config, machines)
 
+    # Get worker description and extract start/end time needed for plotting resource usage
+    worker_description = kubernetes.get_worker_output(config, machines, get_description=True)
+    starttime, endtime = kubernetes.get_start_endtime(worker_description)
+
+    resource_output = kubernetes.get_resource_output(config, machines, starttime, endtime)
+
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, endpoint_output)
+
+    #########################################################################################
+    #
+    #
+    #
+    #
+    #
+    #
+    #
+    # TODO do something with this resource_output
     worker_metrics = config["module"]["application"].gather_worker_metrics(
         machines, config, worker_output, None
     )
@@ -287,7 +306,7 @@ def kube_control(config, machines):
     # Cache the worker to prevent loading
     if config["benchmark"]["cache_worker"]:
         app_vars = config["module"]["application"].cache_worker(config, machines)
-        kubernetes.cache_worker(config, machines, app_vars)
+        kubernetes.cache_worker(config, machines, app_vars, custom_launch=True)
 
     if config["benchmark"]["application"] == "mem_usage":
         config["module"]["application"].get_mem_usage(config, machines, kubernetes)

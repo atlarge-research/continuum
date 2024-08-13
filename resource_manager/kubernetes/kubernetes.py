@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import time
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -58,7 +59,8 @@ def start(config, machines):
     logging.info("Start Kubernetes cluster on VMs")
     commands = []
 
-    # Setup cloud controller
+    ###########################
+    # 1. Setup cloud controller
     commands.append(
         [
             "ansible-playbook",
@@ -71,7 +73,8 @@ def start(config, machines):
         ]
     )
 
-    # Setup cloud worker
+    ###########################
+    # 2. Setup cloud worker
     commands.append(
         [
             "ansible-playbook",
@@ -90,7 +93,41 @@ def start(config, machines):
 
     verify_running_cluster(config, machines)
 
-    # Install observability packages (Prometheus, Grafana) if configured by the user
+    ###########################
+    # 3. Start the resource metrics server
+    command = [
+        "ansible-playbook",
+        "-i",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(
+            config["infrastructure"]["base_path"],
+            ".continuum/cloud/resource_usage.yml",
+        ),
+    ]
+
+    output, error = machines[0].process(config, command)[0]
+
+    logging.debug("Check output for Ansible command [%s]", " ".join(command))
+    ansible.check_output((output, error))
+
+    # Now the OS server that runs on every VM
+    command = [
+        "ansible-playbook",
+        "-i",
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+        os.path.join(
+            config["infrastructure"]["base_path"],
+            ".continuum/cloud/resource_usage_os.yml",
+        ),
+    ]
+
+    output, error = machines[0].process(config, command)[0]
+
+    logging.debug("Check output for Ansible command [%s]", " ".join(command))
+    ansible.check_output((output, error))
+
+    ###########################
+    # 4. Install observability packages (Prometheus, Grafana) if configured by the user
     if config["benchmark"]["observability"] is not None:
         command = [
             "ansible-playbook",
@@ -155,95 +192,123 @@ def verify_running_cluster(config, machines):
             sys.exit()
 
 
-def cache_worker(config, machines, app_vars):
+def cache_worker(config, machines, app_vars, custom_launch=False):
     """Start Kube applications for caching, so the real app doesn't need to load images
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
         app_vars (dict): Dictionary of variables for a specific app
+        custom_launch (bool): Launch app on Kubernetes outside of the yaml. Default: False
+            Use only for kubecontrol.
     """
     logging.info("Cache subscriber pods on %s", config["mode"])
 
     # Set parameters based on mode
+    # Use just 1 app per worker, more is not needed for caching
     if config["mode"] == "cloud":
-        worker_apps = config["infrastructure"]["cloud_nodes"] - 1
+        # Always use at least 1 VM (control plane can be a worker if there are no other workers)
+        worker_apps = max(config["infrastructure"]["cloud_nodes"] - 1, 1)
         cores = config["infrastructure"]["cloud_cores"]
     elif config["mode"] == "edge":
         worker_apps = config["infrastructure"]["edge_nodes"]
         cores = config["infrastructure"]["edge_cores"]
 
-    global_vars = {
-        "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
-        "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
-        "cpu_req": float(cores * 0.5),
-        "replicas": worker_apps,
-        "pull_policy": "IfNotPresent",
-    }
+    # Only apps that have "worker" in their name will get executed on Kubernetes
+    # Currently only applies to the OpenCraft use case
+    worker_imgs = [img for img in config["images"] if "worker" in img]
+    for img_name in worker_imgs:
+        # When >1 worker app, change name based on worker
+        app_name = config["benchmark"]["application"].replace("_", "-")
+        if len(worker_imgs) > 1:
+            # Example: worker_server --> server (final: opencraft-server)
+            app_name += "-" + img_name.split("_")[-1]
 
-    if "runtime" in config["benchmark"]:
-        global_vars["runtime"] = config["benchmark"]["runtime"]
-    if "runtime_filesystem" in config["benchmark"]:
-        global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
+        global_vars = {
+            "app_name": app_name,
+            "image": "%s/%s" % (config["registry"], config["images"][img_name].split(":")[1]),
+            "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
+            "cpu_req": float(cores * 0.5),
+            "replicas": worker_apps,
+            "pull_policy": "IfNotPresent",
+        }
 
-    # Merge the two var dicts
-    all_vars = {**global_vars, **app_vars}
+        if "runtime" in config["benchmark"]:
+            global_vars["runtime"] = config["benchmark"]["runtime"]
+        if "runtime_filesystem" in config["benchmark"]:
+            global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
 
-    # Parse to string
-    vars_str = ""
-    for k, v in all_vars.items():
-        vars_str += str(k) + "=" + str(v) + " "
+        # Merge the two var dicts
+        all_vars = {**global_vars, **app_vars}
 
-    # Launch applications on cloud/edge
-    command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        vars_str[:-1],
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
-    )
+        # Parse to string
+        vars_str = ""
+        for k, v in all_vars.items():
+            vars_str += str(k) + "=" + str(v) + " "
 
-    ansible.check_output(machines[0].process(config, command, shell=True)[0])
+        # When >1 worker app, select the specific launch benchmark file
+        suffix = ""
+        if len(worker_imgs) > 1:
+            suffix = "_%s" % (img_name.split("_")[-1])
 
-    # This only creates the file we need, now launch the benchmark
-    if (
-        "kube_deployment" in config["benchmark"]
-        and config["benchmark"]["kube_deployment"] == "file"
-    ):
-        # Option "file" launches a kubectl command on an entire directory
-        file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
-        command = "kubectl apply -f %s" % (file)
-    elif (
-        "kube_deployment" in config["benchmark"]
-        and config["benchmark"]["kube_deployment"] == "call"
-    ):
-        # Option "call" launches one kubectl command per job file
-        file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
-        command = "for filename in /home/%s/jobs/*; do kubectl apply -f \$filename & done" % (
-            machines[0].cloud_controller_names[0]
+        # Launch applications on cloud/edge
+        command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            vars_str[:-1],
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/launch_benchmark%s.yml" % (suffix),
+            ),
         )
-        command = '"%s"' % (command)
-    else:
-        file = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
-        command = "kubectl apply -f %s" % (file)
 
-    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+        ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
-    if not output or not any("job.batch" in o and "created" in o for o in output):
-        logging.error("Could not deploy pods: %s", "".join(output))
-        logging.error("With error: %s", "".join(error))
-        sys.exit()
-    if error and not all("[CONTINUUM]" in l for l in error):
-        logging.error("Could not deploy pods: %s", "".join(error))
-        sys.exit()
+    # Custom to Kubecontrol
+    if custom_launch:
+        # This only creates the file we need, now launch the benchmark
+        if (
+            "kube_deployment" in config["benchmark"]
+            and config["benchmark"]["kube_deployment"] == "file"
+        ):
+            # Option "file" launches a kubectl command on an entire directory
+            file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
+            command = "kubectl apply -f %s" % (file)
+        elif (
+            "kube_deployment" in config["benchmark"]
+            and config["benchmark"]["kube_deployment"] == "call"
+        ):
+            # Option "call" launches one kubectl command per job file
+            file = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
+            command = "for filename in /home/%s/jobs/*; do kubectl apply -f \$filename & done" % (
+                machines[0].cloud_controller_names[0]
+            )
+            command = '"%s"' % (command)
+        else:
+            file = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
+            command = "kubectl apply -f %s" % (file)
+
+        output, error = machines[0].process(
+            config, command, shell=True, ssh=config["cloud_ssh"][0]
+        )[0]
+
+        if not output or not any("job.batch" in o and "created" in o for o in output):
+            logging.error("Could not deploy pods: %s", "".join(output))
+            logging.error("With error: %s", "".join(error))
+            sys.exit()
+        if error and not all("[CONTINUUM]" in l for l in error):
+            logging.error("Could not deploy pods: %s", "".join(error))
+            sys.exit()
 
     # Waiting for the applications to fully initialize
     time.sleep(10)
-    logging.info("Deployed %i %s applications", worker_apps, config["mode"])
+    logging.info(
+        "Deployed %i set of %i %s applications", worker_apps, len(worker_imgs), config["mode"]
+    )
 
     pending = True
     i = 0
 
-    while i < worker_apps:
+    while i < worker_apps * len(worker_imgs):
         # Get the list of deployed pods
         if pending:
             command = [
@@ -291,11 +356,11 @@ def cache_worker(config, machines, app_vars):
             sys.exit()
 
     # All apps have succesfully been executed, now kill them
-    command = ["kubectl", "delete", "-f", file]
+    command = ["kubectl", "delete", "--all", "jobs"]
     output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
 
     if not output or not any("job.batch" in o and "deleted" in o for o in output):
-        logging.error('Output does not contain "job.batch" and "deleted": %s', "".join(output))
+        logging.error('Output does not contain "job.batch" and "deleted": %s', "--".join(output))
         sys.exit()
     elif error and not all("[CONTINUUM]" in l for l in error):
         logging.error("".join(error))
@@ -329,6 +394,42 @@ def start_worker(config, machines, app_vars, get_starttime=False):
     return starttime, kubectl_output, status
 
 
+def get_total_worker_pods(config):
+    """Get the total of expected worker pods that should be deployed/running on Kubernetes
+
+    Args:
+        config (dict): Parsed configuration
+
+    Returns (optional):
+        int: Number of expected running worker apps
+    """
+    # In container mode, all applications are gathered in 1 pod, so we only have 1 worker
+    if (
+        "kube_deployment" in config["benchmark"]
+        and config["benchmark"]["kube_deployment"] == "container"
+    ):
+        worker_apps = 1
+    else:
+        # Otherwise, we have 1 pod per application
+        if config["mode"] == "cloud":
+            worker_apps = (
+                max(config["infrastructure"]["cloud_nodes"] - 1, 1)
+                * config["benchmark"]["applications_per_worker"]
+            )
+        elif config["mode"] == "edge":
+            worker_apps = (
+                config["infrastructure"]["edge_nodes"]
+                * config["benchmark"]["applications_per_worker"]
+            )
+
+    # We deploy an application "applications_per_worker" times per worker node
+    # An application may consist of multiple apps itself, however
+    worker_imgs = [img for img in config["images"] if "worker" in img]
+    worker_apps *= len(worker_imgs)
+
+    return worker_apps
+
+
 def wait_worker_ready(config, machines, get_starttime):
     """Wait for the Kubernetes pods to be running
 
@@ -341,23 +442,7 @@ def wait_worker_ready(config, machines, get_starttime):
         (list(dict)): Status of all pods every second
     """
     # Determine number of workers
-    # In container mode, all applications are gathered in 1 pod, so we only have 1 worker
-    if (
-        "kube_deployment" in config["benchmark"]
-        and config["benchmark"]["kube_deployment"] == "container"
-    ):
-        worker_apps = 1
-    else:
-        # Otherwise, we have 1 pod per application
-        if config["mode"] == "cloud":
-            worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
-                "applications_per_worker"
-            ]
-        elif config["mode"] == "edge":
-            worker_apps = (
-                config["infrastructure"]["edge_nodes"]
-                * config["benchmark"]["applications_per_worker"]
-            )
+    worker_apps = get_total_worker_pods(config)
 
     status = []
     while True:
@@ -589,45 +674,64 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
 
     # Set parameters based on mode
     if config["mode"] == "cloud":
-        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
-            "applications_per_worker"
-        ]
+        worker_apps = (
+            max(config["infrastructure"]["cloud_nodes"] - 1, 1)
+            * config["benchmark"]["applications_per_worker"]
+        )
     elif config["mode"] == "edge":
         worker_apps = (
             config["infrastructure"]["edge_nodes"] * config["benchmark"]["applications_per_worker"]
         )
 
-    # Global variables for each applications
-    global_vars = {
-        "app_name": config["benchmark"]["application"].replace("_", "-"),
-        "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
-        "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
-        "cpu_req": config["benchmark"]["application_worker_cpu"],
-        "replicas": worker_apps,
-        "pull_policy": "Never",
-    }
+    # Only apps that have "worker" in their name will get executed on Kubernetes
+    # Currently only applies to the OpenCraft use case
+    worker_imgs = [img for img in config["images"] if "worker" in img]
+    for img_name in worker_imgs:
+        # When >1 worker app, change name based on worker
+        app_name = config["benchmark"]["application"].replace("_", "-")
+        if len(worker_imgs) > 1:
+            # Example: worker_server --> server (final: opencraft-server)
+            app_name += "-" + img_name.split("_")[-1]
 
-    if "runtime" in config["benchmark"]:
-        global_vars["runtime"] = config["benchmark"]["runtime"]
-    if "runtime_filesystem" in config["benchmark"]:
-        global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
+        # Global variables for each applications
+        global_vars = {
+            "app_name": app_name,
+            "image": os.path.join(config["registry"], config["images"][img_name].split(":")[1]),
+            "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
+            "cpu_req": config["benchmark"]["application_worker_cpu"],
+            "replicas": worker_apps,
+            "pull_policy": "Never",
+        }
 
-    # Merge the two var dicts
-    all_vars = {**global_vars, **app_vars}
+        if "runtime" in config["benchmark"]:
+            global_vars["runtime"] = config["benchmark"]["runtime"]
+        if "runtime_filesystem" in config["benchmark"]:
+            global_vars["runtime_filesystem"] = config["benchmark"]["runtime_filesystem"]
 
-    # Parse to string
-    vars_str = ""
-    for k, v in all_vars.items():
-        vars_str += str(k) + "=" + str(v) + " "
+        # Merge the two var dicts
+        all_vars = {**global_vars, **app_vars}
 
-    # Launch applications on cloud/edge
-    command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        vars_str[:-1],
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
-    )
+        # Parse to string
+        vars_str = ""
+        for k, v in all_vars.items():
+            vars_str += str(k) + "=" + str(v) + " "
 
-    ansible.check_output(machines[0].process(config, command, shell=True)[0])
+        # When >1 worker app, select the specific launch benchmark file
+        suffix = ""
+        if len(worker_imgs) > 1:
+            suffix = "_%s" % (img_name.split("_")[-1])
+
+        # Launch applications on cloud/edge
+        command = 'ansible-playbook -i %s --extra-vars "%s" %s' % (
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+            vars_str[:-1],
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/launch_benchmark%s.yml" % (suffix),
+            ),
+        )
+
+        ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
     if get_starttime:
         return launch_with_starttime(config, machines)
@@ -864,14 +968,11 @@ def wait_worker_completion(config, machines):
     get_list = True
     i = 0
 
-    workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
-    if config["mode"] == "cloud" or config["mode"] == "edge":
-        # If there is a control machine, dont count that one in
-        controllers = sum(m.cloud_controller for m in machines)
-        workers -= controllers
+    # Determine number of workers
+    worker_apps = get_total_worker_pods(config)
 
     # On the cloud controller, check the status of each pod, and wait until finished
-    while i < workers:
+    while i < worker_apps:
         # Get the list of deployed pods
         if get_list:
             command = [
@@ -1004,7 +1105,7 @@ def get_worker_output_kube(config, machines, get_description):
             for i in range(1, sub_pods + 1):
                 # Sub-pods-mode requires the name of the container to be appended
                 if sub_pods_mode:
-                    container = pod + " empty-%i" % (i)
+                    container = pod + " empty-%i" % (i)  # TODO hardcoded empty should be removed
                 else:
                     container = pod
 
@@ -1396,3 +1497,45 @@ def filter_metrics_os(config, starttime, endtime):
     # Now save in one big dataframe
     df_final = pd.concat(dfs)
     return df_final
+
+
+def get_start_endtime(worker_description):
+    """Get start and endtime of benchmark for resource gathering purposes
+
+    Args:
+        worker_description (list(list(str))): Extensive description of each container
+
+    Returns:
+        float, float: Start and endtime of the benchmark as float
+    """
+    logging.debug("Filter os metric stats")
+    starttime = datetime(3000, 1, 1, 0, 0, 0)  # Any datetime will be smaller than this
+    endtime = datetime(1, 1, 1, 0, 0, 0)  # Any datetime will be larger than this
+
+    for out in worker_description:
+        for line in out:
+            if "startedAt:" in line:  # finishedAt: "2024-08-12T17:55:31Z"
+                t = line.split(": ")[-1]  # "2024-08-12T17:55:31Z"
+                t = t[1:-2]  # 2024-08-12T17:55:31
+                t = t.replace("T", " ")  # 2024-08-12 17:55:31
+                t = datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
+
+                if t < starttime:
+                    starttime = t
+            elif "finishedAt:" in line:
+                t = line.split(": ")[-1]
+                t = t[1:-2]
+                t = t.replace("T", " ")
+                t = datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
+
+                if t > endtime:
+                    endtime = t
+
+    if starttime == -1 or endtime == -1:
+        logging.error("ERROR: No timestamps found for pods")
+        sys.exit()
+
+    starttime -= timedelta(seconds=1)
+    endtime += timedelta(seconds=1)
+
+    return starttime.timestamp(), endtime.timestamp()
