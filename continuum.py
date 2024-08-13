@@ -126,13 +126,13 @@ def main(args):
         if "benchmark" in args.config and args.config["benchmark"]["observability"] is not None:
             logging.info(
                 "To access Grafana: ssh -L 3000:%s:3000 %s -i %s",
-                args.config["cloud_ips"][0],
+                args.config["control_ips"][0],
                 args.config["cloud_ssh"][0],
                 args.config["ssh_key"],
             )
             logging.info(
                 "To access Prometheus: ssh -L 9090:%s:9090 %s -i %s",
-                args.config["cloud_ips"][0],
+                args.config["control_ips"][0],
                 args.config["cloud_ssh"][0],
                 args.config["ssh_key"],
             )
