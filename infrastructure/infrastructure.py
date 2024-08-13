@@ -629,7 +629,13 @@ def start(config):
     m.print_schedule(machines)
 
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
-        docker_registry(config, machines)
+        # TODO Ideally move this if to somewhere else
+        if not (
+            config["infrastructure"]["provider"] in ["aws", "gcp"]
+            and "benchmark" in config
+            and config["benchmark"]["resource_manager"] in ["kubernetes", "kubecontrol"]
+        ):
+            docker_registry(config, machines)
 
     start_provider(config, machines)
 

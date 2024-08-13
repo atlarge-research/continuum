@@ -424,7 +424,7 @@ def move_registry(config, machines):
                 sys.exit()
 
 
-def set_registry(config, machines, control=False):
+def set_registry(config, machines, kube=False):
     """Registry will be moved to the cloud controller, see the move_registry function.
     We need to change the registry IP before installing base software.
     We can only configure the registry itself afterward.
@@ -432,12 +432,13 @@ def set_registry(config, machines, control=False):
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
-        is_control (bool): For kubecontrol, use the public dockerhub registry instead of local
+        kube (bool): Kubernetes uses containerd and hence doesn't support Docker or Docker
+            registries on the same machine. You can deploy it on Kubernetes, but that's not here yet
     """
     config["old_registry"] = config["registry"]
 
     # Determine to new location of the registry
-    if control:
+    if kube:
         registry = "docker.io/redplanet00"
     else:
         if config["infrastructure"]["cloud_nodes"]:
@@ -447,7 +448,7 @@ def set_registry(config, machines, control=False):
         else:
             registry = machines[0].endpoint_ips_internal[0] + ":5000"
 
-    config["registry"] = registry
+        config["registry"] = registry
 
 
 def base_install(config, machines):
@@ -510,8 +511,8 @@ def base_install(config, machines):
 
     # Install docker containers if required
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
-        # Kubecontrol won't use docker registries in the cloud due to conflicts with containerd
-        if config["benchmark"]["resource_manager"] == "kubecontrol":
+        # Kubernetes won't use docker registries in the cloud due to conflicts with containerd
+        if config["benchmark"]["resource_manager"] in ["kubernetes", "kubecontrol"]:
             docker_base_names = []
         else:
             move_registry(config, machines)
@@ -572,8 +573,11 @@ def start_vms(config, machines):
 
     # Kubecontrol doesn't use docker registries in the cloud due to conflicts with containerd
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
-        is_control = config["benchmark"]["resource_manager"] == "kubecontrol"
-        set_registry(config, machines, control=is_control)
+        kube = False
+        if config["benchmark"]["resource_manager"] in ["kubernetes", "kubecontrol"]:
+            kube = True
+
+        set_registry(config, machines, kube=kube)
 
 
 def start(config, machines):
