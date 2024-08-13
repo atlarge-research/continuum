@@ -5,13 +5,12 @@ Mostly used for calling specific application code
 
 import logging
 import sys
-
 from datetime import datetime
 
+from execution_model.openfaas import openfaas
+from resource_manager.endpoint import endpoint
 from resource_manager.kube_kata import kube_kata
 from resource_manager.kubernetes import kubernetes
-from resource_manager.endpoint import endpoint
-from execution_model.openfaas import openfaas
 
 
 def set_container_location(config):
