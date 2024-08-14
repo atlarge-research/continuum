@@ -1297,10 +1297,10 @@ def get_control_output(config, machines, starttime, status):
                 # There may be time zone differences between timestamps
                 # We assume no 2 prints differ by more than 1 hour
                 seconds_per_hour = float(3600)
-                while entry[0] - starttime < seconds_per_hour:
+                while entry[0] < starttime - seconds_per_hour:
                     entry[0] += seconds_per_hour
 
-                while entry[0] - starttime > seconds_per_hour:
+                while entry[0] > starttime + seconds_per_hour:
                     entry[0] -= seconds_per_hour
 
                 # Now check for time interval
@@ -1499,14 +1499,16 @@ def filter_metrics_os(config, starttime, endtime):
     return df_final
 
 
-def get_start_endtime(worker_description):
+def get_start_endtime(config, machines, worker_description):
     """Get start and endtime of benchmark for resource gathering purposes
 
     Args:
+        config (dict): Parsed configuration
+        machines (list(Machine object)): List of machine objects representing physical machines
         worker_description (list(list(str))): Extensive description of each container
 
     Returns:
-        float, float: Start and endtime of the benchmark as float
+        float, float: Start and endtime of the benchmark as float, in nanoseconds
     """
     logging.debug("Filter os metric stats")
     starttime = datetime(3000, 1, 1, 0, 0, 0)  # Any datetime will be smaller than this
@@ -1538,4 +1540,35 @@ def get_start_endtime(worker_description):
     starttime -= timedelta(seconds=1)
     endtime += timedelta(seconds=1)
 
-    return starttime.timestamp(), endtime.timestamp()
+    starttime = starttime.timestamp()
+    endtime = endtime.timestamp()
+
+    # Correct timestamp to system timezone
+    command = "\"python3 -c 'import time; print(time.time())'\""
+    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+
+    if not output or len(output) != 1:
+        logging.error("Could not get system time: %s", " || ".join(error))
+        sys.exit()
+    if error:
+        logging.error("Could not get system time: %s", " || ".join(error))
+        sys.exit()
+
+    try:
+        system_time = float(output[0].rstrip())
+    except:
+        logging.error("Could not get system time: %s", " || ".join(error))
+        sys.exit()
+
+    # There may be time zone differences between timestamps
+    # We assume no 2 prints differ by more than 1 hour
+    seconds_per_hour = float(3600)
+    while starttime < system_time - seconds_per_hour:
+        starttime += seconds_per_hour
+        endtime += seconds_per_hour
+
+    while starttime > system_time + seconds_per_hour:
+        starttime -= seconds_per_hour
+        endtime -= seconds_per_hour
+
+    return starttime, endtime

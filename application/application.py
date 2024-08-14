@@ -78,7 +78,9 @@ def print_raw_output(config, worker_output, endpoint_output):
         logging.debug("------------------------------------")
         logging.debug("%s OUTPUT", config["mode"].upper())
         logging.debug("------------------------------------")
-        for _, out in worker_output:
+        for app, out in worker_output:
+            logging.debug("%s", app)
+            logging.debug("-------")
             for line in out:
                 logging.debug(line)
 
@@ -268,29 +270,26 @@ def kube(config, machines):
 
     # Get worker description and extract start/end time needed for plotting resource usage
     worker_description = kubernetes.get_worker_output(config, machines, get_description=True)
-    starttime, endtime = kubernetes.get_start_endtime(worker_description)
+    starttime, endtime = kubernetes.get_start_endtime(config, machines, worker_description)
 
     resource_output = kubernetes.get_resource_output(config, machines, starttime, endtime)
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, endpoint_output)
 
-    #########################################################################################
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    # TODO do something with this resource_output
     worker_metrics = config["module"]["application"].gather_worker_metrics(
         machines, config, worker_output, None
     )
     endpoint_metrics = config["module"]["application"].gather_endpoint_metrics(
         config, endpoint_output, container_names
     )
-    config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
+    config["module"]["application"].format_output(
+        config,
+        worker_metrics,
+        endpoint_metrics,
+        resource_output=resource_output,
+        endtime=float(endtime - starttime),
+    )
 
 
 def kube_control(config, machines):
