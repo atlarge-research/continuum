@@ -420,7 +420,7 @@ def plot_resources_kube(df, timestamp, xmax=None, ymax=None, xinter=None, yinter
     # Set x axis details
     ax1.set_xlabel("Time (s)")
     x_max = df["Time (s)"].values.max()
-    if ymax:
+    if xmax:
         x_max = xmax
 
     ax1.set_xlim(0, x_max)
