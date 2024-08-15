@@ -6,14 +6,14 @@ import logging
 import sys
 
 
-def generate_tc_commands(config, values, ips, disk):
+def generate_tc_commands(values, ips, disk, network):
     """Generate TC commands
 
     Args:
-        config (dict): Parsed configuration
         values (list(float)): Avg latency, Var latency, throughput
         ips (list(str)): List of ips to filter TC for
         disk (int): Qdisc to attach to
+        network (str): Network interface
 
     Returns:
         list(str): List of TC commands
@@ -21,10 +21,6 @@ def generate_tc_commands(config, values, ips, disk):
     latency_avg = values[0]
     latency_var = values[1]
     throughput = values[2]
-
-    network = "ens2"
-    if config["infrastructure"]["provider"] == "gcp":
-        network = "ens4"
 
     commands = []
 
@@ -173,6 +169,39 @@ def tc_values(config):
     return cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint
 
 
+def get_network(config, machines):
+    # Correct timestamp to system timezone
+    command = "ip a"
+    output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
+
+    if not output or len(output) <= 3:
+        logging.error("Could not get system time: %s", " || ".join(error))
+        sys.exit()
+    if error:
+        logging.error("Could not get system time: %s", " || ".join(error))
+        sys.exit()
+
+    network = ""
+    try:
+        for line in output:
+            if ": en" in line and network != "":
+                logging.error(
+                    "Found multiple network interfaces starting with 'en':\n%s", "\n".join(output)
+                )
+                sys.exit()
+            if ": en" in line:
+                network = line.split(": ")[1]
+    except:
+        logging.error("Could not get network interface: %s", " || ".join(error))
+        sys.exit()
+
+    if network == "":
+        logging.error("Could not find network interface starting with 'en':\n%s", "\n".join(output))
+        sys.exit()
+
+    return network
+
+
 def start(config, machines):
     """Set network latency/throughput between VMs to emulate edge continuum networking
 
@@ -182,6 +211,7 @@ def start(config, machines):
     """
     logging.info("Add network latency between VMs")
     cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint = tc_values(config)
+    network = get_network(config, machines)
 
     commands = []
 
@@ -195,19 +225,19 @@ def start(config, machines):
             set(config["control_ips_internal"] + config["cloud_ips_internal"]) - set([ip])
         )
         if targets:
-            command += generate_tc_commands(config, cloud, targets, disk)
+            command += generate_tc_commands(cloud, targets, disk, network)
             disk += 1
 
         # Between cloud and edge nodes
         targets = config["edge_ips_internal"]
         if targets:
-            command += generate_tc_commands(config, cloud_edge, targets, disk)
+            command += generate_tc_commands(cloud_edge, targets, disk, network)
             disk += 1
 
         # Between cloud and endpoint nodes
         targets = config["endpoint_ips_internal"]
         if targets:
-            command += generate_tc_commands(config, cloud_endpoint, targets, disk)
+            command += generate_tc_commands(cloud_endpoint, targets, disk, network)
 
         commands.append(command)
 
@@ -219,19 +249,19 @@ def start(config, machines):
         # Between edge and other edge nodes
         targets = list(set(config["edge_ips_internal"]) - set([ip]))
         if targets:
-            command += generate_tc_commands(config, edge, targets, disk)
+            command += generate_tc_commands(edge, targets, disk, network)
             disk += 1
 
         # Between edge and cloud nodes
         targets = config["control_ips_internal"] + config["cloud_ips_internal"]
         if targets:
-            command += generate_tc_commands(config, cloud_edge, targets, disk)
+            command += generate_tc_commands(cloud_edge, targets, disk, network)
             disk += 1
 
         # Between edge and endpoint nodes
         targets = config["endpoint_ips_internal"]
         if targets:
-            command += generate_tc_commands(config, edge_endpoint, targets, disk)
+            command += generate_tc_commands(edge_endpoint, targets, disk, network)
 
         commands.append(command)
 
@@ -243,13 +273,13 @@ def start(config, machines):
         # Between endpoint and cloud nodes
         targets = config["control_ips_internal"] + config["cloud_ips_internal"]
         if targets:
-            command += generate_tc_commands(config, cloud_endpoint, targets, disk)
+            command += generate_tc_commands(cloud_endpoint, targets, disk, network)
             disk += 1
 
         # Between endpoint and edge nodes
         targets = config["edge_ips_internal"]
         if targets:
-            command += generate_tc_commands(config, edge_endpoint, targets, disk)
+            command += generate_tc_commands(edge_endpoint, targets, disk, network)
 
         commands.append(command)
 
@@ -278,7 +308,7 @@ def start(config, machines):
         # Check output of TC commands
         logging.info("Check output from TC operations")
         for output, error in results:
-            if error:
+            if error and not all("Warning" in line for line in error):
                 logging.error("".join(error))
                 sys.exit()
             elif output:
