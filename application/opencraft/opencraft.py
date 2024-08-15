@@ -20,7 +20,7 @@ def set_container_location(config):
     }
 
 
-def add_options(_config):
+def add_options(config):
     """Add config options for a particular module
 
     Args:
@@ -32,8 +32,31 @@ def add_options(_config):
     # TODO update app-specific parameters
     # TODO add the parameters to a config file
     # TODO update the launch_benchmark_kubernetes_*.yml files to pass the parameters to the app
+    nodes = config["infrastructure"]["cloud_nodes"] - 1
+    cpu = config["infrastructure"]["cloud_cores"]
+    memory = config["infrastructure"]["cloud_memory"]
+    default_cpu = config["benchmark"]["application_worker_cpu"]
+    default_mem = config["benchmark"]["application_worker_memory"]
+
+    #   ["param_name", type, condition      , mandatory, default_value]
+    # Note: Default value can be ignored if mandatory == True
     settings = [
         ["sleep_time", int, lambda x: x >= 1, True, False],
+        ["node_client", int, lambda x: 0 <= x <= nodes, False, 0],
+        ["node_renderer", int, lambda x: 0 <= x <= nodes, False, 0],
+        ["node_server", int, lambda x: 0 <= x <= nodes, False, 0],
+        ["node_monitor", int, lambda x: 0 <= x <= nodes, False, 0],
+        ["node_scheduler", int, lambda x: 0 <= x <= nodes, False, 0],
+        ["cpu_client", float, lambda x: 0.001 <= x <= cpu, False, default_cpu],
+        ["cpu_renderer", float, lambda x: 0.001 <= x <= cpu, False, default_cpu],
+        ["cpu_server", float, lambda x: 0.001 <= x <= cpu, False, default_cpu],
+        ["cpu_monitor", float, lambda x: 0.001 <= x <= cpu, False, default_cpu],
+        ["cpu_scheduler", float, lambda x: 0.001 <= x <= cpu, False, default_cpu],
+        ["memory_client", float, lambda x: 0.001 <= x <= memory, False, default_mem],
+        ["memory_renderer", float, lambda x: 0.001 <= x <= memory, False, default_mem],
+        ["memory_server", float, lambda x: 0.001 <= x <= memory, False, default_mem],
+        ["memory_monitor", float, lambda x: 0.001 <= x <= memory, False, default_mem],
+        ["memory_scheduler", float, lambda x: 0.001 <= x <= memory, False, default_mem],
     ]
     return settings
 
@@ -49,10 +72,35 @@ def verify_options(parser, config):
         parser.error("ERROR: Application should be opencraft")
     elif config["benchmark"]["resource_manager"] != "kubernetes":
         parser.error("ERROR: Application opencraft requires resource_manager kubernetes")
-    # TODO add parameter verifications with the app and options from add_options
+    elif (
+        config["infrastructure"]["cloud_nodes"] == 0
+        or config["infrastructure"]["edge_nodes"] > 0
+        or config["infrastructure"]["endpoint_nodes"] > 0
+    ):
+        parser.error("ERROR: Opencraft only supports cloud VM deployment at the moment")
+    elif list(range(0, config["infrastructure"]["cloud_nodes"])) != list(
+        set(
+            {
+                config["benchmark"]["node_client"],
+                config["benchmark"]["node_renderer"],
+                config["benchmark"]["node_server"],
+                config["benchmark"]["node_monitor"],
+                config["benchmark"]["node_scheduler"],
+            }
+        )
+    ):
+        parser.error(
+            "ERROR: Not all %i VMs have applications scheduled onto them",
+            config["infrastructure"]["cloud_nodes"],
+        )
+    elif config["infrastructure"]["provider"] != "aws":
+        parser.error("Error: Opencraft deployment has only been tested on AWS")
+
+    # TODO add possibly more parameter verifications with the app and options from add_options
+    #      I'm not going to check the node/cpu/memory settings in-depth, I assume it's fine
 
 
-def cache_worker(_config, _machines):
+def cache_worker(config, _machines):
     """Set variables needed when launching the app for caching
 
     Args:
@@ -64,8 +112,25 @@ def cache_worker(_config, _machines):
     """
     # TODO update variables. Should be in line with add_options()
     #      These are used for a dry run of the application
+
+    m = config["mode"]  # Should be "cloud"
     app_vars = {
         "sleep_time": 15,
+        "node_client": m + str(config["benchmark"]["node_client"]),
+        "node_renderer": m + str(config["benchmark"]["node_renderer"]),
+        "node_server": m + str(config["benchmark"]["node_server"]),
+        "node_monitor": m + str(config["benchmark"]["node_monitor"]),
+        "node_scheduler": m + str(config["benchmark"]["node_scheduler"]),
+        "cpu_client": config["benchmark"]["cpu_client"],
+        "cpu_renderer": config["benchmark"]["cpu_renderer"],
+        "cpu_server": config["benchmark"]["cpu_server"],
+        "cpu_monitor": config["benchmark"]["cpu_monitor"],
+        "cpu_scheduler": config["benchmark"]["cpu_scheduler"],
+        "memory_client": config["benchmark"]["memory_client"],
+        "memory_renderer": config["benchmark"]["memory_renderer"],
+        "memory_server": config["benchmark"]["memory_server"],
+        "memory_monitor": config["benchmark"]["memory_monitor"],
+        "memory_scheduler": config["benchmark"]["memory_scheduler"],
     }
     return app_vars
 
@@ -81,8 +146,25 @@ def start_worker(config, _machines):
         (dict): Application variables
     """
     # TODO this dict will be passed to the launch_benchmark.yml scripts. Update as needed
+
+    m = config["mode"]  # Should be "cloud"
     app_vars = {
         "sleep_time": config["benchmark"]["sleep_time"],
+        "node_client": m + str(config["benchmark"]["node_client"]),
+        "node_renderer": m + str(config["benchmark"]["node_renderer"]),
+        "node_server": m + str(config["benchmark"]["node_server"]),
+        "node_monitor": m + str(config["benchmark"]["node_monitor"]),
+        "node_scheduler": m + str(config["benchmark"]["node_scheduler"]),
+        "cpu_client": config["benchmark"]["cpu_client"],
+        "cpu_renderer": config["benchmark"]["cpu_renderer"],
+        "cpu_server": config["benchmark"]["cpu_server"],
+        "cpu_monitor": config["benchmark"]["cpu_monitor"],
+        "cpu_scheduler": config["benchmark"]["cpu_scheduler"],
+        "memory_client": config["benchmark"]["memory_client"],
+        "memory_renderer": config["benchmark"]["memory_renderer"],
+        "memory_server": config["benchmark"]["memory_server"],
+        "memory_monitor": config["benchmark"]["memory_monitor"],
+        "memory_scheduler": config["benchmark"]["memory_scheduler"],
     }
     return app_vars
 

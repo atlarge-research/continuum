@@ -25,6 +25,7 @@ def add_options(_config):
     settings = [
         ["cache_worker", bool, lambda x: x in [True, False], False, False],
         ["kube_version", str, lambda _: ["v1.27.0"], False, "v1.27.0"],
+        ["custom_scheduling", bool, lambda x: x in [True, False], False, False],
     ]
     return settings
 
@@ -214,6 +215,11 @@ def cache_worker(config, machines, app_vars, custom_launch=False):
         worker_apps = config["infrastructure"]["edge_nodes"]
         cores = config["infrastructure"]["edge_cores"]
 
+    # Custom scheduling implies the app has its own scheduling rules
+    # We ignore any global rules
+    if config["benchmark"]["custom_scheduling"]:
+        worker_apps = 1
+
     # Only apps that have "worker" in their name will get executed on Kubernetes
     # Currently only applies to the OpenCraft use case
     worker_imgs = [img for img in config["images"] if "worker" in img]
@@ -263,6 +269,7 @@ def cache_worker(config, machines, app_vars, custom_launch=False):
 
         ansible.check_output(machines[0].process(config, command, shell=True)[0])
 
+    # TODO move this to kubecontrol provider
     # Custom to Kubecontrol
     if custom_launch:
         # This only creates the file we need, now launch the benchmark
@@ -408,6 +415,10 @@ def get_total_worker_pods(config):
         "kube_deployment" in config["benchmark"]
         and config["benchmark"]["kube_deployment"] == "container"
     ):
+        worker_apps = 1
+    elif config["benchmark"]["custom_scheduling"]:
+        # Custom scheduling implies the app has its own scheduling rules
+        # We ignore any global rules (and assumes we don't have replicas)
         worker_apps = 1
     else:
         # Otherwise, we have 1 pod per application

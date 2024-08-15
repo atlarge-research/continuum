@@ -20,12 +20,14 @@
                 imagePullPolicy: {{ pull_policy }}
                 resources:
                   requests:
-                    memory: "{{ memory_req }}Mi"
-                    cpu: {{ cpu_req }}
+                    memory: "{{ memory_scheduler }}Mi"
+                    cpu: {{ cpu_scheduler }}
                 env:
                 - name: SLEEP_TIME
                   value: "{{ sleep_time }}"
               restartPolicy: Never
+              nodeSelector:
+                kubernetes.io/hostname: {{ node_scheduler }}
         EOF
 
     - name: Launch job

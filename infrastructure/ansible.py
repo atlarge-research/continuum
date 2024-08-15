@@ -221,18 +221,20 @@ def create_inventory_vm(config, machines):
             f.write("cloud_ip=%s\n" % (machines[0].cloud_controller_ips_internal[0]))
             f.write("cloud_ip_external=%s\n" % (machines[0].cloud_controller_ips[0]))
 
-            # Number of worker nodes in the cluster
-            workers = 0
-            if config["mode"] == "cloud":
-                workers = config["infrastructure"]["cloud_nodes"] - 1
-            elif config["mode"] == "edge":
-                workers = config["infrastructure"]["edge_nodes"]
+            # TODO -- opencraft app wants to be scheduled on the control plane
+            #         this is app-specific and should be moved out
+            control_work = 0
+            if (
+                "application" in config["benchmark"]
+                and config["benchmark"]["application"] == "opencraft"
+            ):
+                control_work = 1
 
             # Cloud controller (is always on machine 0)
             f.write("\n[cloudcontroller]\n")
             f.write(
                 "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s workers=%i\n"
+username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s control_work=%i\n"
                 % (
                     machines[0].cloud_controller_names[0],
                     machines[0].cloud_controller_ips[0],
@@ -241,7 +243,7 @@ username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s workers=%i\n"
                     config["mode"] == "cloud",
                     config["benchmark"]["kube_version"][1:],
                     config["benchmark"]["kube_version"][:-2],
-                    workers,
+                    control_work,
                 )
             )
 
