@@ -126,11 +126,11 @@ def cache_worker(config, _machines):
         "cpu_server": config["benchmark"]["cpu_server"],
         "cpu_monitor": config["benchmark"]["cpu_monitor"],
         "cpu_scheduler": config["benchmark"]["cpu_scheduler"],
-        "memory_client": config["benchmark"]["memory_client"],
-        "memory_renderer": config["benchmark"]["memory_renderer"],
-        "memory_server": config["benchmark"]["memory_server"],
-        "memory_monitor": config["benchmark"]["memory_monitor"],
-        "memory_scheduler": config["benchmark"]["memory_scheduler"],
+        "memory_client": int(config["benchmark"]["memory_client"] * 1000),
+        "memory_renderer": int(config["benchmark"]["memory_renderer"] * 1000),
+        "memory_server": int(config["benchmark"]["memory_server"] * 1000),
+        "memory_monitor": int(config["benchmark"]["memory_monitor"] * 1000),
+        "memory_scheduler": int(config["benchmark"]["memory_scheduler"] * 1000),
     }
     return app_vars
 
@@ -160,11 +160,11 @@ def start_worker(config, _machines):
         "cpu_server": config["benchmark"]["cpu_server"],
         "cpu_monitor": config["benchmark"]["cpu_monitor"],
         "cpu_scheduler": config["benchmark"]["cpu_scheduler"],
-        "memory_client": config["benchmark"]["memory_client"],
-        "memory_renderer": config["benchmark"]["memory_renderer"],
-        "memory_server": config["benchmark"]["memory_server"],
-        "memory_monitor": config["benchmark"]["memory_monitor"],
-        "memory_scheduler": config["benchmark"]["memory_scheduler"],
+        "memory_client": int(config["benchmark"]["memory_client"] * 1000),
+        "memory_renderer": int(config["benchmark"]["memory_renderer"] * 1000),
+        "memory_server": int(config["benchmark"]["memory_server"] * 1000),
+        "memory_monitor": int(config["benchmark"]["memory_monitor"] * 1000),
+        "memory_scheduler": int(config["benchmark"]["memory_scheduler"] * 1000),
     }
     return app_vars
 
