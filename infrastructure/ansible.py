@@ -432,6 +432,27 @@ def copy(config, machines):
             path = os.path.join(config["base"], "resource_manager/endpoint/endpoint/")
             out.append(machines[0].copy_files(config, path, dest, recursive=True))
 
+        # Copy pre/post installation files over as well -- only for cloud mode
+        if config["benchmark"]["app_pre_install"]:
+            path = os.path.join(
+                config["base"],
+                "application",
+                config["benchmark"]["application"],
+                "app_pre_install.yml",
+            )
+            d = dest + config["mode"] + "/app_pre_install.yml"
+            out.append(machines[0].copy_files(config, path, d))
+
+        if config["benchmark"]["app_post_install"]:
+            path = os.path.join(
+                config["base"],
+                "application",
+                config["benchmark"]["application"],
+                "app_post_install.yml",
+            )
+            d = dest + config["mode"] + "/app_post_install.yml"
+            out.append(machines[0].copy_files(config, path, d))
+
     for output, error in out:
         if error:
             logging.error("".join(error))

@@ -26,6 +26,8 @@ def add_options(_config):
         ["cache_worker", bool, lambda x: x in [True, False], False, False],
         ["kube_version", str, lambda _: ["v1.27.0"], False, "v1.27.0"],
         ["custom_scheduling", bool, lambda x: x in [True, False], False, False],
+        ["app_pre_install", bool, lambda x: x in [True, False], False, False],
+        ["app_post_install", bool, lambda x: x in [True, False], False, False],
     ]
     return settings
 
@@ -48,6 +50,10 @@ def verify_options(parser, config):
         != 0
     ):
         parser.error(r"ERROR: Kubernetes requires (#clouds-1) % #endpoints == 0 (-1 for control)")
+    elif config["benchmark"]["resource_manager_only"] and (
+        config["benchmark"]["app_pre_install"] or config["benchmark"]["app_post_install"]
+    ):
+        parser.error("ERROR: No application set but app pre/post installation hook is set")
 
 
 def start(config, machines):
@@ -59,6 +65,21 @@ def start(config, machines):
     """
     logging.info("Start Kubernetes cluster on VMs")
     commands = []
+
+    ###########################
+    # 0. Application pre-install hook (Kubernetes not yet started)
+    if config["benchmark"]["app_pre_install"]:
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/cloud/app_pre_install.yml",
+                ),
+            ]
+        )
 
     ###########################
     # 1. Setup cloud controller
@@ -144,6 +165,21 @@ def start(config, machines):
 
         logging.debug("Check output for Ansible command [%s]", " ".join(command))
         ansible.check_output((output, error))
+
+    ###########################
+    # 5. Application post-install hook (Kubernetes already started)
+    if config["benchmark"]["app_post_install"]:
+        commands.append(
+            [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/cloud/app_post_install.yml",
+                ),
+            ]
+        )
 
 
 def verify_running_cluster(config, machines):
