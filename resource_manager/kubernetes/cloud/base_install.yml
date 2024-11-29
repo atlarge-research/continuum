@@ -66,12 +66,12 @@
 
     - name: Add an apt signing key for Kubernetes - no need to ever change the version number here
       apt_key:
-        url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+        url: https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key
         keyring: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
     - name: Adding apt repository for Kubernetes - change version number if needed
       apt_repository:
-        repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.27/deb/ /
+        repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /
         state: present
         filename: kubernetes.list
 

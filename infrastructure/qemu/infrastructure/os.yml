@@ -36,4 +36,4 @@
         - "{{ base_path }}/.continuum/images/ubuntu2004.img"
 
     - name: Resize image to full format
-      command: qemu-img resize "{{ base_path }}/.continuum/images/ubuntu2004.qcow2" +8G
+      command: qemu-img resize "{{ base_path }}/.continuum/images/ubuntu2004.qcow2" +80G
