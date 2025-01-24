@@ -6,7 +6,7 @@ For a full description of the Continuum framework, including instructions on how
 This repository allows you to run our Wasm experiments in Continuum.
 The other code of the project is available as follows:
 
-1. The modified version of the crun container runtime: https://github.com/macko99/crun/tree/wamr_support.
+1. Our version of the crun container runtime: https://github.com/macko99/crun/tree/wamr_support.
 2. Our version of WAMR: https://github.com/macko99/wasm-micro-runtime/tree/master
 3. The Python script plotting all figures from the paper: https://github.com/macko99/plots_master
 4. The WebAssembly OCI container image: https://hub.docker.com/repository/docker/macko99vu/wasmrust
