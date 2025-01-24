@@ -158,11 +158,17 @@
         kubernetesVersion: {{ kubeversion }}
         networking:
           podSubnet: 10.244.0.0/16
+        controllerManager:
+          extraArgs:
+            "node-cidr-mask-size": "22"
         ---
         apiVersion: kubelet.config.k8s.io/v1beta1
         kind: KubeletConfiguration
         containerLogMaxSize: "100Mi"
         containerLogMaxFiles: 10
+        kubeAPIQPS: 50
+        kubeAPIBurst: 100
+        maxPods: 500
         EOF
 
     - name: Initialize the Kubernetes cluster using kubeadm
@@ -192,7 +198,7 @@
       shell: |
         if [ "{{ cloud_mode }}" -gt "0" ]; then
           kubectl apply -f \
-            https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+            https://github.com/macko99/flannel/releases/latest/download/kube-flannel.yml
         fi
 
     - name: Create join command for worker nodes (cloud-only)
@@ -212,3 +218,28 @@
         state: absent
       with_items:
         - /tmp/join-command.txt
+
+    - name: Create runtime class for Wasmtime
+      shell: |
+        cat > "/home/{{ username }}/wasm_runtime.yaml" <<EOF
+        apiVersion: node.k8s.io/v1
+        kind: RuntimeClass
+        metadata:
+          name: wasmtime-rc
+        handler: wasmtime
+        ---
+        apiVersion: node.k8s.io/v1
+        kind: RuntimeClass
+        metadata:
+          name: wasmer-rc
+        handler: wasmer
+        ---
+        apiVersion: node.k8s.io/v1
+        kind: RuntimeClass
+        metadata:
+          name: wasmedge-rc
+        handler: wasmedge
+        EOF
+
+    - name: Apply runtime class for Wasmtime
+      shell: kubectl apply -f /home/{{ username }}/wasm_runtime.yaml

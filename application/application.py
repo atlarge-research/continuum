@@ -5,6 +5,7 @@ Mostly used for calling specific application code
 
 import logging
 import sys
+import time
 
 from datetime import datetime
 
@@ -301,6 +302,10 @@ def kube_control(config, machines):
 
     # Wait for benchmark to finish
     kubernetes.wait_worker_completion(config, machines)
+
+
+    logging.info("Benchmark has been finished, pls wait")
+    time.sleep(50)
 
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")

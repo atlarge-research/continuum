@@ -132,10 +132,11 @@ def main(args):
             for line in output:
                 # Example header and line (header is not printed in our command)
                 # NAME                      CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%
-                # cloud0matthijs            54m          0%     588Mi           1%
+                # cloud0mkozub            54m          0%     588Mi           1%
                 if line[1][-1] != "m":
                     logging.error("Expected CPU to be measured in m, was: %s", line[1])
-                    sys.exit()
+                    # sys.exit()
+                    continue
 
                 to_write.append(line[1][:-1])
 
@@ -145,7 +146,8 @@ def main(args):
                     to_write.append(str(float(line[3][:-2]) * 1000))
                 else:
                     logging.error("Expected Mi or Gi as unit for memory, was: %s", line[3])
-                    sys.exit()
+                    # sys.exit()
+                    continue
 
             # Now get info on pods
             output = get_output(process2)
@@ -157,10 +159,11 @@ def main(args):
 
                 # Example header and line (header is not printed in our command)
                 # NAME                                              CPU(cores)   MEMORY(bytes)
-                # etcd-cloudcontrollermatthijs                      33m          38Mi
+                # etcd-cloudcontrollermkozub                      33m          38Mi
                 if line[1][-1] != "m":
                     logging.error("Expected CPU to be measured in m, was: %s", line[1])
-                    sys.exit()
+                    # sys.exit()
+                    continue
 
                 to_write.append(line[1][:-1])
 
@@ -170,7 +173,8 @@ def main(args):
                     to_write.append(str(float(line[2][:-2]) * 1000))
                 else:
                     logging.error("Expected Mi or Gi as unit for memory, was: %s", line[3])
-                    sys.exit()
+                    # sys.exit()
+                    continue
 
             # Write all data from this iteration to file at once
             line = ",".join(to_write)
@@ -179,7 +183,8 @@ def main(args):
                 logging.error(
                     "This line does not contain the expected %i columns: %s", len(columns), line
                 )
-                sys.exit()
+                # sys.exit()
+                continue
 
             f.write(line + "\n")
             f.flush()

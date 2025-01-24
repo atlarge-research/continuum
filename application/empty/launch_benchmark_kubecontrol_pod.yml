@@ -14,7 +14,24 @@
           template:
             metadata:
               name: {{ app_name }}
+              # -----------------------------------
+              # MKB1 - uncomment below lines to use crun + wasm integration to execute the containers, use only with wasm containers
+              # use interchangeably with one of the lines 32-34
+              # -----------------------------------
+              annotations:
+                module.wasm.image/variant: compat
             spec:
+              # hostNetwork: true
+              # hostIPC: true
+              # hostPID: true
+              # -----------------------------------
+              # MKB1 - use runwasi shim to execute the wasm containers, use only with wasm containers
+              # uncomment just one desired line from below
+              # use interchangeably with lines 21-22
+              # -----------------------------------
+              # runtimeClassName: wasmtime-rc
+              # runtimeClassName: wasmer-rc
+              # runtimeClassName: wasmedge-rc
               containers:
               - name: {{ app_name }}
                 image: {{ image }}
@@ -23,6 +40,8 @@
                   requests:
                     memory: "{{ memory_req }}Mi"
                     cpu: {{ cpu_req }}
+                # securityContext:
+                #   privileged: true
                 env:
                 - name: SLEEP_TIME
                   value: "{{ sleep_time }}"

@@ -70,7 +70,7 @@ version = 2
       max_conf_num = 1
 
     [plugins."io.containerd.grpc.v1.cri".containerd]
-      default_runtime_name = "runc"
+      default_runtime_name = "crun"
       disable_snapshot_annotations = true
       discard_unpacked_layers = false
       no_pivot = false
@@ -199,7 +199,7 @@ version = 2
 
   [plugins."io.containerd.runtime.v1.linux"]
     no_shim = false
-    runtime = "runc"
+    runtime = "crun"
     runtime_root = ""
     shim = "containerd-shim"
     shim_debug = false

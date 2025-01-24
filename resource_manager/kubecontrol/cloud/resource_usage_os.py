@@ -83,6 +83,32 @@ def get_output(process):
 
     return percentage
 
+def get_output2(process):
+    """Wait for a process to complete and return its stdout and stderr
+
+    Args:
+        process (Popen): Subprocess Popen object of running process
+
+    Returns:
+        (list(str)): Return stdout of this process without custom [CONTINUUM] prints
+    """
+    output = [line.decode("utf-8") for line in process.stdout.readlines()]
+    error = [line.decode("utf-8") for line in process.stderr.readlines()]
+
+    if not output:
+        logging.error("stdout is empty, stderr: %s", " ".join(error))
+        sys.exit()
+    elif error:
+        logging.error("stderr is not empty: %s", " ".join(error))
+        sys.exit()
+
+    # We only expect 1 line of output
+    if len(output) != 1:
+        logging.error("stdout should have contained only 1 line, stdout: %s", " ".join(output))
+        sys.exit()
+
+    return output[0].strip()
+
 
 def main(args):
     """Main function
@@ -94,11 +120,12 @@ def main(args):
         'top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\\1/" | awk \'{print 100 - $1}\''
     )
     command_memory = "free | grep Mem | awk '{print $3/$2 * 100.0}'"
+    command_memory2 = "free | grep Mem | awk '{print $4}'"
 
     # Execute the commands every interval and write to file
     with open("resource_usage_os.csv", "w", encoding="utf-8") as f:
         # Write header to file
-        columns = ["timestamp", "cpu-used (%)", "memory-used (%)"]
+        columns = ["timestamp", "cpu-used (%)", "memory-used (%)", "free memory (KB)"]
         logging.debug("Columns: %s", ", ".join(columns))
         f.write(",".join(columns) + "\n")
         f.flush()
@@ -115,6 +142,7 @@ def main(args):
             # Execute both commands
             process1 = execute(command_cpu)
             process2 = execute(command_memory)
+            process3 = execute(command_memory2)
 
             # Get CPU usage
             cpu = get_output(process1)
@@ -123,6 +151,10 @@ def main(args):
             # Get memory usage
             memory = get_output(process2)
             to_write.append(str(memory))
+
+            # Get free memory
+            free_memory = get_output2(process3)
+            to_write.append(str(free_memory))
 
             # Write all data from this iteration to file at once
             line = ",".join(to_write)

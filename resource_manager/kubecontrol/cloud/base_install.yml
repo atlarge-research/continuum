@@ -34,10 +34,162 @@
         path: /etc/containerd
         state: directory
 
+    - name: Repalce containerd binary with new one
+      copy:
+        src: "{{ continuum_home }}/cloud/containerd"
+        dest: /bin/containerd
+
+    - name: Repalce runC binary with new one
+      copy:
+        src: "{{ continuum_home }}/cloud/runc"
+        dest: /usr/bin/runc
+
+    - name: Repalce containerd-shim binary with new one
+      copy:
+        src: "{{ continuum_home }}/cloud/containerd-shim"
+        dest: /bin/containerd-shim
+
+    - name: Repalce containerd-shim-runc-v1 binary with new one
+      copy:
+        src: "{{ continuum_home }}/cloud/containerd-shim-runc-v1"
+        dest: /bin/containerd-shim-runc-v1
+
+    - name: Repalce containerd-shim-runc-v2 binary with new one
+      copy:
+        src: "{{ continuum_home }}/cloud/containerd-shim-runc-v2"
+        dest: /bin/containerd-shim-runc-v2
+    
+    - name: Make new containerd binary executable
+      command: chmod +x /bin/containerd
+
+    - name: Make new containerd-shim binary executable
+      command: chmod +x /bin/containerd-shim
+
+    - name: Make new containerd-shim-runc-v1 binary executable
+      command: chmod +x /bin/containerd-shim-runc-v1
+
+    - name: Make new containerd-shim-runc-v2 binary executable  
+      command: chmod +x /bin/containerd-shim-runc-v2
+
+    - name: Copy wasmtime runtime from local to target
+      copy:
+        src: "{{ continuum_home }}/cloud/containerd-shim-wasmtime-v1"
+        dest: /bin/containerd-shim-wasmtime-v1
+
+    - name: Copy wasmer runtime from local to target
+      copy:
+        src: "{{ continuum_home }}/cloud/containerd-shim-wasmer-v1"
+        dest: /bin/containerd-shim-wasmer-v1
+
+    - name: Copy wasmedge runtime from local to target
+      copy:
+        src: "{{ continuum_home }}/cloud/containerd-shim-wasmedge-v1"
+        dest: /bin/containerd-shim-wasmedge-v1
+    
+    - name: Make new wasmtime shim executable
+      command: chmod +x /bin/containerd-shim-wasmtime-v1
+
+    - name: Make new wasmer shim executable
+      command: chmod +x /bin/containerd-shim-wasmer-v1
+
+    - name: Make new wasmedge shim executable
+      command: chmod +x /bin/containerd-shim-wasmedge-v1
+
     - name: Copy containerd config from local to target
       copy:
-        src: "{{ continuum_home }}/cloud/config.toml"
+        # -----------------------------------
+        # MKB1 - use runC or crun as a default runtime under containerd, runC is used to benchamrk the Python containers, for all other tests use crun
+        # -----------------------------------
+        # src: "{{ continuum_home }}/cloud/config.toml"
+        src: "{{ continuum_home }}/cloud/config_crun.toml"
         dest: /etc/containerd/config.toml
+
+    - name: Install WasmEdge 
+      shell: |
+        sudo curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | sudo bash -s -- -p /usr/local
+
+    - name: Install Wasmer
+      shell: |
+        sudo curl https://get.wasmer.io -sSfL | sudo WASMER_DIR=/usr/local sh
+
+    - name : Install Wasmtime
+      shell: |
+        sudo curl https://wasmtime.dev/install.sh -sSf | sudo WASMTIME_HOME=/usr/local bash
+
+    - name: Install Wasmtime c api
+      shell: |
+        wget https://github.com/bytecodealliance/wasmtime/releases/download/v20.0.2/wasmtime-v20.0.2-x86_64-linux-c-api.tar.xz
+        tar -xf wasmtime-v20.0.2-x86_64-linux-c-api.tar.xz
+        sudo cp wasmtime-v20.0.2-x86_64-linux-c-api/lib/* /lib/
+        sudo cp -r wasmtime-v20.0.2-x86_64-linux-c-api/include/* /usr/local/include/
+
+    - name: Install WAMR prerequisites
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - build-essential
+          - cmake
+          - g++-multilib
+          - libgcc-9-dev
+          - lib32gcc-9-dev
+          - ccache
+    
+    - name: Install WAMR
+      shell: |
+        git clone https://github.com/macko99/wasm-micro-runtime.git
+        cd wasm-micro-runtime
+        git checkout master
+        cd product-mini/platforms/linux
+        mkdir build && cd build
+        cmake ..
+        make
+        sudo make install
+        cp ../../../../core/iwasm/include/* /usr/local/include/
+        ldconfig
+
+    - name: Install prerequsits of crun runtime
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - make
+          - git
+          - gcc
+          - build-essential
+          - pkgconf
+          - libtool
+          - libsystemd-dev
+          - libprotobuf-c-dev
+          - libcap-dev
+          - libseccomp-dev
+          - libyajl-dev
+          - go-md2man
+          - autoconf
+          - python3
+          - automake
+
+    # here u can use --with- wasmtime, wasmedge, wasmer
+    - name: Install crun runtime
+      shell: |
+        git clone https://github.com/macko99/crun
+        cd crun
+        git switch wamr2
+        ./autogen.sh
+        # -----------------------------------
+        # MKB1 - uncomment one of the following lines to use the desired Wasm runtime with crun
+        # to recompaile the crun with different runtime, you need delete the .continuum folder and run the playbook again
+        # -----------------------------------
+        # ./configure --with-wasmedge
+        # ./configure --with-wasmtime
+        # ./configure --with-wasmer
+        ./configure --with-wamr
+        make
+        make install
 
     - name: Replace registry ip in containerd config file
       command: sed -i 's#REGISTRY-IP#{{ registry_ip }}#g' /etc/containerd/config.toml
@@ -94,7 +246,7 @@
 
     - name: Get Kubernetes binaries from host machine
       copy:
-        src: /mnt/sdb/matthijs/kubernetes-node-linux-amd64-{{ kubeversionstrp }}.tar.gz
+        src: "{{ continuum_home }}/cloud/kubernetes-node-linux-amd64-{{ kubeversionstrp }}.tar.gz"
         dest: /tmp/kubernetes-node-linux-amd64.tar.gz
 
     - name: Extract Kubernetes binary archive

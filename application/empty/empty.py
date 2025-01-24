@@ -17,8 +17,12 @@ def set_container_location(config):
     Args:
         config (dict): Parsed configuration
     """
-    source = "redplanet00/kubeedge-applications"
-    config["images"] = {"worker": "%s:empty" % (source)}
+    # -----------------------------------
+    # MKB1 - use pythonbase image to run Pyhton containers, otherwise use wasmrust
+    # -----------------------------------
+    source = "macko99vu/wasmrust"
+    # source = "macko99vu/pythonbase"
+    config["images"] = {"worker": "%s:latest" % (source)}
 
 
 def add_options(_config):
@@ -60,7 +64,7 @@ def cache_worker(_config, _machines):
         (dict): Application variables
     """
     app_vars = {
-        "sleep_time": 30,
+        "sleep_time": 10,
     }
     return app_vars
 
@@ -132,11 +136,13 @@ def format_output(
             worker_metrics = fill_control(
                 config, control, starttime, worker_output, worker_description
             )
-            df = print_control(config, worker_metrics)
+            df = print_control(config, worker_metrics, printOut=False)
             df_resources = print_resources(config, resource_output)
             validate_data(df)
             plot.plot_control(df, config["timestamp"])
-            plot.plot_p56(df, config["timestamp"])
+            plot.plot_p56(df, config["timestamp"], width=20, height=5)
+            plot.plot_p57(df, config["timestamp"], width=500, height=50)
+            plot.plot_p57(df, config["timestamp"], width=20, height=5)
             plot.plot_resources(df_resources, config["timestamp"], xmax=endtime)
 
 
@@ -296,7 +302,7 @@ def check(
 
     # Only the kubelet component is on worker nodes, all other components are in the controlplane
     is_controlplane = True
-    if component == "kubelet":
+    if component in ["kubelet", "crun", "containerd", "runc"]:
         is_controlplane = False
 
     i = 0
@@ -439,6 +445,187 @@ def fill_control(config, control, starttime, worker_output, worker_description):
         ["kubelet", "0505", "11_sandbox_start"],  # Create sandbox
         ["kubelet", "0514", "12_create_container"],  # Create containers
         ["kubelet", "0517", "13_start_container"],  # Start container
+        ["kubelet", "0502", "0502"],
+        ["kubelet", "0503", "0503"],
+        ["kubelet", "0506", "0506"],
+        ["kubelet", "0507", "0507"],
+        ["kubelet", "0508", "0508"],
+        ["kubelet", "0509", "0509"],
+        ["kubelet", "0510", "0510"],
+        ["kubelet", "0511", "0511"],
+        ["kubelet", "0512", "0512"],
+        ["kubelet", "0513", "0513"],
+        ["kubelet", "0515", "0515"],
+        # ["kubelet", "0516", "0516"],
+        ["kubelet", "0518", "0518"],
+        ["kubelet", "0519", "0519"],
+        ["kubelet", "0520", "0520"],
+        ["kubelet", "0521", "0521"],
+        ["kubelet", "0522", "0522"],
+        ["kubelet", "0523", "0523"],
+        ["kubelet", "0540", "0540"],
+        ["kubelet", "0541", "0541"],
+        ["kubelet", "0542", "0542"],
+        ["kubelet", "0555", "0555"],
+        ["kubelet", "0556", "0556"],
+        ["kubelet", "0557", "0557"],
+        ["kubelet", "0558", "0558"],
+        ["kubelet", "0559", "0559"],
+        ["kubelet", "0560", "0560"],
+
+        ["kubelet", "0601", "0601"],
+        ["kubelet", "0602", "0602"],
+        ["kubelet", "0603", "0603"],
+        ["kubelet", "0604", "0604"],
+        ["kubelet", "0605", "0605"],
+        ["kubelet", "0606", "0606"],
+
+        ["kubelet", "0641", "0641"],
+        ["kubelet", "0642", "0642"],
+        ["kubelet", "0643", "0643"],
+        ["kubelet", "0644", "0644"],
+        ["kubelet", "0645", "0645"],
+        ["kubelet", "0646", "0646"],
+        ["kubelet", "0647", "0647"],
+        ["kubelet", "0648", "0648"],
+
+        ["kubelet", "0611", "0611"],
+        ["kubelet", "0612", "0612"],
+        ["kubelet", "0613", "0613"],
+        ["kubelet", "0614", "0614"],
+
+        ["kubelet", "0631", "0631"],
+        ["kubelet", "0632", "0632"],
+        ["kubelet", "0633", "0633"],
+        ["kubelet", "0634", "0634"],    
+        ["kubelet", "0635", "0635"],
+
+        # ["kubelet", "0651", "0651"],
+        # ["kubelet", "0652", "0652"],
+        # ["kubelet", "0653", "0653"],
+        # ["kubelet", "0654", "0654"],
+        # ["kubelet", "0655", "0655"],
+        # ["kubelet", "0656", "0656"],
+        # ["kubelet", "0657", "0657"],
+        # ["kubelet", "0658", "0658"],
+
+        ["kubelet", "0701", "0701"],
+        ["kubelet", "0702", "0702"],
+
+        # ["crun", "0811", "0811"],
+        # ["crun", "0812", "0812"],
+        # ["crun", "0824", "0824"],
+        # ["crun", "0828", "0828"],
+        # ["crun", "0829", "0829"],
+        # ["crun", "0825", "0825"],
+
+        ["containerd", "0901", "0901"],
+        ["containerd", "0902", "0902"],
+        ["containerd", "0903", "0903"],
+        ["containerd", "0904", "0904"],
+        ["containerd", "0905", "0905"],
+        ["containerd", "0906", "0906"],
+        ["containerd", "0907", "0907"],
+        ["containerd", "0908", "0908"],
+        ["containerd", "0909", "0909"],
+        ["containerd", "0912", "0912"],
+        ["containerd", "0913", "0913"],
+        ["containerd", "0914", "0914"],
+        ["containerd", "0915", "0915"],
+        ["containerd", "0916", "0916"],
+        ["containerd", "0917", "0917"],
+        ["containerd", "0918", "0918"],
+        ["containerd", "0919", "0919"],
+
+        ["containerd", "0920", "0920"],
+        ["containerd", "0921", "0921"],
+        ["containerd", "0922", "0922"],
+        ["containerd", "0923", "0923"],
+        ["containerd", "0924", "0924"],
+        ["containerd", "0925", "0925"],
+        ["containerd", "0926", "0926"],
+        ["containerd", "0927", "0927"],
+        ["containerd", "0928", "0928"],
+        ["containerd", "0929", "0929"],
+        ["containerd", "0930", "0930"],
+        # ["containerd", "0931", "0931"],
+        # ["containerd", "0932", "0932"],
+        # ["containerd", "0933", "0933"],
+        # ["containerd", "0934", "0934"],
+        # ["containerd", "0935", "0935"],
+        # ["containerd", "0936", "0936"],
+        # ["containerd", "0937", "0937"],
+        # ["containerd", "0938", "0938"],
+
+        ["containerd", "0940", "0940"],
+        ["containerd", "0941", "0941"],
+        ["containerd", "0942", "0942"],
+        ["containerd", "0943", "0943"],
+        ["containerd", "0944", "0944"],
+        ["containerd", "0945", "0945"],
+        ["containerd", "0946", "0946"],
+        ["containerd", "0947", "0947"],
+        ["containerd", "0948", "0948"],
+        ["containerd", "0949", "0949"],
+        ["containerd", "0950", "0950"],
+
+        # vurtual, copied from 40-45 why? same code is executed twice
+        ["containerd", "0980", "0980"],
+        ["containerd", "0981", "0981"],
+        ["containerd", "0982", "0982"],
+        ["containerd", "0983", "0983"],
+        ["containerd", "0984", "0984"],
+        ["containerd", "0985", "0985"],
+
+        # ["containerd", "0960", "0960"],
+        # ["containerd", "0961", "0961"],
+        # ["containerd", "0962", "0962"],
+        # ["containerd", "0963", "0963"],
+        ["containerd", "0964", "0964"],
+        ["containerd", "0965", "0965"],
+        ["containerd", "0966", "0966"],
+        ["containerd", "0967", "0967"],
+        ["containerd", "0968", "0968"],
+        ["containerd", "0969", "0969"],
+
+        # vurtual, copied from 64-69 why? same code is executed twice
+        ["containerd", "0994", "0994"],
+        ["containerd", "0995", "0995"],
+        ["containerd", "0996", "0996"],
+        ["containerd", "0997", "0997"],
+        ["containerd", "0998", "0998"],
+        ["containerd", "0999", "0999"],
+
+        # ["runc", "0850", "0850"],
+        # ["runc", "0851", "0851"],
+        # ["runc", "0852", "0852"],
+        # ["runc", "0853", "0853"],
+        # ["runc", "0854", "0854"],
+        # ["runc", "0855", "0855"],
+        # ["runc", "0856", "0856"],
+        # ["runc", "0857", "0857"],
+        # ["runc", "0858", "0858"],
+        # ["runc", "0859", "0859"],
+        # ["runc", "0860", "0860"],
+
+        # ["containerd", "0031", "0031"],
+        ["containerd", "0033", "0033"],
+        ["containerd", "0034", "0034"],
+        ["containerd", "0035", "0035"],
+        # ["containerd", "0038", "0038"],
+        # ["containerd", "0039", "0039"],
+        # ["containerd", "0040", "0040"],
+        # ["containerd", "0041", "0041"],
+
+        # vurtual, copied from 33-41 why? same code is executed twice
+        # ["containerd", "0043", "0043"],
+        # ["containerd", "0044", "0044"],
+        # ["containerd", "0045", "0045"],
+        # ["containerd", "0048", "0048"],
+        # ["containerd", "0049", "0049"],
+        # ["containerd", "0050", "0050"],
+        # ["containerd", "0051", "0051"],
+    
         [None, None, "14_app_start"],  # First print in the application
     ]
 
@@ -484,12 +671,12 @@ def fill_control(config, control, starttime, worker_output, worker_description):
     # 17_app_start: First print in the application
     for pod, output in worker_output:
         for line in output:
-            if "Start the application" in line:
+            if "Hello, World!" in line:
                 if config["infrastructure"]["provider"] == "qemu":
-                    # Example: 2023-09-03T11:50:03.183541380+02:00 Start the application
+                    # Example: 2023-09-03T11:50:03.183541380+02:00 Hello, World!
                     dt = line.split("+")[0]
                 elif config["infrastructure"]["provider"] == "gcp":
-                    # Example: 2023-09-03T11:50:03.183541380Z Start the application
+                    # Example: 2023-09-03T11:50:03.183541380Z Hello, World!
                     dt = line.split("Z")[0]
 
                 dt = dt.replace("T", " ")
@@ -526,7 +713,7 @@ def fill_control(config, control, starttime, worker_output, worker_description):
     return worker_metrics
 
 
-def print_control(config, worker_metrics):
+def print_control(config, worker_metrics, printOut=False):
     """Print controlplane data from the source code
 
     Args:
@@ -564,8 +751,9 @@ def print_control(config, worker_metrics):
     )
     df = df.sort_values(by=["started_application (s)"])
 
-    df_no_indices = df.to_string(index=False)
-    logging.info("\n%s", df_no_indices)
+    if printOut:
+        df_no_indices = df.to_string(index=False)
+        logging.info("\n%s", df_no_indices)
 
     # Print ouput in csv format
     logging.debug("Output in csv format\n%s", repr(df.to_csv()))
@@ -596,7 +784,7 @@ def print_resources(config, df):
     """Modify the resource dataframe and save it to csv
 
     Example:
-    timestamp cloud0matthijs_cpu  cloud0matthijs_memory  cloudcontrollermatthijs_cpu   ...
+    timestamp cloud0mkozub_cpu  cloud0mkozub_memory  cloudcontrollermkozub_cpu   ...
     0.359692                 103                    419                         1481   ...
     0.534534                 103                    419                         1481   ...
     0.934234                 103                    419                         1481   ...
