@@ -66,6 +66,8 @@ class Machine:
         self.endpoint_names = []
         self.base_names = []
 
+        self.emulate_network = False
+
     def __repr__(self):
         """Returns this string when called as print(machine_object)"""
         return """
@@ -201,6 +203,7 @@ BASE_NAMES                  %s""" % (
             processes = []
             for j, c in enumerate(command[i * batchsize : (i + 1) * batchsize]):
                 logging.debug("Start subprocess: %s", c)
+                                
                 process = subprocess.Popen(
                     c,
                     shell=shell,

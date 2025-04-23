@@ -1,0 +1,109 @@
+---
+- hosts: base
+  become: true
+  tasks:
+    - name: Copy modded MahiMahi folder 
+      copy:
+        src: "{{ continuum_home }}/mahimahi/"
+        dest: /home/mahimahi
+
+    - name: Install required packages
+      apt:
+        name:
+          - protobuf-compiler
+          - libprotobuf-dev
+          - autotools-dev
+          - dh-autoreconf
+          - iptables
+          - pkg-config
+          - dnsmasq-base
+          - apache2-bin
+          - debhelper
+          - libssl-dev
+          - ssl-cert
+          - libxcb-present-dev
+          - libcairo2-dev
+          - libpango1.0-dev
+          - apache2-dev
+        state: present
+    
+    - name: Install GCC 7
+      apt:
+        name: g++-7
+        state: present
+      become: yes
+
+    - name: Set up GCC 7 as an alternative
+      alternatives:
+        name: gcc
+        path: /usr/bin/gcc-7
+        link: /usr/bin/gcc
+        priority: 60
+        slaves:
+          - name: g++
+            path: /usr/bin/g++-7
+            link: /usr/bin/g++
+      become: yes
+
+    - name: Make autogen.sh executable
+      file:
+        path: /home/mahimahi/autogen.sh
+        mode: '0755'
+        state: file
+      become: yes
+
+    - name: Execute autogen.sh script
+      command: ./autogen.sh
+      args:
+        chdir: /home/mahimahi
+
+    - name: Execute configure script
+      command: ./configure
+      args:
+        chdir: /home/mahimahi
+    
+    - name: Make
+      command: make
+      args:
+        chdir: /home/mahimahi
+    
+    - name: Make install
+      command: make install
+      args:
+        chdir: /home/mahimahi
+
+  
+    - name: Ensure setup_container.sh is executable
+      ansible.builtin.file:
+        path: /home/mahimahi/setup_container.sh
+        mode: '0755'
+
+    - name: Ensure setup_traffic.sh is executable
+      ansible.builtin.file:
+        path: /home/mahimahi/setup_traffic.sh
+        mode: '0755'
+      
+    - name: Add alias for container setup to .bashrc
+      ansible.builtin.lineinfile:
+        path: /home/{{ username }}/.bashrc
+        line: "alias container_setup='mm-delay 20 sudo /home/mahimahi/setup_container.sh &'"
+        state: present
+
+    - name: Add alias for re-routing setup to .bashrc
+      ansible.builtin.lineinfile:
+        path: /home/{{ username }}/.bashrc
+        line: "alias rerouting_setup='sudo /home/mahimahi/setup_traffic.sh'"
+        state: present
+
+    - name: Extract all aliases from .bashrc and save to a verification file
+      ansible.builtin.shell: grep "^alias" /home/{{ username }}/.bashrc > /home/{{ username }}/aliases_verification.txt
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Enable IPv4 forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        reload: yes

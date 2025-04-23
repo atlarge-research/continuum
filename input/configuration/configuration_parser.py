@@ -379,7 +379,7 @@ def parse_infrastructure_network(parser, input_config, config):
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
-        ["wireless_network_preset", str, lambda x: x in ["4g", "5g"], False, "4g"],
+        ["wireless_network_preset", str, lambda x: x in ["4g", "5g", "4g_mahimati"], False, "4g"],
         ["cloud_latency_avg", float, lambda x: x >= 0.0, False, -1],
         ["cloud_latency_var", float, lambda x: x >= 0.0, False, -1],
         ["cloud_throughput", float, lambda x: x >= 1.0, False, -1],

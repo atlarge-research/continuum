@@ -115,6 +115,27 @@ def generate_tc_commands(config, values, ips, disk):
 
     return commands
 
+def generate_mahimati_command(config, propagation_delay, trace):
+    """Generate Mahimati command
+    Executing this command puts application into containerized Mahimati shell.
+    Every command executed with the shell will have throughput and latecies
+    corresponding to the provided trace and progation delay
+
+    Args:
+        config (dict): Parsed configuration
+        propagation_delay (int): Propagation delay on the link measured in ms
+        trace (str): Saturate-formatted trace file
+
+    Returns:
+        str: mahimati command
+    """
+    commands = []
+    commands.append(
+        
+    )
+    
+    return commands
+
 
 def tc_values(config):
     """Set latency/throughput values to be used for tc
@@ -185,6 +206,9 @@ def start(config, machines):
 
     commands = []
 
+    for machine in machines:
+        machine.emulate_network = True 
+
     # For cloud nodes
     for ip in config["control_ips_internal"] + config["cloud_ips_internal"]:
         command = []
@@ -239,6 +263,8 @@ def start(config, machines):
     for _ in config["endpoint_ips_internal"]:
         command = []
         disk = 1
+        
+        # commands += generate_mahimati_command()
 
         # Between endpoint and cloud nodes
         targets = config["control_ips_internal"] + config["cloud_ips_internal"]
