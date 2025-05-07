@@ -124,6 +124,7 @@ BASE_NAMES                  %s""" % (
         ssh=None,
         ssh_key=True,
         retryonoutput=False,
+        wait=True,
     ):
         """Execute a process using the subprocess library, return the output/error of the process
 
@@ -136,6 +137,7 @@ BASE_NAMES                  %s""" % (
             ssh (str, optional): VM to SSH into (instead of physical machine). Default to None
             ssh_key (bool, optional): Use the custom SSH key for VMs. Default to True
             retryonoutput (bool, optional): Retry command on empty output. Default to False
+            wait (bool, optional): Should we wait for output? Default to true
 
         Returns:
             list(list(str), list(str)): Return a list of [output, error] lists, one per command.
@@ -209,10 +211,23 @@ BASE_NAMES                  %s""" % (
                 )
                 processes.append(process)
 
+            # We may not be interested in the output at all
+            if not wait:
+                continue
+
             # Get outputs for this batch of commmands (blocking)
             for j, process in enumerate(processes):
-                output = [line.decode("utf-8") for line in process.stdout.readlines()]
-                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                # Use communicate() to prevent buffer overflows
+                stdout, stderr = process.communicate()
+                output = stdout.decode("utf-8").split("\n")
+                error = stderr.decode("utf-8").split("\n")
+
+                # Byproduct of split
+                if len(output) >= 1 and output[-1] == "":
+                    output = output[:-1]
+                if len(error) >= 1 and error[-1] == "":
+                    error = error[:-1]
+
                 outputs.append([output, error])
 
                 if retryonoutput and not output:
@@ -244,8 +259,16 @@ BASE_NAMES                  %s""" % (
 
             # Get outputs for this batch of commmands (blocking)
             for i, process in zip(retries, processes):
-                output = [line.decode("utf-8") for line in process.stdout.readlines()]
-                error = [line.decode("utf-8") for line in process.stderr.readlines()]
+                stdout, stderr = process.communicate()
+                output = stdout.decode("utf-8").split("\n")
+                error = stderr.decode("utf-8").split("\n")
+
+                # Byproduct of split
+                if len(output) >= 1 and output[-1] == "":
+                    output = output[:-1]
+                if len(error) >= 1 and error[-1] == "":
+                    error = error[:-1]
+
                 outputs[i] = [output, error]
 
                 if not output:
