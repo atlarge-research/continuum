@@ -66,8 +66,6 @@ class Machine:
         self.endpoint_names = []
         self.base_names = []
 
-        self.emulate_network = False
-
     def __repr__(self):
         """Returns this string when called as print(machine_object)"""
         return """
@@ -126,7 +124,6 @@ BASE_NAMES                  %s""" % (
         ssh=None,
         ssh_key=True,
         retryonoutput=False,
-        wait=True,
     ):
         """Execute a process using the subprocess library, return the output/error of the process
 
@@ -139,7 +136,6 @@ BASE_NAMES                  %s""" % (
             ssh (str, optional): VM to SSH into (instead of physical machine). Default to None
             ssh_key (bool, optional): Use the custom SSH key for VMs. Default to True
             retryonoutput (bool, optional): Retry command on empty output. Default to False
-            wait (bool, optional): Should we wait for output? Default to true
 
         Returns:
             list(list(str), list(str)): Return a list of [output, error] lists, one per command.
@@ -203,7 +199,6 @@ BASE_NAMES                  %s""" % (
             processes = []
             for j, c in enumerate(command[i * batchsize : (i + 1) * batchsize]):
                 logging.debug("Start subprocess: %s", c)
-                                
                 process = subprocess.Popen(
                     c,
                     shell=shell,
@@ -214,23 +209,10 @@ BASE_NAMES                  %s""" % (
                 )
                 processes.append(process)
 
-            # We may not be interested in the output at all
-            if not wait:
-                continue
-
             # Get outputs for this batch of commmands (blocking)
             for j, process in enumerate(processes):
-                # Use communicate() to prevent buffer overflows
-                stdout, stderr = process.communicate()
-                output = stdout.decode("utf-8").split("\n")
-                error = stderr.decode("utf-8").split("\n")
-
-                # Byproduct of split
-                if len(output) >= 1 and output[-1] == "":
-                    output = output[:-1]
-                if len(error) >= 1 and error[-1] == "":
-                    error = error[:-1]
-
+                output = [line.decode("utf-8") for line in process.stdout.readlines()]
+                error = [line.decode("utf-8") for line in process.stderr.readlines()]
                 outputs.append([output, error])
 
                 if retryonoutput and not output:
@@ -262,16 +244,8 @@ BASE_NAMES                  %s""" % (
 
             # Get outputs for this batch of commmands (blocking)
             for i, process in zip(retries, processes):
-                stdout, stderr = process.communicate()
-                output = stdout.decode("utf-8").split("\n")
-                error = stderr.decode("utf-8").split("\n")
-
-                # Byproduct of split
-                if len(output) >= 1 and output[-1] == "":
-                    output = output[:-1]
-                if len(error) >= 1 and error[-1] == "":
-                    error = error[:-1]
-
+                output = [line.decode("utf-8") for line in process.stdout.readlines()]
+                error = [line.decode("utf-8") for line in process.stderr.readlines()]
                 outputs[i] = [output, error]
 
                 if not output:
@@ -285,10 +259,15 @@ BASE_NAMES                  %s""" % (
         """Get the amount of physical cores for this machine.
         This automatically functions as reachability check for this machine.
         """
+        # GCP uses Terraform (cloud), so the number of local cores won't matter
         # GCP and AWS uses Terraform (cloud), so the number of local cores won't matter
         # Just set the value extremely high so everything can be scheduled on the
         # same "machine" (your local machine is seen as the cloud provider)
-        if config["infrastructure"]["provider"] in ["gcp", "aws"]:
+        if config["infrastructure"]["provider"] == "gcp":
+            self.cores = 100000
+            return
+
+        if config["infrastructure"]["provider"] == "aws":
             self.cores = 100000
             return
 

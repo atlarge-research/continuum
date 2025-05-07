@@ -225,7 +225,7 @@ def create_inventory_vm(config, machines):
             f.write("\n[cloudcontroller]\n")
             f.write(
                 "%s ansible_connection=ssh ansible_host=%s ansible_user=%s \
-username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s\n"
+username=%s cloud_mode=%i kubeversion=%s\n"
                 % (
                     machines[0].cloud_controller_names[0],
                     machines[0].cloud_controller_ips[0],
@@ -233,7 +233,6 @@ username=%s cloud_mode=%i kubeversion=%s kubeversion_major=%s\n"
                     machines[0].cloud_controller_names[0],
                     config["mode"] == "cloud",
                     config["benchmark"]["kube_version"][1:],
-                    config["benchmark"]["kube_version"][:-2],
                 )
             )
 
@@ -294,7 +293,7 @@ ansible_user=%s username=%s\n"
                         if "cloud" in name:
                             f.write(
                                 "%s ansible_connection=ssh ansible_host=%s \
-ansible_user=%s username=%s kubeversion=%s kubeversionstrp=%s kubeversion_major=%s\n"
+ansible_user=%s username=%s kubeversion=%s kubeversionstrp=%s\n"
                                 % (
                                     name,
                                     ip,
@@ -302,7 +301,6 @@ ansible_user=%s username=%s kubeversion=%s kubeversionstrp=%s kubeversion_major=
                                     name,
                                     config["benchmark"]["kube_version"][1:],
                                     config["benchmark"]["kube_version"].replace(".", ""),
-                                    config["benchmark"]["kube_version"][:-2],
                                 )
                             )
 

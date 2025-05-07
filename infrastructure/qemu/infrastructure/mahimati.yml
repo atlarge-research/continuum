@@ -82,24 +82,6 @@
       ansible.builtin.file:
         path: /home/mahimahi/setup_traffic.sh
         mode: '0755'
-      
-    - name: Add alias for container setup to .bashrc
-      ansible.builtin.lineinfile:
-        path: /home/{{ username }}/.bashrc
-        line: "alias container_setup='mm-delay 20 sudo /home/mahimahi/setup_container.sh &'"
-        state: present
-
-    - name: Add alias for re-routing setup to .bashrc
-      ansible.builtin.lineinfile:
-        path: /home/{{ username }}/.bashrc
-        line: "alias rerouting_setup='sudo /home/mahimahi/setup_traffic.sh'"
-        state: present
-
-    - name: Extract all aliases from .bashrc and save to a verification file
-      ansible.builtin.shell: grep "^alias" /home/{{ username }}/.bashrc > /home/{{ username }}/aliases_verification.txt
-      args:
-        executable: /bin/bash
-      changed_when: false
 
     - name: Enable IPv4 forwarding
       sysctl:

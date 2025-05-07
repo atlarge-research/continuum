@@ -1,10 +1,7 @@
-iptables -t nat -A POSTROUTING -d 192.168.192.3 -j MASQUERADE
+CONTAINER_IP="10.0.0.2"
 
-sysctl -w net.ipv4.conf.ingress.send_redirects=0
-sysctl -w net.ipv4.conf.ingress.accept_redirects=0
-
-sysctl -w net.ipv4.conf.all.send_redirects=0
-sysctl -w net.ipv4.conf.all.accept_redirects=0
+sudo iptables -t nat -A PREROUTING -d $CONTAINER_IP -j DNAT --to-destination 10.0.0.1
+sudo iptables -t nat -A POSTROUTING -j MASQUERADE
 
 while :
 do
