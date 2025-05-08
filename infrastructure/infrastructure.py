@@ -337,12 +337,10 @@ def create_continuum_dir(config, machines):
         commands.append(command)
 
         if machine.is_local:
-            print("We are copying")
-            command = (
-                "cp -r mahimahi %s/.continuum/mahimahi"
-                % ((config["infrastructure"]["base_path"],))
+            command = "cp -r mahimahi %s/.continuum/mahimahi" % (
+                (config["infrastructure"]["base_path"],)
             )
-        
+
         commands.append(command)
 
     results = machines[0].process(config, commands, shell=True)

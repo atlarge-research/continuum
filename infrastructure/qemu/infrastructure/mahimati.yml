@@ -2,7 +2,7 @@
 - hosts: base
   become: true
   tasks:
-    - name: Copy modded MahiMahi folder 
+    - name: Copy modded MahiMahi folder
       copy:
         src: "{{ continuum_home }}/mahimahi/"
         dest: /home/mahimahi
@@ -26,7 +26,7 @@
           - libpango1.0-dev
           - apache2-dev
         state: present
-    
+
     - name: Install GCC 7
       apt:
         name: g++-7
@@ -48,7 +48,7 @@
     - name: Make autogen.sh executable
       file:
         path: /home/mahimahi/autogen.sh
-        mode: '0755'
+        mode: "0755"
         state: file
       become: yes
 
@@ -61,31 +61,30 @@
       command: ./configure
       args:
         chdir: /home/mahimahi
-    
+
     - name: Make
       command: make
       args:
         chdir: /home/mahimahi
-    
+
     - name: Make install
       command: make install
       args:
         chdir: /home/mahimahi
 
-  
     - name: Ensure setup_container.sh is executable
       ansible.builtin.file:
         path: /home/mahimahi/setup_container.sh
-        mode: '0755'
+        mode: "0755"
 
     - name: Ensure setup_traffic.sh is executable
       ansible.builtin.file:
         path: /home/mahimahi/setup_traffic.sh
-        mode: '0755'
+        mode: "0755"
 
     - name: Enable IPv4 forwarding
       sysctl:
         name: net.ipv4.ip_forward
-        value: '1'
+        value: "1"
         state: present
         reload: yes
