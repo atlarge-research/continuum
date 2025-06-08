@@ -533,7 +533,7 @@ def base_image(config, machines):
     ]
     ansible.check_output(machines[0].process(config, command)[0])
 
-     # Install mahimati at the endpoint
+    # Install mahimati at the endpoint
     command = [
         "ansible-playbook",
         "-i",

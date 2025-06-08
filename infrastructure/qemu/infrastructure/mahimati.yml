@@ -7,24 +7,79 @@
         src: "{{ continuum_home }}/mahimahi/"
         dest: /home/mahimahi
 
-    - name: Install required packages
+    - name: Install protobuf-compiler
       apt:
-        name:
-          - protobuf-compiler
-          - libprotobuf-dev
-          - autotools-dev
-          - dh-autoreconf
-          - iptables
-          - pkg-config
-          - dnsmasq-base
-          - apache2-bin
-          - debhelper
-          - libssl-dev
-          - ssl-cert
-          - libxcb-present-dev
-          - libcairo2-dev
-          - libpango1.0-dev
-          - apache2-dev
+        name: protobuf-compiler
+        state: present
+
+    - name: Install libprotobuf-dev
+      apt:
+        name: libprotobuf-dev
+        state: present
+
+    - name: Install autotools-dev
+      apt:
+        name: autotools-dev
+        state: present
+
+    - name: Install dh-autoreconf
+      apt:
+        name: dh-autoreconf
+        state: present
+
+    - name: Install iptables
+      apt:
+        name: iptables
+        state: present
+
+    - name: Install pkg-config
+      apt:
+        name: pkg-config
+        state: present
+
+    - name: Install dnsmasq-base
+      apt:
+        name: dnsmasq-base
+        state: present
+
+    - name: Install apache2-bin
+      apt:
+        name: apache2-bin
+        state: present
+
+    - name: Install debhelper
+      apt:
+        name: debhelper
+        state: present
+
+    - name: Install libssl-dev
+      apt:
+        name: libssl-dev
+        state: present
+
+    - name: Install ssl-cert
+      apt:
+        name: ssl-cert
+        state: present
+
+    - name: Install libxcb-present-dev
+      apt:
+        name: libxcb-present-dev
+        state: present
+
+    - name: Install libcairo2-dev
+      apt:
+        name: libcairo2-dev
+        state: present
+
+    - name: Install libpango1.0-dev
+      apt:
+        name: libpango1.0-dev
+        state: present
+
+    - name: Install apache2-dev
+      apt:
+        name: apache2-dev
         state: present
     
     - name: Install GCC 7

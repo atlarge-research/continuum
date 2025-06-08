@@ -379,7 +379,9 @@ def parse_infrastructure_network(parser, input_config, config):
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
-        ["wireless_network_preset", str, lambda x: x in ["4g", "5g", "4g_us_verizon_mahimahi", "evdo_us_verizon_mahimahi"], False, "4g"],
+        ["wireless_network_preset", str, lambda x: x in ["4g", "5g", "4g_us_verizon_mahimahi", "evdo_us_verizon_mahimahi", "5g_nl_kpn_mahimahi", "6g_nl_kpn_mahimahi"], False, "4g"],
+        ["edge_location", str, lambda x: x in ["aws_vodafone"], False, ""],
+        ["cloud_location", str, lambda x: x in ["eu_central_1"], False, ""],
         ["cloud_latency_avg", float, lambda x: x >= 0.0, False, -1],
         ["cloud_latency_var", float, lambda x: x >= 0.0, False, -1],
         ["cloud_throughput", float, lambda x: x >= 1.0, False, -1],
@@ -435,6 +437,7 @@ def parse_benchmark(parser, input_config, config):
         # Option | Type | Condition | Mandatory | Default
         ["resource_manager", str, lambda x: x in rms, True, None],
         ["resource_manager_only", bool, lambda x: x in [True, False], False, None],
+        ["kube_version", str, lambda x: x in ["v1.27.0"], False, None ],
         ["docker_pull", bool, lambda x: x in [True, False], False, None],
         ["application", str, lambda x: x in apps, False, None],
     ]

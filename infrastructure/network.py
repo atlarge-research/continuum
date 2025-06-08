@@ -148,15 +148,20 @@ def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
     commands.append([
         "(",
         "mm-link",
+        f"--uplink-log=uplink.log",
+        f"--downlink-log=downlink.log",
         uplink,
         downlink,
         "sudo",
-        f"/home/mahimahi/setup_container.sh {endpoint_ip} {" ".join([target for target in targets])}",
+        f"/home/mahimahi/setup_container.sh {endpoint_ip} {' '.join([target for target in targets])}",
         ">output_mahi.txt",
         "2>&1",
         "&",
         ")"
     ])
+
+
+    commands.append(["sleep", "10"])
 
     commands.append([
         "(",
@@ -183,7 +188,13 @@ def mahimahi_values(config):
         2x list(str): Path to the MahiMahi traces
     """
     if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi':
-        return ["/home/mahimahi/traces/TMobile-LTE-driving.up", "/home/mahimahi/traces/TMobile-LTE-driving.down",]
+        return ["/home/mahimahi/traces/Verizon-LTE-driving.up", "/home/mahimahi/traces/Verizon-LTE-driving.down",]
+    
+    elif config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi':
+        return ["/home/mahimahi/traces/KPN_5G.up", "/home/mahimahi/traces/KPN_5G.down",]
+    
+    elif config["infrastructure"]["wireless_network_preset"] == '6g_nl_kpn_mahimahi':
+        return ["/home/mahimahi/traces/6g_trace.up", "/home/mahimahi/traces/6g_trace.down",]
     
     elif config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi':
         return ["/home/mahimahi/traces/Verizon-EVDO-driving.up", "/home/mahimahi/traces/Verizon-EVDO-driving.down",]
@@ -206,9 +217,15 @@ def tc_values(config):
     edge = [7.5, 2.5, 1000]  # Between edge nodes (wired)
     cloud_edge = [7.5, 2.5, 1000]  # Between cloud and edge (wired)
 
-    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi':
+    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '6g_nl_kpn_mahimahi':
         cloud_endpoint = [0, 0, 1000]
         edge_endpoint = [0, 0, 1000]
+
+    if config["infrastructure"]["edge_location"] == "aws_vodafone_edge":
+        edge_endpoint = [0.07, 0.01, 10000]
+
+    if config["infrastructure"]["cloud_location"] == "eu_central_1":
+        cloud_endpoint = [3.125, 0.01, 10000]
 
     # Set values based on 4g/5g preset (if the user didn't set anything, 4g is default)
     if config["infrastructure"]["wireless_network_preset"] == "4g":
