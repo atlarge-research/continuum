@@ -122,7 +122,7 @@ def add_constants(config):
 
     # Get Docker registry IP
     if not config["infrastructure"]["infra_only"]:
-        config["registry"] = "192.168.1.103:5000"
+        config["registry"] = "192.168.1.104:5000"
 
 
 def option_check(
