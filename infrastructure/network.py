@@ -45,24 +45,6 @@ def generate_tc_commands(config, values, ips, disk):
             ]
         )
 
-    # Set throughput
-    commands.append(
-        [
-            "sudo",
-            "tc",
-            "class",
-            "add",
-            "dev",
-            network,
-            "parent",
-            "1:",
-            "classid",
-            "1:%i" % (disk),
-            "htb",
-            "rate",
-            "%smbit" % (throughput),
-        ]
-    )
 
     # Filter for specific IPs
     for ip in ips:
@@ -192,9 +174,12 @@ def mahimahi_values(config):
     
     elif config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi':
         return ["/home/mahimahi/traces/KPN_5G.up", "/home/mahimahi/traces/KPN_5G.down",]
+
+    elif config["infrastructure"]["wireless_network_preset"] == '4g_nl_kpn_mahimahi':
+        return ["/home/mahimahi/traces/KPN_4G.up", "/home/mahimahi/traces/KPN_4G.down",]
     
-    elif config["infrastructure"]["wireless_network_preset"] == '6g_nl_kpn_mahimahi':
-        return ["/home/mahimahi/traces/6g_trace.up", "/home/mahimahi/traces/6g_trace.down",]
+    elif config["infrastructure"]["wireless_network_preset"] == '5g_low_band_nl_kpn_mahimahi':
+        return ["/home/mahimahi/traces/KPN_5G_low_band.up", "/home/mahimahi/traces/KPN_5G_low_band.down",]
     
     elif config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi':
         return ["/home/mahimahi/traces/Verizon-EVDO-driving.up", "/home/mahimahi/traces/Verizon-EVDO-driving.down",]
@@ -223,9 +208,15 @@ def tc_values(config):
 
     if config["infrastructure"]["edge_location"] == "aws_vodafone_edge":
         edge_endpoint = [0.07, 0.01, 10000]
+    elif config["infrastructure"]["edge_location"] == "base_edge":
+        edge_endpoint = [0, 0, 1000]
 
     if config["infrastructure"]["cloud_location"] == "eu_central_1":
         cloud_endpoint = [3.125, 0.01, 10000]
+    elif config["infrastructure"]["cloud_location"] == "us_east_1":
+        cloud_endpoint = [45, 0.01, 10000]
+    elif config["infrastructure"]["cloud_location"] == "eu_west_3":
+        cloud_endpoint = [7.5, 0.01, 10000]
 
     # Set values based on 4g/5g preset (if the user didn't set anything, 4g is default)
     if config["infrastructure"]["wireless_network_preset"] == "4g":

@@ -107,6 +107,7 @@
         state: file
       become: yes
 
+
     - name: Execute autogen.sh script
       command: ./autogen.sh
       args:
