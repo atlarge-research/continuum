@@ -14,7 +14,7 @@
         for i in $(seq "{{ cloud_start }}" "{{ cloud_end }}"); do
           qemu-img create -f qcow2 -F qcow2 \
           -b "{{ base_path }}/.continuum/images/{{ base_cloud }}.qcow2" \
-          "{{ base_path }}/.continuum/images/cloud${i}_{{ username }}.qcow2"
+          "{{ base_path }}/.continuum/images/cloud${i}_{{ username }}.qcow2" 50G
         done
 
     - name: Add cloudinit disk for cloud controller

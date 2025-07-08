@@ -4,8 +4,6 @@
     - name: Remove old base image from {{ base_path }}/.continuum/images
       shell: |
         rm -f "{{ base_path }}/.continuum/images/{{ base_endpoint }}.qcow2"
-      args:
-        warn: false
 
     - name: Create base image
       command: >
