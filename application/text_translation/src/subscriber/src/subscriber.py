@@ -3,12 +3,9 @@ This is a subscriber, receiving images through MQTT and
 processing them using image classification from TFLite.
 """
 
-import io
 import os
 import time
 import multiprocessing
-from PIL import Image
-import numpy as np
 import paho.mqtt.client as mqtt
 import torch
 
@@ -18,9 +15,9 @@ from transformers import MarianMTModel, MarianTokenizer
 MQTT_LOGS = os.environ["MQTT_LOGS"]
 CPU_THREADS = int(os.environ["CPU_THREADS"])
 ENDPOINT_CONNECTED = int(os.environ["ENDPOINT_CONNECTED"])
-MQTT_TOPIC_PUB = "image-classification-pub"
+MQTT_TOPIC_PUB = "text-translation-pub"
 MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
-MQTT_TOPIC_SUB = "image-classification-sub"
+MQTT_TOPIC_SUB = "text-translation-sub"
 
 work_queue = multiprocessing.Queue()
 endpoints_connected = multiprocessing.Value("i", ENDPOINT_CONNECTED)
@@ -109,7 +106,7 @@ def connect_remote_client(current, ip):
 
 def do_tflite(queue):
     """A Multiprocessing thread
-    Receive images from a queue, and perform image classification on it
+    Receive text from a queue, and perform text translation on it
 
     Args:
         queue (obj): Multiprocessing queue with work
@@ -156,9 +153,11 @@ def do_tflite(queue):
                 )
                 continue
         except (AttributeError, UnicodeDecodeError):
-            print("[%s] Read image and apply ML\n" % (current.name), end="")
+            print("[%s] Read text and apply ML\n" % (current.name), end="")
 
-        # Read the image, do ML on it
+        print("[%s] Read text and apply ML\n" % (current.name), end="")
+
+        # Read the text, do ML on it
         with texts_processed.get_lock():
             texts_processed.value += 1
 
@@ -171,6 +170,8 @@ def do_tflite(queue):
         # Get timestamp to calculate latency. We prepended 0's to the time to make it a fixed length
         t_bytes = data[-35:-15]
         t_old = int(t_bytes.decode("utf-8"))
+
+        print("[%s] Received time is" % (current.name, t_old), end="")
         print("[%s] Latency (ns): %s\n" % (current.name, str(t_now - t_old)), end="")
 
         # Get data to process
@@ -226,7 +227,7 @@ def main():
         work_queue.join_thread()
 
     with texts_processed.get_lock():
-        print("Finished, processed images: %i" % texts_processed.value)
+        print("Finished, processed texts: %i" % texts_processed.value)
 
 
 if __name__ == "__main__":

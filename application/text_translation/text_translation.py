@@ -18,8 +18,8 @@ def set_container_location(config):
     source = "fzovpec2/text_translation"
 
     config["images"] = {
-        "worker": "%s:text_translation_subscriber_8" % (source),
-        "endpoint": "%s:text_translation_publisher_1" % (source)
+        "worker": "%s:text_translation_subscriber" % (source),
+        "endpoint": "%s:text_translation_publisher" % (source)
     }
 
 

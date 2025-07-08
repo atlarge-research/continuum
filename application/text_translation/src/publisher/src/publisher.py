@@ -10,8 +10,8 @@ MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
 MQTT_REMOTE_IP = os.environ["MQTT_REMOTE_IP"]
 MQTT_LOGS = os.environ["MQTT_LOGS"]
 FREQUENCY = float(os.environ["FREQUENCY"]) / 10
-MQTT_TOPIC_PUB = "image-classification-pub"
-MQTT_TOPIC_SUB = "image-classification-sub"
+MQTT_TOPIC_PUB = "text-translation-pub"
+MQTT_TOPIC_SUB = "text-translation-sub"
 
 if "DURATION" in os.environ:
     DURATION = int(os.environ["DURATION"])
@@ -20,7 +20,7 @@ else:
 
 # Set how many imgs to send, and how often
 SEC_PER_FRAME = float(1 / FREQUENCY)
-MAX_IMGS = int(FREQUENCY * DURATION)
+MAX_TXTS = int(FREQUENCY * DURATION)
 
 RECEIVED = 0
 
@@ -131,8 +131,10 @@ def send():
     print("Read %i lines from the file" % len(lines))
 
     # Send all frames over MQTT, one by one
-    for i in range(MAX_IMGS):
+    for i in range(MAX_TXTS):
         start_time = time.time_ns()
+
+        print("The start time (ns): %i" % (start_time))
         
         text = lines[i % len(lines)].strip()
         print("Sending text: %s" % text)
@@ -170,7 +172,7 @@ def send():
     remote_client.loop_stop()
 
     remote_client.disconnect()
-    print("Finished, sent %i texts" % (MAX_IMGS))
+    print("Finished, sent %i texts" % (MAX_TXTS))
 
 
 if __name__ == "__main__":
@@ -178,8 +180,8 @@ if __name__ == "__main__":
     send()
 
     print("Wait for all texts to be received back")
-    while RECEIVED != MAX_IMGS:
-        print("Waiting progress: %i / %i" % (RECEIVED, MAX_IMGS))
+    while RECEIVED != MAX_TXTS:
+        print("Waiting progress: %i / %i" % (RECEIVED, MAX_TXTS))
         time.sleep(10)
 
-    print("All %i texts have been received back" % (MAX_IMGS))
+    print("All %i texts have been received back" % (MAX_TXTS))
