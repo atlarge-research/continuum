@@ -175,10 +175,10 @@ def mahimahi_values(config):
     elif config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi':
         return ["/home/mahimahi/traces/KPN_5G.up", "/home/mahimahi/traces/KPN_5G.down",]
 
-    elif config["infrastructure"]["wireless_network_preset"] == '4g_nl_kpn_mahimahi':
+    elif config["infrastructure"]["wireless_network_preset"] == 'lte_nl_kpn_mahimahi':
         return ["/home/mahimahi/traces/KPN_4G.up", "/home/mahimahi/traces/KPN_4G.down",]
     
-    elif config["infrastructure"]["wireless_network_preset"] == '5g_low_band_nl_kpn_mahimahi':
+    elif config["infrastructure"]["wireless_network_preset"] == '5g_obstacled_nl_kpn_mahimahi':
         return ["/home/mahimahi/traces/KPN_5G_low_band.up", "/home/mahimahi/traces/KPN_5G_low_band.down",]
     
     elif config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi':

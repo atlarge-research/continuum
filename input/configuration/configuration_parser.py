@@ -379,7 +379,7 @@ def parse_infrastructure_network(parser, input_config, config):
 
     settings = [
         # Option | Type | Condition | Mandatory | Default
-        ["wireless_network_preset", str, lambda x: x in ["4g", "5g", "4g_us_verizon_mahimahi", "evdo_us_verizon_mahimahi", "5g_nl_kpn_mahimahi", "6g_nl_kpn_mahimahi"], False, "4g"],
+        ["wireless_network_preset", str, lambda x: x in ["4g", "5g", "4g_us_verizon_mahimahi", "evdo_us_verizon_mahimahi", "5g_nl_kpn_mahimahi", "5g_obstacled_nl_kpn_mahimahi", "lte_nl_kpn_mahimahi"], False, "4g"],
         ["edge_location", str, lambda x: x in ["aws_vodafone_edge", "base_edge"], False, ""],
         ["cloud_location", str, lambda x: x in ["eu_central_1", "us_east_1", "eu_west_3"], False, ""],
         ["cloud_latency_avg", float, lambda x: x >= 0.0, False, -1],
