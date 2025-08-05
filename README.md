@@ -192,7 +192,7 @@ git clone https://github.com/atlarge-research/continuum.git
 cd continuum
 
 # 4. Install Python and some packages, including Ansible
-sudo apt install python3 python3-pip
+sudo apt install python3 python3-pip ansible
 pip3 install -r requirements.txt
 
 # 5. Edit the Ansible configuration as follows on Ubuntu 20.04:
