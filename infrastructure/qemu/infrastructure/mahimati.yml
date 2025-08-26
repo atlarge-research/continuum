@@ -1,0 +1,147 @@
+---
+- hosts: base
+  become: true
+  tasks:
+    - name: Copy modded MahiMahi folder 
+      copy:
+        src: "{{ continuum_home }}/mahimahi/"
+        dest: /home/mahimahi
+
+    - name: Install protobuf-compiler
+      apt:
+        name: protobuf-compiler
+        state: present
+
+    - name: Install libprotobuf-dev
+      apt:
+        name: libprotobuf-dev
+        state: present
+
+    - name: Install autotools-dev
+      apt:
+        name: autotools-dev
+        state: present
+
+    - name: Install dh-autoreconf
+      apt:
+        name: dh-autoreconf
+        state: present
+
+    - name: Install iptables
+      apt:
+        name: iptables
+        state: present
+
+    - name: Install pkg-config
+      apt:
+        name: pkg-config
+        state: present
+
+    - name: Install dnsmasq-base
+      apt:
+        name: dnsmasq-base
+        state: present
+
+    - name: Install apache2-bin
+      apt:
+        name: apache2-bin
+        state: present
+
+    - name: Install debhelper
+      apt:
+        name: debhelper
+        state: present
+
+    - name: Install libssl-dev
+      apt:
+        name: libssl-dev
+        state: present
+
+    - name: Install ssl-cert
+      apt:
+        name: ssl-cert
+        state: present
+
+    - name: Install libxcb-present-dev
+      apt:
+        name: libxcb-present-dev
+        state: present
+
+    - name: Install libcairo2-dev
+      apt:
+        name: libcairo2-dev
+        state: present
+
+    - name: Install libpango1.0-dev
+      apt:
+        name: libpango1.0-dev
+        state: present
+
+    - name: Install apache2-dev
+      apt:
+        name: apache2-dev
+        state: present
+    
+    - name: Install GCC 7
+      apt:
+        name: g++-7
+        state: present
+      become: yes
+
+    - name: Set up GCC 7 as an alternative
+      alternatives:
+        name: gcc
+        path: /usr/bin/gcc-7
+        link: /usr/bin/gcc
+        priority: 60
+        slaves:
+          - name: g++
+            path: /usr/bin/g++-7
+            link: /usr/bin/g++
+      become: yes
+
+    - name: Make autogen.sh executable
+      file:
+        path: /home/mahimahi/autogen.sh
+        mode: '0755'
+        state: file
+      become: yes
+
+
+    - name: Execute autogen.sh script
+      command: ./autogen.sh
+      args:
+        chdir: /home/mahimahi
+
+    - name: Execute configure script
+      command: ./configure
+      args:
+        chdir: /home/mahimahi
+    
+    - name: Make
+      command: make
+      args:
+        chdir: /home/mahimahi
+    
+    - name: Make install
+      command: make install
+      args:
+        chdir: /home/mahimahi
+
+  
+    - name: Ensure setup_container.sh is executable
+      ansible.builtin.file:
+        path: /home/mahimahi/setup_container.sh
+        mode: '0755'
+
+    - name: Ensure setup_traffic.sh is executable
+      ansible.builtin.file:
+        path: /home/mahimahi/setup_traffic.sh
+        mode: '0755'
+
+    - name: Enable IPv4 forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        reload: yes

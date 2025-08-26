@@ -45,24 +45,6 @@ def generate_tc_commands(config, values, ips, disk):
             ]
         )
 
-    # Set throughput
-    commands.append(
-        [
-            "sudo",
-            "tc",
-            "class",
-            "add",
-            "dev",
-            network,
-            "parent",
-            "1:",
-            "classid",
-            "1:%i" % (disk),
-            "htb",
-            "rate",
-            "%smbit" % (throughput),
-        ]
-    )
 
     # Filter for specific IPs
     for ip in ips:
@@ -115,9 +97,99 @@ def generate_tc_commands(config, values, ips, disk):
 
     return commands
 
+def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
+    """Generate Mahimati command
+    Executing this command puts application into containerized Mahimati shell.
+    Every command executed with the shell will have throughput and latecies
+    corresponding to the provided trace and progation delay
+
+    Args:
+        config (dict): Parsed configuration
+        propagation_delay (int): Propagation delay on the link measured in ms
+        trace (str): Saturate-formatted trace file
+
+    Returns:
+        str: mahimati command
+    """
+    # the path for verizon let's say is /home/mahimahi/traces/Verizon-LTE-driving.up
+    if not uplink or not downlink:
+        return [[]]
+    
+    commands = []
+
+    commands.append([
+        "export",
+        "SRC_TO_IGNORE=10.0.0.1"
+    ])
+
+    commands.append([
+        "export",
+        "DEST_TO_IGNORE=10.0.0.1"
+    ])
+
+    commands.append([
+        "(",
+        "mm-link",
+        f"--uplink-log=uplink.log",
+        f"--downlink-log=downlink.log",
+        uplink,
+        downlink,
+        "sudo",
+        f"/home/mahimahi/setup_container.sh {endpoint_ip} {' '.join([target for target in targets])}",
+        ">output_mahi.txt",
+        "2>&1",
+        "&",
+        ")"
+    ])
+
+
+    commands.append(["sleep", "10"])
+
+    commands.append([
+        "(",
+        "sudo",
+        f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {" ".join([target for target in targets])}",
+        ">output_reroute.txt",
+        "2>&1",
+        "&",
+        ")"
+    ])
+    
+    
+    return commands
+
+def mahimahi_values(config):
+    """
+        Set values used for for MahiMahi
+        In case non-mahimahi preset is used, function returns None
+
+    Args:
+        config (dict): Parsed configuration
+
+    Returns:
+        2x list(str): Path to the MahiMahi traces
+    """
+    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi':
+        return ["/home/mahimahi/traces/Verizon-LTE-driving.up", "/home/mahimahi/traces/Verizon-LTE-driving.down",]
+    
+    elif config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi':
+        return ["/home/mahimahi/traces/KPN_5G.up", "/home/mahimahi/traces/KPN_5G.down",]
+
+    elif config["infrastructure"]["wireless_network_preset"] == 'lte_nl_kpn_mahimahi':
+        return ["/home/mahimahi/traces/KPN_4G.up", "/home/mahimahi/traces/KPN_4G.down",]
+    
+    elif config["infrastructure"]["wireless_network_preset"] == '5g_obstacled_nl_kpn_mahimahi':
+        return ["/home/mahimahi/traces/KPN_5G_low_band.up", "/home/mahimahi/traces/KPN_5G_low_band.down",]
+    
+    elif config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi':
+        return ["/home/mahimahi/traces/Verizon-EVDO-driving.up", "/home/mahimahi/traces/Verizon-EVDO-driving.down",]
+
+    return [None, None]
 
 def tc_values(config):
     """Set latency/throughput values to be used for tc
+
+    The MahiMahi keys have the following format: standard_location_provider
 
     Args:
         config (dict): Parsed configuration
@@ -129,6 +201,22 @@ def tc_values(config):
     cloud = [0, 0, 1000]  # Between cloud nodes (wired)
     edge = [7.5, 2.5, 1000]  # Between edge nodes (wired)
     cloud_edge = [7.5, 2.5, 1000]  # Between cloud and edge (wired)
+
+    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '6g_nl_kpn_mahimahi':
+        cloud_endpoint = [0, 0, 1000]
+        edge_endpoint = [0, 0, 1000]
+
+    if config["infrastructure"]["edge_location"] == "aws_vodafone_edge":
+        edge_endpoint = [0.07, 0.01, 10000]
+    elif config["infrastructure"]["edge_location"] == "base_edge":
+        edge_endpoint = [0, 0, 1000]
+
+    if config["infrastructure"]["cloud_location"] == "eu_central_1":
+        cloud_endpoint = [3.125, 0.01, 10000]
+    elif config["infrastructure"]["cloud_location"] == "us_east_1":
+        cloud_endpoint = [45, 0.01, 10000]
+    elif config["infrastructure"]["cloud_location"] == "eu_west_3":
+        cloud_endpoint = [7.5, 0.01, 10000]
 
     # Set values based on 4g/5g preset (if the user didn't set anything, 4g is default)
     if config["infrastructure"]["wireless_network_preset"] == "4g":
@@ -176,11 +264,18 @@ def tc_values(config):
 def start(config, machines):
     """Set network latency/throughput between VMs to emulate edge continuum networking
 
+    Whenever the network emulation is set to MahiMahi (name should end with _mahimahi),
+    mobile network emulation is a responsibility of MahiMahi and the core network emulation 
+    is the responsibility of tc.
+
+    Otherwise tc performs end-to-end network emulation
+
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     logging.info("Add network latency between VMs")
+    uplink, downlink = mahimahi_values(config)
     cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint = tc_values(config)
 
     commands = []
@@ -236,7 +331,7 @@ def start(config, machines):
         commands.append(command)
 
     # For endpoint nodes (no endpoint->endpoint connection possible)
-    for _ in config["endpoint_ips_internal"]:
+    for endpoint_ip in config["endpoint_ips_internal"]:
         command = []
         disk = 1
 
@@ -251,11 +346,15 @@ def start(config, machines):
         if targets:
             command += generate_tc_commands(config, edge_endpoint, targets, disk)
 
-        commands.append(command)
+        targets = config["control_ips_internal"] + config["cloud_ips_internal"] + config["edge_ips_internal"]
+        if targets:
+            command += generate_mahimati_command(endpoint_ip, targets, uplink, downlink)
+            commands.append(command)
 
     # Generate all TC commands and the ssh addresses where they need to be executed
     commands_final = []
     sshs = []
+
     for ssh, command in zip(
         config["cloud_ssh"] + config["edge_ssh"] + config["endpoint_ssh"], commands
     ):
@@ -273,6 +372,7 @@ def start(config, machines):
 
     # Execute TC command in parallel
     if commands_final:
+        print(commands_final, sshs)
         results = machines[0].process(config, commands_final, shell=True, ssh=sshs)
 
         # Check output of TC commands
