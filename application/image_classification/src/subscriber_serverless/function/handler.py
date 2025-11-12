@@ -3,16 +3,17 @@ This is a subscriber, receiving images through HTTP as serverless and
 processing them using image classification from TFLite.
 """
 
+import base64
 import io
+import json
 import os
 import time
-import base64
-import json
-from PIL import Image
+
 import numpy as np
 
 # pylint: disable-next=import-error
 import tflite_runtime.interpreter as tflite
+from PIL import Image
 
 CPU_THREADS = int(os.environ["CPU_THREADS"])
 

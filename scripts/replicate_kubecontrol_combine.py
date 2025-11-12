@@ -5,19 +5,17 @@ Benchmarks for kubecontrol
 """
 
 import argparse
-import sys
 import logging
 import os
+import sys
 import time
-
-import pandas as pd
-import numpy as np
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
-
+import numpy as np
+import pandas as pd
 import replicate_paper
+from matplotlib.ticker import MaxNLocator
 
 
 class MicroBenchmark(replicate_paper.Experiment):

@@ -1,9 +1,8 @@
 """Manage the empty application"""
 
+import copy
 import logging
 import sys
-import copy
-
 from datetime import datetime
 
 import pandas as pd

@@ -2,11 +2,12 @@
 This is a publisher, sending local images over HTTP to a subscriber for further processing.
 """
 
-import time
-import os
-import sys
 import base64
 import json
+import os
+import sys
+import time
+
 import requests
 
 FREQUENCY = int(os.environ["FREQUENCY"])

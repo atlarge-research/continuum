@@ -6,19 +6,19 @@ Check the documentation and help for more information.
 """
 
 import argparse
+import logging
 import os
 import os.path
 import sys
-import logging
 import time
 
 from application import application
 from execution_model import execution_model
 from infrastructure import infrastructure
-from resource_manager import resource_manager
 
 # pylint: disable-next=redefined-builtin
 from input import input
+from resource_manager import resource_manager
 
 
 def make_wide(formatter, w=120, h=36):
@@ -126,13 +126,13 @@ def main(args):
         if "benchmark" in args.config and args.config["benchmark"]["observability"]:
             logging.info(
                 "To access Grafana: ssh -L 3000:%s:3000 %s -i %s",
-                args.config["cloud_ips"][0],
+                args.config["control_ips"][0],
                 args.config["cloud_ssh"][0],
                 args.config["ssh_key"],
             )
             logging.info(
                 "To access Prometheus: ssh -L 9090:%s:9090 %s -i %s",
-                args.config["cloud_ips"][0],
+                args.config["control_ips"][0],
                 args.config["cloud_ssh"][0],
                 args.config["ssh_key"],
             )

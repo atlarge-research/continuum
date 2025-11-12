@@ -1,8 +1,9 @@
 """Manage the image_classification application"""
 
-import logging
 import copy
+import logging
 import sys
+
 import numpy as np
 import pandas as pd
 

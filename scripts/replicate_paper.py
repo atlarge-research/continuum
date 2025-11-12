@@ -3,22 +3,20 @@ Run the benchmark multiple times with a range of settings,
 and produce tables / graphs with these results
 """
 
-import math
-import time
 import argparse
-import sys
-import logging
-import subprocess
 import datetime
+import logging
+import math
 import os
+import subprocess
+import sys
+import time
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
-
-from matplotlib.ticker import ScalarFormatter
-from matplotlib.ticker import NullFormatter
+from matplotlib.ticker import NullFormatter, ScalarFormatter
 
 # Home dir should be continuum/
 os.chdir("../")

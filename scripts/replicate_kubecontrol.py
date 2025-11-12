@@ -5,17 +5,17 @@ Benchmarks for kubecontrol
 """
 
 import argparse
-import sys
 import logging
 import os
+import sys
 import time
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 sys.path.append("../application/empty")
-import replicate_paper  # pylint: disable=wrong-import-position
 import plot  # pylint: disable=wrong-import-position,import-error
+import replicate_paper  # pylint: disable=wrong-import-position
 
 
 class MicroBenchmark(replicate_paper.Experiment):

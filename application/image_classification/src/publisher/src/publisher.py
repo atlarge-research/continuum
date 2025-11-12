@@ -2,8 +2,9 @@
 This is a publisher, sending local images over MQTT to a subscriber for further processing.
 """
 
-import time
 import os
+import time
+
 import paho.mqtt.client as mqtt
 
 MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]

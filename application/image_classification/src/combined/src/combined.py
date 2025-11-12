@@ -3,15 +3,15 @@ This is a combination of a publisher and subscriber,
 modeling handling ML workload on the endpoint itself.
 """
 
+import multiprocessing
 import os
 import time
-import multiprocessing
+
 import numpy as np
-from PIL import Image
 
 # pylint: disable-next=import-error
 import tflite_runtime.interpreter as tflite
-
+from PIL import Image
 
 CPU_THREADS = int(os.environ["CPU_THREADS"])
 FREQUENCY = int(os.environ["FREQUENCY"])

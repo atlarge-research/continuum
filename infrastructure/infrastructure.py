@@ -2,12 +2,13 @@
 Impelemnt infrastructure
 """
 
+import json
 import logging
 import os
+import string
 import sys
 import time
-import json
-import string
+
 import numpy as np
 
 from . import machine as m

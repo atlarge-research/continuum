@@ -3,10 +3,9 @@ Setup Kubernetes on cloud
 This resource manager doesn't have any/many help functions, see the /kubernetes folder instead
 """
 
+import json
 import logging
 import os
-import json
-
 from datetime import datetime
 from typing import Dict, List
 

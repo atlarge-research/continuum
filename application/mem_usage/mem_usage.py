@@ -5,8 +5,8 @@ import time
 
 from resource_manager.kubernetes import kubernetes
 
-from ..empty.empty import set_container_location as empty_set_container_location
 from ..empty.empty import cache_worker as empty_cache_worker
+from ..empty.empty import set_container_location as empty_set_container_location
 
 
 def set_container_location(config):

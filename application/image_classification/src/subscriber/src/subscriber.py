@@ -4,15 +4,16 @@ processing them using image classification from TFLite.
 """
 
 import io
+import multiprocessing
 import os
 import time
-import multiprocessing
-from PIL import Image
+
 import numpy as np
 import paho.mqtt.client as mqtt
 
 # pylint: disable-next=import-error
 import tflite_runtime.interpreter as tflite
+from PIL import Image
 
 MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
 MQTT_LOGS = os.environ["MQTT_LOGS"]

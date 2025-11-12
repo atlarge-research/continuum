@@ -2,18 +2,18 @@
 Use the mathematical model from the paper, with data from the benchmark
 """
 
-import sys
-import os
 import argparse
-import logging
-import subprocess
 import datetime
+import logging
+import os
+import subprocess
+import sys
 import time
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from matplotlib import colors
-
 
 # pylint: disable=wrong-import-position,import-error
 

@@ -4,6 +4,7 @@ Licensed under the MIT license. See LICENSE file in the project root for full li
 """
 
 import sys
+
 from function import handler
 
 

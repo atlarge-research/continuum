@@ -2,14 +2,13 @@
 Create and use QEMU Vms
 """
 
-import sys
 import logging
-import time
-import string
 import os
+import string
+import sys
+import time
 
-from infrastructure import infrastructure
-from infrastructure import ansible
+from infrastructure import ansible, infrastructure
 from infrastructure import machine as m
 
 from . import generate

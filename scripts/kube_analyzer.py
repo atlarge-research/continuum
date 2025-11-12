@@ -3,12 +3,12 @@ Automatic analyzer tool
 Assumes all log files already exist
 """
 
-import sys
 import argparse
-
-# import pandas as pd
+import sys
 
 import replicate_kubecontrol
+
+# import pandas as pd
 
 
 class Analyzer(replicate_kubecontrol.MicroBenchmark):

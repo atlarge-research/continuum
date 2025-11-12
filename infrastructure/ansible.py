@@ -2,10 +2,10 @@
 Generate Ansible inventory files
 """
 
-import sys
 import logging
 import os
 import re
+import sys
 
 
 def check_output(out):
