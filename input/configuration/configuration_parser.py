@@ -7,7 +7,6 @@ import configparser
 import getpass
 import importlib
 import os
-import socket
 import sys
 
 from application import application
@@ -98,11 +97,10 @@ def dynamic_import(parser, config):
                 )
 
 
-def add_constants(parser, config):
+def add_constants(config):
     """Add some constants to the config dict
 
     Args:
-        parser (ArgumentParser): Argparse object
         config (dict): Parsed configuration
     """
     config["home"] = str(os.getenv("HOME"))
@@ -118,16 +116,10 @@ def add_constants(parser, config):
     config["postfixIP_lower"] = 2
     config["postfixIP_upper"] = 252
 
+    # NOTE: Hardcoded for demo purposes
     # Get Docker registry IP
     if not config["infrastructure"]["infra_only"]:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            host_ip = s.getsockname()[0]
-        except socket.gaierror as e:
-            parser.error("Could not get host ip with error: %s", e)
-
-        config["registry"] = host_ip + ":5000"
+        config["registry"] = "192.168.1.104:5000"
 
 
 def option_check(
@@ -521,7 +513,7 @@ def start(parser, arg):
 
     # Add stuff based on the parsed config
     dynamic_import(parser, config)
-    add_constants(parser, config)
+    add_constants(config)
 
     # Add and verify options for each module
     add_options(parser, input_config, config)
