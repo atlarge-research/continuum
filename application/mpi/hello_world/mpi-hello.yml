@@ -1,0 +1,40 @@
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: mpi-hello
+spec:
+  slotsPerWorker: 1
+  runPolicy:
+    cleanPodPolicy: Running
+  sshAuthMountPath: /home/mpiuser/.ssh
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          serviceAccountName: default
+          containers:
+          - name: mpi-launcher
+            image: redplanet00/mpi-demo:hello_world
+            imagePullPolicy: Always # TODO: IfNotPresent
+            securityContext:
+              runAsUser: 1000
+            command: ["mpirun"]
+            args: ["-np","2","--hostfile","/etc/mpi/hostfile","--map-by","ppr:1:node","/home/mpiuser/mpi_example"]
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          serviceAccountName: default
+          containers:
+          - name: mpi-worker
+            image: redplanet00/mpi-demo:hello_world
+            imagePullPolicy: Always # TODO: IfNotPresent
+            securityContext:
+              runAsUser: 1000
+            command: ["/usr/sbin/sshd"]
+            args: ["-De","-f","/home/mpiuser/.sshd_config"]
+            resources:
+              requests:
+                cpu: "1"
+                memory: "512Mi"

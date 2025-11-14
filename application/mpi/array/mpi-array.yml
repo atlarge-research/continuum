@@ -1,0 +1,89 @@
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: mpi-array
+spec:
+  slotsPerWorker: 1
+  runPolicy:
+    cleanPodPolicy: Running
+  sshAuthMountPath: /home/mpiuser/.ssh
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        metadata:
+          labels:
+            app: mpi-array
+        spec:
+          serviceAccountName: default
+          #########################################################
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app: mpi-array
+                topologyKey: "kubernetes.io/hostname"
+          #########################################################
+          containers:
+          - name: mpi-launcher
+            image: redplanet00/mpi-demo:array
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              runAsUser: 1000
+            command: ["bash", "-lc"]
+            args: 
+              - |
+                # Wait for all hosts in the hostfile to resolve in DNS
+                HOSTS=$(awk '{print $1}' /etc/mpi/hostfile)
+                echo "Waiting for all hosts to resolve..."
+                for h in $HOSTS; do
+                  echo "Probing SSH on $h..."
+                  until ssh -p 2222 \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=no \
+                            -o ConnectTimeout=5 \
+                            "$h" 'exit 0' >/dev/null 2>&1; do
+                    sleep 1
+                  done
+                done
+                echo "All hosts resolvable, starting mpirun"
+
+                exec mpirun \
+                  -np 4 \
+                  --hostfile /etc/mpi/hostfile \
+                  --map-by ppr:1:node \
+                  /home/mpiuser/mpi_example
+            resources:
+              requests:
+                cpu: "0.5"
+                memory: "1024Mi"
+    Worker:
+      replicas: 4
+      template:
+        metadata:
+          labels:
+            app: mpi-array
+        spec:
+          serviceAccountName: default
+          #########################################################
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app: mpi-array
+                topologyKey: "kubernetes.io/hostname"
+          #########################################################
+          containers:
+          - name: mpi-worker
+            image: redplanet00/mpi-demo:array
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              runAsUser: 1000
+            command: ["/usr/sbin/sshd"]
+            args: ["-De","-f","/home/mpiuser/.sshd_config"]
+            resources:
+              requests:
+                cpu: "0.5"
+                memory: "1024Mi"
