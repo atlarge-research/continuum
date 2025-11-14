@@ -1,7 +1,7 @@
 # Continuum Demo
 **This demo is part of an event. Please see the main branch of Continuum if you are not currently attending an in-person or online demo or tutorial.**
 
-This demo consists of X parts:
+This demo consists of 5 parts:
 
 1. Access the Kubernetes cluster.
 2. Inspect the cluster via the terminal and browser.
