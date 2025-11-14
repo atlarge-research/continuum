@@ -4,8 +4,6 @@
   tasks:
     - name: Enable edgestream
       shell: "sed -z 's/enable: false/enable: true/3' /etc/kubeedge/config/edgecore.yaml > edgecore.yaml"
-      args:
-        warn: false
 
     - name: Move the newly created edgecore to KubeEdge directory
       command: mv -f "/home/{{ username }}/edgecore.yaml" /etc/kubeedge/config/edgecore.yaml
@@ -14,8 +12,6 @@
       shell: >
         sed '/^ExecStart=.*/a Environment="CHECK_EDGECORE_ENVIRONMENT=false"'
         /etc/kubeedge/edgecore.service > edgecore.service
-      args:
-        warn: false
 
     - name: Move the newly created edgecore service to KubeEdge directory
       command: mv -f "/home/{{ username }}/edgecore.service" /etc/kubeedge/edgecore.service

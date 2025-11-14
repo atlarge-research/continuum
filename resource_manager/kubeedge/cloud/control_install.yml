@@ -54,8 +54,6 @@
 
     - name: Link KubeEdge to Kubernetes
       command: ln -s "/home/{{ username }}/.kube" /root
-      args:
-        warn: false
 
     # Ansible SSH's into the VM, executes a command and then kills the session.
     # This doesn't always work with KubeEdge, so we nohup KubeEdge and then wait for it to finish.

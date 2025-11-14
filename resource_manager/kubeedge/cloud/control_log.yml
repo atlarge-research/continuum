@@ -19,8 +19,6 @@
 
     - name: Enable cloudstream
       shell: "sed -z 's/enable: false/enable: true/2' /etc/kubeedge/config/cloudcore.yaml > cloudcore.yaml"
-      args:
-        warn: false
 
     - name: Move the newly created cloudcore to KubeEdge directory
       command: mv -f "/home/{{ username }}/cloudcore.yaml" /etc/kubeedge/config/cloudcore.yaml
@@ -30,5 +28,3 @@
 
     - name: Restart cloudcore
       command: sudo su -c 'nohup cloudcore > cloudcore.log 2>&1 &'
-      args:
-        warn: false
