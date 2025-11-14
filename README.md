@@ -43,7 +43,7 @@ In this part, you inspect the Kubernetes cluster running on 2 VMs to see what th
     5. How many CPU and memory resources are these applications using?
         - Hint: `kubectl describe pod ...`
 2. Kubernetes can also be inspected in the browser using a tool called `Grafana` (https://grafana.com/). Grafana provides interactive real-time dashboards that consume metrics produced by Kubernetes and stored in Prometheus (https://prometheus.io/). Grafana and Prometheus are running in the Kubernetes control-plane VM and can be accessed locally because you have connected to the control-plane VM using port-forwarding (see the SSH commands with `-L` flags you used to access the VM).
-    1. Go to `http://localhost:3000` in a browser. This opens the Grafana dashboards. Log in with username and password `admin`, and skip creating a new password.
+    1. Go to http://localhost:3000 in a browser. This opens the Grafana dashboards. Log in with username and password `admin`, and skip creating a new password.
     2. Click on the menu icon next to `home` in the top-left corner, and then click on `Dashboards`.
     3. Grafana offers many `Default` dashboards, such as:
         1. `Kubernetes/Compute Resources/Cluster`: Inspect the resource usage of all pods in the cluster. Pods are grouped here in namespaces -> default contains the user's applications, kube-system contains Kubernetes' control plane components, monitoring contains Prometheus' and Grafana's applications used to get the data used in these dashboards. 
