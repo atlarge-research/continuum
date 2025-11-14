@@ -17,8 +17,8 @@
       command: systemctl restart docker
 
     - name: Wait for join command to be finished on cloud controller
-      local_action:
-        module: wait_for
+      delegate_to: localhost
+      wait_for:
         path: "{{ continuum_home }}/join-command.txt"
       become: false
 
