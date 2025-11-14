@@ -52,6 +52,18 @@ For Terraform support, please contact the developers. Currently, Terraform suppo
     ```
     Finally, check if the network has been correctly started: `virsh net-list`
 
+6. If `/etc/libvirt/qemu.conf` has already been updated you still get errors similar to this:
+
+    ```
+    home/user/continuum/infrastructure/qemu/qemu.py:468 - base_image() ] ERROR: error: Failed to create domain from /home/user/.continuum/domain_base_cloud_kubernetes0_matthijs.xmlerror: Cannot access storage file '/home/user/.continuum/images/base_cloud_kubernetes0_user.qcow2' (as uid:64055, gid:108): Permission denied
+    ```
+
+    Then there might be a permission issue. Libvirtd needs to have r and x permissions for all directories up to where the Continuum qcow images are stored. In this example, you could update your permissions as follows:
+
+    ```
+    chmod 755 /home/$USER
+    ```
+
 ## Libvirt/KVM/QEMU
 1. During QEMU execution, output `error : cannot execute binary /usr/local/bin/qemu-img: Permission denied`
     

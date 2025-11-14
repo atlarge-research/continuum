@@ -56,9 +56,11 @@ In this part, you inspect the Kubernetes cluster running on 2 VMs to see what th
 ## Part 3: Deploy a *parallel* MPI application on a single node.
 Following the HPC-style of MPI deployment, you now deploy an MPI application on a cloud-native Kubernetes cluster. To start, you deploy an MPI application for matrix multiplication, where 1 master splits workload across 4 workers. These workers have to do local computation followed by communication multiple times. We launch this application on a single VM, meaning that network communication is relatively cheap. Each master and worker runs in a dedicated container.
 
-1. Create a new Kubernetes deployment file while in the cloud_controller VM:
+1. Install MPI for Kubernetes: `kubectl apply --server-side -f https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.7.0/deploy/v2beta1/mpi-operator.yaml`.
+2. Allow pods to be scheduled on the control-plane VM: `kubectl taint nodes -l node-role.kubernetes.io/control-plane= node-role.kubernetes.io/control-plane:NoSchedule-`
+3. Create a new Kubernetes deployment file while in the cloud_controller VM:
 ```bash
-cat > ~/new_job.yaml <<EOF
+cat > ~/mpi-array.yml <<'EOF'
 apiVersion: kubeflow.org/v2beta1
 kind: MPIJob
 metadata:
@@ -150,8 +152,8 @@ spec:
                 memory: "1024Mi"
 EOF
 ```
-2. Deploy the application: `kubectl apply -f mpi-array.yml`
-3. Inspect the application at runtime and post-mortem:
+4. Deploy the application: `kubectl apply -f mpi-array.yml`
+5. Inspect the application at runtime and post-mortem:
     ```bash
     kubectl get pods -o wide 
 
@@ -162,8 +164,8 @@ EOF
     # Feel free to inspect the worker pods. 
     # However, they get automatically deleted after completion!
     ```
-4. Take note of the execution time. This starts from the line `All hosts resolvable, starting mpirun` and ends at `*** Final sum= `. Write this down, you will no longer have access to these logs later.
-5. See in Grafana if you can monitor the live resource usage from the pods. Is there a difference in resource usage between the pods/containers?
+6. Take note of the execution time. This starts from the line `All hosts resolvable, starting mpirun` and ends at `*** Final sum= `. Write this down, you will no longer have access to these logs later.
+7. See in Grafana if you can monitor the live resource usage from the pods. Is there a difference in resource usage between the pods/containers?
 
 ## Part 4: Deploy a *distributed* MPI application across two nodes.
 We now deploy the workers from the same application across our 2 VMs. What difference in performance do you expect?
