@@ -93,8 +93,7 @@ def dynamic_import(parser, config):
                 )
             else:
                 parser.error(
-                    "ERROR: Application %s does not exist",
-                    config["benchmark"]["application"],
+                    "ERROR: Application %s does not exist", config["benchmark"]["application"]
                 )
 
 
@@ -131,15 +130,7 @@ def add_constants(parser, config):
 
 
 def option_check(
-    parser,
-    input_config,
-    config,
-    section,
-    option,
-    intype,
-    condition,
-    mandatory,
-    default,
+    parser, input_config, config, section, option, intype, condition, mandatory, default
 ):
     """Check if each config option is present, if the type is correct, and if the value is correct.
 

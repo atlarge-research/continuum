@@ -2,10 +2,10 @@
 Generate Ansible inventory files
 """
 
-import sys
 import logging
 import os
 import re
+import sys
 
 
 def check_output(out):
@@ -70,13 +70,7 @@ def create_inventory_machine(config, machines):
             else:
                 f.write(
                     "%s ansible_connection=ssh ansible_host=%s ansible_user=%s username=%s %s\n"
-                    % (
-                        machine.name_sanitized,
-                        machine.ip,
-                        machine.user,
-                        machine.user,
-                        base,
-                    )
+                    % (machine.name_sanitized, machine.ip, machine.user, machine.user, base)
                 )
 
         # Specific cloud/edge/endpoint groups for installing RM software
@@ -97,12 +91,7 @@ def create_inventory_machine(config, machines):
                     f.write(
                         "localhost ansible_connection=local cloud_controller=%i \
 cloud_start=%i cloud_end=%i base_cloud=%s\n"
-                        % (
-                            machine.cloud_controller,
-                            clouds,
-                            clouds + machine.clouds - 1,
-                            base,
-                        )
+                        % (machine.cloud_controller, clouds, clouds + machine.clouds - 1, base)
                     )
                 else:
                     f.write(

@@ -2,14 +2,13 @@
 Create and use QEMU Vms
 """
 
-import sys
 import logging
-import time
-import string
 import os
+import string
+import sys
+import time
 
-from infrastructure import infrastructure
-from infrastructure import ansible
+from infrastructure import ansible, infrastructure
 from infrastructure import machine as m
 
 from . import generate
@@ -129,11 +128,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             machine.cloud_controller = int(nodes["cloud"] > 0)
             machine.clouds = nodes["cloud"] - int(nodes["cloud"] > 0)
 
-            ip = "%s.%s.%s" % (
-                config["infrastructure"]["prefixIP"],
-                middle_ip,
-                postfix_ip,
-            )
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.cloud_controller_ips.append(ip)
             machine.cloud_controller_ips_internal.append(ip)
 
@@ -149,11 +144,7 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for cloud
         for _ in range(machine.clouds):
-            ip = "%s.%s.%s" % (
-                config["infrastructure"]["prefixIP"],
-                middle_ip,
-                postfix_ip,
-            )
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.cloud_ips.append(ip)
             machine.cloud_ips_internal.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
@@ -164,11 +155,7 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for edge
         for _ in range(machine.edges):
-            ip = "%s.%s.%s" % (
-                config["infrastructure"]["prefixIP"],
-                middle_ip,
-                postfix_ip,
-            )
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.edge_ips.append(ip)
             machine.edge_ips_internal.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
@@ -179,11 +166,7 @@ def set_ip_names(config, machines, nodes_per_machine):
 
         # Set IP / name for endpoint
         for _ in range(machine.endpoints):
-            ip = "%s.%s.%s" % (
-                config["infrastructure"]["prefixIP"],
-                middle_ip,
-                postfix_ip,
-            )
+            ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.endpoint_ips.append(ip)
             machine.endpoint_ips_internal.append(ip)
             middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
@@ -277,25 +260,18 @@ def copy(config, machines):
         ):
             out.append(
                 machine.copy_files(
-                    config,
-                    os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"),
-                    dest,
+                    config, os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"), dest
                 )
             )
             out.append(
                 machine.copy_files(
-                    config,
-                    os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"),
-                    dest,
+                    config, os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"), dest
                 )
             )
 
         # Copy Ansible files for infrastructure
         path = os.path.join(
-            config["base"],
-            "infrastructure",
-            config["infrastructure"]["provider"],
-            "infrastructure",
+            config["base"], "infrastructure", config["infrastructure"]["provider"], "infrastructure"
         )
         out.append(machine.copy_files(config, path, dest, recursive=True))
 
@@ -322,8 +298,7 @@ def os_image(config, machines):
         command = [
             "find",
             os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/images/ubuntu2004.qcow2",
+                config["infrastructure"]["base_path"], ".continuum/images/ubuntu2004.qcow2"
             ),
         ]
         output, error = machine.process(config, command, ssh=machine.name)[0]
@@ -338,10 +313,7 @@ def os_image(config, machines):
             "ansible-playbook",
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/infrastructure/os.yml",
-            ),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/os.yml"),
         ]
         ansible.check_output(machines[0].process(config, command)[0])
     else:
@@ -444,8 +416,7 @@ def base_image(config, machines):
             base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
             if base_name_r in base_names:
                 path = os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/domain_%s.xml" % (base_name),
+                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (base_name)
                 )
                 if machine.is_local:
                     command = "virsh --connect qemu:///system create %s" % (path)
@@ -485,8 +456,7 @@ def base_image(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/cloud/base_install.yml",
+                    config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"
                 ),
             ]
         elif "base_edge" in base_name:
@@ -495,8 +465,7 @@ def base_image(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/edge/base_install.yml",
+                    config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"
                 ),
             ]
         elif "base_endpoint" in base_name:
@@ -505,8 +474,7 @@ def base_image(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/endpoint/base_install.yml",
+                    config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"
                 ),
             ]
 
@@ -527,8 +495,7 @@ def base_image(config, machines):
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/infrastructure/netperf.yml",
+            config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
         ),
     ]
     ansible.check_output(machines[0].process(config, command)[0])
@@ -666,8 +633,7 @@ def launch_vms(config, machines, repeat=None):
                 + machine.endpoint_names
             ):
                 path = os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/domain_%s.xml" % (name),
+                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (name)
                 )
                 if machine.is_local:
                     command = "virsh --connect qemu:///system create %s" % (path)
@@ -717,10 +683,7 @@ def start_vms(config, machines):
         "ansible-playbook",
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/infrastructure/remove.yml",
-        ),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/remove.yml"),
     ]
     ansible.check_output(machines[0].process(config, command)[0])
 
@@ -735,8 +698,7 @@ def start_vms(config, machines):
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
             os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/infrastructure/cloud_start.yml",
+                config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"
             ),
         ]
         ansible.check_output(machines[0].process(config, command)[0])
@@ -748,8 +710,7 @@ def start_vms(config, machines):
             "-i",
             os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
             os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/infrastructure/edge_start.yml",
+                config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"
             ),
         ]
         ansible.check_output(machines[0].process(config, command)[0])

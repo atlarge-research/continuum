@@ -240,18 +240,13 @@ def copy(config, machines):
         for tf in tf_files:
             out.append(
                 machine.copy_files(
-                    config,
-                    os.path.join(config["base"], ".tmp", "%s.tf" % (tf)),
-                    dest_image,
+                    config, os.path.join(config["base"], ".tmp", "%s.tf" % (tf)), dest_image
                 )
             )
 
         # Copy Ansible files for infrastructure (such as netperf installs)
         path = os.path.join(
-            config["base"],
-            "infrastructure",
-            config["infrastructure"]["provider"],
-            "infrastructure",
+            config["base"], "infrastructure", config["infrastructure"]["provider"], "infrastructure"
         )
         out.append(machine.copy_files(config, path, dest, recursive=True))
 
@@ -277,8 +272,7 @@ def netperf_install(config, machines):
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
         os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/infrastructure/netperf.yml",
+            config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
         ),
     ]
     ansible.check_output(machines[0].process(config, command)[0])
@@ -411,10 +405,7 @@ def move_registry(config, machines):
 
         # Finally, load the image from the remote docker storage into the remote docker registry
         tag = os.path.join(config["registry"], image_name)
-        commands = [
-            ["docker", "tag", full_image, tag],
-            ["docker", "push", tag],
-        ]
+        commands = [["docker", "tag", full_image, tag], ["docker", "push", tag]]
 
         for command in commands:
             _, error = machines[0].process(config, command, ssh=ssh)[0]
@@ -467,8 +458,7 @@ def base_install(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/cloud/base_install.yml",
+                    config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"
                 ),
             ]
             commands.append(command)
@@ -479,8 +469,7 @@ def base_install(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/edge/base_install.yml",
+                    config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"
                 ),
             ]
             commands.append(command)
@@ -491,8 +480,7 @@ def base_install(config, machines):
                 "-i",
                 os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
                 os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/endpoint/base_install.yml",
+                    config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"
                 ),
             ]
             commands.append(command)

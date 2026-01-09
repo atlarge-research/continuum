@@ -91,11 +91,7 @@ def set_ip_names(config, machines, nodes_per_machine):
         # Set cloud information
         machine.clouds = nodes["cloud"]
 
-        ip = "%s.%s.%s" % (
-            config["infrastructure"]["prefixIP"],
-            middle_ip,
-            postfix_ip,
-        )
+        ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
         machine.cloud_ips.append(ip)
         machine.cloud_ips_internal.append(ip)
 
@@ -105,11 +101,7 @@ def set_ip_names(config, machines, nodes_per_machine):
         middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
 
         # Set endpoint information
-        ip = "%s.%s.%s" % (
-            config["infrastructure"]["prefixIP"],
-            middle_ip,
-            postfix_ip,
-        )
+        ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
         machine.endpoint_ips.append(ip)
         machine.endpoint_ips_internal.append(ip)
         middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)

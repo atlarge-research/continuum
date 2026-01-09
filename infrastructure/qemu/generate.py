@@ -5,9 +5,8 @@ too many things can change depending on user input.
 """
 
 import logging
-import sys
 import re
-
+import sys
 
 DOMAIN = """\
 <domain type='kvm'>

@@ -2,8 +2,8 @@
 Handle any kind of input, such as configuration files or DSLs
 """
 
-import os
 import logging
+import os
 
 from .configuration import configuration_parser
 from .dsl import dsl_parser
