@@ -1,0 +1,6 @@
+numpy
+Pillow==8.1.0
+paho-mqtt==1.5.1
+transformers==4.46.3
+torch
+sentencepiece

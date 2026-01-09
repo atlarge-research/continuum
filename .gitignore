@@ -7,6 +7,7 @@ id_rsa*
 *.tf
 .tmp
 logs/
+jupyter_notebooks/*
 *package-lock.json
 *node_modules
 scripts/*.csv
