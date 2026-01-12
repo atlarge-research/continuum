@@ -1,8 +1,9 @@
 """Manage the image_classification application"""
 
-import logging
 import copy
+import logging
 import sys
+
 import numpy as np
 import pandas as pd
 
@@ -19,7 +20,7 @@ def set_container_location(config):
 
     config["images"] = {
         "worker": "%s:text_translation_subscriber" % (source),
-        "endpoint": "%s:text_translation_publisher" % (source)
+        "endpoint": "%s:text_translation_publisher" % (source),
     }
 
 
@@ -437,4 +438,5 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
     if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:
         logging.debug("Output in csv format\n%s\n%s", repr(df1.to_csv()), repr(df2.to_csv()))
     else:
+        logging.debug("Output in csv format\n%s", repr(df2.to_csv()))
         logging.debug("Output in csv format\n%s", repr(df2.to_csv()))

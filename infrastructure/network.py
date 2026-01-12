@@ -34,7 +34,6 @@ def generate_tc_commands(config, values, ips, disk):
             ["sudo", "tc", "qdisc", "add", "dev", network, "root", "handle", "1:", "htb"]
         )
 
-
     # Filter for specific IPs
     for ip in ips:
         commands.append(
@@ -86,6 +85,7 @@ def generate_tc_commands(config, values, ips, disk):
 
     return commands
 
+
 def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
     """Generate Mahimati command
     Executing this command puts application into containerized Mahimati shell.
@@ -103,49 +103,46 @@ def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
     # the path for verizon let's say is /home/mahimahi/traces/Verizon-LTE-driving.up
     if not uplink or not downlink:
         return [[]]
-    
+
     commands = []
 
-    commands.append([
-        "export",
-        "SRC_TO_IGNORE=10.0.0.1"
-    ])
+    commands.append(["export", "SRC_TO_IGNORE=10.0.0.1"])
 
-    commands.append([
-        "export",
-        "DEST_TO_IGNORE=10.0.0.1"
-    ])
+    commands.append(["export", "DEST_TO_IGNORE=10.0.0.1"])
 
-    commands.append([
-        "(",
-        "mm-link",
-        f"--uplink-log=uplink.log",
-        f"--downlink-log=downlink.log",
-        uplink,
-        downlink,
-        "sudo",
-        f"/home/mahimahi/setup_container.sh {endpoint_ip} {' '.join([target for target in targets])}",
-        ">output_mahi.txt",
-        "2>&1",
-        "&",
-        ")"
-    ])
-
+    commands.append(
+        [
+            "(",
+            "mm-link",
+            f"--uplink-log=uplink.log",
+            f"--downlink-log=downlink.log",
+            uplink,
+            downlink,
+            "sudo",
+            f"/home/mahimahi/setup_container.sh {endpoint_ip} {' '.join([target for target in targets])}",
+            ">output_mahi.txt",
+            "2>&1",
+            "&",
+            ")",
+        ]
+    )
 
     commands.append(["sleep", "10"])
 
-    commands.append([
-        "(",
-        "sudo",
-        f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {" ".join([target for target in targets])}",
-        ">output_reroute.txt",
-        "2>&1",
-        "&",
-        ")"
-    ])
-    
-    
+    commands.append(
+        [
+            "(",
+            "sudo",
+            f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {" ".join([target for target in targets])}",
+            ">output_reroute.txt",
+            "2>&1",
+            "&",
+            ")",
+        ]
+    )
+
     return commands
+
 
 def mahimahi_values(config):
     """
@@ -158,22 +155,38 @@ def mahimahi_values(config):
     Returns:
         2x list(str): Path to the MahiMahi traces
     """
-    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi':
-        return ["/home/mahimahi/traces/Verizon-LTE-driving.up", "/home/mahimahi/traces/Verizon-LTE-driving.down",]
-    
-    elif config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi':
-        return ["/home/mahimahi/traces/KPN_5G.up", "/home/mahimahi/traces/KPN_5G.down",]
+    if config["infrastructure"]["wireless_network_preset"] == "4g_us_verizon_mahimahi":
+        return [
+            "/home/mahimahi/traces/Verizon-LTE-driving.up",
+            "/home/mahimahi/traces/Verizon-LTE-driving.down",
+        ]
 
-    elif config["infrastructure"]["wireless_network_preset"] == 'lte_nl_kpn_mahimahi':
-        return ["/home/mahimahi/traces/KPN_4G.up", "/home/mahimahi/traces/KPN_4G.down",]
-    
-    elif config["infrastructure"]["wireless_network_preset"] == '5g_obstacled_nl_kpn_mahimahi':
-        return ["/home/mahimahi/traces/KPN_5G_low_band.up", "/home/mahimahi/traces/KPN_5G_low_band.down",]
-    
-    elif config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi':
-        return ["/home/mahimahi/traces/Verizon-EVDO-driving.up", "/home/mahimahi/traces/Verizon-EVDO-driving.down",]
+    elif config["infrastructure"]["wireless_network_preset"] == "5g_nl_kpn_mahimahi":
+        return [
+            "/home/mahimahi/traces/KPN_5G.up",
+            "/home/mahimahi/traces/KPN_5G.down",
+        ]
+
+    elif config["infrastructure"]["wireless_network_preset"] == "lte_nl_kpn_mahimahi":
+        return [
+            "/home/mahimahi/traces/KPN_4G.up",
+            "/home/mahimahi/traces/KPN_4G.down",
+        ]
+
+    elif config["infrastructure"]["wireless_network_preset"] == "5g_obstacled_nl_kpn_mahimahi":
+        return [
+            "/home/mahimahi/traces/KPN_5G_low_band.up",
+            "/home/mahimahi/traces/KPN_5G_low_band.down",
+        ]
+
+    elif config["infrastructure"]["wireless_network_preset"] == "evdo_us_verizon_mahimahi":
+        return [
+            "/home/mahimahi/traces/Verizon-EVDO-driving.up",
+            "/home/mahimahi/traces/Verizon-EVDO-driving.down",
+        ]
 
     return [None, None]
+
 
 def tc_values(config):
     """Set latency/throughput values to be used for tc
@@ -191,7 +204,12 @@ def tc_values(config):
     edge = [7.5, 2.5, 1000]  # Between edge nodes (wired)
     cloud_edge = [7.5, 2.5, 1000]  # Between cloud and edge (wired)
 
-    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '6g_nl_kpn_mahimahi':
+    if (
+        config["infrastructure"]["wireless_network_preset"] == "4g_us_verizon_mahimahi"
+        or config["infrastructure"]["wireless_network_preset"] == "evdo_us_verizon_mahimahi"
+        or config["infrastructure"]["wireless_network_preset"] == "5g_nl_kpn_mahimahi"
+        or config["infrastructure"]["wireless_network_preset"] == "6g_nl_kpn_mahimahi"
+    ):
         cloud_endpoint = [0, 0, 1000]
         edge_endpoint = [0, 0, 1000]
 
@@ -254,7 +272,7 @@ def start(config, machines):
     """Set network latency/throughput between VMs to emulate edge continuum networking
 
     Whenever the network emulation is set to MahiMahi (name should end with _mahimahi),
-    mobile network emulation is a responsibility of MahiMahi and the core network emulation 
+    mobile network emulation is a responsibility of MahiMahi and the core network emulation
     is the responsibility of tc.
 
     Otherwise tc performs end-to-end network emulation
@@ -335,7 +353,11 @@ def start(config, machines):
         if targets:
             command += generate_tc_commands(config, edge_endpoint, targets, disk)
 
-        targets = config["control_ips_internal"] + config["cloud_ips_internal"] + config["edge_ips_internal"]
+        targets = (
+            config["control_ips_internal"]
+            + config["cloud_ips_internal"]
+            + config["edge_ips_internal"]
+        )
         if targets:
             command += generate_mahimati_command(endpoint_ip, targets, uplink, downlink)
             commands.append(command)

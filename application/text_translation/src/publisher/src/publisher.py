@@ -2,8 +2,9 @@
 This is a publisher, sending local images over MQTT to a subscriber for further processing.
 """
 
-import time
 import os
+import time
+
 import paho.mqtt.client as mqtt
 
 MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
@@ -184,4 +185,4 @@ if __name__ == "__main__":
         print("Waiting progress: %i / %i" % (RECEIVED, MAX_TXTS))
         time.sleep(10)
 
-    print("All %i texts have been received back" % (MAX_TXTS))
+    print("All %i texts have been received back" % (MAX_TXTS))    print("All %i texts have been received back" % (MAX_TXTS))

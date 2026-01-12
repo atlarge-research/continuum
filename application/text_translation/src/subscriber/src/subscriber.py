@@ -3,9 +3,10 @@ This is a subscriber, receiving images through MQTT and
 processing them using image classification from TFLite.
 """
 
+import multiprocessing
 import os
 import time
-import multiprocessing
+
 import paho.mqtt.client as mqtt
 import torch
 
@@ -182,7 +183,7 @@ def do_tflite(queue):
         print("[%s] Translated text: %s\n" % (current.name, result), end="")
         # Prepare the result to send back
         result_bytes = result.encode("utf-8")
-        
+
         sec_frame = time.time_ns() - start_time
         print("[%s] Processing (ns): %i\n" % (current.name, sec_frame), end="")
 
@@ -231,4 +232,5 @@ def main():
 
 
 if __name__ == "__main__":
+    main()
     main()

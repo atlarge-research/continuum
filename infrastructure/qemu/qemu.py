@@ -510,7 +510,7 @@ def base_image(config, machines):
             ".continuum/infrastructure/mahimati.yml",
         ),
     ]
-    
+
     ansible.check_output(machines[0].process(config, command)[0])
 
     # Install docker containers if required
