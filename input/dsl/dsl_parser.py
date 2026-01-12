@@ -2,15 +2,15 @@
 Parse the input DSL
 """
 
-import os
-from subprocess import Popen, PIPE
 import json
+import os
+from subprocess import PIPE, Popen
 
 from application import application
 from input.configuration.configuration_parser import (
     add_constants,
-    dynamic_import,
     add_options,
+    dynamic_import,
     verify_options,
 )
 

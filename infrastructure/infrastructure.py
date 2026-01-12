@@ -2,12 +2,13 @@
 Impelemnt infrastructure
 """
 
+import json
 import logging
 import os
+import string
 import sys
 import time
-import json
-import string
+
 import numpy as np
 
 from . import machine as m
@@ -386,13 +387,7 @@ def add_ssh(config, machines, base=None):
 
     # Check if old keys are still in the known hosts file
     for ip in ips:
-        command = [
-            "ssh-keygen",
-            "-f",
-            os.path.join(config["home"], ".ssh/known_hosts"),
-            "-R",
-            ip,
-        ]
+        command = ["ssh-keygen", "-f", os.path.join(config["home"], ".ssh/known_hosts"), "-R", ip]
         _, error = machines[0].process(config, command)[0]
 
         if error and not any("not found in" in err for err in error):
@@ -566,11 +561,7 @@ def docker_pull(config, machines, base_names):
                         images.append(config["images"]["combined"].split(":")[1])
 
                 for image in images:
-                    command = [
-                        "docker",
-                        "pull",
-                        os.path.join(config["registry"], image),
-                    ]
+                    command = ["docker", "pull", os.path.join(config["registry"], image)]
                     commands.append(command)
                     sshs.append(name + "@" + ip)
 

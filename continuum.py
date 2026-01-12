@@ -6,19 +6,19 @@ Check the documentation and help for more information.
 """
 
 import argparse
+import logging
 import os
 import os.path
 import sys
-import logging
 import time
 
 from application import application
 from execution_model import execution_model
 from infrastructure import infrastructure
-from resource_manager import resource_manager
 
 # pylint: disable-next=redefined-builtin
 from input import input
+from resource_manager import resource_manager
 
 
 def make_wide(formatter, w=120, h=36):
@@ -145,9 +145,7 @@ if __name__ == "__main__":
     )
 
     parser_obj.add_argument(
-        "config",
-        type=lambda x: input.start(parser_obj, x),
-        help="benchmark config file",
+        "config", type=lambda x: input.start(parser_obj, x), help="benchmark config file"
     )
     parser_obj.add_argument("-v", "--verbose", action="store_true", help="increase verbosity level")
 

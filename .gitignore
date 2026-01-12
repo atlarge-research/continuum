@@ -14,3 +14,4 @@ scripts/*.csv
 scripts/*.pdf
 *.out
 .idea
+.vscode/settings.json
