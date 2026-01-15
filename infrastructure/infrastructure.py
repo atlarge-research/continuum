@@ -9,8 +9,6 @@ import string
 import sys
 import time
 
-import numpy as np
-
 from . import machine as m
 from . import network
 
@@ -99,9 +97,7 @@ def schedule_equal(config, machines):
             continue
 
         # Get machine with least cores used compared to total cores
-        i = np.argmin(
-            [cores_used / m.cores for cores_used, m in zip(machines_cores_used, machines)]
-        )
+        i = min(range(len(machines)), key=lambda i: machines_cores_used[i] / machines[i].cores)
 
         # Place VM on that machine
         machines_cores_used[i] += cores_per_type[machine_type]

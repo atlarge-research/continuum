@@ -127,7 +127,7 @@ def send():
     remote_client.connect(MQTT_REMOTE_IP, port=1883, keepalive=120)
     print("Connected with the broker")
 
-    with open('crime_and_punishment.txt', 'r') as file:
+    with open("crime_and_punishment.txt", "r") as file:
         lines = file.readlines()
     print("Read %i lines from the file" % len(lines))
 
@@ -136,7 +136,7 @@ def send():
         start_time = time.time_ns()
 
         print("The start time (ns): %i" % (start_time))
-        
+
         text = lines[i % len(lines)].strip()
         print("Sending text: %s" % text)
         byte_arr = bytearray(text.encode("utf-8"))
@@ -185,4 +185,4 @@ if __name__ == "__main__":
         print("Waiting progress: %i / %i" % (RECEIVED, MAX_TXTS))
         time.sleep(10)
 
-    print("All %i texts have been received back" % (MAX_TXTS))    print("All %i texts have been received back" % (MAX_TXTS))
+    print("All %i texts have been received back" % (MAX_TXTS))

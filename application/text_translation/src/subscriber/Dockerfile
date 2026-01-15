@@ -14,9 +14,9 @@ RUN apt install -y \
     python3-numpy \
     python3-pip \
     git \
-    curl \ 
+    curl \
     unzip \
-    wget \ 
+    wget \
     tar
 
 # Install python specific packages

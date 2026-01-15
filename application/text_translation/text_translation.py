@@ -439,4 +439,3 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
         logging.debug("Output in csv format\n%s\n%s", repr(df1.to_csv()), repr(df2.to_csv()))
     else:
         logging.debug("Output in csv format\n%s", repr(df2.to_csv()))
-        logging.debug("Output in csv format\n%s", repr(df2.to_csv()))
