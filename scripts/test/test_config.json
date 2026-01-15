@@ -1,0 +1,33 @@
+{
+    "base_image_rebuild_frequency": 10,
+    "test_timeout_minutes": 30,
+    "stop_on_failure": false,
+    "success_detection": {
+        "require_ssh_output": true,
+        "require_exit_code_zero": true,
+        "check_log_files": false,
+        "infra_only_override": {
+            "require_ssh_output": false,
+            "require_exit_code_zero": true
+        }
+    },
+    "test_suites": {
+        "smoke": {
+            "directories": [
+                "configuration/tests/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false
+        },
+        "full": {
+            "directories": [
+                "configuration/"
+            ],
+            "use_cache": false,
+            "rebuild_base_images": true
+        }
+    },
+    "exclude_patterns": [
+        "template.cfg"
+    ]
+}
