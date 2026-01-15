@@ -34,6 +34,25 @@ def generate_tc_commands(config, values, ips, disk):
             ["sudo", "tc", "qdisc", "add", "dev", network, "root", "handle", "1:", "htb"]
         )
 
+    # Set throughput. Somehow disabled because incompatible with profiles ...
+    # -    commands.append(
+    # -        [
+    # -            "sudo",
+    # -            "tc",
+    # -            "class",
+    # -            "add",
+    # -            "dev",
+    # -            network,
+    # -            "parent",
+    # -            "1:",
+    # -            "classid",
+    # -            "1:%i" % (disk),
+    # -            "htb",
+    # -            "rate",
+    # -            "%smbit" % (throughput),
+    # -        ]
+    # -    )
+
     # Filter for specific IPs
     for ip in ips:
         commands.append(
@@ -383,7 +402,6 @@ def start(config, machines):
 
     # Execute TC command in parallel
     if commands_final:
-        print(commands_final, sshs)
         results = machines[0].process(config, commands_final, shell=True, ssh=sshs)
 
         # Check output of TC commands

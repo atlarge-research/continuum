@@ -15,7 +15,7 @@
         name: cloud-image-utils
         state: present
       when: ansible_os_family == "Debian"
-    
+
     - name: Install cloudinit requirements
       package:
         name: cloud-utils

@@ -21,7 +21,10 @@ def add_options(config):
     # Mist doesn't have cache worker, only KubeEdge
     settings = None
     if config["benchmark"]["resource_manager"] == "kubeedge":
-        settings = [["cache_worker", bool, lambda x: x in [True, False], False, False]]
+        settings = [
+            ["cache_worker", bool, lambda x: x in [True, False], False, False],
+            ["kube_version", str, lambda _: ["v1.27.0"], False, "v1.27.0"],
+        ]
 
     return settings
 
