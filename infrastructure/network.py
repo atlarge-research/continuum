@@ -2,7 +2,9 @@
 Use TC to control latency / throughput between VMs, and perform network benchmarks with netperf.
 """
 
+import json
 import logging
+import os
 import sys
 
 
@@ -34,24 +36,25 @@ def generate_tc_commands(config, values, ips, disk):
             ["sudo", "tc", "qdisc", "add", "dev", network, "root", "handle", "1:", "htb"]
         )
 
-    # Set throughput. Somehow disabled because incompatible with profiles ...
-    # -    commands.append(
-    # -        [
-    # -            "sudo",
-    # -            "tc",
-    # -            "class",
-    # -            "add",
-    # -            "dev",
-    # -            network,
-    # -            "parent",
-    # -            "1:",
-    # -            "classid",
-    # -            "1:%i" % (disk),
-    # -            "htb",
-    # -            "rate",
-    # -            "%smbit" % (throughput),
-    # -        ]
-    # -    )
+    # Define a class for this disk so flowid 1:disk actually exists.
+    # The throughput component of the profile (or manual override) is used as the rate.
+    commands.append(
+        [
+            "sudo",
+            "tc",
+            "class",
+            "add",
+            "dev",
+            network,
+            "parent",
+            "1:",
+            "classid",
+            "1:%i" % (disk),
+            "htb",
+            "rate",
+            "%smbit" % (throughput),
+        ]
+    )
 
     # Filter for specific IPs
     for ip in ips:
@@ -409,10 +412,10 @@ def start(config, machines):
         for output, error in results:
             if error:
                 logging.error("".join(error))
-                sys.exit()
+                sys.exit(1)
             elif output:
                 logging.error("".join(output))
-                sys.exit()
+                sys.exit(1)
 
 
 def netperf_commands(target_ips):
@@ -461,11 +464,41 @@ def benchmark_output(
         source_name (str): Type of VM running netperf
         target_name (str): Type of VMs on the receiving side of netperf
     """
-    for target_ip, command in zip(targets + targets, lat_commands + tp_commands):
+    # Prepare path for optional structured netperf results (NDJSON)
+    base_dir = config.get("base", os.getcwd())
+    results_dir = os.path.join(base_dir, "logs", "network_validation")
+    os.makedirs(results_dir, exist_ok=True)
+    ts = config.get("timestamp", "unknown")
+    results_path = os.path.join(results_dir, f"netperf_results_{ts}.ndjson")
+
+    all_targets = targets + targets
+    all_commands = lat_commands + tp_commands
+
+    for idx, (target_ip, command) in enumerate(zip(all_targets, all_commands)):
         output, error = machine.process(config, command, ssh=ssh)[0]
         logging.info("From %s %s to %s %s: %s", source_name, ssh, target_name, target_ip, command)
         logging.info("\n%s", "".join(output))
         logging.info("\n%s", "".join(error))
+
+        # Write one NDJSON entry per netperf invocation for later validation
+        direction = "latency" if idx < len(targets) else "throughput"
+        entry = {
+            "timestamp": ts,
+            "source": source_name,
+            "target": target_name,
+            "source_ssh": ssh,
+            "target_ip": target_ip,
+            "direction": direction,
+            "command": command,
+            "output": "".join(output),
+            "error": "".join(error),
+        }
+        try:
+            with open(results_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+        except OSError:
+            # Non-fatal; structured validation data is best-effort
+            pass
 
 
 def benchmark(config, machines):

@@ -1,6 +1,6 @@
 {
     "base_image_rebuild_frequency": 10,
-    "test_timeout_minutes": 30,
+    "test_timeout_minutes": 60,
     "stop_on_failure": false,
     "success_detection": {
         "require_ssh_output": true,
@@ -25,6 +25,13 @@
             ],
             "use_cache": false,
             "rebuild_base_images": true
+        },
+        "network_validation": {
+            "directories": [
+                "configuration/network_validation/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false
         }
     },
     "exclude_patterns": [

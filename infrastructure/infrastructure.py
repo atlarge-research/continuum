@@ -316,6 +316,12 @@ def create_continuum_dir(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     commands = []
+
+    # Mahimahi support is only required when using a Mahimahi-based wireless preset.
+    # For non-mahimahi presets, we should not assume Mahimahi is needed or installed.
+    wireless_preset = config["infrastructure"].get("wireless_network_preset", "")
+    need_mahimahi = isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
+
     for machine in machines:
         if machine.is_local:
             command = (
@@ -333,13 +339,45 @@ def create_continuum_dir(config, machines):
 
         commands.append(command)
 
-        if machine.is_local:
-            print("We are copying")
-            command = "cp -r mahimahi %s/.continuum/mahimahi" % (
-                (config["infrastructure"]["base_path"],)
-            )
+        # Only copy Mahimahi support files when using a Mahimahi-based preset.
+        if machine.is_local and need_mahimahi:
+            src_dir = os.path.join(config.get("base", os.getcwd()), "mahimahi")
+            if not os.path.isdir(src_dir):
+                # Attempt to automatically fetch the modded Mahimahi implementation
+                # from the official Continuum Mahimahi repository:
+                # https://github.com/atlarge-research/continuum-modded-mahimahi
+                logging.info(
+                    "Mahimahi directory not found at %s; cloning continuum-modded-mahimahi...",
+                    src_dir,
+                )
+                clone_cmd = (
+                    "git clone https://github.com/atlarge-research/continuum-modded-mahimahi.git %s"
+                    % src_dir
+                )
+                clone_result = machines[0].process(config, clone_cmd, shell=True)[0]
+                clone_out, clone_err = clone_result
 
-        commands.append(command)
+                if clone_err:
+                    logging.error("Failed to clone continuum-modded-mahimahi repository.")
+                    logging.error("".join(clone_err))
+                    sys.exit(1)
+
+            # After ensuring src_dir exists, perform the copy; fail hard if it still doesn't.
+            if os.path.isdir(src_dir):
+                print("We are copying")
+                command = "cp -r %s %s/.continuum/mahimahi" % (
+                    src_dir,
+                    config["infrastructure"]["base_path"],
+                )
+                commands.append(command)
+            else:
+                logging.error(
+                    "Mahimahi directory not found at %s after clone attempt; required for preset %s. "
+                    "Either create/populate this directory or use a non-mahimahi preset.",
+                    src_dir,
+                    wireless_preset,
+                )
+                sys.exit(1)
 
     results = machines[0].process(config, commands, shell=True)
 
