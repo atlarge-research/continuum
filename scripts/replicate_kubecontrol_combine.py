@@ -5,19 +5,17 @@ Benchmarks for kubecontrol
 """
 
 import argparse
-import sys
 import logging
 import os
+import sys
 import time
-
-import pandas as pd
-import numpy as np
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
-
+import numpy as np
+import pandas as pd
 import replicate_paper
+from matplotlib.ticker import MaxNLocator
 
 
 class MicroBenchmark(replicate_paper.Experiment):
@@ -119,7 +117,7 @@ class MicroBenchmark(replicate_paper.Experiment):
         """
         if sum(x is True for x in [is_cfg, is_log, is_csv]) != 1:
             logging.error("[ERROR] Exactly one of is_cfg / is_log / is_csv needs to be true")
-            sys.exit()
+            sys.exit(1)
 
         if is_cfg:
             # CFG = pods_per_node/pod_10
@@ -136,7 +134,7 @@ class MicroBenchmark(replicate_paper.Experiment):
             if is_cfg:
                 # Config should alreay exist
                 logging.error("[ERROR] Directory %s does not exist", path)
-                sys.exit()
+                sys.exit(1)
 
             # Create directory for log / csv, and return empty because file doesn't exist
             os.makedirs(path)
@@ -162,7 +160,7 @@ class MicroBenchmark(replicate_paper.Experiment):
                 # The cfg file should just exist
                 # We can't run benchmarks on something that doens't exist
                 logging.error("[ERROR] The cfg file %s did not exist", file_to_check)
-                sys.exit()
+                sys.exit(1)
 
             # If not file with that extention was found, return an empty string
             # This means we need to do a new run for this entry
@@ -178,7 +176,7 @@ class MicroBenchmark(replicate_paper.Experiment):
                     file_to_check,
                     files_of_interest,
                 )
-                sys.exit()
+                sys.exit(1)
 
         # Should only find 1 file
         if len(files_of_interest) > 1:
@@ -186,7 +184,7 @@ class MicroBenchmark(replicate_paper.Experiment):
                 "[ERROR] Should have found only one file, but found: %s",
                 ",".join(files_of_interest),
             )
-            sys.exit()
+            sys.exit(1)
 
         # If a file was found, return the file
         return path + "/" + files_of_interest[0]
@@ -213,7 +211,7 @@ class MicroBenchmark(replicate_paper.Experiment):
 
                 if csv == "":
                     print("ERROR NO CSV FOUND")
-                    sys.exit()
+                    sys.exit(1)
 
                 # File does exist, only run plot code
                 logging.info("To plot: %s", cfg)
@@ -607,7 +605,7 @@ def main(args):
         exp = MicroBenchmark(args)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
-        sys.exit()
+        sys.exit(1)
 
     logging.info(exp)
     exp.generate()

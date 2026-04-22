@@ -1,7 +1,9 @@
 {
     "base_image_rebuild_frequency": 10,
-    "test_timeout_minutes": 60,
+    "test_timeout_minutes": 90,
     "stop_on_failure": false,
+    "physical_machine_cores": 20,
+    "external_physical_machine": "matthijs@node3",
     "success_detection": {
         "require_ssh_output": true,
         "require_exit_code_zero": true,
@@ -14,27 +16,74 @@
     "test_suites": {
         "smoke": {
             "directories": [
-                "configuration/tests/"
+                "configs/experiments/smoke/"
             ],
             "use_cache": true,
-            "rebuild_base_images": false
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access for VM-backed smoke execution",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
         },
         "full": {
             "directories": [
-                "configuration/"
+                "configs/experiments/"
             ],
             "use_cache": false,
             "rebuild_base_images": true
         },
         "network_validation": {
             "directories": [
-                "configuration/network_validation/"
+                "configs/experiments/network_validation/"
             ],
             "use_cache": true,
-            "rebuild_base_images": false
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and tc-based network emulation support",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "tc",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
+        "benchmark_smoke": {
+            "directories": [
+                "configs/experiments/benchmark_smoke/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access for resumed benchmark smoke execution",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
         }
     },
     "exclude_patterns": [
-        "template.cfg"
+        "template.yaml"
     ]
 }

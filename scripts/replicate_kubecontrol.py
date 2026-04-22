@@ -5,17 +5,17 @@ Benchmarks for kubecontrol
 """
 
 import argparse
-import sys
 import logging
 import os
+import sys
 import time
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 sys.path.append("../application/empty")
-import replicate_paper  # pylint: disable=wrong-import-position
 import plot  # pylint: disable=wrong-import-position,import-error
+import replicate_paper  # pylint: disable=wrong-import-position
 
 
 class MicroBenchmark(replicate_paper.Experiment):
@@ -105,7 +105,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
                     replicate_paper.execute(command, shell=True, crash=False)
                 except Exception as e:
                     logging.error("[ERROR] Could not virsh destroy with %s", e)
-                    sys.exit()
+                    sys.exit(1)
 
     def _remove_base(self):
         """Just to be safe, remove all base images before starting.
@@ -118,7 +118,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
                     replicate_paper.execute(command, shell=True, crash=False)
                 except Exception as e:
                     logging.error("[ERROR] Could not remove base images with %s", e)
-                    sys.exit()
+                    sys.exit(1)
 
     def run_commands(self):
         """Execute all generated commands
@@ -149,7 +149,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
                 logging.debug("ERROR")
                 logging.debug("------------------------------------")
                 logging.debug("\n%s", "".join(error))
-                sys.exit()
+                sys.exit(1)
 
             logging.debug("------------------------------------")
 
@@ -179,7 +179,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
         """
         if sum(x is True for x in [is_cfg, is_log, is_csv]) != 1:
             logging.error("[ERROR] Exactly one of is_cfg / is_log / is_csv needs to be true")
-            sys.exit()
+            sys.exit(1)
 
         if is_cfg:
             # CFG = pods_per_node/pod_10
@@ -196,7 +196,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
             if is_cfg:
                 # Config should alreay exist
                 logging.error("[ERROR] Directory %s does not exist", path)
-                sys.exit()
+                sys.exit(1)
 
             # Create directory for log / csv, and return empty because file doesn't exist
             os.makedirs(path)
@@ -222,7 +222,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
                 # The cfg file should just exist
                 # We can't run benchmarks on something that doens't exist
                 logging.error("[ERROR] The cfg file %s did not exist", file_to_check)
-                sys.exit()
+                sys.exit(1)
 
             # If not file with that extention was found, return an empty string
             # This means we need to do a new run for this entry
@@ -238,7 +238,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
                     file_to_check,
                     files_of_interest,
                 )
-                sys.exit()
+                sys.exit(1)
 
         # Should only find 1 file
         if len(files_of_interest) > 1:
@@ -246,7 +246,7 @@ xargs -I %% sh -c \"virsh destroy %%\""
                 "[ERROR] Should have found only one file, but found: %s",
                 ",".join(files_of_interest),
             )
-            sys.exit()
+            sys.exit(1)
 
         # If a file was found, return the file
         return path + "/" + files_of_interest[0]
@@ -364,7 +364,7 @@ def main(args):
         exp = MicroBenchmark(args)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
-        sys.exit()
+        sys.exit(1)
 
     logging.info(exp)
     exp.generate()

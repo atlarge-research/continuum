@@ -3,14 +3,21 @@ Test utilities for Continuum end-to-end testing framework.
 Provides functions for config discovery, base image management, success detection, and result storage.
 """
 
-import configparser
+import argparse
 import fnmatch
 import getpass
 import json
 import os
 import re
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
+import yaml
+
+from input.configuration import yaml_parser
+
+_ORCHESTRATOR_MODULE_TYPES = ("none", "kubernetes", "kubeedge", "kubecontrol", "kube_kata", "mist")
 
 
 def discover_config_files(
@@ -32,13 +39,13 @@ def discover_config_files(
     """
     config_files = set()
 
-    # First, collect all .cfg files from specified directories
+    # First, collect supported YAML config files from specified directories.
     for directory in directories:
         if not os.path.exists(directory):
             continue
         for root, _, files in os.walk(directory):
             for file in files:
-                if file.endswith(".cfg"):
+                if file.endswith(".yaml") or file.endswith(".yml"):
                     file_path = os.path.join(root, file)
                     config_files.add(file_path)
 
@@ -116,35 +123,183 @@ def parse_config_simple(config_path: str) -> Dict:
     Returns:
         Dictionary with parsed config values
     """
-    config = configparser.ConfigParser()
-    config.read(config_path)
+    _, ext = os.path.splitext(config_path)
+    if ext not in (".yaml", ".yml"):
+        raise ValueError(
+            "Only YAML experiment/lock configs are supported by the test runner, got %s"
+            % (config_path)
+        )
+    return parse_yaml_config_simple(config_path)
+
+
+def parse_yaml_config_simple(config_path: str) -> Dict:
+    """Parse YAML experiment/lock config to extract basic information."""
+    path = Path(config_path).expanduser().resolve()
+    data = _load_yaml(path)
+    data = _normalized_payload_for_testing(path, data)
 
     result = {
         "infrastructure": {},
         "benchmark": {},
     }
 
-    # Parse infrastructure section
-    if "infrastructure" in config:
-        infra = config["infrastructure"]
-        result["infrastructure"]["provider"] = infra.get("provider", "qemu")
-        result["infrastructure"]["infra_only"] = infra.getboolean("infra_only", False)
-        result["infrastructure"]["cloud_nodes"] = infra.getint("cloud_nodes", 0)
-        result["infrastructure"]["edge_nodes"] = infra.getint("edge_nodes", 0)
-        result["infrastructure"]["endpoint_nodes"] = infra.getint("endpoint_nodes", 0)
-        result["infrastructure"]["base_path"] = os.path.expanduser(infra.get("base_path", "~"))
-        result["infrastructure"]["middleIP"] = infra.getint("middleIP", 100)
-        result["infrastructure"]["middleIP_base"] = infra.getint("middleIP_base", 90)
+    infrastructure = data.get("infrastructure", {})
+    clusters = infrastructure.get("clusters", [])
+    if not isinstance(clusters, list):
+        clusters = []
 
-    # Parse benchmark section
-    if "benchmark" in config:
-        bench = config["benchmark"]
-        result["benchmark"]["resource_manager"] = bench.get("resource_manager", "none")
-        result["benchmark"]["resource_manager_only"] = bench.getboolean(
-            "resource_manager_only", False
-        )
+    tier_aggregate = {
+        "cloud": {"count": 0, "cores": 4},
+        "edge": {"count": 0, "cores": 2},
+        "endpoint": {"count": 0, "cores": 1},
+    }
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        tier = cluster.get("tier")
+        if tier not in tier_aggregate:
+            continue
+        vms = ((cluster.get("resources") or {}).get("vms") or {})
+        count = vms.get("count", 0)
+        if not isinstance(count, int):
+            continue
+        if count < 0:
+            continue
+        tier_aggregate[tier]["count"] += count
+        spec = vms.get("spec", {})
+        if isinstance(spec, dict) and isinstance(spec.get("cores"), int) and spec["cores"] > 0:
+            tier_aggregate[tier]["cores"] = spec["cores"]
 
+    provider = data.get("provider", {})
+    provider_cfg = provider.get("config", {})
+    software = data.get("software", {})
+    modules = software.get("modules", [])
+    if not isinstance(modules, list):
+        modules = []
+
+    orchestrator_name = "none"
+    for module in modules:
+        if not isinstance(module, dict):
+            continue
+        module_type = module.get("type")
+        if isinstance(module_type, str) and module_type in _ORCHESTRATOR_MODULE_TYPES:
+            orchestrator_name = module_type
+            break
+
+    result["infrastructure"]["provider"] = provider.get("name", "qemu")
+    target_set = set(_run_targets(data))
+    result["infrastructure"]["infra_only"] = (
+        "infrastructure" in target_set
+        and "software" not in target_set
+        and "application" not in target_set
+    )
+    result["infrastructure"]["cloud_nodes"] = int(tier_aggregate["cloud"]["count"])
+    result["infrastructure"]["edge_nodes"] = int(tier_aggregate["edge"]["count"])
+    result["infrastructure"]["endpoint_nodes"] = int(tier_aggregate["endpoint"]["count"])
+    result["infrastructure"]["cloud_cores"] = int(tier_aggregate["cloud"]["cores"])
+    result["infrastructure"]["edge_cores"] = int(tier_aggregate["edge"]["cores"])
+    result["infrastructure"]["endpoint_cores"] = int(tier_aggregate["endpoint"]["cores"])
+    result["infrastructure"]["cpu_pin"] = bool(provider_cfg.get("cpu_pin", False))
+    result["infrastructure"]["base_path"] = os.path.expanduser(provider_cfg.get("base_path", "~"))
+    ip_cfg = provider_cfg.get("ip", {})
+    result["infrastructure"]["middleIP"] = int(ip_cfg.get("middle", 100))
+    result["infrastructure"]["middleIP_base"] = int(ip_cfg.get("middle_base", 90))
+    external_machines = provider_cfg.get("external_physical_machines", [])
+    result["infrastructure"]["external_physical_machines"] = (
+        ",".join(external_machines) if external_machines else None
+    )
+
+    result["benchmark"]["resource_manager"] = orchestrator_name
+    result["benchmark"]["resource_manager_only"] = (
+        "software" in target_set and "application" not in target_set
+    )
     return result
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _load_yaml(path: Path) -> Dict:
+    with path.open("r", encoding="utf-8") as filep:
+        data = yaml.safe_load(filep) or {}
+    if not isinstance(data, dict):
+        raise ValueError("Expected top-level YAML mapping in %s" % (path))
+    return data
+
+
+def _resolve_profile_path(experiment_path: Path, profile_kind: str, ref: str) -> Path:
+    ref_path = Path(ref).expanduser()
+    if ref_path.is_absolute() and ref_path.exists():
+        return ref_path
+
+    candidates = [
+        (experiment_path.parent / ref).expanduser(),
+        (experiment_path.parent / ("%s.yaml" % ref)).expanduser(),
+        (experiment_path.parent / ("%s.yml" % ref)).expanduser(),
+        (_repo_root() / ref).expanduser(),
+        (_repo_root() / ("%s.yaml" % ref)).expanduser(),
+        (_repo_root() / ("%s.yml" % ref)).expanduser(),
+        (_repo_root() / "configs" / "profiles" / profile_kind / ("%s.yaml" % ref)),
+        (Path.home() / ".continuum" / "configs" / "profiles" / profile_kind / ("%s.yaml" % ref)),
+    ]
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+
+    raise FileNotFoundError("Could not resolve %s profile reference '%s'" % (profile_kind, ref))
+
+
+def _run_targets(data: Dict) -> List[str]:
+    run = data.get("run", {})
+    if not isinstance(run, dict):
+        return ["infrastructure", "software", "application"]
+    targets = run.get("targets", ["infrastructure", "software", "application"])
+    if not isinstance(targets, list) or not targets:
+        return ["infrastructure", "software", "application"]
+    return [target for target in targets if isinstance(target, str)]
+
+
+def _compose_experiment(path: Path, experiment: Dict) -> Dict:
+    use = experiment.get("use", {})
+    if not isinstance(use, dict):
+        raise ValueError("%s: missing use mapping in experiment config" % path)
+
+    env_ref = use.get("environment")
+    sw_ref = use.get("software")
+    if not isinstance(env_ref, str) or not env_ref:
+        raise ValueError("%s: missing use.environment in experiment config" % path)
+    if not isinstance(sw_ref, str) or not sw_ref:
+        raise ValueError("%s: missing use.software in experiment config" % path)
+
+    env_path = _resolve_profile_path(path, "environment", env_ref)
+    sw_path = _resolve_profile_path(path, "software", sw_ref)
+    environment = _load_yaml(env_path)
+    software = _load_yaml(sw_path)
+
+    return {
+        "run": experiment.get("run", {}),
+        "infrastructure": experiment.get("infrastructure", {}),
+        "provider": (environment.get("provider") or {}),
+        "software": (software.get("software") or {}),
+        "benchmark": experiment.get("benchmark", {}),
+    }
+
+
+def _normalized_payload_for_testing(path: Path, data: Dict) -> Dict:
+    kind = str(data.get("kind", "")).strip()
+    if kind == "ContinuumExperimentLock":
+        normalized = data.get("normalized_config", {})
+        if not isinstance(normalized, dict) or not normalized:
+            raise ValueError("%s: lock config must contain normalized_config mapping" % path)
+        return normalized
+    if kind == "ContinuumExperiment":
+        return _compose_experiment(path, data)
+    raise ValueError(
+        "%s: unsupported YAML kind '%s' for test runner (expected ContinuumExperiment or "
+        "ContinuumExperimentLock)" % (path, kind)
+    )
 
 
 def get_username() -> str:
@@ -161,7 +316,6 @@ def identify_base_images(config: Dict, base_path_override: Optional[str] = None)
 
     Args:
         config: Parsed config dictionary
-        benchmark: Benchmark config dictionary
         base_path_override: Optional override for base_path
 
     Returns:
@@ -300,6 +454,9 @@ def detect_success(
 
     require_ssh = criteria.get("require_ssh_output", True)
     require_exit_zero = criteria.get("require_exit_code_zero", True)
+    require_experiment_lock = criteria.get("require_experiment_lock", True)
+    require_state_file = criteria.get("require_state_file", True)
+    require_state_phase = criteria.get("require_state_phase", True)
     check_logs = criteria.get("check_log_files", False)
 
     reasons = []
@@ -319,13 +476,96 @@ def detect_success(
             return False, "No SSH output found (expected SSH commands)"
         reasons.append("ssh_output_found")
 
-    # Optional: Check log files for errors
+    continuum_dir = os.path.join(config.get("infrastructure", {}).get("base_path", ""), ".continuum")
+    experiment_lock_path = os.path.join(continuum_dir, "experiment_lock.yaml")
+    state_path = os.path.join(continuum_dir, "state.json")
+
+    if require_experiment_lock:
+        if not os.path.exists(experiment_lock_path):
+            return False, "Experiment lock file missing: %s" % (experiment_lock_path)
+        reasons.append("experiment_lock_written")
+
+    state_payload = None
+    if require_state_file or require_state_phase:
+        if not os.path.exists(state_path):
+            return False, "State file missing: %s" % (state_path)
+        reasons.append("state_file_written")
+
+        try:
+            with open(state_path, "r", encoding="utf-8") as filep:
+                state_payload = json.load(filep)
+        except (OSError, json.JSONDecodeError) as exc:
+            return False, "State file unreadable: %s" % (exc)
+
+    if require_state_phase:
+        expected_phase = _expected_phase_completed(config)
+        actual_phase = state_payload.get("phase_completed")
+        if actual_phase != expected_phase:
+            return False, "State phase %r (expected %r)" % (actual_phase, expected_phase)
+        reasons.append("state_phase=%s" % (expected_phase))
+
+    # Optional: Check log files or stdout/stderr for explicit failure markers
     if check_logs:
-        # This would require reading log files - implement if needed
         pass
+
+    # Heuristic: even if exit code is 0, treat known Ansible failures as test failures
+    ansible_failed = ("FAILED!" in stdout) or ("non-zero return code" in stdout)
+    if ansible_failed:
+        return False, "Ansible reported FAILED in stdout despite exit_code=0"
 
     reason_str = "Success: " + ", ".join(reasons) if reasons else "Success"
     return True, reason_str
+
+
+def _expected_phase_completed(config: Dict) -> str:
+    """Return the expected saved state phase for a successful run."""
+    infrastructure = config.get("infrastructure", {})
+    benchmark = config.get("benchmark", {})
+
+    if infrastructure.get("infra_only", False):
+        return "infrastructure"
+    if benchmark.get("resource_manager_only", False):
+        return "software"
+    return "application"
+
+
+def classify_test_failure(result: Dict) -> Optional[str]:
+    """Classify a failed test result into a stable debugging bucket."""
+    if result.get("success", False):
+        return None
+
+    if result.get("timed_out", False):
+        return "timeout"
+
+    detail = str(result.get("error") or result.get("success_reason") or "")
+    if detail.startswith("Failed to parse config:"):
+        return "parse_failure"
+    if detail.startswith("Failed to create temp config:"):
+        return "override_failure"
+    if detail.startswith("Failed to execute test:"):
+        return "runner_failure"
+    if detail.startswith("Experiment lock file missing:"):
+        return "missing_lock"
+    if detail.startswith("State file missing:"):
+        return "missing_state"
+    if detail.startswith("State file unreadable:"):
+        return "unreadable_state"
+    if detail.startswith("State phase "):
+        return "wrong_state_phase"
+    if detail.startswith("No SSH output found"):
+        return "missing_ssh"
+    if detail.startswith("Exit code "):
+        return "nonzero_exit"
+    if "Ansible reported FAILED" in detail:
+        return "ansible_failure"
+    return "runtime_failure"
+
+
+def _sanitize_artifact_name(config_path: str) -> str:
+    """Return a filesystem-safe stem for one test result artifact directory."""
+    stem = Path(config_path).stem
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
+    return safe or "test"
 
 
 def save_test_results(results: List[Dict], output_dir: str) -> str:
@@ -342,6 +582,41 @@ def save_test_results(results: List[Dict], output_dir: str) -> str:
 
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime())
     results_file = os.path.join(output_dir, f"test_results_{timestamp}.json")
+    artifacts_dir = os.path.join(output_dir, f"test_results_{timestamp}")
+    os.makedirs(artifacts_dir, exist_ok=True)
+
+    serialized_results = []
+    for index, result in enumerate(results, 1):
+        serialized = dict(result)
+        serialized["failure_class"] = classify_test_failure(serialized)
+
+        artifact_name = "%02d_%s" % (
+            index,
+            _sanitize_artifact_name(serialized.get("config_path", "")),
+        )
+        result_dir = os.path.join(artifacts_dir, artifact_name)
+        os.makedirs(result_dir, exist_ok=True)
+
+        stdout_path = os.path.join(result_dir, "stdout.txt")
+        stderr_path = os.path.join(result_dir, "stderr.txt")
+        metadata_path = os.path.join(result_dir, "metadata.json")
+
+        with open(stdout_path, "w", encoding="utf-8") as filep:
+            filep.write(serialized.get("stdout", ""))
+        with open(stderr_path, "w", encoding="utf-8") as filep:
+            filep.write(serialized.get("stderr", ""))
+
+        metadata_payload = dict(serialized)
+        metadata_payload["stdout_artifact"] = stdout_path
+        metadata_payload["stderr_artifact"] = stderr_path
+        with open(metadata_path, "w", encoding="utf-8") as filep:
+            json.dump(metadata_payload, filep, indent=2)
+            filep.write("\n")
+
+        serialized["stdout_artifact"] = stdout_path
+        serialized["stderr_artifact"] = stderr_path
+        serialized["metadata_artifact"] = metadata_path
+        serialized_results.append(serialized)
 
     with open(results_file, "w", encoding="utf-8") as f:
         json.dump(
@@ -350,11 +625,13 @@ def save_test_results(results: List[Dict], output_dir: str) -> str:
                 "total_tests": len(results),
                 "passed": sum(1 for r in results if r.get("success", False)),
                 "failed": sum(1 for r in results if not r.get("success", False)),
-                "results": results,
+                "artifacts_dir": artifacts_dir,
+                "results": serialized_results,
             },
             f,
             indent=2,
         )
+        f.write("\n")
 
     return results_file
 
@@ -379,51 +656,172 @@ def load_test_manifest(manifest_path: str) -> Optional[Dict]:
         return None
 
 
+def calculate_total_cores(config: Dict) -> int:
+    """Calculate total number of cores needed for a configuration.
+
+    Args:
+        config: Parsed config dictionary
+
+    Returns:
+        Total number of cores needed
+    """
+    infra = config.get("infrastructure", {})
+    cloud_nodes = infra.get("cloud_nodes", 0)
+    edge_nodes = infra.get("edge_nodes", 0)
+    endpoint_nodes = infra.get("endpoint_nodes", 0)
+    cloud_cores = infra.get("cloud_cores", 4)
+    edge_cores = infra.get("edge_cores", 2)
+    endpoint_cores = infra.get("endpoint_cores", 1)
+
+    total_cores = (
+        cloud_nodes * cloud_cores + edge_nodes * edge_cores + endpoint_nodes * endpoint_cores
+    )
+    return total_cores
+
+
+def should_use_external_machine(
+    config: Dict,
+    physical_machine_cores: int = 20,
+) -> bool:
+    """Determine if an external physical machine is needed.
+
+    Args:
+        config: Parsed config dictionary
+        physical_machine_cores: Number of cores available on the primary physical machine
+
+    Returns:
+        True if external machine is needed
+    """
+    infra = config.get("infrastructure", {})
+    cpu_pin = infra.get("cpu_pin", False)
+
+    # Only need external machine if cpu_pin is enabled
+    if not cpu_pin:
+        return False
+
+    total_cores = calculate_total_cores(config)
+    return total_cores > physical_machine_cores
+
+
 def override_config_parameters(
     config_path: str,
     base_path: Optional[str] = None,
     middle_ip: Optional[int] = None,
     middle_ip_base: Optional[int] = None,
+    external_physical_machines: Optional[str] = None,
 ) -> str:
-    """Create a temporary config file with overridden parameters.
+    """Create a temporary YAML config file with overridden parameters.
 
     Args:
         config_path: Original config file path
         base_path: Override for base_path
         middle_ip: Override for middleIP
         middle_ip_base: Override for middleIP_base
+        external_physical_machines: Override for external_physical_machines
 
     Returns:
         Path to temporary config file
     """
-    config = configparser.ConfigParser()
-    config.read(config_path)
+    _, ext = os.path.splitext(config_path)
+    if ext not in (".yaml", ".yml"):
+        raise ValueError(
+            "Only YAML experiment/lock configs are supported by test overrides, got %s"
+            % (config_path)
+        )
+    return override_yaml_config_parameters(
+        config_path,
+        base_path=base_path,
+        middle_ip=middle_ip,
+        middle_ip_base=middle_ip_base,
+        external_physical_machines=external_physical_machines,
+    )
 
-    # Ensure infrastructure section exists
-    if "infrastructure" not in config:
-        config.add_section("infrastructure")
 
-    # Apply overrides (check for None explicitly, not just truthiness)
+def override_yaml_config_parameters(
+    config_path: str,
+    base_path: Optional[str] = None,
+    middle_ip: Optional[int] = None,
+    middle_ip_base: Optional[int] = None,
+    external_physical_machines: Optional[str] = None,
+) -> str:
+    """Create temporary YAML config with overridden provider fields.
+
+    For experiment configs, this generates a temporary lock-style payload so
+    provider overrides are applied to the fully resolved runtime config.
+    """
+    path = Path(config_path).expanduser().resolve()
+    data = _load_yaml(path)
+
+    if data.get("kind") == "ContinuumExperimentLock":
+        lock_data = data
+    elif data.get("kind") == "ContinuumExperiment":
+        parser = argparse.ArgumentParser(prog="continuum-test-override")
+        try:
+            parsed_config = yaml_parser.start(parser, str(path))
+        except SystemExit as exc:
+            raise ValueError("Failed to normalize experiment override input: %s" % (path)) from exc
+
+        parsed_provider_cfg = parsed_config["normalized"]["provider"]["config"]
+        parsed_infra = parsed_config["infrastructure"]
+        if base_path is not None:
+            expanded_path = os.path.expanduser(base_path)
+            if expanded_path.endswith("/"):
+                expanded_path = expanded_path[:-1]
+            parsed_provider_cfg["base_path"] = expanded_path
+            parsed_infra["base_path"] = expanded_path
+        if middle_ip is not None:
+            parsed_provider_cfg.setdefault("ip", {})["middle"] = int(middle_ip)
+            parsed_infra["middleIP"] = int(middle_ip)
+        if middle_ip_base is not None:
+            parsed_provider_cfg.setdefault("ip", {})["middle_base"] = int(middle_ip_base)
+            parsed_infra["middleIP_base"] = int(middle_ip_base)
+        if external_physical_machines is not None:
+            if external_physical_machines:
+                parsed_provider_cfg["external_physical_machines"] = [
+                    s.strip() for s in external_physical_machines.split(",") if s.strip()
+                ]
+            else:
+                parsed_provider_cfg["external_physical_machines"] = []
+            parsed_infra["external_physical_machines"] = ",".join(
+                parsed_provider_cfg["external_physical_machines"]
+            ) or None
+
+        lock_path = Path(yaml_parser.write_experiment_lock(parsed_config))
+        lock_data = _load_yaml(lock_path)
+    else:
+        raise ValueError(
+            "Unsupported YAML kind '%s' for overrides at %s"
+            % (data.get("kind"), path)
+        )
+
+    provider_cfg = ((lock_data.get("normalized_config", {}) or {}).get("provider", {}) or {}).get(
+        "config", {}
+    )
+
     if base_path is not None:
-        # Expand user path and normalize
         expanded_path = os.path.expanduser(base_path)
         if expanded_path.endswith("/"):
             expanded_path = expanded_path[:-1]
-        config["infrastructure"]["base_path"] = expanded_path
+        provider_cfg["base_path"] = expanded_path
 
+    ip_cfg = provider_cfg.setdefault("ip", {})
     if middle_ip is not None:
-        config["infrastructure"]["middleIP"] = str(middle_ip)
-
+        ip_cfg["middle"] = int(middle_ip)
     if middle_ip_base is not None:
-        config["infrastructure"]["middleIP_base"] = str(middle_ip_base)
+        ip_cfg["middle_base"] = int(middle_ip_base)
 
-    # Create temporary file
+    if external_physical_machines is not None:
+        if external_physical_machines:
+            provider_cfg["external_physical_machines"] = [
+                s.strip() for s in external_physical_machines.split(",") if s.strip()
+            ]
+        else:
+            provider_cfg["external_physical_machines"] = []
+
     import tempfile
 
-    temp_fd, temp_path = tempfile.mkstemp(suffix=".cfg", prefix="continuum_test_")
+    temp_fd, temp_path = tempfile.mkstemp(suffix=".yaml", prefix="continuum_test_")
     os.close(temp_fd)
-
-    with open(temp_path, "w", encoding="utf-8") as f:
-        config.write(f)
-
+    with open(temp_path, "w", encoding="utf-8") as filep:
+        yaml.safe_dump(lock_data, filep, sort_keys=False)
     return temp_path

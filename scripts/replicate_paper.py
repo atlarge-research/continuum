@@ -3,22 +3,20 @@ Run the benchmark multiple times with a range of settings,
 and produce tables / graphs with these results
 """
 
-import math
-import time
 import argparse
-import sys
-import logging
-import subprocess
 import datetime
+import logging
+import math
 import os
+import subprocess
+import sys
+import time
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
-
-from matplotlib.ticker import ScalarFormatter
-from matplotlib.ticker import NullFormatter
+from matplotlib.ticker import NullFormatter, ScalarFormatter
 
 # Home dir should be continuum/
 os.chdir("../")
@@ -65,7 +63,7 @@ def execute(command, shell=False, crash=True):
             error = [line.decode("utf-8") for line in process.stderr.readlines()]
     except Exception as _:
         if crash:
-            sys.exit()
+            sys.exit(1)
 
     return output, error
 
@@ -132,7 +130,7 @@ class Experiment:
                 logging.debug("ERROR")
                 logging.debug("------------------------------------")
                 logging.debug("\n%s", "".join(error))
-                sys.exit()
+                sys.exit(1)
 
             logging.debug("------------------------------------")
 
@@ -651,7 +649,7 @@ QUOTA                   %s""" % (
                 cpu_quota = cpu * quota
                 if cpu_quota != memory:
                     logging.error("ERROR: cpu x quota (%f) != memory (%f)", cpu_quota, memory)
-                    sys.exit()
+                    sys.exit(1)
 
                 if cpu_quota >= 1:
                     cpu_str = "%s00" % (int(cpu_quota))
@@ -1132,7 +1130,7 @@ def main(args):
         exp = Serverless(args.resume)
     else:
         logging.error("Invalid experiment: %s", args.experiment)
-        sys.exit()
+        sys.exit(1)
 
     logging.info(exp)
     exp.generate()

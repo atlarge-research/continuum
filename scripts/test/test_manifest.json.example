@@ -1,13 +1,9 @@
 {
   "include": [
-    "configuration/tests/**",
-    "configuration/cellular_network/bench_cloud_4g.cfg",
-    "configuration/cellular_network/bench_edge_5g.cfg"
+    "configs/experiments/**/*.yaml",
+    "configs/experiments/bench_cloud_openfaas.yaml"
   ],
   "exclude": [
-    "configuration/experiment_kata/**",
-    "configuration/experiment_control/microbenchmark/**",
-    "**/*template*.cfg"
+    "**/*template*.yaml"
   ]
 }
-

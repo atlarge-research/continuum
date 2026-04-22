@@ -7,6 +7,7 @@ Discovers and executes test configurations, tracks results, and generates report
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -38,7 +39,12 @@ class Colors:
 
 
 def print_colored(message: str, color: str = Colors.RESET):
-    """Print colored message to console."""
+    """Print colored message to console.
+
+    Args:
+        message: Text to print.
+        color: ANSI color code. Defaults to reset.
+    """
     print(f"{color}{message}{Colors.RESET}")
 
 
@@ -55,12 +61,106 @@ def load_test_config(config_path: str) -> Dict:
         return json.load(f)
 
 
+def validate_suite_prerequisites(suite_name: str, suite_config: Dict) -> List[str]:
+    """Return missing host commands required by a suite preflight."""
+    prerequisites = suite_config.get("prerequisites", {})
+    if not prerequisites:
+        return []
+    if not isinstance(prerequisites, dict):
+        raise ValueError("Suite '%s' prerequisites must be a mapping" % (suite_name))
+
+    commands = prerequisites.get("commands", [])
+    if not isinstance(commands, list) or any(
+        not isinstance(command, str) or not command.strip() for command in commands
+    ):
+        raise ValueError("Suite '%s' prerequisites.commands must be a list of strings" % (suite_name))
+
+    missing = []
+    for command in commands:
+        if shutil.which(command) is None:
+            missing.append(command)
+    return missing
+
+
+def suite_prerequisite_summary(suite_name: str, suite_config: Dict) -> Optional[str]:
+    """Return a short human-facing suite prerequisite summary when configured."""
+    prerequisites = suite_config.get("prerequisites", {})
+    if not isinstance(prerequisites, dict):
+        return None
+
+    summary = prerequisites.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        return summary.strip()
+    if prerequisites.get("commands"):
+        return "Requires host commands: %s" % (", ".join(prerequisites["commands"]))
+    return None
+
+
+def print_suite_catalog(test_config: Dict):
+    """Print configured suites and their declared prerequisites."""
+    suites = test_config.get("test_suites", {})
+    print_colored("Configured test suites:", Colors.BOLD)
+    for suite_name in sorted(suites.keys()):
+        suite_config = suites[suite_name]
+        directories = suite_config.get("directories", [])
+        summary = suite_prerequisite_summary(suite_name, suite_config)
+        print_colored("- %s" % (suite_name), Colors.BLUE)
+        print("  directories: %s" % (", ".join(directories) if directories else "<none>"))
+        if summary:
+            print("  prerequisites: %s" % (summary))
+
+
+def check_suite_prerequisites(selected_suites: Dict[str, Dict]) -> int:
+    """Validate suite prerequisites and print a short report.
+
+    Returns:
+        int: process exit code (0 when all selected suites are runnable).
+    """
+    overall_ok = True
+    for suite_name in sorted(selected_suites.keys()):
+        suite_config = selected_suites[suite_name]
+        summary = suite_prerequisite_summary(suite_name, suite_config)
+        if summary:
+            print_colored("Suite '%s': %s" % (suite_name, summary), Colors.BLUE)
+        try:
+            missing_commands = validate_suite_prerequisites(suite_name, suite_config)
+        except ValueError as exc:
+            print_colored("Error: %s" % (exc), Colors.RED)
+            overall_ok = False
+            continue
+
+        if missing_commands:
+            print_colored(
+                "Missing required host command(s): %s" % (", ".join(missing_commands)),
+                Colors.RED,
+            )
+            overall_ok = False
+        else:
+            print_colored("Prerequisites satisfied", Colors.GREEN)
+
+    return 0 if overall_ok else 1
+
+
+def resolve_results_dir(base_path_override: Optional[str] = None) -> str:
+    """Resolve the directory used for saved test-result summaries and artifacts."""
+    env_override = os.environ.get("CONTINUUM_TEST_RESULTS_DIR")
+    if env_override:
+        return os.path.expanduser(env_override)
+    if base_path_override:
+        return os.path.join(os.path.expanduser(base_path_override), ".continuum", "test_results")
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(script_dir))
+    return os.path.join(project_root, "logs", "test_results")
+
+
 def run_single_test(
     config_path: str,
     test_config: Dict,
     base_path_override: Optional[str] = None,
     middle_ip_override: Optional[int] = None,
     middle_ip_base_override: Optional[int] = None,
+    external_physical_machines_override: Optional[str] = None,
     timeout_minutes: int = 30,
 ) -> Dict:
     """Run a single test configuration.
@@ -71,6 +171,7 @@ def run_single_test(
         base_path_override: Optional base_path override
         middle_ip_override: Optional middleIP override
         middle_ip_base_override: Optional middleIP_base override
+        external_physical_machines_override: Optional external_physical_machines override
         timeout_minutes: Test timeout in minutes
 
     Returns:
@@ -88,6 +189,7 @@ def run_single_test(
         "execution_time": 0,
         "base_images_rebuilt": [],
         "parameter_overrides": {},
+        "timed_out": False,
     }
 
     # Parse config to get base images
@@ -99,27 +201,44 @@ def run_single_test(
             "base_path": base_path_override,
             "middleIP": middle_ip_override,
             "middleIP_base": middle_ip_base_override,
+            "external_physical_machines": external_physical_machines_override,
         }
     except Exception as e:
         result["error"] = f"Failed to parse config: {e}"
         result["execution_time"] = time.time() - start_time
+        result["failure_class"] = test_utils.classify_test_failure(result)
         return result
 
     # Create temporary config with overrides if needed
     temp_config_path = config_path
     temp_file_created = False
-    if base_path_override or middle_ip_override is not None or middle_ip_base_override is not None:
+    if (
+        base_path_override
+        or middle_ip_override is not None
+        or middle_ip_base_override is not None
+        or external_physical_machines_override is not None
+    ):
         try:
             temp_config_path = test_utils.override_config_parameters(
                 config_path,
                 base_path=base_path_override,
                 middle_ip=middle_ip_override,
                 middle_ip_base=middle_ip_base_override,
+                external_physical_machines=external_physical_machines_override,
             )
             temp_file_created = True
         except Exception as e:
             result["error"] = f"Failed to create temp config: {e}"
             result["execution_time"] = time.time() - start_time
+            result["failure_class"] = test_utils.classify_test_failure(result)
+            return result
+
+        try:
+            config = test_utils.parse_config_simple(temp_config_path)
+        except Exception as e:
+            result["error"] = f"Failed to parse overridden config: {e}"
+            result["execution_time"] = time.time() - start_time
+            result["failure_class"] = test_utils.classify_test_failure(result)
             return result
 
     # Run continuum.py
@@ -151,11 +270,13 @@ def run_single_test(
             result["exit_code"] = -1
             result["stdout"] = stdout.decode("utf-8", errors="replace") if stdout else ""
             result["stderr"] = stderr.decode("utf-8", errors="replace") if stderr else ""
+            result["timed_out"] = True
             result["error"] = f"Test timed out after {timeout_minutes} minutes"
 
     except Exception as e:
         result["error"] = f"Failed to execute test: {e}"
         result["execution_time"] = time.time() - start_time
+        result["failure_class"] = test_utils.classify_test_failure(result)
         return result
     finally:
         # Clean up temporary config file
@@ -164,6 +285,13 @@ def run_single_test(
                 os.remove(temp_config_path)
             except Exception:
                 pass
+
+    if result.get("timed_out"):
+        result["success"] = False
+        result["success_reason"] = result["error"]
+        result["execution_time"] = time.time() - start_time
+        result["failure_class"] = test_utils.classify_test_failure(result)
+        return result
 
     # Detect success
     success_config = test_config.get("success_detection", {})
@@ -178,6 +306,7 @@ def run_single_test(
     result["success"] = success
     result["success_reason"] = reason
     result["execution_time"] = time.time() - start_time
+    result["failure_class"] = test_utils.classify_test_failure(result)
 
     return result
 
@@ -188,6 +317,7 @@ def run_tests(
     base_path_override: Optional[str] = None,
     middle_ip_override: Optional[int] = None,
     middle_ip_base_override: Optional[int] = None,
+    external_physical_machines_override: Optional[str] = None,
     rebuild_base_images: bool = False,
     use_cache: bool = False,
     stop_on_failure: bool = False,
@@ -200,6 +330,7 @@ def run_tests(
         base_path_override: Optional base_path override
         middle_ip_override: Optional middleIP override
         middle_ip_base_override: Optional middleIP_base override
+        external_physical_machines_override: Optional external_physical_machines override
         rebuild_base_images: Force rebuild base images
         use_cache: Use cache only (never rebuild)
         stop_on_failure: Stop on first failure
@@ -242,6 +373,31 @@ def run_tests(
             print_colored(f"  Rebuilding base images: {', '.join(base_images)}", Colors.YELLOW)
             deleted_images = test_utils.delete_base_images(base_image_paths)
 
+        # Determine if external physical machine is needed
+        external_machines_override = external_physical_machines_override
+        if external_machines_override is None:
+            # Check if config already has external_physical_machines set
+            existing_external = config.get("infrastructure", {}).get("external_physical_machines")
+            # Only auto-detect if not already set (or set to empty/None)
+            if not existing_external:
+                # Auto-detect if external machine is needed
+                try:
+                    physical_machine_cores = test_config.get("physical_machine_cores", 20)
+                    if test_utils.should_use_external_machine(config, physical_machine_cores):
+                        external_machine = test_config.get(
+                            "external_physical_machine", "matthijs@node3"
+                        )
+                        external_machines_override = external_machine
+                        total_cores = test_utils.calculate_total_cores(config)
+                        print_colored(
+                            f"  Auto-detected need for external machine: {total_cores} cores > {physical_machine_cores} cores",
+                            Colors.YELLOW,
+                        )
+                except Exception as e:
+                    print_colored(
+                        f"  Warning: Could not determine external machine need: {e}", Colors.YELLOW
+                    )
+
         # Run the test
         result = run_single_test(
             config_path,
@@ -249,6 +405,7 @@ def run_tests(
             base_path_override=base_path_override,
             middle_ip_override=middle_ip_override,
             middle_ip_base_override=middle_ip_base_override,
+            external_physical_machines_override=external_machines_override,
             timeout_minutes=timeout_minutes,
         )
 
@@ -262,8 +419,13 @@ def run_tests(
                 Colors.GREEN,
             )
         else:
+            print(result)
             error_msg = result.get("error") or result.get("success_reason", "Unknown error")
-            print_colored(f"  ✗ FAILED ({result['execution_time']:.1f}s) - {error_msg}", Colors.RED)
+            failure_class = result.get("failure_class", "runtime_failure")
+            print_colored(
+                f"  ✗ FAILED ({result['execution_time']:.1f}s) [{failure_class}] - {error_msg}",
+                Colors.RED,
+            )
             if result.get("stderr"):
                 # Print first few lines of stderr
                 stderr_lines = result["stderr"].split("\n")[:3]
@@ -285,7 +447,7 @@ def print_summary(results: List[Dict]):
     """Print test execution summary.
 
     Args:
-        results: List of test result dictionaries
+        results: List of test result dictionaries.
     """
     total = len(results)
     passed = sum(1 for r in results if r.get("success", False))
@@ -305,7 +467,24 @@ def print_summary(results: List[Dict]):
         for result in results:
             if not result.get("success", False):
                 error = result.get("error") or result.get("success_reason", "Unknown")
-                print_colored(f"  - {result['config_path']}: {error}", Colors.RED)
+                failure_class = result.get("failure_class", "runtime_failure")
+                print_colored(
+                    f"  - {result['config_path']} [{failure_class}]: {error}",
+                    Colors.RED,
+                )
+
+        failure_counts = {}
+        for result in results:
+            failure_class = result.get("failure_class")
+            if failure_class:
+                failure_counts[failure_class] = failure_counts.get(failure_class, 0) + 1
+        if failure_counts:
+            print_colored("\nFailure classes:", Colors.YELLOW)
+            for failure_class in sorted(failure_counts.keys()):
+                print_colored(
+                    f"  - {failure_class}: {failure_counts[failure_class]}",
+                    Colors.YELLOW,
+                )
 
     print()
 
@@ -319,8 +498,17 @@ def main():
 
     parser.add_argument(
         "--suite",
-        choices=["smoke", "full"],
-        help="Test suite to run (smoke or full)",
+        help="Test suite to run (resolved from the loaded test config)",
+    )
+    parser.add_argument(
+        "--list-suites",
+        action="store_true",
+        help="List configured suites and their prerequisite summaries",
+    )
+    parser.add_argument(
+        "--check-prereqs",
+        action="store_true",
+        help="Validate suite prerequisites without discovering or running tests",
     )
     parser.add_argument(
         "--config",
@@ -350,6 +538,10 @@ def main():
         help="Override middleIP_base for all tests",
     )
     parser.add_argument(
+        "--external-physical-machines",
+        help="Override external_physical_machines for all tests",
+    )
+    parser.add_argument(
         "--rebuild-base-images",
         action="store_true",
         help="Force rebuild base images for all tests",
@@ -362,6 +554,7 @@ def main():
     parser.add_argument(
         "--stop-on-failure",
         action="store_true",
+        default=None,
         help="Stop on first test failure",
     )
     parser.add_argument(
@@ -391,6 +584,34 @@ def main():
         sys.exit(1)
 
     test_config = load_test_config(test_config_path)
+    available_suites = list(test_config.get("test_suites", {}).keys())
+    if not available_suites:
+        print_colored("Error: No test suites defined in test config", Colors.RED)
+        sys.exit(1)
+
+    if args.suite and args.suite not in available_suites:
+        print_colored(
+            "Error: Unknown test suite '%s'. Available suites: %s"
+            % (args.suite, ", ".join(sorted(available_suites))),
+            Colors.RED,
+        )
+        sys.exit(1)
+
+    if args.list_suites:
+        print_suite_catalog(test_config)
+        sys.exit(0)
+
+    if args.check_prereqs:
+        if args.suite:
+            selected_suites = {args.suite: test_config["test_suites"][args.suite]}
+        else:
+            selected_suites = test_config["test_suites"]
+        sys.exit(check_suite_prerequisites(selected_suites))
+
+    # Initialize default values for rebuild_base_images and use_cache
+    rebuild_base_images = False
+    use_cache = False
+    stop_on_failure = test_config.get("stop_on_failure", False)
 
     # Determine which config files to test
     if args.config:
@@ -401,25 +622,34 @@ def main():
         config_files = [args.config]
     else:
         # Use test suite or discover all
-        if args.suite:
-            suite_config = test_config["test_suites"][args.suite]
-            directories = suite_config["directories"]
-            use_cache = suite_config.get("use_cache", False)
-            rebuild_base_images = suite_config.get("rebuild_base_images", False)
-        else:
-            # Default to smoke tests
-            suite_config = test_config["test_suites"]["smoke"]
-            directories = suite_config["directories"]
-            use_cache = suite_config.get("use_cache", False)
-            rebuild_base_images = suite_config.get("rebuild_base_images", False)
+        suite_name = args.suite or ("smoke" if "smoke" in test_config["test_suites"] else None)
+        if suite_name is None:
+            suite_name = available_suites[0]
 
-        # Override with command-line flags
-        if args.use_cache:
-            use_cache = True
-            rebuild_base_images = False
-        if args.rebuild_base_images:
-            rebuild_base_images = True
-            use_cache = False
+        suite_config = test_config["test_suites"][suite_name]
+        try:
+            missing_commands = validate_suite_prerequisites(suite_name, suite_config)
+        except ValueError as exc:
+            print_colored("Error: %s" % (exc), Colors.RED)
+            sys.exit(1)
+        if missing_commands:
+            summary = suite_prerequisite_summary(suite_name, suite_config)
+            if summary:
+                print_colored(
+                    "Suite '%s' prerequisites: %s" % (suite_name, summary),
+                    Colors.YELLOW,
+                )
+            print_colored(
+                "Error: Missing required host command(s) for suite '%s': %s"
+                % (suite_name, ", ".join(missing_commands)),
+                Colors.RED,
+            )
+            sys.exit(1)
+
+        directories = suite_config["directories"]
+        use_cache = suite_config.get("use_cache", False)
+        rebuild_base_images = suite_config.get("rebuild_base_images", False)
+        stop_on_failure = suite_config.get("stop_on_failure", stop_on_failure)
 
         exclude_patterns = test_config.get("exclude_patterns", [])
 
@@ -456,6 +686,16 @@ def main():
                 print_colored(f"Using manifest: {args.manifest}", Colors.YELLOW)
             sys.exit(0)
 
+    # Override with command-line flags (applies to both single config and test suites)
+    if args.use_cache:
+        use_cache = True
+        rebuild_base_images = False
+    if args.rebuild_base_images:
+        rebuild_base_images = True
+        use_cache = False
+    if args.stop_on_failure is not None:
+        stop_on_failure = args.stop_on_failure
+
     # Run tests
     results = run_tests(
         config_files,
@@ -463,18 +703,17 @@ def main():
         base_path_override=args.base_path,
         middle_ip_override=args.middle_ip,
         middle_ip_base_override=args.middle_ip_base,
+        external_physical_machines_override=args.external_physical_machines,
         rebuild_base_images=rebuild_base_images,
         use_cache=use_cache,
-        stop_on_failure=args.stop_on_failure,
+        stop_on_failure=stop_on_failure,
     )
 
     # Print summary
     print_summary(results)
 
     # Save results
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(script_dir))
-    results_dir = os.path.join(project_root, "logs", "test_results")
+    results_dir = resolve_results_dir(base_path_override=args.base_path)
     results_file = test_utils.save_test_results(results, results_dir)
     print_colored(f"Results saved to: {results_file}", Colors.BLUE)
 

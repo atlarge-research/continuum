@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
-"""\
-Verify that Continuum network profiles and manual overrides behave as expected,
-using structured netperf output produced by infrastructure.network.benchmark().
-
-This script is intentionally simple and conservative: it checks relative
-relationships (e.g. 5G > 4G throughput, manual_high > manual_low) rather than
-hard absolute numbers, to avoid overfitting to a single environment.
-"""
+"""Verify network-profile behavior from structured netperf output."""
 
 import argparse
 import json
 import os
 import re
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs", "network_validation")
+RELATIVE_TOLERANCE = 0.25
+LATENCY_ABSOLUTE_TOLERANCE_MS = 10.0
+THROUGHPUT_ABSOLUTE_TOLERANCE_MBPS = 10.0
 
 
 def _latest_results_file() -> str:
@@ -42,11 +38,26 @@ def _parse_throughput(output: str) -> float:
     output corresponds to throughput (often in Mbit/s). This is heuristic
     but works well enough for relative comparisons.
     """
-    numbers = re.findall(r"[-+]?[0-9]*\\.?[0-9]+", output)
+    numbers = re.findall(r"[-+]?[0-9]*\.?[0-9]+", output)
     if not numbers:
         return 0.0
     try:
         return float(numbers[-1])
+    except ValueError:
+        return 0.0
+
+
+def _parse_latency_ms(output: str) -> float:
+    """Parse mean latency from a TCP_RR `-O ...` result line.
+
+    Netperf returns latency fields in microseconds for TCP_RR. We extract the
+    mean latency (the second numeric field) and convert it to milliseconds.
+    """
+    numbers = re.findall(r"[-+]?[0-9]*\.?[0-9]+", output)
+    if len(numbers) < 2:
+        return 0.0
+    try:
+        return float(numbers[1]) / 1000.0
     except ValueError:
         return 0.0
 
@@ -89,6 +100,75 @@ def summarize_throughput(group: List[Dict]) -> float:
     return sum(values) / len(values)
 
 
+def summarize_latency_ms(group: List[Dict]) -> float:
+    """Compute average latency in milliseconds for latency entries."""
+    values: List[float] = []
+    for entry in group:
+        if entry.get("direction") != "latency":
+            continue
+        latency_ms = _parse_latency_ms(entry.get("output", ""))
+        if latency_ms > 0:
+            values.append(latency_ms)
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
+def _within_tolerance(observed: float, expected: float, absolute_floor: float) -> bool:
+    lower = max(0.0, expected - max(absolute_floor, expected * RELATIVE_TOLERANCE))
+    upper = expected + max(absolute_floor, expected * RELATIVE_TOLERANCE)
+    return lower <= observed <= upper
+
+
+def validate_results(results: List[Dict]) -> List[str]:
+    """Return validation failures for a structured netperf result set."""
+    grouped = group_by_scenario(results)
+    failures: List[str] = []
+
+    for scenario_key, entries in grouped.items():
+        latency_expected = next(
+            (
+                float(entry["expected_latency_ms"])
+                for entry in entries
+                if entry.get("expected_latency_ms") is not None
+            ),
+            None,
+        )
+        throughput_expected = next(
+            (
+                float(entry["expected_throughput_mbps"])
+                for entry in entries
+                if entry.get("expected_throughput_mbps") is not None
+            ),
+            None,
+        )
+
+        observed_latency = summarize_latency_ms(entries)
+        observed_throughput = summarize_throughput(entries)
+
+        if latency_expected is not None and observed_latency > 0:
+            if not _within_tolerance(
+                observed_latency, latency_expected, LATENCY_ABSOLUTE_TOLERANCE_MS
+            ):
+                failures.append(
+                    "%s latency %.2fms is outside tolerated range for expected %.2fms"
+                    % (scenario_key, observed_latency, latency_expected)
+                )
+
+        if throughput_expected is not None and observed_throughput > 0:
+            if not _within_tolerance(
+                observed_throughput,
+                throughput_expected,
+                THROUGHPUT_ABSOLUTE_TOLERANCE_MBPS,
+            ):
+                failures.append(
+                    "%s throughput %.2fmbps is outside tolerated range for expected %.2fmbps"
+                    % (scenario_key, observed_throughput, throughput_expected)
+                )
+
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Verify Continuum network profiles using netperf results."
@@ -108,38 +188,22 @@ def main() -> int:
         return 1
 
     grouped = group_by_scenario(results)
-
-    # Simple expectations:
-    # - cloud->endpoint throughput should be higher for "manual_high" than "manual_low"
-    # - 5G should generally offer higher throughput than 4G for cloud->endpoint
-    # We use config-derived hints encoded in the source_ssh name if available.
-
-    # Map scenario key -> avg throughput
     scenario_tp: Dict[str, float] = {
         key: summarize_throughput(entries) for key, entries in grouped.items()
     }
+    scenario_latency: Dict[str, float] = {
+        key: summarize_latency_ms(entries) for key, entries in grouped.items()
+    }
 
     # Print summary for transparency
-    print("Throughput summary by scenario (arbitrary units):")
-    for key, value in scenario_tp.items():
-        print(f"  {key}: {value:.2f}")
-
-    # We keep assertions intentionally light and relative.
-    failures: List[str] = []
-
-    # Example heuristic checks: look at cloud->endpoint
-    cloud_endpoint_keys = [k for k in scenario_tp if k.startswith("cloud->endpoint")]
-    if len(cloud_endpoint_keys) >= 2:
-        # Sort by throughput
-        sorted_pairs: List[Tuple[str, float]] = sorted(
-            ((k, scenario_tp[k]) for k in cloud_endpoint_keys), key=lambda x: x[1]
+    print("Scenario summary:")
+    for key in sorted(grouped):
+        print(
+            "  %s: latency=%.2fms throughput=%.2fmbps"
+            % (key, scenario_latency.get(key, 0.0), scenario_tp.get(key, 0.0))
         )
-        lowest, highest = sorted_pairs[0], sorted_pairs[-1]
-        if highest[1] < lowest[1] * 1.2:  # expect at least 20% difference
-            failures.append(
-                "cloud->endpoint throughput across scenarios does not differ enough "
-                "(manual/profile validation may be misconfigured)."
-            )
+
+    failures = validate_results(results)
 
     if failures:
         print("Network profile validation FAILED:")
@@ -147,7 +211,10 @@ def main() -> int:
             print(f"  - {msg}")
         return 1
 
-    print("Network profile validation PASSED (basic relative checks).")
+    print(
+        "Network profile validation PASSED "
+        "(tolerance: 25%% or 10ms / 10mbps, whichever is larger)."
+    )
     return 0
 
 
