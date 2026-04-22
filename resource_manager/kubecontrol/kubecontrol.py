@@ -3,15 +3,13 @@ Setup Kubernetes on cloud
 This resource manager doesn't have any/many help functions, see the /kubernetes folder instead
 """
 
-import logging
-import os
-
-from infrastructure import ansible
+from input.configuration import config_access
+from resource_manager import orchestrator_options, plans
 from resource_manager.kubernetes import kubernetes
 
 
 def add_options(_config):
-    """Add config options for a particular module
+    """[INTERFACE] Add config options for this RM module
 
     Args:
         config (ConfigParser): ConfigParser object
@@ -19,28 +17,14 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    settings = [
-        ["cache_worker", bool, lambda x: x in [True, False], False, False],
-        [
-            "kube_deployment",
-            str,
-            lambda x: x in ["pod", "container", "file", "call"],
-            False,
-            "pod",
-        ],
-        [
-            "kube_version",
-            str,
-            lambda _: ["v1.27.0", "v1.26.0", "v1.25.0", "v1.24.0", "v1.23.0"],
-            False,
-            "v1.27.0",
-        ],
-    ]
-    return settings
+    return (
+        orchestrator_options.kubernetes_common_options(orchestrator_options.KUBE_VERSIONS_COMPAT)
+        + orchestrator_options.kube_deployment_options()
+    )
 
 
 def verify_options(parser, config):
-    """Verify the config from the module's requirements
+    """[INTERFACE] Verify config options for this RM module
 
     Args:
         parser (ArgumentParser): Argparse object
@@ -59,96 +43,69 @@ def verify_options(parser, config):
         parser.error(r"ERROR: Kubernetes requires (#clouds-1) % #endpoints == 0 (-1 for control)")
 
 
-def start(config, machines):
-    """Setup Kubernetes on cloud VMs using Ansible.
+def start(runner):
+    """[INTERFACE] Execute kubecontrol software-phase installation.
 
     Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner): Shared Ansible runner with config and machine state.
     """
-    logging.info("Start Kubernetes cluster on VMs")
-    commands = []
+    from resource_manager import resource_manager
 
-    # Setup cloud controller
-    commands.append(
-        [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/cloud/control_install.yml",
-            ),
-        ]
-    )
+    resource_manager.start(runner)
 
-    # Setup worker
-    commands.append(
-        [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/%s/install.yml" % (config["mode"]),
-            ),
-        ]
-    )
 
-    results = machines[0].process(config, commands)
+def base_install_playbook(_config, tier):
+    """[INTERFACE] Return kubecontrol base-install playbook for a tier.
 
-    # Check playbooks
-    for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for Ansible command [%s]", " ".join(command))
-        ansible.check_output((output, error))
+    Args:
+        _config (dict): Parsed configuration (unused).
+        tier (str): VM tier selector.
 
-    kubernetes.verify_running_cluster(config, machines)
+    Returns:
+        str | None: K8s base-install playbook for cloud/edge tiers, else None.
+    """
+    if tier in ("cloud", "edge"):
+        return "playbooks/resource_manager/k8s_base_install.yml"
+    return None
 
-    # Start the resource metrics server
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/cloud/resource_usage.yml",
+
+def build_phase_plan(config):
+    """[INTERFACE] Build software-phase plan entries for kubecontrol RM.
+
+    Args:
+        config (dict): Parsed configuration.
+
+    Returns:
+        list[PlanEntry]: Ordered software-phase execution entries.
+    """
+    observability_owner = None
+    if config_access.has_addon(config, "observability"):
+        observability_owner = config_access.software_module_by_type(config, "observability")
+
+    entries = [
+        plans.PlanEntry(
+            kind="playbook",
+            playbook="playbooks/resource_manager/k8s_cluster.yml",
+            extra_vars={"ignore_preflight_errors": True},
         ),
+        plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/k8s_metrics.yml"),
     ]
+    if observability_owner is not None:
+        entries.append(
+            plans.PlanEntry(
+                kind="playbook",
+                playbook="playbooks/resource_manager/k8s_observability.yml",
+                owner_id=observability_owner["id"],
+                owner_type=observability_owner["type"],
+            )
+        )
+    return entries
 
-    output, error = machines[0].process(config, command)[0]
 
-    logging.debug("Check output for Ansible command [%s]", " ".join(command))
-    ansible.check_output((output, error))
+def post_phase_hook(runner):
+    """[INTERFACE] Run post-install verification for kubecontrol RM.
 
-    # Now the OS server that runs on every VM
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/cloud/resource_usage_os.yml",
-        ),
-    ]
-
-    output, error = machines[0].process(config, command)[0]
-
-    logging.debug("Check output for Ansible command [%s]", " ".join(command))
-    ansible.check_output((output, error))
-
-    # Install observability packages (Prometheus, Grafana) if configured by the user
-    if config["benchmark"]["observability"]:
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/cloud/observability.yml",
-            ),
-        ]
-
-        output, error = machines[0].process(config, command)[0]
-
-        logging.debug("Check output for Ansible command [%s]", " ".join(command))
-        ansible.check_output((output, error))
+    Args:
+        runner (AnsibleRunner): Shared runner instance.
+    """
+    kubernetes.verify_running_cluster(runner.config, runner.machines)

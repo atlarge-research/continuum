@@ -1,25 +1,20 @@
-"""\
-Select the correct resource manager, install required software and set them up.
-"""
+"""Select the correct resource manager, install required software and set them up."""
 
-from .endpoint import endpoint
+from . import plans
 
 
-def start(config, machines):
-    """Create and manage resource managers
+def start(runner):
+    """[INTERFACE] Create and manage resource managers
 
     Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner): Shared Ansible runner with config and machine state.
     """
-    # Install software on cloud/edge nodes
-    if config["module"]["resource_manager"]:
-        config["module"]["resource_manager"].start(config, machines)
+    config = runner.config
 
-    # Start RM software on endpoints
-    # Only when RM=none, otherwise it's a infra_only run and we don't do anything
-    if config["infrastructure"]["endpoint_nodes"] and not config["infrastructure"]["infra_only"]:
-        endpoint.start(config, machines)
+    # Install orchestrator/addons through centralized software planning.
+    entries = plans.build_software_phase_entries(config)
+    plans.execute_entries(runner, entries)
+    plans.run_post_phase_hook(runner)
 
 
 def add_options(config):
@@ -27,6 +22,9 @@ def add_options(config):
 
     Args:
         config (ConfigParser): ConfigParser object
+
+    Returns:
+        object: Option descriptors from the selected resource manager module.
     """
     return config["module"]["resource_manager"].add_options(config)
 

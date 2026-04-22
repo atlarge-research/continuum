@@ -10,7 +10,7 @@ def add_options(_config):
     """Add config options for a particular module
 
     Args:
-        config (ConfigParser): ConfigParser object
+        _config (ConfigParser): ConfigParser object
 
     Returns:
         list(list()): Options to add

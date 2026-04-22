@@ -7,25 +7,57 @@ import os
 import sys
 import time
 
-from infrastructure import ansible
+from input.configuration import config_access
 
 
-def start(config, machines):
-    """Setup endpoint VMs using Ansible.
+def _is_transient_ssh_error(lines):
+    """Determine whether SSH stderr output indicates a transient failure.
 
     Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Start setting up endpoint VMs")
+        lines (list[str]): Stderr lines from an SSH-invoked command.
 
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/endpoint/install.yml"),
+    Returns:
+        bool: True when the error likely resolves on retry.
+    """
+    if not lines:
+        return False
+    combined = " ".join(lines).lower()
+    patterns = [
+        "timeout, server",
+        "not responding",
+        "connection timed out",
+        "connection reset by peer",
+        "broken pipe",
+        "no route to host",
+        "connection closed",
     ]
-    ansible.check_output(machines[0].process(config, command)[0])
+    return any(pattern in combined for pattern in patterns)
+
+
+def start(runner):
+    """[INTERFACE] Setup endpoint VMs using Ansible.
+
+    Args:
+        runner (AnsibleRunner): Shared Ansible runner with config and machine state.
+    """
+    from resource_manager import resource_manager
+
+    resource_manager.start(runner)
+
+
+def base_install_playbook(_config, tier):
+    """[INTERFACE] Return endpoint base-install playbook for a tier.
+
+    Args:
+        _config (dict): Parsed configuration (unused).
+        tier (str): VM tier selector.
+
+    Returns:
+        str | None: Endpoint install playbook for endpoint tier, else None.
+    """
+    if tier == "endpoint":
+        return "playbooks/resource_manager/endpoint_install.yml"
+    return None
 
 
 def start_endpoint(config, machines):
@@ -38,10 +70,22 @@ def start_endpoint(config, machines):
     Returns:
         list(list(str)): Names of docker containers launched per machine
     """
-    if config["benchmark"]["resource_manager"] == "baremetal":
+    if config_access.orchestrator_name(config) == "baremetal":
         return start_endpoint_baremetal(config, machines)
 
     return start_endpoint_default(config, machines)
+
+
+def _benchmark_env(config):
+    """Return common benchmark environment variables for endpoint containers.
+
+    Values are expected to be validated/defaulted during initial config parsing
+    (`runtime_config.apply_module_options`), not here during execution.
+    """
+    return [
+        "FREQUENCY=%s" % (config_access.benchmark_param(config, "frequency")),
+        "DURATION=%s" % (config_access.benchmark_param(config, "duration")),
+    ]
 
 
 def start_endpoint_default(config, machines):
@@ -59,6 +103,9 @@ def start_endpoint_default(config, machines):
     commands = []
     sshs = []
     container_names = []
+    endpoint_cpu_cores = config_access.benchmark_param_float(config, "application_endpoint_cpu")
+    endpoint_memory_gb = config_access.benchmark_param_float(config, "application_endpoint_memory")
+    endpoint_cpu_threads = max(1, int(endpoint_cpu_cores))
 
     # Calc endpoints per worker
     workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
@@ -85,10 +132,7 @@ def start_endpoint_default(config, machines):
             cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
 
             # TODO Move this to arguments to make it more flexible
-            env = [
-                "FREQUENCY=%i" % (config["benchmark"]["frequency"]),
-                "DURATION=%i" % (config["benchmark"]["duration"]),
-            ]
+            env = _benchmark_env(config)
 
             if config["mode"] == "cloud" or config["mode"] == "edge":
                 cont_name = "%s%i_" % (config["mode"], worker_i) + cont_name
@@ -99,7 +143,7 @@ def start_endpoint_default(config, machines):
                 if config["control_ips"]:
                     env.append("CLOUD_CONTROLLER_IP=%s" % (config["control_ips"][0]))
             else:
-                env.append("CPU_THREADS=%i" % (config["infrastructure"]["endpoint_cores"]))
+                env.append("CPU_THREADS=%i" % (endpoint_cpu_threads))
 
             logging.info("Launch %s", cont_name)
 
@@ -114,8 +158,8 @@ def start_endpoint_default(config, machines):
                     "container",
                     "run",
                     "--detach",
-                    "--cpus=%i" % (config["benchmark"]["application_endpoint_cpu"]),
-                    "--memory=%ig" % (config["benchmark"]["application_endpoint_memory"]),
+                    "--cpus=%s" % (endpoint_cpu_cores),
+                    "--memory=%sg" % (endpoint_memory_gb),
                     "--network=host",
                 ]
                 + ["--env %s" % (e) for e in env]
@@ -141,10 +185,10 @@ def start_endpoint_default(config, machines):
 
         if error and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
-            sys.exit()
+            sys.exit(1)
         elif not output:
             logging.error("No output from docker container")
-            sys.exit()
+            sys.exit(1)
 
     return container_names
 
@@ -163,10 +207,12 @@ def start_endpoint_baremetal(config, machines):
 
     commands = []
     container_names = []
+    endpoint_cpu_cores = config_access.benchmark_param_float(config, "application_endpoint_cpu")
+    endpoint_memory_gb = config_access.benchmark_param_float(config, "application_endpoint_memory")
 
     period_scaler = 100000
-    period = int(config["infrastructure"]["endpoint_cores"] * period_scaler)
-    quota = int(period * config["infrastructure"]["endpoint_quota"])
+    period = period_scaler
+    quota = int(period * endpoint_cpu_cores)
 
     worker_ip = config["registry"].split(":")[0]
 
@@ -175,10 +221,7 @@ def start_endpoint_baremetal(config, machines):
         cont_name = "endpoint%i" % (endpoint_i)
         cont_name = "%s0_" % (config["mode"]) + cont_name
 
-        env = [
-            "FREQUENCY=%i" % (config["benchmark"]["frequency"]),
-            "DURATION=%i" % (config["benchmark"]["duration"]),
-        ]
+        env = _benchmark_env(config)
         env.append("MQTT_LOCAL_IP=%s" % (worker_ip))
         env.append("MQTT_REMOTE_IP=%s" % (worker_ip))
         env.append("MQTT_LOGS=True")
@@ -197,7 +240,7 @@ def start_endpoint_baremetal(config, machines):
                 "container",
                 "run",
                 "--detach",
-                "--memory=%ig" % (config["infrastructure"]["endpoint_memory"]),
+                "--memory=%sg" % (endpoint_memory_gb),
                 "--cpu-period=%i" % (period),
                 "--cpu-quota=%i" % (quota),
                 "--network=host",
@@ -224,10 +267,10 @@ def start_endpoint_baremetal(config, machines):
 
         if error and "Your kernel does not support swap limit capabilities" not in error[0]:
             logging.error("".join(error))
-            sys.exit()
+            sys.exit(1)
         elif not output:
             logging.error("No output from docker container")
-            sys.exit()
+            sys.exit(1)
 
     return container_names
 
@@ -248,6 +291,8 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
     for ssh, cont_name in zip(sshs, container_names):
         logging.info("Wait for container to finish: %s on VM %s", cont_name, ssh.split("@")[0])
         finished = False
+        transient_failures = 0
+        empty_output_failures = 0
 
         while not finished:
             # Get list of docker containers
@@ -260,11 +305,35 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
             output, error = machines[0].process(config, command, shell=True, ssh=ssh_entry)[0]
 
             if error:
+                if _is_transient_ssh_error(error) and transient_failures < 8:
+                    transient_failures += 1
+                    backoff = min(30, 2**transient_failures)
+                    logging.warning(
+                        "Transient SSH error on %s (attempt %s), retrying in %ss: %s",
+                        ssh.split("@")[0],
+                        transient_failures,
+                        backoff,
+                        " ".join(error),
+                    )
+                    time.sleep(backoff)
+                    continue
                 logging.error("".join(error))
-                sys.exit()
+                sys.exit(1)
             elif not output:
+                if empty_output_failures < 5:
+                    empty_output_failures += 1
+                    logging.warning(
+                        "Empty docker output on %s (attempt %s), retrying in 5s",
+                        ssh.split("@")[0],
+                        empty_output_failures,
+                    )
+                    time.sleep(5)
+                    continue
                 logging.error("No output from docker container")
-                sys.exit()
+                sys.exit(1)
+            else:
+                transient_failures = 0
+                empty_output_failures = 0
 
             # Get status of docker container
             status_line = None
@@ -279,7 +348,7 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                     ssh.split("@")[0],
                     "".join(output),
                 )
-                sys.exit()
+                sys.exit(1)
 
             parsed = status_line.rstrip().split(" ")
 
@@ -295,7 +364,7 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                     ssh.split("@")[0],
                     status_line,
                 )
-                sys.exit()
+                sys.exit(1)
 
     logging.info("All endpoint or mist containers have finished")
 
@@ -332,10 +401,10 @@ def get_endpoint_output(config, machines, container_names, use_ssh=True):
 
         if error:
             logging.error("".join(error))
-            sys.exit()
+            sys.exit(1)
         elif not output:
             logging.error("Container %s output empty", container)
-            sys.exit()
+            sys.exit(1)
 
         output = [line.rstrip() for line in output]
         endpoint_output.append(output)

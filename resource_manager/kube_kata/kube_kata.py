@@ -3,21 +3,20 @@ Setup Kubernetes on cloud
 This resource manager doesn't have any/many help functions, see the /kubernetes folder instead
 """
 
-import logging
-import os
 import json
-
+import logging
 from datetime import datetime
 from typing import Dict, List
 
 import requests
 
-from infrastructure import ansible
+from input.configuration import config_access
+from resource_manager import orchestrator_options, plans
 from resource_manager.kubernetes import kubernetes
 
 
 def add_options(_config):
-    """Add config options for a particular module
+    """[INTERFACE] Add config options for this RM module
 
     Args:
         config (ConfigParser): ConfigParser object
@@ -25,30 +24,15 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    settings = [
-        ["cache_worker", bool, lambda x: x in [True, False], False, False],
-        [
-            "kube_deployment",
-            str,
-            lambda x: x in ["pod", "container", "file", "call"],
-            False,
-            "pod",
-        ],
-        [
-            "kube_version",
-            str,
-            lambda _: ["v1.27.0", "v1.26.0", "v1.25.0", "v1.24.0", "v1.23.0"],
-            False,
-            "v1.27.0",
-        ],
-        ["runtime", str, lambda x: x in ["runc", "kata-qemu", "kata-fc"], False, "runc"],
-        ["runtime_filesystem", str, lambda x: x in ["overlayfs", "devmapper"], False, "devmapper"],
-    ]
-    return settings
+    return (
+        orchestrator_options.kubernetes_common_options(orchestrator_options.KUBE_VERSIONS_COMPAT)
+        + orchestrator_options.kube_deployment_options()
+        + orchestrator_options.kata_runtime_options()
+    )
 
 
 def verify_options(parser, config):
-    """Verify the config from the module's requirements
+    """[INTERFACE] Verify config options for this RM module
 
     Args:
         parser (ArgumentParser): Argparse object
@@ -66,8 +50,8 @@ def verify_options(parser, config):
     ):
         parser.error(r"ERROR: Kubernetes requires (#clouds-1) % #endpoints == 0 (-1 for control)")
     elif (
-        config["benchmark"]["runtime"] == "kata-fc"
-        and config["benchmark"]["runtime_filesystem"] == "overlayfs"
+        config_access.orchestrator_value(config, "runtime") == "kata-fc"
+        and config_access.orchestrator_value(config, "runtime_filesystem") == "overlayfs"
     ):
         parser.error(
             "ERROR: Overlay FS cannot be used with kata-fc - "
@@ -75,141 +59,97 @@ def verify_options(parser, config):
         )
 
 
-def start(config, machines):
-    """Setup Kubernetes on cloud VMs using Ansible.
+def start(runner):
+    """[INTERFACE] Execute kube_kata software-phase installation.
 
     Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner): Shared Ansible runner with config and machine state.
     """
-    logging.info("Start Kubernetes cluster on VMs")
-    commands = []
+    from resource_manager import resource_manager
 
-    # Setup cloud controller
-    commands.append(
-        [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/cloud/control_install.yml",
-            ),
-        ]
-    )
+    resource_manager.start(runner)
 
-    # Setup worker
-    commands.append(
-        [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/%s/install.yml" % (config["mode"]),
-            ),
-        ]
-    )
 
-    # Setup worker runtime
-    runtime = config["benchmark"]["runtime"]
-    use_overlayfs = (
-        "true" if config["benchmark"].get("runtime_filesystem") == "overlayfs" else "false"
-    )
+def base_install_playbook(_config, tier):
+    """[INTERFACE] Return kube_kata base-install playbook for a tier.
+
+    Args:
+        _config (dict): Parsed configuration (unused).
+        tier (str): VM tier selector.
+
+    Returns:
+        str | None: K8s base-install playbook for cloud/edge tiers, else None.
+    """
+    if tier in ("cloud", "edge"):
+        return "playbooks/resource_manager/k8s_base_install.yml"
+    return None
+
+
+def build_phase_plan(config):
+    """[INTERFACE] Build software-phase plan entries for kube_kata RM.
+
+    Args:
+        config (dict): Parsed configuration.
+
+    Returns:
+        list[PlanEntry]: Ordered software-phase execution entries.
+    """
+    observability_owner = None
+    if config_access.has_addon(config, "observability"):
+        observability_owner = config_access.software_module_by_type(config, "observability")
+
+    entries = [
+        plans.PlanEntry(
+            kind="playbook",
+            playbook="playbooks/resource_manager/k8s_cluster.yml",
+            extra_vars={"ignore_preflight_errors": True},
+        )
+    ]
+
+    runtime = str(config_access.orchestrator_value(config, "runtime"))
+    use_overlayfs = config_access.orchestrator_value(config, "runtime_filesystem") == "overlayfs"
     if "kata" in runtime:
-        commands.append(
-            [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    f".continuum/{(config['mode'])}/install_kata_containers.yml",
-                ),
-                "-e",
-                f"use_overlayfs={use_overlayfs}",
-            ]
-        )
-        commands.append(
-            [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/cloud/install_kata_dev_tools.yml",
-                ),
-            ]
+        entries.append(
+            plans.PlanEntry(
+                kind="playbook",
+                playbook="playbooks/resource_manager/kata_setup.yml",
+                extra_vars={"continuum_use_overlayfs": use_overlayfs},
+            )
         )
 
-    results = machines[0].process(config, commands)
+    entries.append(
+        plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/k8s_metrics.yml")
+    )
+    if observability_owner is not None:
+        entries.append(
+            plans.PlanEntry(
+                kind="playbook",
+                playbook="playbooks/resource_manager/k8s_observability.yml",
+                owner_id=observability_owner["id"],
+                owner_type=observability_owner["type"],
+            )
+        )
+    return entries
 
-    # Check playbooks
-    for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for Ansible command [%s]", " ".join(command))
-        ansible.check_output((output, error))
 
-    kubernetes.verify_running_cluster(config, machines)
+def post_phase_hook(runner):
+    """[INTERFACE] Run post-install verification for kube_kata RM.
 
-    # Start the resource metrics server
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/cloud/resource_usage.yml",
-        ),
-    ]
-
-    output, error = machines[0].process(config, command)[0]
-
-    logging.debug("Check output for Ansible command [%s]", " ".join(command))
-    ansible.check_output((output, error))
-
-    # Now the OS server that runs on every VM
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/cloud/resource_usage_os.yml",
-        ),
-    ]
-
-    output, error = machines[0].process(config, command)[0]
-
-    logging.debug("Check output for Ansible command [%s]", " ".join(command))
-    ansible.check_output((output, error))
-
-    # Install observability packages (Prometheus, Grafana) if configured by the user
-    if config["benchmark"]["observability"]:
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/cloud/observability.yml",
-            ),
-        ]
-
-        output, error = machines[0].process(config, command)[0]
-
-        logging.debug("Check output for Ansible command [%s]", " ".join(command))
-        ansible.check_output((output, error))
+    Args:
+        runner (AnsibleRunner): Shared runner instance.
+    """
+    kubernetes.verify_running_cluster(runner.config, runner.machines)
 
 
 def get_deployment_duration(config, machines):
-    """_summary_
+    """Get deployment duration from stress job completion timestamps.
 
     Args:
-        config (_type_): _description_
-        machines (_type_): _description_
+        config (dict): Parsed configuration
+        machines (list): List of machine objects representing physical machines
 
     Returns:
-        _type_: _description_
+        float: Duration in seconds, or -1 on error.
     """
     try:
         command = "kubectl get job stress -o json"
@@ -257,7 +197,7 @@ def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
 
 
 def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
-    """TODO
+    """Extract kata period timestamps from Jaeger traces.
 
     T0 -> T1 : create kata runtime
     T1 -> T2 : create VM
@@ -265,10 +205,10 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
     T3 -> T4 : create container and launch
 
     Args:
-        traces (List[List[Dict]]): _description_
+        traces (List[List[Dict]]): Sorted Jaeger trace spans per deployment.
 
     Returns:
-        List[List[int]]: _description_
+        List[List[int]]: Per-trace lists of [T0, T1, T2, T3, T4] timestamps.
     """
 
     timestamps: List[List[int]] = []
@@ -305,14 +245,14 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
 
 # Kata entry point.
 def get_kata_timestamps(config, _worker_output) -> List[List[int]]:
-    """_summary_
+    """Fetch kata period timestamps from Jaeger on worker nodes.
 
     Args:
-        config (_type_): _description_
-        _worker_output (_type_): _description_
+        config (dict): Parsed configuration with cloud_ssh entries.
+        _worker_output: Unused; worker output from benchmark run.
 
     Returns:
-        List[List[int]]: _description_
+        List[List[int]]: Per-deployment kata period timestamps.
     """
     logging.info(
         "----------------------------------------------------------------------------------------"
