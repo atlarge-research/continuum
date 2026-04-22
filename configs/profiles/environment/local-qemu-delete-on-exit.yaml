@@ -1,0 +1,15 @@
+schema_version: 1
+kind: ContinuumEnvironment
+
+provider:
+  name: qemu
+  config:
+    base_path: "~"
+    cpu_pin: false
+    external_physical_machines: []
+    ip:
+      prefix: "192.168"
+      middle: 100
+      middle_base: 90
+    netperf: false
+    delete_on_exit: true

@@ -1,0 +1,46 @@
+schema_version: 1
+kind: ContinuumExperiment
+
+use:
+  environment: local-qemu-delete-on-exit
+  software: k8s-endpoint-runtime
+
+run:
+  targets: [application]
+  image_prefetch: "off"
+  dry_run: false
+  clean: false
+
+infrastructure:
+  clusters:
+    - id: cloud-1
+      tier: cloud
+      resources:
+        vms:
+          count: 2
+          spec: { cores: 4, memory_gb: 4, cpu_quota: 1.0 }
+    - id: endpoint-1
+      tier: endpoint
+      resources:
+        vms:
+          count: 1
+          spec: { cores: 1, memory_gb: 1, cpu_quota: 0.5 }
+  network:
+    emulation: false
+    wireless_preset: 4g
+    overrides: {}
+
+benchmark:
+  pipeline:
+    - id: classify-images
+      type: image_classification
+      assign_to: { match: { cluster: cloud-1 } }
+      tags: { benchmark.role: classify }
+      config:
+        frequency: 1
+        duration: 30
+        applications_per_worker: 1
+        application_worker_cpu: 0.5
+        application_worker_memory: 1.0
+        application_endpoint_cpu: 0.5
+        application_endpoint_memory: 1.0

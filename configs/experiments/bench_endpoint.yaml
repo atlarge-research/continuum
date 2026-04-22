@@ -1,0 +1,25 @@
+schema_version: 1
+kind: ContinuumExperiment
+
+use:
+  environment: local-qemu
+  software: endpoint-runtime
+
+run:
+  targets: [infrastructure, software]
+  image_prefetch: "off"
+  dry_run: false
+  clean: false
+
+infrastructure:
+  clusters:
+    - id: endpoint-1
+      tier: endpoint
+      resources:
+        vms:
+          count: 1
+          spec: { cores: 1, memory_gb: 1, cpu_quota: 0.5 }
+  network:
+    emulation: true
+    wireless_preset: 4g
+    overrides: {}

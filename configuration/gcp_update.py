@@ -2,9 +2,9 @@
 Update GCP information for all GCP configs
 """
 
+import argparse
 import os
 import sys
-import argparse
 
 # pylint: disable=import-error,wrong-import-position
 
@@ -80,7 +80,7 @@ def update_files(files, target, replace, reset):
 
     if stop:
         print("Detected an error, stop")
-        sys.exit()
+        sys.exit(1)
 
 
 def main(args):

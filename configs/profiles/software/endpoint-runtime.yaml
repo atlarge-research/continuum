@@ -1,0 +1,13 @@
+schema_version: 1
+kind: ContinuumSoftware
+
+software:
+  modules:
+    - id: endpoint-runtime-base
+      type: none
+      assign_to: { match: { cluster: endpoint-1 } }
+      config: {}
+    - id: endpoint-runtime
+      type: endpoint_runtime
+      assign_to: { match: { cluster: endpoint-1 } }
+      config: {}

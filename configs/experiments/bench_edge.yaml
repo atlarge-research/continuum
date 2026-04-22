@@ -1,0 +1,37 @@
+schema_version: 1
+kind: ContinuumExperiment
+
+use:
+  environment: local-qemu
+  software: kubeedge-endpoint-runtime
+
+run:
+  targets: [infrastructure, software]
+  image_prefetch: "off"
+  dry_run: false
+  clean: false
+
+infrastructure:
+  clusters:
+    - id: cloud-1
+      tier: cloud
+      resources:
+        vms:
+          count: 1
+          spec: { cores: 4, memory_gb: 4, cpu_quota: 1.0 }
+    - id: edge-1
+      tier: edge
+      resources:
+        vms:
+          count: 1
+          spec: { cores: 2, memory_gb: 2, cpu_quota: 0.75 }
+    - id: endpoint-1
+      tier: endpoint
+      resources:
+        vms:
+          count: 1
+          spec: { cores: 1, memory_gb: 1, cpu_quota: 0.5 }
+  network:
+    emulation: true
+    wireless_preset: 4g
+    overrides: {}

@@ -264,14 +264,14 @@ sudo sysctl -p /etc/sysctl.conf
 ```
 
 ### Part 2: Use the framework
-Continuum comes with many pre-made configuration files that can be used to deploy infrastructures and benchmark with Continuum. You can find these files in `/configuration`.
+Continuum comes with canonical YAML experiment and profile files that can be used to deploy infrastructure and benchmark with Continuum. The active runtime examples live under `configs/experiments/`, with reusable profiles under `configs/profiles/`. Legacy `.cfg` files remain under `configuration/` for historical reproduction and migration only.
 For example:
 1. Go the the continuum framework: `cd continuum`
 2. Check how the framework can be used: `python3 continuum.py --help`
-3. We use a configuration that deploys 2 virtual machines, installs Kubernetes on them, and starts a third machine that emulates an IoT device that sends data periodically to the Kubernetes cluster for processing. The framework starts a processing application on the cluster, which processes the incoming data and sends the result back to the IoT device: `python3 continuum.py configuration/bench_cloud.cfg`.
+3. We use an experiment that deploys 2 virtual machines, installs Kubernetes on them, and starts a third machine that emulates an IoT device that sends data periodically to the Kubernetes cluster for processing. The framework starts a processing application on the cluster, which processes the incoming data and sends the result back to the IoT device: `python3 continuum.py configs/experiments/bench_cloud.yaml`.
 4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
 
-Please explore what the Continuum framework can do, see `configuration/template.cfg` for a list of all configuration parameters. These include deploying infrastructure on Google Cloud, installing Prometheus and Grafana on VMs, or running serverless benchmarks. All components can be easily extended - open a GitHub Issue or send us a mail at m.s.jansen@vu.nl if you have any questions.
+For the active configuration model, see `docs/configuration_reference.md` for the canonical YAML schema and `docs/migration_notes.md` for legacy-to-YAML replacements. Template files are available at `configs/experiments/template.yaml`, `configs/profiles/environment/template.yaml`, and `configs/profiles/software/template.yaml`. These include deploying infrastructure on Google Cloud, installing Prometheus and Grafana on VMs, or running serverless benchmarks. All components can be easily extended - open a GitHub Issue or send us a mail at m.s.jansen@vu.nl if you have any questions.
 
 ### Appendix
 The Continuum framework is supposed to be run from an Ubuntu-like operating system.

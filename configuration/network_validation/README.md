@@ -5,29 +5,18 @@ network emulation paths (TC + optional Mahimahi), without deploying any
 resource manager or applications.
 
 All configs:
-- set `infra_only = True` so only infrastructure is created;
-- enable `network_emulation = True` so TC rules are applied;
-- enable `netperf = True` so the built–in netperf benchmark runs;
+- set `run.targets: [infrastructure]` so only infrastructure is created;
+- set `infrastructure.network.emulation: true` so TC rules are applied;
+- set `provider.config.netperf: true` so the built-in netperf benchmark runs;
 - use a minimal QEMU topology (2 cloud nodes + 1 endpoint).
 
 ### Scenarios
 
-- `bench_net_4g.cfg`: 4G profile via `wireless_network_preset = 4g`.
-- `bench_net_5g.cfg`: 5G profile via `wireless_network_preset = 5g`.
-- `bench_net_manual_low.cfg`: 4G preset, but with low manual throughput caps:
-  - `cloud_endpoint_throughput = 5`, `edge_endpoint_throughput = 5`.
-- `bench_net_manual_high.cfg`: 4G preset, but with higher throughput caps:
-  - `cloud_endpoint_throughput = 100`, `edge_endpoint_throughput = 100`.
-- `bench_net_mahimahi_4g.cfg`: Mahimahi–based 4G networking via
-  `wireless_network_preset = 4g_us_verizon_mahimahi`.
-- `bench_net_manual_override_only.cfg`: No `wireless_network_preset` at all;
-  only manual latency/throughput overrides are used:
-  - `cloud_endpoint_latency_*`, `cloud_endpoint_throughput`,
-  - `edge_endpoint_latency_*`, `edge_endpoint_throughput`.
+- `bench_net_4g.yaml`: 4G profile via `infrastructure.network.wireless_preset: 4g`.
 
 ### How netperf results are collected
 
-When `netperf = True`, `infrastructure.network.benchmark()`:
+When `provider.config.netperf: true`, `infrastructure.network.benchmark()`:
 
 - Starts a `netserver` on the relevant VMs.
 - Runs a small set of `netperf` latency and throughput tests.
@@ -72,10 +61,12 @@ Each NDJSON line contains:
 
    - Finds the latest `logs/network_validation/netperf_results_*.ndjson`.
    - Groups entries by scenario (e.g. `cloud->endpoint`).
-   - Computes basic average throughput per scenario.
-   - Performs conservative, **relative** checks such as:
-     - High–throughput scenarios should achieve clearly higher throughput
-       than low–throughput scenarios.
+   - Compares observed latency and throughput against the expected profile values
+     carried in the structured result records.
+   - Uses the agreed smoke tolerance:
+     - within 25% of the expected value, or
+     - within 10 ms for latency / 10 mbit for throughput,
+       whichever tolerance band is larger.
    - Exits with code `0` when checks pass, or `1` when they fail.
 
 3. You can also point the validator at a specific run:
@@ -91,10 +82,9 @@ These scenarios and the validator together provide a lightweight regression
 suite for:
 
 - **Profile–based networking**:
-  - `wireless_network_preset = 4g` vs `5g`.
+  - `infrastructure.network.wireless_preset` profiles such as `4g`.
 - **Manual throughput / latency overrides**:
-  - Both in combination with presets, and in a pure "manual only" mode
-    without any `wireless_network_preset` set.
+  - YAML `infrastructure.network.overrides` values layered on top of presets.
 - **Mahimahi–based networking**:
-  - `*_mahimahi` presets and their interaction with the TC core–network model.
-
+  - Mahimahi presets and their interaction with the TC core-network model when
+    those YAML scenarios are added to the active suite.

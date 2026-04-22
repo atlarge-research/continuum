@@ -8,11 +8,20 @@ Continuum includes an automated end-to-end testing framework that can discover, 
 ### Quick Start
 
 ```bash
+# Inspect configured suites and their declared prerequisites
+python3 scripts/test/run_tests.py --list-suites
+
+# Check whether the local host can run the smoke suite
+python3 scripts/test/run_tests.py --suite smoke --check-prereqs
+
 # Run smoke tests (fast, uses cached base images)
 python3 scripts/test/run_tests.py --suite smoke
 
 # Run full regression (all configs, periodic base image rebuild)
 python3 scripts/test/run_tests.py --suite full
+
+# Run the dedicated network-emulation validation suite
+python3 scripts/test/run_tests.py --suite network_validation
 ```
 
 ### Basic Usage
@@ -24,11 +33,14 @@ python3 scripts/test/run_tests.py --suite smoke
 # Run full regression (all configs, periodic base image rebuild)
 python3 scripts/test/run_tests.py --suite full
 
+# Run network-emulation validation configs only
+python3 scripts/test/run_tests.py --suite network_validation
+
 # Run specific provider tests
 python3 scripts/test/run_tests.py --provider qemu
 
 # Run single config file
-python3 scripts/test/run_tests.py --config configuration/tests/qemu/01_infraonly-cloud.cfg
+python3 scripts/test/run_tests.py --config configs/experiments/infra_only.yaml
 
 # Stop on first failure
 python3 scripts/test/run_tests.py --suite smoke --stop-on-failure
@@ -66,12 +78,11 @@ The manifest supports include/exclude patterns:
 ```json
 {
   "include": [
-    "configuration/tests/**",
-    "configuration/cellular_network/bench_cloud_4g.cfg"
+    "configs/experiments/**/*.yaml",
+    "configs/experiments/bench_cloud_openfaas.yaml"
   ],
   "exclude": [
-    "configuration/experiment_kata/**",
-    "configuration/experiment_control/microbenchmark/**"
+    "**/*template*.yaml"
   ]
 }
 ```
@@ -95,13 +106,25 @@ python3 scripts/test/run_tests.py --use-cache
 Test results are saved to `logs/test_results/` as JSON files:
 - Individual test run results: `test_results_YYYY-MM-DD_HH-MM-SS.json`
 - Includes execution time, success/failure status, error messages, and base image rebuild information
+- Each summary JSON now points at a sibling artifact directory `test_results_YYYY-MM-DD_HH-MM-SS/`
+- Each test inside that directory gets `stdout.txt`, `stderr.txt`, and `metadata.json`
+- Failed runs are also tagged with a stable `failure_class` such as `timeout`, `missing_lock`,
+  `missing_state`, `wrong_state_phase`, `missing_ssh`, or `ansible_failure`
+
+For YAML runs, the runner success contract is stricter than just `exit_code=0`.
+It also expects:
+- `.continuum/experiment_lock.yaml` to be written
+- `.continuum/state.json` to be written
+- `state.json.phase_completed` to match the executed phase target
 
 ### Manual Testing (Legacy)
 
-You can still run tests manually using the old approach:
+Legacy `.cfg` loops are kept only for historical reproduction. For active runtime validation, use YAML experiments under `configs/experiments/`.
+
+You can still run YAML experiments manually:
 
 ```bash
-for i in configuration/tests/<qemu OR gcp>/*.cfg; do
+for i in configs/experiments/*.yaml; do
     python3 continuum.py $i || break
 done
 ```
@@ -111,7 +134,35 @@ You can also check the log files in `logs/` to validate the runs.
 
 ### Test Suites
 
-The tests are currently split up per provider, with `qemu` covering local execution, and `gcp` covering execution in the cloud using Google Cloud Platform. The latter requires extra configuration, most notably, defining your GCP project name and service key location.
+The active suites are declared in `scripts/test/test_config.json`.
 
-- **Smoke Tests**: Core test configs in `configuration/tests/` - fast validation using cached images
-- **Full Regression**: All configs including experiments - comprehensive testing with periodic base image rebuilds
+- **Smoke Tests**: Dedicated lightweight YAML scenarios in `configs/experiments/smoke/`.
+- **Full Regression**: All YAML experiments in `configs/experiments/` with periodic base image rebuilds.
+- **Network Validation**: Only `configs/experiments/network_validation/` scenarios for TC/netperf profile validation.
+
+The runner now performs suite preflight checks from `scripts/test/test_config.json`
+before discovery/execution starts.
+
+- **Smoke** requires host `virsh` and `ssh`.
+- **Network Validation** requires host `virsh`, `ssh`, and `tc`.
+- **Full** currently has no additional suite-level preflight.
+
+The new CLI helpers are intended to make those expectations inspectable before
+starting a long VM-backed run:
+
+- `python3 scripts/test/run_tests.py --list-suites`
+- `python3 scripts/test/run_tests.py --suite smoke --check-prereqs`
+- `python3 scripts/test/run_tests.py --suite network_validation --check-prereqs`
+- `./scripts/test/run_smoke_host.sh list-suites`
+- `./scripts/test/run_smoke_host.sh check-prereqs`
+
+When a smoke run fails, inspect the per-test artifact directory before rerunning.
+That is usually faster than relying on the aggregate JSON alone.
+
+The smoke and network-validation suites are configured to stop on first failure.
+That keeps the operational path fast-fail and avoids spending time on downstream phases after an
+earlier phase is already broken.
+
+For failed smoke runs that retain VMs, use [vm_debugging_runbook.md](/home/matthijs/continuum/docs/vm_debugging_runbook.md).
+For least-privilege host execution of real VM-backed smoke runs, use
+[smoke_runner_isolation.md](/home/matthijs/continuum/docs/smoke_runner_isolation.md).

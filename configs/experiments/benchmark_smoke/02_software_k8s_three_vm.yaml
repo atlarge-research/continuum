@@ -1,0 +1,31 @@
+schema_version: 1
+kind: ContinuumExperiment
+
+use:
+  environment: local-qemu
+  software: k8s-endpoint-runtime
+
+run:
+  targets: [software]
+  image_prefetch: "off"
+  dry_run: false
+  clean: false
+
+infrastructure:
+  clusters:
+    - id: cloud-1
+      tier: cloud
+      resources:
+        vms:
+          count: 2
+          spec: { cores: 4, memory_gb: 4, cpu_quota: 1.0 }
+    - id: endpoint-1
+      tier: endpoint
+      resources:
+        vms:
+          count: 1
+          spec: { cores: 1, memory_gb: 1, cpu_quota: 0.5 }
+  network:
+    emulation: false
+    wireless_preset: 4g
+    overrides: {}
