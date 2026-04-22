@@ -30,8 +30,8 @@ def on_connect(client, _userdata, _flags, rc):
 
     Args:
         client (object): Client object
-        _userdata (_type_): _description_
-        _flags (_type_): _description_
+        _userdata: User data passed to callback (unused)
+        _flags: Connection flags
         rc (str): Result code
     """
     print("Connected with result code " + str(rc) + "\n", end="")
@@ -42,10 +42,10 @@ def on_subscribe(_mqttc, _obj, _mid, _granted_qos):
     """Execute when subscribing to a topic on a MQTT broker
 
     Args:
-        _mqttc (_type_): _description_
-        _obj (_type_): _description_
-        _mid (_type_): _description_
-        _granted_qos (_type_): _description_
+        _mqttc: MQTT client instance
+        _obj: User data object
+        _mid: Message ID
+        _granted_qos: Granted QoS level(s)
     """
     print("Subscribed to topic\n", end="")
 
@@ -54,8 +54,8 @@ def on_log(_client, _userdata, level, buff):
     """Execute MQTT log on every MQTT event
 
     Args:
-        _client (_type_): _description_
-        _userdata (_type_): _description_
+        _client: MQTT client instance
+        _userdata: User data passed to callback (unused)
         level (str): Log level (error, warning, info, etc)
         buff (str): Log message
     """
@@ -66,8 +66,8 @@ def on_message(_client, _userdata, msg):
     """Execute when receiving a message on a topic you are subscribed to
 
     Args:
-        _client (_type_): _description_
-        _userdata (_type_): _description_
+        _client: MQTT client instance
+        _userdata: User data passed to callback (unused)
         msg (str): Received message
     """
     work_queue.put([time.time_ns(), msg.payload])
@@ -77,9 +77,9 @@ def on_publish(_mqttc, _obj, _mid):
     """Execute when publishing / sending data
 
     Args:
-        _mqttc (_type_): _description_
-        _obj (_type_): _description_
-        _mid (_type_): _description_
+        _mqttc: MQTT client instance
+        _obj: User data object
+        _mid: Message ID
     """
     print("Published data")
 
@@ -156,8 +156,6 @@ def do_tflite(queue):
         except (AttributeError, UnicodeDecodeError):
             print("[%s] Read text and apply ML\n" % (current.name), end="")
 
-        print("[%s] Read text and apply ML\n" % (current.name), end="")
-
         # Read the text, do ML on it
         with texts_processed.get_lock():
             texts_processed.value += 1
@@ -172,7 +170,7 @@ def do_tflite(queue):
         t_bytes = data[-35:-15]
         t_old = int(t_bytes.decode("utf-8"))
 
-        print("[%s] Received time is" % (current.name, t_old), end="")
+        print("[%s] Received time is %s" % (current.name, t_old), end="")
         print("[%s] Latency (ns): %s\n" % (current.name, str(t_now - t_old)), end="")
 
         # Get data to process

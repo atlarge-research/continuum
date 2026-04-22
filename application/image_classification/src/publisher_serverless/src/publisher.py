@@ -2,11 +2,12 @@
 This is a publisher, sending local images over HTTP to a subscriber for further processing.
 """
 
-import time
-import os
-import sys
 import base64
 import json
+import os
+import sys
+import time
+
 import requests
 
 FREQUENCY = int(os.environ["FREQUENCY"])
@@ -65,7 +66,7 @@ def send():
         except Exception:
             print("ERROR: Can't decode the output, something went wrong")
             print(response.text)
-            sys.exit()
+            sys.exit(1)
         # pylint: enable=broad-except
 
         t_respone = time.time_ns()

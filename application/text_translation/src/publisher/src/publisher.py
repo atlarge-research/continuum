@@ -31,8 +31,8 @@ def on_connect(local_client, _userdata, _flags, rc):
 
     Args:
         local_client (object): Client object
-        _userdata (_type_): _description_
-        _flags (_type_): _description_
+        _userdata: User data passed to callback (unused)
+        _flags: Connection flags
         rc (str): Result code
     """
     print("Connected with result code " + str(rc) + "\n", end="")
@@ -43,10 +43,10 @@ def on_subscribe(_mqttc, _obj, _mid, _granted_qos):
     """Execute when subscribing to a topic on a MQTT broker
 
     Args:
-        _mqttc (_type_): _description_
-        _obj (_type_): _description_
-        _mid (_type_): _description_
-        _granted_qos (_type_): _description_
+        _mqttc: MQTT client instance
+        _obj: User data object
+        _mid: Message ID
+        _granted_qos: Granted QoS level(s)
     """
     print("Subscribed to topic\n", end="")
 
@@ -55,8 +55,8 @@ def on_log(_client, _userdata, level, buff):
     """Execute MQTT log on every MQTT event
 
     Args:
-        _client (_type_): _description_
-        _userdata (_type_): _description_
+        _client: MQTT client instance
+        _userdata: User data passed to callback (unused)
         level (str): Log level (error, warning, info, etc)
         buff (str): Log message
     """
@@ -67,8 +67,8 @@ def on_message(_client, _userdata, msg):
     """Execute when receiving a message on a topic you are subscribed to
 
     Args:
-        _client (_type_): _description_
-        _userdata (_type_): _description_
+        _client: MQTT client instance
+        _userdata: User data passed to callback (unused)
         msg (str): Received message
     """
     t_now = time.time_ns()
@@ -88,15 +88,15 @@ def on_publish(_mqttc, _obj, _mid):
     """Execute when publishing / sending data
 
     Args:
-        _mqttc (_type_): _description_
-        _obj (_type_): _description_
-        _mid (_type_): _description_
+        _mqttc: MQTT client instance
+        _obj: User data object
+        _mid: Message ID
     """
     print("Published data")
 
 
 def connect():
-    """Execute when connecting to a MQTT broker"""
+    """Execute when connecting to a MQTT broker."""
     print("Start connecting to the local MQTT broker")
     print("Broker ip: " + str(MQTT_LOCAL_IP))
     print("Topic: " + str(MQTT_TOPIC_PUB))
@@ -114,7 +114,7 @@ def connect():
 
 
 def send():
-    """Loop over local images, and send them one by one to a remote MQTT broker"""
+    """Loop over local images, and send them one by one to a remote MQTT broker."""
     # Loop over the dataset of 60 images
     files = []
     print("Start connecting to the remote MQTT broker")

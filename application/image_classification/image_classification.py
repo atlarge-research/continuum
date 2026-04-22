@@ -1,12 +1,15 @@
 """Manage the image_classification application"""
 
-import logging
 import copy
+import logging
 import sys
+
 import numpy as np
 import pandas as pd
 
 from application import application
+from application import runtime_helpers
+from input.configuration import config_access
 
 
 def set_container_location(config):
@@ -16,7 +19,7 @@ def set_container_location(config):
         config (dict): Parsed configuration
     """
     source = "redplanet00/kubeedge-applications"
-    if "execution_model" in config and config["execution_model"]["model"] == "openfaas":
+    if config_access.has_addon(config, "openfaas"):
         # Serverless applications
         # Has no combined - does not make sense
         config["images"] = {
@@ -56,11 +59,11 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    if config["benchmark"]["application"] != "image_classification":
+    if config_access.benchmark_primary_stage_type(config) != "image_classification":
         parser.error("ERROR: Application should be image_classification")
-    elif "cache_worker" in config["benchmark"] and config["benchmark"]["cache_worker"] == "True":
+    elif config_access.orchestrator_bool_optional(config, "cache_worker", default=False):
         parser.error("ERROR: image_classification app does not support application caching")
-    elif config["benchmark"]["resource_manager"] == "kubecontrol":
+    elif config_access.orchestrator_name(config) == "kubecontrol":
         parser.error("ERROR: Application image_classification does not support kubecontrol")
     elif config["infrastructure"]["endpoint_nodes"] <= 0:
         parser.error("ERROR: Application image classification requires at least 1 endpoint")
@@ -78,9 +81,9 @@ def start_worker(config, machines):
         OR
         (list): Application variables
     """
-    if config["benchmark"]["resource_manager"] == "mist":
+    if config_access.orchestrator_name(config) == "mist":
         return start_worker_mist(config, machines)
-    if config["benchmark"]["resource_manager"] == "baremetal":
+    if config_access.orchestrator_name(config) == "baremetal":
         return start_worker_baremetal(config, machines)
 
     return start_worker_kube(config, machines)
@@ -96,22 +99,7 @@ def start_worker_kube(config, _machines):
     Returns:
         (dict): Application variables
     """
-    if config["mode"] == "cloud":
-        worker_apps = (config["infrastructure"]["cloud_nodes"] - 1) * config["benchmark"][
-            "applications_per_worker"
-        ]
-    elif config["mode"] == "edge":
-        worker_apps = (
-            config["infrastructure"]["edge_nodes"] * config["benchmark"]["applications_per_worker"]
-        )
-
-    app_vars = {
-        "container_port": 1883,
-        "mqtt_logs": True,
-        "endpoint_connected": int(config["infrastructure"]["endpoint_nodes"] / worker_apps),
-        "cpu_threads": max(1, int(config["benchmark"]["application_worker_cpu"])),
-    }
-    return app_vars
+    return runtime_helpers.mqtt_kubernetes_worker_vars(config)
 
 
 def start_worker_mist(config, _machines):
@@ -124,15 +112,7 @@ def start_worker_mist(config, _machines):
     Returns:
         (list): Application variables
     """
-    app_vars = [
-        "MQTT_LOGS=True",
-        "CPU_THREADS=%i" % (config["infrastructure"]["edge_cores"]),
-        "ENDPOINT_CONNECTED=%i"
-        % (
-            int(config["infrastructure"]["endpoint_nodes"] / config["infrastructure"]["edge_nodes"])
-        ),
-    ]
-    return app_vars
+    return runtime_helpers.mqtt_mist_worker_env(config)
 
 
 def start_worker_baremetal(config, _machines):
@@ -145,18 +125,7 @@ def start_worker_baremetal(config, _machines):
     Returns:
         (list): Application variables
     """
-    app_vars = [
-        "MQTT_LOCAL_IP=%s" % (config["registry"].split(":")[0]),
-        "MQTT_LOGS=True",
-        "CPU_THREADS=%i" % (config["infrastructure"]["cloud_cores"]),
-        "ENDPOINT_CONNECTED=%i"
-        % (
-            int(
-                config["infrastructure"]["endpoint_nodes"] / config["infrastructure"]["cloud_nodes"]
-            )
-        ),
-    ]
-    return app_vars
+    return runtime_helpers.mqtt_baremetal_worker_env(config)
 
 
 def gather_worker_metrics(_machines, _config, worker_output, _starttime):
@@ -380,7 +349,7 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
     """
     if status is not None:
         logging.error("This application does not support status reporting")
-        sys.exit()
+        sys.exit(1)
 
     df1 = None
     if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:

@@ -4,14 +4,15 @@ Mostly used for calling specific application code
 """
 
 import logging
+import os
 import sys
-
 from datetime import datetime
 
+from application import runtime_helpers as application_runtime_helpers
+from input.configuration import config_access
+from resource_manager.endpoint import endpoint
 from resource_manager.kube_kata import kube_kata
 from resource_manager.kubernetes import kubernetes
-from resource_manager.endpoint import endpoint
-from execution_model.openfaas import openfaas
 
 
 def set_container_location(config):
@@ -28,6 +29,9 @@ def add_options(config):
 
     Args:
         config (ConfigParser): ConfigParser object
+
+    Returns:
+        object: Options from application module.
     """
     return config["module"]["application"].add_options(config)
 
@@ -42,28 +46,36 @@ def verify_options(parser, config):
     config["module"]["application"].verify_options(parser, config)
 
 
-def start(config, machines):
+def start(runner):
     """[INTERFACE] Start the application with a certain deployment model
 
     Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner): Shared Ansible runner with config and machine state.
     """
+    config = runner.config
+    machines = runner.machines
+    if not config["module"]["application"]:
+        logging.error(
+            "ERROR: Benchmark stage %s does not define an executable application module",
+            config_access.benchmark_primary_stage_type(config),
+        )
+        sys.exit(1)
+
     if config["infrastructure"]["provider"] == "baremetal":
-        baremetal(config, machines)
-    elif config["benchmark"]["resource_manager"] == "mist":
-        mist(config, machines)
-    elif config["module"]["execution_model"] and config["execution_model"]["model"] == "openfaas":
-        serverless(config, machines)
-    elif config["benchmark"]["resource_manager"] == "none":
+        baremetal(config, machines, runner)
+    elif config_access.orchestrator_name(config) == "mist":
+        mist(config, machines, runner)
+    elif config_access.has_addon(config, "openfaas"):
+        serverless(config, machines, runner)
+    elif config_access.orchestrator_name(config) == "none":
         endpoint_only(config, machines)
-    elif config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge"]:
-        kube(config, machines)
-    elif config["benchmark"]["resource_manager"] in ["kubecontrol", "kube_kata"]:
-        kube_control(config, machines)
+    elif config_access.orchestrator_name(config) in ("kubernetes", "kubeedge"):
+        kube(config, machines, runner)
+    elif config_access.orchestrator_name(config) in ("kubecontrol", "kube_kata"):
+        kube_control(config, machines, runner)
     else:
         logging.error("ERROR: Don't have a deployment for this resource manager / application")
-        sys.exit()
+        sys.exit(1)
 
 
 def print_raw_output(config, worker_output, endpoint_output):
@@ -119,7 +131,7 @@ def to_datetime(s):
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
 
 
-def baremetal(config, machines):
+def baremetal(config, machines, runner=None):
     """Launch a mist computing deployment
 
     Args:
@@ -128,7 +140,7 @@ def baremetal(config, machines):
     """
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    container_names_work = kubernetes.start_worker(config, machines, app_vars)
+    container_names_work = kubernetes.start_worker(config, machines, app_vars, runner=runner)
 
     # Start the endpoint
     container_names = endpoint.start_endpoint(config, machines)
@@ -140,7 +152,11 @@ def baremetal(config, machines):
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
     endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
-    worker_output = kubernetes.get_worker_output(config, machines, container_names_work)
+    worker_output = application_runtime_helpers.get_worker_output(
+        config,
+        machines,
+        container_names_work,
+    )
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, endpoint_output)
@@ -153,7 +169,7 @@ def baremetal(config, machines):
     config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
 
 
-def mist(config, machines):
+def mist(config, machines, runner=None):
     """Launch a mist computing deployment
 
     Args:
@@ -162,7 +178,7 @@ def mist(config, machines):
     """
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    container_names_work = kubernetes.start_worker(config, machines, app_vars)
+    container_names_work = kubernetes.start_worker(config, machines, app_vars, runner=runner)
 
     # Start the endpoint
     container_names = endpoint.start_endpoint(config, machines)
@@ -174,7 +190,11 @@ def mist(config, machines):
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
     endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
-    worker_output = kubernetes.get_worker_output(config, machines, container_names_work)
+    worker_output = application_runtime_helpers.get_worker_output(
+        config,
+        machines,
+        container_names_work,
+    )
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, endpoint_output)
@@ -187,7 +207,33 @@ def mist(config, machines):
     config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
 
 
-def serverless(config, machines):
+def _start_openfaas_worker(runner):
+    """Start the OpenFaaS serverless function deployment playbook.
+
+    Args:
+        runner (AnsibleRunner): Shared runner instance.
+    """
+    config = runner.config
+
+    logging.info("Deploy serverless functions on %s", config["mode"])
+
+    memory = min(1000, int(config_access.benchmark_param_float(config, "application_worker_memory") * 1000))
+    cpu = min(1, config_access.benchmark_param_float(config, "application_worker_cpu"))
+    extra_vars = {
+        "app_name": config_access.benchmark_primary_stage_type(config).split("_")[0],
+        "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        "memory_req": memory,
+        "cpu_req": cpu,
+        "cpu_threads": max(1, int(cpu)),
+    }
+    playbook = os.path.join(
+        config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"
+    )
+    runner.run_playbook(playbook, inventory="vms", extra_vars=extra_vars)
+    logging.info("Deployed %s serverless application", config["mode"])
+
+
+def serverless(config, machines, runner):
     """Launch a serverless deployment using Kubernetes + OpenFaaS
 
     Args:
@@ -195,7 +241,7 @@ def serverless(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     # Start the worker
-    openfaas.start_worker(config, machines)
+    _start_openfaas_worker(runner)
 
     # Start the endpoint
     container_names = endpoint.start_endpoint(config, machines)
@@ -236,7 +282,7 @@ def endpoint_only(config, machines):
     config["module"]["application"].format_output(config, None, endpoint_metrics)
 
 
-def kube(config, machines):
+def kube(config, machines, runner=None):
     """Launch a K8 deployment, benchmarking K8's applications
 
     Args:
@@ -244,13 +290,13 @@ def kube(config, machines):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     # Cache the worker to prevent loading
-    if config["benchmark"]["cache_worker"]:
+    if config_access.orchestrator_bool_optional(config, "cache_worker", default=False):
         app_vars = config["module"]["application"].cache_worker(config, machines)
-        kubernetes.cache_worker(config, machines, app_vars)
+        kubernetes.cache_worker(config, machines, app_vars, runner=runner)
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    kubernetes.start_worker(config, machines, app_vars)
+    kubernetes.start_worker(config, machines, app_vars, runner=runner)
 
     # Start the endpoint
     container_names = endpoint.start_endpoint(config, machines)
@@ -262,7 +308,7 @@ def kube(config, machines):
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
     endpoint_output = endpoint.get_endpoint_output(config, machines, container_names, use_ssh=True)
-    worker_output = kubernetes.get_worker_output(config, machines)
+    worker_output = application_runtime_helpers.get_worker_output(config, machines)
 
     # Parse output into dicts, and print result
     print_raw_output(config, worker_output, endpoint_output)
@@ -275,7 +321,7 @@ def kube(config, machines):
     config["module"]["application"].format_output(config, worker_metrics, endpoint_metrics)
 
 
-def kube_control(config, machines):
+def kube_control(config, machines, runner=None):
     """Launch a K8 deployment, benchmarking K8's controlplane instead of applications running on it
 
     Args:
@@ -286,17 +332,18 @@ def kube_control(config, machines):
     kubernetes.start_resource_metrics(config, machines)
 
     # Cache the worker to prevent loading
-    if config["benchmark"]["cache_worker"]:
+    if config_access.orchestrator_bool_optional(config, "cache_worker", default=False):
         app_vars = config["module"]["application"].cache_worker(config, machines)
-        kubernetes.cache_worker(config, machines, app_vars)
+        kubernetes.cache_worker(config, machines, app_vars, runner=runner)
 
-    if config["benchmark"]["application"] == "mem_usage":
+    benchmark_stage_type = config_access.benchmark_primary_stage_type(config)
+    if benchmark_stage_type == "mem_usage":
         config["module"]["application"].get_mem_usage(config, machines, kubernetes)
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
     starttime, kubectl_out, status = kubernetes.start_worker(
-        config, machines, app_vars, get_starttime=True
+        config, machines, app_vars, get_starttime=True, runner=runner
     )
 
     # Wait for benchmark to finish
@@ -305,19 +352,26 @@ def kube_control(config, machines):
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
 
-    worker_output = kubernetes.get_worker_output(config, machines)
-    worker_description = kubernetes.get_worker_output(config, machines, get_description=True)
+    worker_output = application_runtime_helpers.get_worker_output(config, machines)
+    worker_description = application_runtime_helpers.get_worker_output(
+        config,
+        machines,
+        get_description=True,
+    )
 
     control_output, endtime = kubernetes.get_control_output(config, machines, starttime, status)
 
-    resource_output = kubernetes.get_resource_output(config, machines, starttime, endtime)
+    resource_output = kubernetes.get_resource_output(
+        config, machines, starttime, endtime, runner=runner
+    )
 
     # Add kubectl output
     node = config["cloud_ssh"][0].split("@")[0]
     control_output[node]["kubectl"] = kubectl_out
 
-    if "runtime" in config["benchmark"] and "kata" in config["benchmark"]["runtime"]:
-        if config["benchmark"]["application"] == "empty_kata":
+    runtime = config_access.orchestrator_overrides(config, ("runtime",)).get("runtime")
+    if isinstance(runtime, str) and "kata" in runtime:
+        if benchmark_stage_type == "empty_kata":
             kata_ts = kube_kata.get_kata_timestamps(config, worker_output)
             config["module"]["application"].format_output(
                 config,
@@ -331,7 +385,7 @@ def kube_control(config, machines):
                 endtime=float(endtime - starttime),
                 kata_ts=kata_ts,
             )
-        elif config["benchmark"]["application"] == "stress":
+        elif benchmark_stage_type == "stress":
             stress_dur = kube_kata.get_deployment_duration(config, machines)
             logging.info("Total stress duration: %s", stress_dur)
 

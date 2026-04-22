@@ -1,28 +1,26 @@
 ---
-- hosts: cloudcontroller
+- name: Launch benchmark for kubecontrol with one container per pod/job
+  hosts: cloudcontroller
   become: true
   tasks:
     - name: Create job file
-      shell: |
-        cat > "/home/{{ username }}/job-template.yaml" <<EOF
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {{ app_name }}
-        spec:
-          template:
-            metadata:
-              name: {{ app_name }}
-            spec:
-              restartPolicy: Never
-              containers:
-
-    - name: Add container descriptions
-      shell: |
-        for i in `seq 1 {{ replicas }}`
-        do
-          cat >> "/home/{{ username }}/job-template.yaml" <<EOF
-              - name: {{ app_name }}-$i
+      ansible.builtin.copy:
+        dest: "/home/{{ username }}/job-template.yaml"
+        mode: '0644'
+        content: |
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: {{ app_name }}
+          spec:
+            template:
+              metadata:
+                name: {{ app_name }}
+              spec:
+                restartPolicy: Never
+                containers:
+          {% for i in range(1, replicas + 1) %}
+              - name: {{ app_name }}-{{ i }}
                 image: {{ image }}
                 imagePullPolicy: {{ pull_policy }}
                 resources:
@@ -32,5 +30,4 @@
                 env:
                 - name: SLEEP_TIME
                   value: "{{ sleep_time }}"
-        EOF
-        done
+          {% endfor %}

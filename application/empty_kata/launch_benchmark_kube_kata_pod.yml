@@ -1,31 +1,33 @@
 ---
-- hosts: cloudcontroller
+- name: Launch benchmark for kube_kata with one pod per job
+  hosts: cloudcontroller
   become: true
   tasks:
     - name: Create job file
-      shell: |
-        cat > "/home/{{ username }}/job-template.yaml" <<EOF
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {{ app_name }}
-        spec:
-          parallelism: {{ replicas }}
-          template:
-            metadata:
-              name: {{ app_name }}
-            spec:
-              runtimeClassName: {{ runtime }}
-              containers:
-              - name: {{ app_name }}
-                image: {{ image }}
-                imagePullPolicy: {{ pull_policy }}
-                resources:
-                  requests:
-                    memory: "{{ memory_req }}Mi"
-                    cpu: {{ cpu_req }}
-                env:
-                - name: SLEEP_TIME
-                  value: "{{ sleep_time }}"
-              restartPolicy: Never
-        EOF
+      ansible.builtin.copy:
+        dest: "/home/{{ username }}/job-template.yaml"
+        mode: '0644'
+        content: |
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: {{ app_name }}
+          spec:
+            parallelism: {{ replicas }}
+            template:
+              metadata:
+                name: {{ app_name }}
+              spec:
+                runtimeClassName: {{ runtime }}
+                containers:
+                - name: {{ app_name }}
+                  image: {{ image }}
+                  imagePullPolicy: {{ pull_policy }}
+                  resources:
+                    requests:
+                      memory: "{{ memory_req }}Mi"
+                      cpu: {{ cpu_req }}
+                  env:
+                  - name: SLEEP_TIME
+                    value: "{{ sleep_time }}"
+                restartPolicy: Never

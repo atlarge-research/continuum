@@ -1,42 +1,51 @@
 ---
-- hosts: cloudcontroller
+- name: Launch benchmark for kube_kata with one call total, using one file per job
+  hosts: cloudcontroller
   become: true
   tasks:
-    - name: Create job file
-      shell: |
-        cat > "/home/{{ username }}/job-template.yaml" <<EOF
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {{ app_name }}-%ITEM
-        spec:
-          template:
-            metadata:
-              name: {{ app_name }}-%ITEM
-            spec:
-              containers:
-              - name: {{ app_name }}-%ITEM
-                image: {{ image }}
-                imagePullPolicy: {{ pull_policy }}
-                resources:
-                  requests:
-                    memory: "{{ memory_req }}Mi"
-                    cpu: {{ cpu_req }}
-                env:
-                - name: SLEEP_TIME
-                  value: "{{ sleep_time }}"
-              restartPolicy: Never
-        EOF
+    - name: Create job template file
+      ansible.builtin.copy:
+        dest: "/home/{{ username }}/job-template.yaml"
+        mode: '0644'
+        content: |
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: {{ app_name }}-%ITEM
+          spec:
+            template:
+              metadata:
+                name: {{ app_name }}-%ITEM
+              spec:
+                containers:
+                - name: {{ app_name }}-%ITEM
+                  image: {{ image }}
+                  imagePullPolicy: {{ pull_policy }}
+                  resources:
+                    requests:
+                      memory: "{{ memory_req }}Mi"
+                      cpu: {{ cpu_req }}
+                  env:
+                  - name: SLEEP_TIME
+                    value: "{{ sleep_time }}"
+                restartPolicy: Never
 
     - name: Create job directory
-      file:
+      ansible.builtin.file:
         path: /home/{{ username }}/jobs
         state: directory
+        mode: '0755'
 
     - name: Create job multiple times
-      shell: |
-        for i in `seq 1 {{ replicas }}`
-        do
-          cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" \
-          > "/home/{{ username }}/jobs/job-$i.yaml"
-        done
+      ansible.builtin.copy:
+        src: "/home/{{ username }}/job-template.yaml"
+        dest: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
+        mode: '0644'
+      loop: "{{ range(1, replicas + 1) | list }}"
+
+    - name: Replace %ITEM placeholder in job files
+      ansible.builtin.replace:
+        path: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
+        regexp: '%ITEM'
+        replace: "{{ item }}"
+      loop: "{{ range(1, replicas + 1) | list }}"

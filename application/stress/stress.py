@@ -1,5 +1,7 @@
 """Manage the stress application"""
 
+from input.configuration import config_access
+
 from ..empty.empty import print_resources
 from ..empty.plot import plot_resources
 
@@ -35,9 +37,9 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    if config["benchmark"]["application"] != "stress":
+    if config_access.benchmark_primary_stage_type(config) != "stress":
         parser.error("ERROR: Application should be stress")
-    elif config["benchmark"]["resource_manager"] != "kubecontrol":
+    elif config_access.orchestrator_name(config) != "kubecontrol":
         parser.error("ERROR: Application stress requires resource_manager kubecontrol")
 
 
@@ -68,7 +70,7 @@ def start_worker(config, _machines):
         (dict): Application variables
     """
     app_vars = {
-        "stress_app_timeout": config["benchmark"]["stress_app_timeout"],
+        "stress_app_timeout": config_access.benchmark_param_int(config, "stress_app_timeout"),
     }
     return app_vars
 

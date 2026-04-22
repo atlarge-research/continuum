@@ -4,15 +4,16 @@ processing them using image classification from TFLite.
 """
 
 import io
+import multiprocessing
 import os
 import time
-import multiprocessing
-from PIL import Image
+
 import numpy as np
 import paho.mqtt.client as mqtt
 
 # pylint: disable-next=import-error
 import tflite_runtime.interpreter as tflite
+from PIL import Image
 
 MQTT_LOCAL_IP = os.environ["MQTT_LOCAL_IP"]
 MQTT_LOGS = os.environ["MQTT_LOGS"]
@@ -31,8 +32,8 @@ def on_connect(client, _userdata, _flags, rc):
 
     Args:
         client (object): Client object
-        _userdata (_type_): _description_
-        _flags (_type_): _description_
+        _userdata: User data passed to callback (unused)
+        _flags: Connection flags
         rc (str): Result code
     """
     print("Connected with result code " + str(rc) + "\n", end="")
@@ -43,10 +44,10 @@ def on_subscribe(_mqttc, _obj, _mid, _granted_qos):
     """Execute when subscribing to a topic on a MQTT broker
 
     Args:
-        _mqttc (_type_): _description_
-        _obj (_type_): _description_
-        _mid (_type_): _description_
-        _granted_qos (_type_): _description_
+        _mqttc: MQTT client instance
+        _obj: User data object
+        _mid: Message ID
+        _granted_qos: Granted QoS level(s)
     """
     print("Subscribed to topic\n", end="")
 
@@ -55,8 +56,8 @@ def on_log(_client, _userdata, level, buff):
     """Execute MQTT log on every MQTT event
 
     Args:
-        _client (_type_): _description_
-        _userdata (_type_): _description_
+        _client: MQTT client instance
+        _userdata: User data passed to callback (unused)
         level (str): Log level (error, warning, info, etc)
         buff (str): Log message
     """
@@ -67,8 +68,8 @@ def on_message(_client, _userdata, msg):
     """Execute when receiving a message on a topic you are subscribed to
 
     Args:
-        _client (_type_): _description_
-        _userdata (_type_): _description_
+        _client: MQTT client instance
+        _userdata: User data passed to callback (unused)
         msg (str): Received message
     """
     work_queue.put([time.time_ns(), msg.payload])
@@ -78,9 +79,9 @@ def on_publish(_mqttc, _obj, _mid):
     """Execute when publishing / sending data
 
     Args:
-        _mqttc (_type_): _description_
-        _obj (_type_): _description_
-        _mid (_type_): _description_
+        _mqttc: MQTT client instance
+        _obj: User data object
+        _mid: Message ID
     """
     print("Published data")
 

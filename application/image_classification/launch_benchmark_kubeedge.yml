@@ -1,56 +1,67 @@
 ---
-- hosts: cloudcontroller
+- name: Launch benchmark for kubeedge with one call, and one job per file
+  hosts: cloudcontroller
   become: true
   tasks:
-    - name: Create job file
-      shell: |
-        cat > "/home/{{ username }}/job-template.yaml" <<EOF
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {{ app_name }}-%ITEM
-        spec:
-          template:
-            metadata:
-              name: {{ app_name }}
-            spec:
-              containers:
-              - name: {{ app_name }}
-                image: {{ image }}
-                ports:
-                - containerPort: 1883
-                imagePullPolicy: Always
-                resources:
-                  requests:
-                    memory: "{{ memory_req }}Mi"
-                    cpu: {{ cpu_req }}
-                env:
-                - name: MQTT_LOCAL_IP
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: status.hostIP
-                - name: MQTT_LOGS
-                  value: "{{ mqtt_logs }}"
-                - name: CPU_THREADS
-                  value: "{{ cpu_threads }}"
-                - name: ENDPOINT_CONNECTED
-                  value: "{{ endpoint_connected }}"
-              restartPolicy: Never
-        EOF
+    - name: Create job template file
+      ansible.builtin.copy:
+        dest: "/home/{{ username }}/job-template.yaml"
+        mode: '0644'
+        content: |
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: {{ app_name }}-%ITEM
+          spec:
+            template:
+              metadata:
+                name: {{ app_name }}
+              spec:
+                containers:
+                - name: {{ app_name }}
+                  image: {{ image }}
+                  ports:
+                  - containerPort: 1883
+                  imagePullPolicy: Always
+                  resources:
+                    requests:
+                      memory: "{{ memory_req }}Mi"
+                      cpu: {{ cpu_req }}
+                  env:
+                  - name: MQTT_LOCAL_IP
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: status.hostIP
+                  - name: MQTT_LOGS
+                    value: "{{ mqtt_logs }}"
+                  - name: CPU_THREADS
+                    value: "{{ cpu_threads }}"
+                  - name: ENDPOINT_CONNECTED
+                    value: "{{ endpoint_connected }}"
+                restartPolicy: Never
 
     - name: Create job directory
-      file:
+      ansible.builtin.file:
         path: /home/{{ username }}/jobs
         state: directory
+        mode: '0755'
 
     - name: Create job multiple times
-      shell: |
-        for i in `seq 0 {{ replicas }}`
-        do
-          cat "/home/{{ username }}/job-template.yaml" | sed "s/\%ITEM/$i/" \
-          > "/home/{{ username }}/jobs/job-$i.yaml"
-        done
+      ansible.builtin.copy:
+        src: "/home/{{ username }}/job-template.yaml"
+        dest: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
+        mode: '0644'
+      loop: "{{ range(1, replicas + 1) | list }}"
+
+    - name: Replace %ITEM placeholder in job files
+      ansible.builtin.replace:
+        path: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
+        regexp: '%ITEM'
+        replace: "{{ item }}"
+      loop: "{{ range(1, replicas + 1) | list }}"
 
     - name: Launch jobs
-      command: >
-        kubectl apply -f "/home/{{ username }}/jobs"
+      kubernetes.core.k8s:
+        state: present
+        src: "/home/{{ username }}/jobs"
+        kubeconfig: /etc/kubernetes/admin.conf

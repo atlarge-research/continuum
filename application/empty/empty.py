@@ -1,12 +1,14 @@
 """Manage the empty application"""
 
-import logging
-import sys
 import copy
-
+import logging
+import os
+import sys
 from datetime import datetime
 
 import pandas as pd
+
+from input.configuration import config_access
 
 from . import plot
 
@@ -43,9 +45,9 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    if config["benchmark"]["application"] != "empty":
+    if config_access.benchmark_primary_stage_type(config) != "empty":
         parser.error("ERROR: Application should be empty")
-    elif config["benchmark"]["resource_manager"] != "kubecontrol":
+    elif config_access.orchestrator_name(config) != "kubecontrol":
         parser.error("ERROR: Application empty requires resource_manager kubecontrol")
 
 
@@ -76,7 +78,7 @@ def start_worker(config, _machines):
         (dict): Application variables
     """
     app_vars = {
-        "sleep_time": config["benchmark"]["sleep_time"],
+        "sleep_time": config_access.benchmark_param_int(config, "sleep_time"),
     }
     return app_vars
 
@@ -126,7 +128,9 @@ def format_output(
     """
     # Plot the status of each pod over time
     if status is not None:
-        plot.plot_status(status, config["timestamp"])
+        log_dir = config_access.runtime_logs_dir(config)
+        os.makedirs(log_dir, exist_ok=True)
+        plot.plot_status(status, config["timestamp"], output_dir=log_dir)
 
         if control is not None:
             worker_metrics = fill_control(
@@ -135,9 +139,9 @@ def format_output(
             df = print_control(config, worker_metrics)
             df_resources = print_resources(config, resource_output)
             validate_data(df)
-            plot.plot_control(df, config["timestamp"])
-            plot.plot_p56(df, config["timestamp"])
-            plot.plot_resources(df_resources, config["timestamp"], xmax=endtime)
+            plot.plot_control(df, config["timestamp"], output_dir=log_dir)
+            plot.plot_p56(df, config["timestamp"], output_dir=log_dir)
+            plot.plot_resources(df_resources, config["timestamp"], xmax=endtime, output_dir=log_dir)
 
 
 def create_control_object(worker_description, mapping):
@@ -186,10 +190,10 @@ def create_control_object(worker_description, mapping):
 
         if container_name == "":
             logging.error("ERROR: container_id could not be be set")
-            sys.exit()
+            sys.exit(1)
         elif pod_name == "":
             logging.error("ERROR: pod_name could not be be set")
-            sys.exit()
+            sys.exit(1)
 
         w_set = copy.deepcopy(worker_set)
         w_set["pod"] = pod_name
@@ -216,7 +220,7 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
     except Exception as e:
         logging.error("ERROR: couldnt sort due to exception %s", str(e))
         logging.error(str(worker_metrics))
-        sys.exit()
+        sys.exit(1)
 
     # You can't directly insert in worker_metrics like this, so we first
     # find the timestamp to insert to in the sorted list, and then
@@ -241,7 +245,7 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
     if insertion_time == 100000:
         logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
         logging.error(str(worker_metrics))
-        sys.exit()
+        sys.exit(1)
 
     # Now insert in the real list given by searching for our timestamp
     insert = False
@@ -254,7 +258,7 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
     if not insert:
         logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
         logging.error(str(worker_metrics))
-        sys.exit()
+        sys.exit(1)
 
 
 def check(
@@ -309,7 +313,7 @@ def check(
             # Get output from a specific component you want to filter
             if component not in output:
                 logging.error("ERROR: component %s not a valid key", component)
-                sys.exit()
+                sys.exit(1)
 
             out = output[component]
 
@@ -328,7 +332,8 @@ def check(
                 # Sort on time cases
                 if component == "apiserver" or (
                     tag == "5_pod_object_create"
-                    and config["benchmark"]["kube_deployment"] in ["pod", "container"]
+                    and config_access.orchestrator_value(config, "kube_deployment")
+                    in ["pod", "container"]
                 ):
                     # See comments in next function
                     timestamp = time_delta(t, starttime)
@@ -408,7 +413,7 @@ def check(
             # In all other conditions all pods should have been parsed automatically
             # If that didn't happen, generate an error
             logging.error("ERROR: Only parsed output for %i / %i pods.", i, len(worker_metrics))
-            sys.exit()
+            sys.exit(1)
 
 
 def fill_control(config, control, starttime, worker_output, worker_description):
@@ -571,7 +576,13 @@ def print_control(config, worker_metrics):
     logging.debug("Output in csv format\n%s", repr(df.to_csv()))
 
     # Save as csv file
-    df.to_csv("./logs/%s_dataframe.csv" % (config["timestamp"]), index=False, encoding="utf-8")
+    df.to_csv(
+        os.path.join(
+            config_access.runtime_logs_dir(config), "%s_dataframe.csv" % (config["timestamp"])
+        ),
+        index=False,
+        encoding="utf-8",
+    )
 
     return df
 
@@ -628,12 +639,20 @@ def print_resources(config, df):
 
     # Save to csv
     df_kube.to_csv(
-        "./logs/%s_dataframe_resources.csv" % (config["timestamp"]), index=False, encoding="utf-8"
+        os.path.join(
+            config_access.runtime_logs_dir(config),
+            "%s_dataframe_resources.csv" % (config["timestamp"]),
+        ),
+        index=False,
+        encoding="utf-8",
     )
 
     # df os only needs to be saved - we already renamed it beforehand
     df_os.to_csv(
-        "./logs/%s_dataframe_resources_os.csv" % (config["timestamp"]),
+        os.path.join(
+            config_access.runtime_logs_dir(config),
+            "%s_dataframe_resources_os.csv" % (config["timestamp"]),
+        ),
         index=False,
         encoding="utf-8",
     )

@@ -3,10 +3,11 @@
 import logging
 import time
 
+from input.configuration import config_access
 from resource_manager.kubernetes import kubernetes
 
-from ..empty.empty import set_container_location as empty_set_container_location
 from ..empty.empty import cache_worker as empty_cache_worker
+from ..empty.empty import set_container_location as empty_set_container_location
 
 
 def set_container_location(config):
@@ -14,6 +15,9 @@ def set_container_location(config):
 
     Args:
         config (dict): Parsed configuration
+
+    Returns:
+        list[list[str]]: Container image location overrides.
     """
     return empty_set_container_location(config)
 
@@ -37,23 +41,23 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    if config["benchmark"]["application"] != "mem_usage":
+    if config_access.benchmark_primary_stage_type(config) != "mem_usage":
         parser.error("ERROR: Application should be mem_usage")
-    elif config["benchmark"]["resource_manager"] != "kubecontrol":
+    elif config_access.orchestrator_name(config) != "kubecontrol":
         parser.error("ERROR: Application mem_usage requires resource_manager kubecontrol")
     # elif int(config["benchmark"]["sleep_time"]) < 6000 :
     #     parser.error("ERROR: Application mem_usage requires that pods don't sleep (>6000)")
 
 
 def cache_worker(_config, _machines):
-    """See called function
+    """Set variables needed when launching the app for caching.
 
     Args:
-        _config (_type_): _description_
-        _machines (_type_): _description_
+        _config (dict): Parsed configuration (unused, delegates to empty).
+        _machines (list): List of machine objects (unused).
 
     Returns:
-        _type_: _description_
+        dict: Application variables for cache worker.
     """
     return empty_cache_worker(_config, _machines)
 
@@ -75,12 +79,12 @@ def start_worker(_config, _machines):
 
 
 def get_mem_usage(config, machines, _start_worker_kube):
-    """Get memory usage
+    """Measure memory usage per container by deploying and comparing free memory.
 
     Args:
-        config (_type_): _description_
-        machines (_type_): _description_
-        _start_worker_kube (_type_): _description_
+        config (dict): Parsed configuration.
+        machines (list): List of machine objects representing physical machines.
+        _start_worker_kube: Unused; worker start function reference.
     """
 
     def deploy_memory_deployment(config, machines, replicas: int):
@@ -128,7 +132,7 @@ def get_mem_usage(config, machines, _start_worker_kube):
 
         return int(output[0])
 
-    replicas = config["benchmark"]["applications_per_worker"]
+    replicas = config_access.benchmark_param_int(config, "applications_per_worker")
 
     mem_before = get_free_memory(config, machines)
     logging.info("Worker free memory before deployment: %i MB", mem_before)

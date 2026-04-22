@@ -2,6 +2,7 @@
 
 import logging
 import math
+import os
 
 import numpy as np
 
@@ -10,7 +11,12 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 
-def plot_status(status, timestamp):
+def _output_path(output_dir, filename):
+    os.makedirs(output_dir, exist_ok=True)
+    return os.path.join(output_dir, filename)
+
+
+def plot_status(status, timestamp, output_dir="logs"):
     """Print and plot controlplane data from external observations
 
     Args:
@@ -85,10 +91,13 @@ def plot_status(status, timestamp):
     ax1.legend(patches, texts, loc="upper right")
 
     # Save plot
-    plt.savefig("./logs/%s_breakdown.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig(
+        _output_path(output_dir, "%s_breakdown.pdf" % (timestamp)),
+        bbox_inches="tight",
+    )
 
 
-def plot_control(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
+def plot_control(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, output_dir="logs"):
     """Plot controlplane data from the source code
 
     Phases:
@@ -224,11 +233,14 @@ def plot_control(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     ax1.legend(patches, texts, loc="lower right", fontsize="16")
 
     # Save plot
-    plt.savefig("./logs/%s_breakdown_intern.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig(
+        _output_path(output_dir, "%s_breakdown_intern.pdf" % (timestamp)),
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
 
-def plot_p56(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
+def plot_p56(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, output_dir="logs"):
     """Plot controlplane data from the source code
 
     Phases:
@@ -332,11 +344,14 @@ def plot_p56(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
     ax1.legend(patches, texts, loc="lower left", fontsize="16")
 
     # Save plot
-    plt.savefig("./logs/%s_breakdown_intern_P56.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig(
+        _output_path(output_dir, "%s_breakdown_intern_P56.pdf" % (timestamp)),
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
 
-def plot_resources(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
+def plot_resources(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, output_dir="logs"):
     """Plot resource utilization data
 
     Args:
@@ -345,11 +360,13 @@ def plot_resources(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None
         xmax (bool): Optional. Set the xmax of the plot by hand. Defaults to None.
         ymax (bool): Optional. Set the ymax of the plot by hand. Defaults to None.
     """
-    plot_resources_kube(df[0], timestamp, xmax, ymax, xinter, yinter)
-    plot_resources_os(df[1], timestamp, xmax, ymax, xinter, yinter)
+    plot_resources_kube(df[0], timestamp, xmax, ymax, xinter, yinter, output_dir=output_dir)
+    plot_resources_os(df[1], timestamp, xmax, ymax, xinter, yinter, output_dir=output_dir)
 
 
-def plot_resources_kube(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
+def plot_resources_kube(
+    df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, output_dir="logs"
+):
     """Plot resources based on kubectl top command
 
     Args:
@@ -395,7 +412,10 @@ def plot_resources_kube(df, timestamp, xmax=None, ymax=None, xinter=None, yinter
     # add legend
     ax1.legend(loc="best", fontsize="16")
 
-    plt.savefig("./logs/%s_resources_cpu.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig(
+        _output_path(output_dir, "%s_resources_cpu.pdf" % (timestamp)),
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
     # ------------------------------
@@ -435,11 +455,16 @@ def plot_resources_kube(df, timestamp, xmax=None, ymax=None, xinter=None, yinter
     # add legend
     ax1.legend(loc="best", fontsize="16")
 
-    plt.savefig("./logs/%s_resources_memory.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig(
+        _output_path(output_dir, "%s_resources_memory.pdf" % (timestamp)),
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
 
-def plot_resources_os(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None):
+def plot_resources_os(
+    df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, output_dir="logs"
+):
     """Plot resources based on os-level resource metric commands
 
     Args:
@@ -489,7 +514,10 @@ def plot_resources_os(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=N
     # add legend
     ax1.legend(loc="best", fontsize="16")
 
-    plt.savefig("./logs/%s_resources_os_cpu.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig(
+        _output_path(output_dir, "%s_resources_os_cpu.pdf" % (timestamp)),
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
     # ------------------------------
@@ -534,5 +562,8 @@ def plot_resources_os(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=N
     # add legend
     ax1.legend(loc="best", fontsize="16")
 
-    plt.savefig("./logs/%s_resources_os_memory.pdf" % (timestamp), bbox_inches="tight")
+    plt.savefig(
+        _output_path(output_dir, "%s_resources_os_memory.pdf" % (timestamp)),
+        bbox_inches="tight",
+    )
     plt.close(fig)

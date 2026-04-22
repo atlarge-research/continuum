@@ -1,37 +1,38 @@
 ---
-- hosts: cloudcontroller
+- name: Launch benchmark for kubecontrol with one kubectl command call per job
+  hosts: cloudcontroller
   become: true
   tasks:
     - name: Create job directory
-      file:
+      ansible.builtin.file:
         path: /home/{{ username }}/jobs
         state: directory
+        mode: '0755'
 
     - name: Add container descriptions
-      shell: |
-        for i in `seq 1 {{ replicas }}`
-        do
-          cat > "/home/{{ username }}/jobs/job-$i.yaml" <<EOF
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {{ app_name }}-$i
-        spec:
-          template:
-            metadata:
-              name: {{ app_name }}-$i
-            spec:
-              restartPolicy: Never
-              containers:
-              - name: {{ app_name }}-$i
-                image: {{ image }}
-                imagePullPolicy: {{ pull_policy }}
-                resources:
-                  requests:
-                    memory: "{{ memory_req }}Mi"
-                    cpu: {{ cpu_req }}
-                env:
-                - name: SLEEP_TIME
-                  value: "{{ sleep_time }}"
-        EOF
-        done
+      ansible.builtin.copy:
+        dest: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
+        mode: '0644'
+        content: |
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: {{ app_name }}-{{ item }}
+          spec:
+            template:
+              metadata:
+                name: {{ app_name }}-{{ item }}
+              spec:
+                restartPolicy: Never
+                containers:
+                - name: {{ app_name }}-{{ item }}
+                  image: {{ image }}
+                  imagePullPolicy: {{ pull_policy }}
+                  resources:
+                    requests:
+                      memory: "{{ memory_req }}Mi"
+                      cpu: {{ cpu_req }}
+                  env:
+                  - name: SLEEP_TIME
+                    value: "{{ sleep_time }}"
+      loop: "{{ range(1, replicas + 1) | list }}"
