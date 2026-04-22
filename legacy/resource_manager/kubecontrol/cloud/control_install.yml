@@ -1,0 +1,214 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Configure node ip
+      lineinfile:
+        path: /etc/default/kubelet
+        line: KUBELET_EXTRA_ARGS=--node-ip={{ cloud_ip }}
+        create: true
+
+    - name: Restart kubelet
+      service:
+        name: kubelet
+        daemon_reload: true
+        state: restarted
+
+    - name: Forward IPv4 and let iptables see bridged traffic
+      shell: |
+        cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+        overlay
+        br_netfilter
+        EOF
+
+        sudo modprobe overlay
+        sudo modprobe br_netfilter
+
+        cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+        net.bridge.bridge-nf-call-iptables  = 1
+        net.bridge.bridge-nf-call-ip6tables = 1
+        net.ipv4.ip_forward                 = 1
+        EOF
+
+        sudo sysctl --system
+
+    # - name: Create patches directory for Kubernetes
+    #   command: mkdir /home/{{ username }}/patches
+
+    # - name: Create kube-apiserver patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/kube-apiserver.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: kube-apiserver
+    #         resources:
+    #           requests:
+    #             cpu: 250m
+    #             memory: 500Mi
+    #           limits:
+    #             cpu: 250m
+    #             memory: 500Mi
+    #     EOF
+
+    # - name: Create kube-controller-manager patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/kube-controller-manager.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: kube-controller-manager
+    #         resources:
+    #           requests:
+    #             cpu: 100m
+    #             memory: 200Mi
+    #           limits:
+    #             cpu: 100m
+    #             memory: 200Mi
+    #     EOF
+
+    # - name: Create kube-scheduler patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/kube-scheduler.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: kube-scheduler
+    #         resources:
+    #           requests:
+    #             cpu: 100m
+    #             memory: 200Mi
+    #           limits:
+    #             cpu: 100m
+    #             memory: 200Mi
+    #     EOF
+
+    # - name: Create etcd patch file
+    #   shell: |
+    #     cat > "/home/{{ username }}/patches/etcd.yaml" <<EOF
+    #     spec:
+    #       containers:
+    #       - name: etcd
+    #         resources:
+    #           requests:
+    #             cpu: 200m
+    #             memory: 400Mi
+    #           limits:
+    #             cpu: 200m
+    #             memory: 400Mi
+    #     EOF
+
+    # - name: Create kubelet config file (optimized)
+    #   shell: |
+    #     cat > "/home/{{ username }}/config.yaml" <<EOF
+    #     apiVersion: kubeadm.k8s.io/v1beta3
+    #     kind: InitConfiguration
+    #     localAPIEndpoint:
+    #       advertiseAddress: {{ cloud_ip }}
+    #     ---
+    #     apiVersion: kubeadm.k8s.io/v1beta3
+    #     kind: ClusterConfiguration
+    #     apiServer:
+    #       certSANs:
+    #       - {{ cloud_ip }}
+    #       extraArgs:
+    #         max-mutating-requests-inflight: "100000"
+    #         max-requests-inflight: "100000"
+    #     imageRepository: {{ registry_ip }}
+    #     kubernetesVersion: {{ kubeversion }}
+    #     networking:
+    #       podSubnet: 10.244.0.0/16
+    #     controllerManager:
+    #       extraArgs:
+    #         kube-api-qps: "100000"
+    #         kube-api-burst: "100000"
+    #     scheduler:
+    #       extraArgs:
+    #         kube-api-qps: "100000"
+    #         kube-api-burst: "100000"
+    #     ---
+    #     apiVersion: kubelet.config.k8s.io/v1beta1
+    #     kind: KubeletConfiguration
+    #     containerLogMaxSize: "100Mi"
+    #     containerLogMaxFiles: 10
+    #     registryPullQPS: 100000
+    #     eventRecordQPS: 100000
+    #     kubeAPIQPS: 100000
+    #     serializeImagePulls: false
+    #     maxParallelImagePulls: 100000
+    #     ---
+    #     apiVersion: kubeproxy.config.k8s.io/v1alpha1
+    #     kind: KubeProxyConfiguration
+    #     clientConnection:
+    #       qps: 100000
+    #       burst: 100000
+    #     EOF
+
+    - name: Create kubelet config file (default)
+      shell: |
+        cat > "/home/{{ username }}/config.yaml" <<EOF
+        apiVersion: kubeadm.k8s.io/v1beta3
+        kind: InitConfiguration
+        localAPIEndpoint:
+          advertiseAddress: {{ cloud_ip }}
+        ---
+        apiVersion: kubeadm.k8s.io/v1beta3
+        kind: ClusterConfiguration
+        apiServer:
+          certSANs:
+          - {{ cloud_ip }}
+        imageRepository: {{ registry_ip }}
+        kubernetesVersion: {{ kubeversion }}
+        networking:
+          podSubnet: 10.244.0.0/16
+        ---
+        apiVersion: kubelet.config.k8s.io/v1beta1
+        kind: KubeletConfiguration
+        containerLogMaxSize: "100Mi"
+        containerLogMaxFiles: 10
+        EOF
+
+    - name: Initialize the Kubernetes cluster using kubeadm
+      command: >
+        kubeadm init
+          --node-name {{ ansible_hostname }}
+          --ignore-preflight-errors all
+          --config /home/{{ username }}/config.yaml
+
+    - name: Create user Kubernetes directory
+      file:
+        path: /home/{{ username }}/.kube
+        state: directory
+
+    - name: Copy Kubernetes files to user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/{{ username }}/.kube/config
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        remote_src: true
+
+    - name: Set KUBECONFIG variable globally
+      shell: echo "export KUBECONFIG=/home/{{ username }}/.kube/config" >> /etc/environment
+
+    - name: Enable networking with Flannel, only for cloud mode
+      shell: |
+        if [ "{{ cloud_mode }}" -gt "0" ]; then
+          kubectl apply -f \
+            https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+        fi
+
+    - name: Create join command for worker nodes (cloud-only)
+      shell: |
+        echo '#!/bin/bash' > /tmp/join-command.txt
+        kubeadm token create --print-join-command >> /tmp/join-command.txt
+
+    - name: Copy join command to local file
+      fetch:
+        src: /tmp/join-command.txt
+        dest: "{{ continuum_home }}/"
+        flat: true
+
+    - name: Remove unneeded Kubernetes join command file
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /tmp/join-command.txt

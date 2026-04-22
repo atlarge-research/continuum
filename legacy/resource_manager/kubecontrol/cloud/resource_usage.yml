@@ -1,0 +1,27 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Download metrics-server manifest
+      get_url:
+        url: https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+        dest: /components.yaml
+        mode: '0644'
+
+    - name: Allow communication between nodes without signatures
+      shell: |
+        grep -q -- '--kubelet-insecure-tls' /components.yaml || \
+        sed -i '/--metric-resolution=15s/a\        - --kubelet-insecure-tls' /components.yaml
+      args:
+        executable: /bin/bash
+
+    - name: Apply the metrics server
+      command: kubectl apply -f /components.yaml
+
+    - name: Wait for metrics-server Deployment to be available
+      command: kubectl -n kube-system rollout status deployment/metrics-server --timeout=10m
+
+    - name: Copy resource metrics script in
+      copy:
+        src: "{{ continuum_home }}/cloud/resource_usage.py"
+        dest: /home/{{ username }}

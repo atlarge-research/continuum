@@ -1,0 +1,89 @@
+---
+- hosts: cloudcontroller:clouds
+  become: true
+  tasks:
+    - name: actually install dev tools
+      shell: |
+        sudo apt install zsh fzf neovim -y
+
+    - name: Install ohmyzsh
+      shell: |
+        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+      become: true
+      become_user: "{{ username }}"
+
+    - name: Set default shell to zsh
+      user:
+        name: "{{ username }}"
+        shell: /bin/zsh
+
+    - name: Update plugins in .zshrc
+      lineinfile:
+        path: /home/{{ username }}/.zshrc
+        regexp: '^plugins=\(git\)'
+        line: "plugins=(git sudo colored-man-pages timer kubectl)"
+      become: true
+      become_user: "{{ username }}"
+
+    - name: Update ZSH theme in .zshrc
+      lineinfile:
+        path: /home/{{ username }}/.zshrc
+        regexp: '^ZSH_THEME="robbyrussell"'
+        line: 'ZSH_THEME="pmcgee"'
+      become: true
+      become_user: "{{ username }}"
+
+    - name: Clone vim-surround
+      git:
+        repo: "https://github.com/tpope/vim-surround.git"
+        dest: /home/{{ username }}/.config/nvim/pack/tpope/start/vim-surround
+        depth: 1
+
+    - name: Clone vim-commentary
+      git:
+        repo: "https://github.com/tpope/vim-commentary.git"
+        dest: /home/{{ username }}/.config/nvim/pack/tpope/start/vim-commentary
+        depth: 1
+
+    - name: Clone vim-unimpaired
+      git:
+        repo: "https://github.com/tpope/vim-unimpaired.git"
+        dest: /home/{{ username }}/.config/nvim/pack/tpope/start/vim-unimpaired
+        depth: 1
+
+    - name: Clone vim-repeat
+      git:
+        repo: "https://github.com/tpope/vim-repeat.git"
+        dest: /home/{{ username }}/.config/nvim/pack/tpope/start/vim-repeat
+        depth: 1
+
+    - name: Clone vim-eunuch
+      git:
+        repo: "https://github.com/tpope/vim-eunuch.git"
+        dest: /home/{{ username }}/.config/nvim/pack/tpope/start/vim-eunuch
+        depth: 1
+
+    - name: Write nvim configuration
+      copy:
+        dest: /home/{{ username }}/.config/nvim/init.vim
+        content: |
+          set number t_Co=256 scrolloff=7 ts=4 sts=4 sw=4 expandtab nowrap ignorecase smartcase
+          filetype on
+          syntax enable
+          autocmd FileType make setlocal ts=8 sts=8 sw=8 noexpandtab
+          let mapleader = ","
+          noremap \ ,
+          nnoremap <Leader>w :w!<CR>
+          nnoremap <Leader>q :q<CR>
+          nmap <C-j> <C-W>j
+          nmap <C-k> <C-W>k
+          nmap <C-h> <C-W>h
+          nmap <C-l> <C-W>l
+          nnoremap <silent> <esc> :silent noh<CR>
+          command! W execute 'w !sudo tee % > /dev/null' <bar> edit!
+          augroup highlight_yank
+              autocmd!
+              au TextYankPost * silent! lua vim.highlight.on_yank { higroup='IncSearch', timeout=250 }
+          augroup END
+          tnoremap <ESC> <C-\><C-n>
+          tnoremap <C-v><ESC> <ESC>

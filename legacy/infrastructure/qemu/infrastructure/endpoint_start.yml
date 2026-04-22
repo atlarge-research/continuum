@@ -1,0 +1,17 @@
+---
+- hosts: endpoints
+  tasks:
+    - name: Create endpoint images
+      shell: |
+        for i in $(seq "{{ endpoint_start }}" "{{ endpoint_end }}"); do
+          qemu-img create -f qcow2 -F qcow2 \
+          -b "{{ base_path }}/.continuum/images/{{ base_endpoint }}.qcow2" \
+          "{{ base_path }}/.continuum/images/endpoint${i}_{{ username }}.qcow2"
+        done
+
+    - name: Add cloudinit disk
+      shell: |
+        for i in $(seq "{{ endpoint_start }}" "{{ endpoint_end }}"); do
+          cloud-localds "{{ base_path }}/.continuum/images/user_data_endpoint${i}_{{ username }}.img" \
+          "{{ base_path }}/.continuum/user_data_endpoint${i}_{{ username }}.yml"
+        done

@@ -1,0 +1,76 @@
+---
+- name: Create edge images
+  hosts: edges
+  become: true
+  gather_facts: false
+
+  vars:
+    continuum_dir: "{{ base_path }}/.continuum"
+    images_dir: "{{ continuum_dir }}/images"
+    base_image: "{{ images_dir }}/{{ base_edge }}.qcow2"
+
+  tasks:
+    # -----------------------------
+    # Preflight checks (clean errors)
+    # -----------------------------
+    - name: Check Continuum folder exists
+      ansible.builtin.stat:
+        path: "{{ continuum_dir }}"
+      register: continuum_dir_stat
+
+    - name: Fail if Continuum folder is missing
+      ansible.builtin.fail:
+        msg: >-
+          Continuum folder is missing or not a directory: {{ continuum_dir }}.
+          This playbook expects it to be created by a prior step/playbook.
+      when: not continuum_dir_stat.stat.isdir | default(false)
+
+    - name: Check base qcow2 image exists
+      ansible.builtin.stat:
+        path: "{{ base_image }}"
+      register: base_image_stat
+
+    - name: Fail if base qcow2 image is missing
+      ansible.builtin.fail:
+        msg: >-
+          Base edge image does not exist (or is not a regular file): {{ base_image }}.
+          Create it with the base-image playbook first.
+      when: not base_image_stat.stat.isreg | default(false)
+
+    - name: Ensure images directory exists
+      ansible.builtin.file:
+        path: "{{ images_dir }}"
+        state: directory
+        mode: "0755"
+
+    # -----------------------------
+    # Build a simple list of nodes (maintainable)
+    # -----------------------------
+    - name: Build list of edge indices
+      ansible.builtin.set_fact:
+        edge_indices: "{{ range(edge_start | int, (edge_end | int) + 1) | list }}"
+
+    # -----------------------------
+    # Create qcow2 overlays + cloud-init disks
+    # -----------------------------
+    - name: Create qcow2 overlay images (backed by base)
+      ansible.builtin.command:
+        cmd: >
+          qemu-img create -f qcow2 -F qcow2
+          -b {{ base_image }}
+          {{ images_dir }}/edge{{ item }}_{{ username }}.qcow2
+        creates: "{{ images_dir }}/edge{{ item }}_{{ username }}.qcow2"
+      loop: "{{ edge_indices }}"
+      loop_control:
+        label: "edge{{ item }}"
+
+    - name: Create cloud-init disks (cloud-localds)
+      ansible.builtin.command:
+        cmd: >
+          cloud-localds
+          {{ images_dir }}/user_data_edge{{ item }}_{{ username }}.img
+          {{ continuum_dir }}/user_data_edge{{ item }}_{{ username }}.yml
+        creates: "{{ images_dir }}/user_data_edge{{ item }}_{{ username }}.img"
+      loop: "{{ edge_indices }}"
+      loop_control:
+        label: "edge{{ item }}"

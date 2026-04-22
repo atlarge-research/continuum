@@ -1,0 +1,160 @@
+---
+- name: Cloud base image installation for KubeEdge
+  hosts: base_cloud
+  become: true
+  vars:
+    repo_major_minor: "v1.31"
+    k8s_pkg_version: "1.31.14-1.1"
+    kubeedge_version: "v1.22.0"
+  tasks:
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - jq
+          - socat
+          - conntrack
+          - ipset
+        state: present
+        update_cache: true
+
+    - name: Ensure keyrings dir exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Load kernel modules required for Kubernetes networking
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Persist kernel modules
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        mode: "0644"
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Set sysctls required for Kubernetes networking
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: true
+      loop:
+        - { name: net.ipv4.ip_forward, value: "1" }
+        - { name: net.bridge.bridge-nf-call-iptables, value: "1" }
+        - { name: net.bridge.bridge-nf-call-ip6tables, value: "1" }
+
+    - name: Install docker
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+
+    - name: Add cloud user to docker group
+      ansible.builtin.user:
+        name: "{{ username }}"
+        groups: docker
+        append: true
+
+    - name: Allow HTTP pulling from private docker registry
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "insecure-registries": ["{{ registry_ip }}"]
+          }
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart docker service
+
+    - name: Disable swap
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Comment out swap in /etc/fstab (persistent)
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(.*\s+swap\s+.*)$'
+        replace: '# \1'
+
+    - name: Fetch Kubernetes repo key (Release.key)
+      ansible.builtin.get_url:
+        url: https://pkgs.k8s.io/core:/stable:/{{ repo_major_minor }}/deb/Release.key
+        dest: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        mode: "0644"
+      notify: Install Kubernetes keyring (dearmor)
+
+    - name: Adding apt repository for Kubernetes
+      ansible.builtin.apt_repository:
+        repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ repo_major_minor }}/deb/ /
+        state: present
+        filename: kubernetes.list
+
+    - name: Install Kubernetes binaries
+      ansible.builtin.apt:
+        name:
+          - kubelet={{ k8s_pkg_version }}
+          - kubeadm={{ k8s_pkg_version }}
+          - kubectl={{ k8s_pkg_version }}
+        state: present
+        update_cache: true
+
+    - name: Hold Kubernetes packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    # Use Kuberntes v1.31 with KubeEdge 1.22
+    - name: Get KubeEdge and unarchive it
+      ansible.builtin.unarchive:
+        src: https://github.com/kubeedge/kubeedge/releases/download/{{ kubeedge_version }}/keadm-{{ kubeedge_version }}-linux-amd64.tar.gz
+        dest: /tmp
+        remote_src: true
+      notify: Remove KubeEdge archive
+
+    - name: Move KubeEdge executable to /usr/local/bin
+      ansible.builtin.copy:
+        src: /tmp/keadm-{{ kubeedge_version }}-linux-amd64/keadm/keadm
+        dest: /usr/local/bin/keadm
+        mode: '0755'
+        remote_src: true
+        owner: root
+        group: root
+      notify: Remove extracted KubeEdge archive
+
+  handlers:
+    - name: Install Kubernetes keyring (dearmor)
+      ansible.builtin.command: >
+        gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Restart docker service
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+
+    - name: Remove KubeEdge archive
+      ansible.builtin.file:
+        path: /tmp/keadm-{{ kubeedge_version }}-linux-amd64.tar.gz
+        state: absent
+
+    - name: Remove extracted KubeEdge archive
+      ansible.builtin.file:
+        path: /tmp/keadm-{{ kubeedge_version }}-linux-amd64
+        state: absent

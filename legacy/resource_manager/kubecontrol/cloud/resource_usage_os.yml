@@ -1,0 +1,8 @@
+---
+- hosts: cloudcontroller,clouds
+  become: true
+  tasks:
+    - name: Copy resource metrics os script in
+      copy:
+        src: "{{ continuum_home }}/cloud/resource_usage_os.py"
+        dest: /home/{{ username }}

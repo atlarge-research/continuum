@@ -1,0 +1,33 @@
+---
+- hosts: edges
+  become: true
+  tasks:
+    - name: Ensure docker service is running
+      systemd:
+        name: docker
+        state: started
+
+    - name: Add edge user to docker group
+      user:
+        name: "{{ username }}"
+        groups: docker,systemd-journal
+        append: true
+
+    - name: Restart docker service
+      command: systemctl restart docker
+
+    - name: Install Mosquitto
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - mosquitto=1.6.9-1
+
+    - name: Run Mosquitto
+      command: mosquitto -d -p 1883
+
+  handlers:
+    - name: docker status
+      service: name=docker state=started

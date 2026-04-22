@@ -1,0 +1,27 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Set up kube-prometheus on Kubernetes
+      command: kubectl create -f /kube-prometheus/manifests/setup
+
+    - name: Wait for CRDs to be established
+      command: kubectl wait --for=condition=Established --all crd --timeout=5m
+
+    - name: Run kube-prometheus on Kubernetes
+      command: kubectl apply -f /kube-prometheus/manifests/
+
+    - name: Wait for Grafana to be Available
+      command: kubectl -n monitoring wait --for=condition=Available deployment/grafana --timeout=20m
+
+    - name: Enable Grafana port-forwarding
+      shell: |
+        nohup kubectl port-forward --namespace=monitoring \
+          --address={{ cloud_ip }},{{ cloud_ip_external }} svc/grafana 3000:3000 > /dev/null 2>&1 &
+
+    - name: Enable Prometheus port-forwarding
+      shell: |
+        nohup kubectl port-forward --namespace=monitoring \
+          --address={{ cloud_ip }},{{ cloud_ip_external }} \
+          svc/prometheus-k8s 9090:9090 > /dev/null 2>&1 &
+

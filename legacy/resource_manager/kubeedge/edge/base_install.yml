@@ -1,0 +1,97 @@
+---
+- hosts: base_edge
+  become: true
+  tasks:
+    - name: Install base packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - jq
+          - socat
+          - conntrack
+          - ipset
+        state: present
+        update_cache: yes
+
+    - name: Load kernel modules required for Kubernetes networking
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Persist kernel modules
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Set sysctls required for Kubernetes networking
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: net.ipv4.ip_forward, value: "1" }
+        - { name: net.bridge.bridge-nf-call-iptables, value: "1" }
+        - { name: net.bridge.bridge-nf-call-ip6tables, value: "1" }
+
+    - name: Install docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Add cloud user to docker group
+      user:
+        name: "{{ username }}"
+        groups: docker
+        append: true
+
+    - name: Allow HTTP pulling from private docker registry
+      shell: echo '{ "insecure-registries":["{{ registry_ip }}"] }' > /etc/docker/daemon.json
+
+    - name: Restart docker service
+      command: systemctl restart docker
+
+    - name: Disable swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Make sure swap is disabled even after reboot
+      command: sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+    - name: Enable ipv4 forwarding
+      shell: echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+
+    - name: Reload ip settings
+      command: sysctl -p
+    
+    # Use Kuberntes v1.31 with KubeEdge 1.22
+    - name: Get KubeEdge and unarchive it
+      unarchive:
+        src: https://github.com/kubeedge/kubeedge/releases/download/v1.22.0/keadm-v1.22.0-linux-amd64.tar.gz
+        dest: /tmp
+        remote_src: true
+
+    - name: Make KubeEdge executable
+      file:
+        dest: /tmp/keadm-v1.22.0-linux-amd64/keadm/keadm
+        mode: +x
+
+    - name: Move KubeEdge executable
+      command: mv "/tmp/keadm-v1.22.0-linux-amd64/keadm/keadm" /usr/local/bin
+
+    - name: Remove unneeded KubeEdge files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /tmp/keadm-v1.22.0-linux-amd64
+        - /tmp/keadm-v1.22.0-linux-amd64.tar.gz

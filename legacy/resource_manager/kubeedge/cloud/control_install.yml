@@ -1,0 +1,149 @@
+---
+- hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Add cloud user to docker group
+      user:
+        name: "{{ username }}"
+        groups: docker
+        append: true
+
+    - name: Restart docker service
+      systemd:
+        name: docker
+        state: restarted
+
+    - name: Configure node ip
+      lineinfile:
+        path: /etc/default/kubelet
+        line: KUBELET_EXTRA_ARGS=--node-ip={{ cloud_ip }}
+        create: true
+
+    - name: Restart kubelet
+      service:
+        name: kubelet
+        daemon_reload: true
+        state: restarted
+
+    - name: Initialize the Kubernetes cluster using kubeadm
+      command: >
+        kubeadm init
+          --kubernetes-version=v1.31.14
+          --apiserver-advertise-address={{ cloud_ip }}
+          --apiserver-cert-extra-sans={{ cloud_ip }}
+          --node-name {{ ansible_hostname }}
+          --pod-network-cidr=10.244.0.0/16
+
+    - name: Create user Kubernetes directory
+      file:
+        path: /home/{{ username }}/.kube
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Copy Kubernetes admin.conf to user kubeconfig
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/{{ username }}/.kube/config
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0600"
+        remote_src: true
+
+    - name: Install Flannel CNI
+      command: kubectl apply -f https://github.com/flannel-io/flannel/releases/download/v0.28.0/kube-flannel.yml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for Flannel DaemonSet rollout
+      command: kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=600s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Prevent Flannel from running on edge nodes
+      command: >
+        kubectl -n kube-flannel patch ds kube-flannel-ds -p
+        '{"spec":{"template":{"spec":{"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"node-role.kubernetes.io/edge","operator":"DoesNotExist"}]}]}}}}}}}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Prevent kube-proxy from running on edge nodes
+      command: >
+        kubectl -n kube-system patch ds kube-proxy -p
+        '{"spec":{"template":{"spec":{"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"node-role.kubernetes.io/edge","operator":"DoesNotExist"}]}]}}}}}}}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for nodes to be Ready
+      command: kubectl wait node --all --for=condition=Ready --timeout=600s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for apiserver readyz to be clean
+      command: kubectl get --raw='/readyz?verbose'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: readyz
+      retries: 30
+      delay: 5
+      until: readyz.rc == 0
+
+    - name: Initialize KubeEdge CloudCore (allow on control-plane)
+      command: >
+        keadm init
+        --kube-config=/etc/kubernetes/admin.conf
+        --advertise-address={{ cloud_ip }}
+        --kubeedge-version=1.22.0
+        --force
+        --set mosquitto.enabled=false
+        --set cloudCore.tolerations[0].key=node-role.kubernetes.io/control-plane
+        --set cloudCore.tolerations[0].operator=Exists
+        --set cloudCore.tolerations[0].effect=NoSchedule
+        --set cloudCore.tolerations[1].key=node-role.kubernetes.io/master
+        --set cloudCore.tolerations[1].operator=Exists
+        --set cloudCore.tolerations[1].effect=NoSchedule
+
+    - name: Wait for CloudCore pod
+      command: kubectl -n kubeedge rollout status deploy/cloudcore --timeout=600s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for tokensecret to exist
+      shell: |
+        set -e
+        for i in $(seq 1 60); do
+          kubectl -n kubeedge get secret tokensecret && exit 0
+          sleep 5
+        done
+        echo "tokensecret did not appear" && exit 1
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Get KubeEdge token
+      command: keadm gettoken --kube-config=/home/{{ username }}/.kube/config
+      register: ke_token
+
+    - name: Write token to file
+      copy:
+        content: "{{ ke_token.stdout }}\n"
+        dest: /tmp/join-command.txt
+        mode: "0644"
+
+    - name: Copy join command to local file
+      fetch:
+        src: /tmp/join-command.txt
+        dest: "{{ continuum_home }}/"
+        flat: true
+
+    - name: Remove unneeded KubeEdge join command file
+      file:
+        path: /tmp/join-command.txt
+        state: absent
+    
+    - name: KubeEdge kubectl logs/exec DNAT rules
+      shell: |
+        iptables -t nat -I PREROUTING 1 -p tcp --dport 10350 -j DNAT --to-destination {{ cloud_ip }}:10003
+        iptables -t nat -I OUTPUT 1 -p tcp --dport 10350 -j DNAT --to-destination {{ cloud_ip }}:10003
+        iptables -t nat -I PREROUTING 1 -p tcp --dport 10351 -j DNAT --to-destination {{ cloud_ip }}:10003
+        iptables -t nat -I OUTPUT 1 -p tcp --dport 10351 -j DNAT --to-destination {{ cloud_ip }}:10003

@@ -1,0 +1,202 @@
+---
+- name: Cloud base image installation for kube-kata
+  hosts: base_cloud
+  become: true
+  vars:
+    mosquitto_version: "1.6.9-1"
+    ssh_max_sessions: 10000
+    ssh_max_startups: 10000
+    kube_prometheus_version: "release-0.13"
+  tasks:
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+          - software-properties-common
+          - git
+        state: present
+        update_cache: true
+
+    - name: Ensure keyrings dir exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker apt signing key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        keyring: /etc/apt/keyrings/docker.gpg
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install containerd.io
+      ansible.builtin.apt:
+        name: containerd.io
+        state: present
+        update_cache: true
+
+    - name: Create containerd directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: "0755"
+
+    - name: Copy containerd config from local to target
+      ansible.builtin.copy:
+        src: "{{ continuum_home }}/cloud/config.toml"
+        dest: /etc/containerd/config.toml
+        mode: "0644"
+
+    - name: Replace registry ip in containerd config file
+      ansible.builtin.replace:
+        path: /etc/containerd/config.toml
+        regexp: "REGISTRY-IP"
+        replace: "{{ registry_ip }}"
+      notify: restart containerd
+
+    - name: Disable swap
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Comment out swap in /etc/fstab (persistent)
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(.*\s+swap\s+.*)$'
+        replace: '# \1'
+
+    - name: Enable ipv4 forwarding (sysctl)
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        state: present
+        reload: true
+
+    - name: Fetch Kubernetes repo key (Release.key)
+      ansible.builtin.get_url:
+        url: "https://pkgs.k8s.io/core:/stable:/{{ 'v1.29' if kubeversion_major == 'v1.27' else kubeversion_major }}/deb/Release.key"
+        dest: /tmp/kubernetes-release.key
+        mode: "0644"
+      notify: Install Kubernetes keyring (dearmor)
+
+    - name: Add Kubernetes apt repo
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        mode: "0644"
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ kubeversion_major }}/deb/ /
+
+    - name: Install Kubernetes binaries
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: true
+
+    - name: Hold Kubernetes packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Stop Kubelet service
+      ansible.builtin.systemd:
+        name: kubelet
+        state: stopped
+        daemon_reload: true
+
+    - name: Get Kubernetes binaries from host machine
+      ansible.builtin.copy:
+        src: /mnt/sdb/matthijs/kubernetes-node-linux-amd64-{{ kubeversionstrp }}.tar.gz
+        dest: /tmp/kubernetes-node-linux-amd64.tar.gz
+        mode: "0644"
+
+    - name: Extract Kubernetes binary archive
+      ansible.builtin.unarchive:
+        src: /tmp/kubernetes-node-linux-amd64.tar.gz
+        dest: /tmp/
+        remote_src: true
+      notify: Remove Kubernetes archive
+
+    - name: Copy Kubernetes binaries into /usr/bin and overwrite installed binaries
+      ansible.builtin.copy:
+        src: /tmp/kubernetes/node/bin/
+        dest: /usr/bin/
+        remote_src: true
+        mode: preserve
+        force: true
+      notify: Remove extracted Kubernetes archive
+
+    - name: Start Kubelet service
+      ansible.builtin.systemd:
+        name: kubelet
+        state: started
+        daemon_reload: true
+
+    - name: Set endpoints for crictl
+      ansible.builtin.copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+        mode: "0644"
+
+    - name: Install Mosquitto (Ubuntu 20)
+      ansible.builtin.apt:
+        name: mosquitto={{ mosquitto_version }}
+        state: present
+        update_cache: true
+
+    - name: Update SSH settings to allow many parallel sessions
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        block: |
+          MaxSessions {{ ssh_max_sessions }}
+          MaxStartups {{ ssh_max_startups }}
+      notify: Restart sshd
+
+    - name: Clone kube-prometheus
+      ansible.builtin.git:
+        repo: https://github.com/prometheus-operator/kube-prometheus.git
+        dest: /kube-prometheus
+        version: "{{ kube_prometheus_version }}"
+        force: false
+
+  handlers:
+    - name: Install Kubernetes keyring (dearmor)
+      ansible.builtin.command: >
+        gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Restart containerd
+      ansible.builtin.systemd:
+        name: containerd
+        state: restarted
+
+    - name: Restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted
+
+    - name: Remove Kubernetes archive
+      ansible.builtin.file:
+        path: /tmp/kubernetes-node-linux-amd64.tar.gz
+        state: absent
+
+    - name: Remove extracted Kubernetes archive
+      ansible.builtin.file:
+        path: /tmp/kubernetes
+        state: absent

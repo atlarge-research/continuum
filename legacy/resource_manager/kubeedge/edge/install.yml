@@ -1,0 +1,144 @@
+---
+- hosts: edges
+  become: true
+  tasks:
+    - name: Install Mosquitto
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+      vars:
+        packages:
+          - mosquitto=1.6.9-1
+
+    - name: Enable and start mosquitto
+      systemd:
+        name: mosquitto
+        enabled: true
+        state: started
+
+    - name: Add edge user to docker group
+      user:
+        name: "{{ username }}"
+        groups: docker,systemd-journal
+        append: true
+
+    - name: Restart docker service
+      systemd:
+        name: docker
+        state: restarted
+    
+    - name: Install CNI plugins (edge)
+      shell: |
+        set -e
+        mkdir -p /opt/cni/bin
+        cd /tmp
+        curl -L -o cni.tgz https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
+        tar -C /opt/cni/bin -xzf cni.tgz
+      args:
+        creates: /opt/cni/bin/bridge
+
+    - name: Configure CNI for containerd (edge) - bridge without promiscMode
+      copy:
+        dest: /etc/cni/net.d/10-containerd.conflist
+        mode: "0644"
+        owner: root
+        group: root
+        content: |
+          {
+            "cniVersion": "0.4.0",
+            "name": "containerd-net",
+            "plugins": [
+              {
+                "type": "bridge",
+                "bridge": "cni0",
+                "isGateway": true,
+                "ipMasq": true,
+                "hairpinMode": true,
+                "ipam": {
+                  "type": "host-local",
+                  "ranges": [[{ "subnet": "10.244.1.0/24" }]],
+                  "routes": [{ "dst": "0.0.0.0/0" }]
+                }
+              },
+              { "type": "portmap", "capabilities": { "portMappings": true } },
+              { "type": "firewall" },
+              { "type": "tuning" }
+            ]
+          }
+
+    - name: Ensure containerd certs.d dir exists
+      file:
+        path: "/etc/containerd/certs.d/{{ registry_ip }}"
+        state: directory
+        mode: "0755"
+
+    - name: Configure containerd hosts.toml for insecure registry
+      copy:
+        dest: "/etc/containerd/certs.d/{{ registry_ip }}/hosts.toml"
+        mode: "0644"
+        content: |
+          server = "http://{{ registry_ip }}"
+          [host."http://{{ registry_ip }}"]
+            capabilities = ["pull", "resolve", "push"]
+            skip_verify = true
+
+    - name: Generate default containerd config.toml if missing
+      shell: |
+        set -e
+        if [ ! -f /etc/containerd/config.toml ]; then
+          containerd config default > /etc/containerd/config.toml
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Set containerd CRI registry config_path (only in cri.registry)
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: '(\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]\n(?:[^\[]*\n)*)\s*config_path\s*=\s*".*"'
+        replace: '\1  config_path = "/etc/containerd/certs.d"'
+
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+
+    - name: Wait for join command to be finished on cloud controller
+      local_action:
+        module: wait_for
+        path: "{{ continuum_home }}/join-command.txt"
+        timeout: 900
+      become: false
+
+    - name: Copy the join command to the edge node
+      copy:
+        src: "{{ continuum_home }}/join-command.txt"
+        dest: /tmp/join-command.txt
+
+    - name: Join the cloud controller kubernetes server
+      shell: >
+        keadm join 
+        --cloudcore-ipport={{ cloud_ip }}:10000
+        --token=$(cat /tmp/join-command.txt) 
+        --kubeedge-version=1.22.0
+
+    - name: Remove unneeded KubeEdge join command file
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /tmp/join-command.txt
+
+    - name: Enable edgeStream (edgecore.yaml)
+      replace:
+        path: /etc/kubeedge/config/edgecore.yaml
+        backup: true
+        regexp: '(\n\s*edgeStream:\s*\n(?:.*\n)*?\s*enable:\s*)false\b'
+        replace: '\1true'
+
+    - name: Restart edgecore if kubelet bind changed
+      systemd:
+        name: edgecore
+        state: restarted
+        enabled: true
+        daemon_reload: true

@@ -1,0 +1,123 @@
+---
+- hosts: clouds
+  become: true
+  tasks:
+    - name: Install kata-fc
+      shell: |
+        wget https://github.com/kata-containers/kata-containers/releases/download/3.1.3/kata-static-3.1.3-x86_64.tar.xz
+        xzcat kata-static-3.1.3-x86_64.tar.xz | sudo tar -xvf - -C /
+        sudo ln -s /opt/kata/bin/kata-runtime /usr/local/bin
+        rm kata-static-3.1.3-x86_64.tar.xz
+
+        sudo mkdir -p /var/lib/containerd/io.containerd.snapshotter.v1.devmapper
+
+        sudo touch /var/lib/containerd/io.containerd.snapshotter.v1.devmapper/data
+        sudo truncate -s 20G /var/lib/containerd/io.containerd.snapshotter.v1.devmapper/data
+
+        sudo touch /var/lib/containerd/io.containerd.snapshotter.v1.devmapper/meta
+        sudo truncate -s 10G /var/lib/containerd/io.containerd.snapshotter.v1.devmapper/meta
+
+        DATA_DEV=$(sudo losetup --find --show /var/lib/containerd/io.containerd.snapshotter.v1.devmapper/data)
+        META_DEV=$(sudo losetup --find --show /var/lib/containerd/io.containerd.snapshotter.v1.devmapper/meta)
+
+        DATA_SIZE="$(sudo blockdev --getsize64 -q ${DATA_DEV})"
+        LENGTH_IN_SECTORS=$((DATA_SIZE / 512))
+
+        sudo dmsetup create devpool --table "0 ${LENGTH_IN_SECTORS} thin-pool ${META_DEV} ${DATA_DEV} 128 32768"
+
+        file_path='/etc/containerd/config.toml'
+
+        line_number=$(grep -n 'io.containerd.snapshotter.v1.devmapper' "$file_path" | cut -d ":" -f 1)
+
+        sudo sed -i "$((line_number + 1)) c\    pool_name = \"devpool\"" "$file_path"
+        sudo sed -i "$((line_number + 2)) c\    root_path = \"/var/lib/containerd/io.containerd.snapshotter.v1.devmapper\"" "$file_path"
+        sudo sed -i "$((line_number + 3)) c\    base_image_size = \"10GB\"" "$file_path"
+        sudo sed -i "$((line_number + 4)) c\    discard_blocks = true" "$file_path"
+
+        sudo sed -i 's/snapshotter = "overlayfs"/snapshotter = "devmapper"/g' "$file_path"
+
+        echo '#!/bin/bash' | sudo tee -a /usr/local/bin/containerd-shim-kata-fc-v2 > /dev/null
+        echo 'KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-fc.toml /opt/kata/bin/containerd-shim-kata-v2 $@' | \
+          sudo tee -a /usr/local/bin/containerd-shim-kata-fc-v2 > /dev/null
+
+        sudo chmod +x /usr/local/bin/containerd-shim-kata-fc-v2
+
+        echo '#!/bin/bash' | sudo tee -a /usr/local/bin/containerd-shim-kata-qemu-v2 > /dev/null
+        echo 'KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-qemu.toml /opt/kata/bin/containerd-shim-kata-v2 $@' | \
+          sudo tee -a /usr/local/bin/containerd-shim-kata-qemu-v2 > /dev/null
+
+        sudo chmod +x /usr/local/bin/containerd-shim-kata-qemu-v2
+
+        line_number=$(grep -n 'containerd.runtimes]' "$file_path" | cut -d ":" -f 1)
+
+        sed -i "$((line_number + 1)) a\         [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.kata-fc]" "$file_path"
+        sed -i "$((line_number + 2)) a\           runtime_type = \"io.containerd.kata-fc.v2\"\n" "$file_path"
+        sed -i "$((line_number + 3)) a\         [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.kata-qemu]" "$file_path"
+        sed -i "$((line_number + 4)) a\           runtime_type = \"io.containerd.kata-qemu.v2\"\n" "$file_path"
+
+        sudo systemctl restart containerd
+
+    - name: Use overlayfs
+      shell: |
+        sudo sed -i 's/snapshotter = "devmapper"/snapshotter = "overlayfs"/g' "/etc/containerd/config.toml"
+        sudo systemctl restart containerd
+      when: use_overlayfs | bool
+
+    - name: Enable kata tracing
+      shell: |
+        # removes the comment from the runtime enable_tracing parameter in the configurations.
+        sudo sed -i '324s/#//' /opt/kata/share/defaults/kata-containers/configuration-fc.toml
+        sudo sed -i '588s/#//' /opt/kata/share/defaults/kata-containers/configuration-qemu.toml
+
+    - name: Install tracing tools
+      command: sudo snap install docker
+
+    - name: Ensure Docker service is started
+      service:
+        name: snap.docker.dockerd.service
+        state: started
+        enabled: true
+
+    - name: start tracing daemon
+      shell: |
+        sudo docker run -d --name jaeger \
+          -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
+          -e COLLECTOR_OTLP_ENABLED=true \
+          -p 6831:6831/udp \
+          -p 6832:6832/udp \
+          -p 5778:5778 \
+          -p 16686:16686 \
+          -p 4317:4317 \
+          -p 4318:4318 \
+          -p 14250:14250 \
+          -p 14268:14268 \
+          -p 14269:14269 \
+          -p 9411:9411 \
+          jaegertracing/all-in-one:1.47 --query.max-clock-skew-adjustment=20s
+
+    - name: create resetTracesFile
+      copy:
+        dest: /home/{{ username }}/resetTraces.sh
+        content: |
+          #!/bin/bash
+          sudo docker stop "$(sudo docker ps -aq)"
+          sudo docker rm "$(sudo docker ps -aq)"
+          sudo docker run -d --name jaeger \
+            -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
+            -e COLLECTOR_OTLP_ENABLED=true \
+            -p 6831:6831/udp \
+            -p 6832:6832/udp \
+            -p 5778:5778 \
+            -p 16686:16686 \
+            -p 4317:4317 \
+            -p 4318:4318 \
+            -p 14250:14250 \
+            -p 14268:14268 \
+            -p 14269:14269 \
+            -p 9411:9411 \
+            jaegertracing/all-in-one:1.47 #--query.max-clock-skew-adjustment=20s
+
+    - name: chmod_x resetTraces
+      file:
+        path: /home/{{ username }}/resetTraces.sh
+        mode: "a+x"

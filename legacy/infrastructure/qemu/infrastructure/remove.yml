@@ -1,0 +1,26 @@
+---
+- hosts: all_hosts
+  tasks:
+    - name: Remove existing base image user data (if any)
+      shell: |
+        rm -f "{{ base_path }}/.continuum/images/user_data_base*.img"
+
+    - name: Remove existing cloud controller images (if any)
+      shell: |
+        rm -f "{{ base_path }}/.continuum/images/cloud_controller*.qcow2"
+        rm -f "{{ base_path }}/.continuum/images/user_data_cloud_controller*.img"
+
+    - name: Remove existing cloud images (if any)
+      shell: |
+        rm -f "{{ base_path }}/.continuum/images/cloud*.qcow2"
+        rm -f "{{ base_path }}/.continuum/images/user_data_cloud*.img"
+
+    - name: Remove existing edge images (if any)
+      shell: |
+        rm -f "{{ base_path }}/.continuum/images/edge*.qcow2"
+        rm -f "{{ base_path }}/.continuum/images/user_data_edge*.img"
+
+    - name: Remove existing endpoint images (if any)
+      shell: |
+        rm -f "{{ base_path }}/.continuum/images/endpoint*.qcow2"
+        rm -f "{{ base_path }}/.continuum/images/user_data_endpoint*.img"

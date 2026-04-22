@@ -1,0 +1,84 @@
+---
+- name: Create cloud images
+  hosts: clouds
+
+  vars:
+    continuum_dir: "{{ base_path }}/.continuum"
+    images_dir: "{{ continuum_dir }}/images"
+    base_image: "{{ images_dir }}/{{ base_cloud }}.qcow2"
+
+  tasks:
+    # -----------------------------
+    # Preflight checks (fail fast with clean errors)
+    # -----------------------------
+    - name: Check Continuum folder exists
+      ansible.builtin.stat:
+        path: "{{ continuum_dir }}"
+      register: continuum_dir_stat
+
+    - name: Fail if Continuum folder is missing
+      ansible.builtin.fail:
+        msg: >-
+          Continuum folder is missing or not a directory: {{ continuum_dir }}.
+          This playbook expects it to be created by a prior step/playbook.
+      when: not continuum_dir_stat.stat.isdir
+
+    - name: Check base qcow2 image exists
+      ansible.builtin.stat:
+        path: "{{ base_image }}"
+      register: base_image_stat
+
+    - name: Fail if base qcow2 image is missing
+      ansible.builtin.fail:
+        msg: >-
+          Base image does not exist (or is not a regular file): {{ base_image }}.
+          Create it with the base_start playbook first.
+      when: not base_image_stat.stat.isreg
+
+    - name: Ensure images directory exists and is writable
+      ansible.builtin.file:
+        path: "{{ images_dir }}"
+        state: directory
+        mode: "0755"
+
+    # -----------------------------
+    # Build a simple list of nodes
+    # -----------------------------
+    - name: Initialize nodes list
+      ansible.builtin.set_fact:
+        nodes: []
+
+    - name: Add controller node
+      ansible.builtin.set_fact:
+        nodes: "{{ nodes + [{'name': 'cloud_controller'}] }}"
+      when: (cloud_controller | int) > 0
+
+    - name: Add cloud nodes
+      ansible.builtin.set_fact:
+        nodes: "{{ nodes + [{ 'name': 'cloud' ~ (item | string)}] }}"
+      loop: "{{ range(cloud_start | int, (cloud_end | int) + 1) | list }}"
+
+    # -----------------------------
+    # Create qcow2 overlays + cloud-init disks
+    # -----------------------------
+    - name: Create qcow2 overlay images (backed by base)
+      ansible.builtin.command:
+        cmd: >
+          qemu-img create -f qcow2 -F qcow2
+          -b {{ base_image }}
+          {{ images_dir }}/{{ item.name }}_{{ username }}.qcow2
+        creates: "{{ images_dir }}/{{ item.name }}_{{ username }}.qcow2"
+      loop: "{{ nodes }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Create cloud-init disks (cloud-localds)
+      ansible.builtin.command:
+        cmd: >
+          cloud-localds
+          {{ images_dir }}/user_data_{{ item.name }}_{{ username }}.img
+          {{ continuum_dir }}/user_data_{{ item.name }}_{{ username }}.yml
+        creates: "{{ images_dir }}/user_data_{{ item.name }}_{{ username }}.img"
+      loop: "{{ nodes }}"
+      loop_control:
+        label: "{{ item.name }}"

@@ -1,0 +1,87 @@
+---
+- hosts: base
+  become: true
+  tasks:
+    - name: Copy modded MahiMahi folder
+      copy:
+        src: "{{ continuum_home }}/mahimahi/"
+        dest: /home/mahimahi/
+
+    - name: Install build dependencies
+      apt:
+        update_cache: true
+        state: present
+        name:
+          - protobuf-compiler
+          - libprotobuf-dev
+          - autoconf
+          - automake
+          - libtool
+          - autotools-dev
+          - dh-autoreconf
+          - pkg-config
+          - iptables
+          - dnsmasq-base
+          - apache2-bin
+          - debhelper
+          - libssl-dev
+          - ssl-cert
+          - libxcb-present-dev
+          - libcairo2-dev
+          - libpango1.0-dev
+          - apache2-dev
+          - g++-7
+
+    - name: Set up GCC 7 as an alternative
+      alternatives:
+        name: gcc
+        path: /usr/bin/gcc-7
+        link: /usr/bin/gcc
+        priority: 60
+        slaves:
+          - name: g++
+            path: /usr/bin/g++-7
+            link: /usr/bin/g++
+
+    - name: Make autogen.sh executable
+      file:
+        path: /home/mahimahi/autogen.sh
+        mode: '0755'
+        state: file
+
+    - name: Execute autogen.sh script
+      command: ./autogen.sh
+      args:
+        chdir: /home/mahimahi
+
+    - name: Execute configure script
+      command: ./configure
+      args:
+        chdir: /home/mahimahi
+
+    - name: Make
+      command: make
+      args:
+        chdir: /home/mahimahi
+
+    - name: Make install
+      command: make install
+      args:
+        chdir: /home/mahimahi
+
+    - name: Ensure setup_container.sh is executable
+      file:
+        path: /home/mahimahi/setup_container.sh
+        mode: '0755'
+
+    - name: Ensure setup_traffic.sh is executable
+      file:
+        path: /home/mahimahi/setup_traffic.sh
+        mode: '0755'
+
+    - name: Enable IPv4 forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        reload: yes
