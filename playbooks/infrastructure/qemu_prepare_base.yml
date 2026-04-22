@@ -1,0 +1,12 @@
+---
+- name: Prepare base images for QEMU
+  hosts: all_hosts
+  tasks:
+    - name: Prepare base images for this host
+      ansible.builtin.include_role:
+        name: qemu_base_image
+      vars:
+        image_name: "{{ item }}"
+      loop: "{{ continuum_base_images_by_host[inventory_hostname] | default([]) }}"
+      loop_control:
+        label: "{{ item }}"

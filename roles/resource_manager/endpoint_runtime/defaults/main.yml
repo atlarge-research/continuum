@@ -1,0 +1,3 @@
+---
+rm_endpoint_runtime_username: >-
+  {{ username | default(continuum_username | default('ubuntu')) }}

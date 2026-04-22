@@ -1,0 +1,9 @@
+---
+# List of VM node names to generate, e.g. ["cloud_controller", "cloud0"].
+vm_nodes: []
+# Name of the base image backing generated overlays.
+base_image_name: ""
+# Base path where .continuum runtime assets live.
+base_path: ""
+# VM username suffix used in generated image names.
+username: ""

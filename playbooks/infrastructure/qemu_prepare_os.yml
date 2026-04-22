@@ -1,0 +1,5 @@
+---
+- name: Prepare shared OS image for QEMU
+  hosts: all_hosts
+  roles:
+    - role: qemu_os_image

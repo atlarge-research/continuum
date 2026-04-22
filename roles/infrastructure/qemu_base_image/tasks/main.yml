@@ -1,0 +1,72 @@
+---
+- name: Validate base image name input
+  ansible.builtin.assert:
+    that:
+      - image_name | length > 0
+    fail_msg: "qemu_base_image role requires image_name to be set."
+
+- name: Validate base path input
+  ansible.builtin.assert:
+    that:
+      - base_path | length > 0
+    fail_msg: "qemu_base_image role requires base_path to be set."
+
+- name: Ensure QEMU images directory exists
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images"
+    state: directory
+    mode: "0755"
+
+- name: Check qemu-img is available on host
+  ansible.builtin.command: which qemu-img
+  register: qemu_base_image_qemu_img
+  changed_when: false
+  failed_when: false
+
+- name: Fail when qemu-img is missing
+  ansible.builtin.fail:
+    msg: >-
+      qemu-img is required on the QEMU host to prepare base images.
+      Install host prerequisites first.
+  when: qemu_base_image_qemu_img.rc != 0
+
+- name: Check cloud-localds is available on host
+  ansible.builtin.command: which cloud-localds
+  register: qemu_base_image_cloud_localds
+  changed_when: false
+  failed_when: false
+
+- name: Fail when cloud-localds is missing
+  ansible.builtin.fail:
+    msg: >-
+      cloud-localds is required on the QEMU host to prepare cloud-init disks.
+      Install host prerequisites first.
+  when: qemu_base_image_cloud_localds.rc != 0
+
+- name: Check Ubuntu qcow2 source image exists
+  ansible.builtin.stat:
+    path: "{{ base_path }}/.continuum/images/ubuntu2004.qcow2"
+  register: qemu_base_source_stat
+
+- name: Fail when Ubuntu source image is missing
+  ansible.builtin.fail:
+    msg: >-
+      Required source image is missing: {{ base_path }}/.continuum/images/ubuntu2004.qcow2.
+      Run the qemu_os_image role first.
+  when: not qemu_base_source_stat.stat.exists
+
+- name: Create base qcow2 image
+  ansible.builtin.command: >
+    qemu-img create -f qcow2 -F qcow2
+    -b {{ base_path }}/.continuum/images/ubuntu2004.qcow2
+    {{ base_path }}/.continuum/images/{{ image_name }}.qcow2
+  args:
+    creates: "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
+
+- name: Create cloud-init disk for base image
+  ansible.builtin.command: >
+    cloud-localds
+    {{ base_path }}/.continuum/images/user_data_{{ image_name }}.img
+    {{ base_path }}/.continuum/user_data_{{ image_name }}.yml
+  args:
+    creates: "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"

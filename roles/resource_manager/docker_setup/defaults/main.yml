@@ -1,0 +1,5 @@
+---
+rm_docker_setup_registry_ip: >-
+  {{ registry_ip | default(continuum_registry_ip | default('')) }}
+rm_docker_setup_username: >-
+  {{ username | default(continuum_username | default('ubuntu')) }}

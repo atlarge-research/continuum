@@ -1,0 +1,60 @@
+---
+- name: Install mosquitto on edge node
+  ansible.builtin.apt:
+    name: "mosquitto=1.6.9-1"
+    state: present
+    update_cache: true
+
+- name: Ensure mosquitto service is enabled and running
+  ansible.builtin.systemd:
+    name: mosquitto
+    state: started
+    enabled: true
+
+- name: Wait for join token file on local controller
+  ansible.builtin.wait_for:
+    path: "{{ rm_kubeedge_edge_join_continuum_home }}/join-command.txt"
+    timeout: 900
+  delegate_to: localhost
+  become: false
+
+- name: Copy KubeEdge join token to edge node
+  ansible.builtin.copy:
+    src: "{{ rm_kubeedge_edge_join_continuum_home }}/join-command.txt"
+    dest: /tmp/join-command.txt
+    mode: "0644"
+
+- name: Check whether edge node is already joined
+  ansible.builtin.stat:
+    path: /etc/kubeedge/config/edgecore.yaml
+  register: rm_kubeedge_edge_join_state
+
+- name: Join edge node to CloudCore
+  ansible.builtin.shell: >-
+    keadm join
+    --cloudcore-ipport={{ rm_kubeedge_edge_join_cloud_ip }}:10000
+    --token=$(cat /tmp/join-command.txt)
+    --kubeedge-version={{ rm_kubeedge_edge_join_kubeedge_version }}
+  args:
+    executable: /bin/bash
+    creates: /etc/kubeedge/config/edgecore.yaml
+  when: not rm_kubeedge_edge_join_state.stat.exists
+
+- name: Remove temporary KubeEdge join token file
+  ansible.builtin.file:
+    path: /tmp/join-command.txt
+    state: absent
+
+- name: Enable edgeStream in edgecore config
+  ansible.builtin.replace:
+    path: /etc/kubeedge/config/edgecore.yaml
+    backup: true
+    regexp: "(\\n\\s*edgeStream:\\s*\\n(?:.*\\n)*?\\s*enable:\\s*)false\\b"
+    replace: "\\1true"
+
+- name: Restart edgecore service
+  ansible.builtin.systemd:
+    name: edgecore
+    state: restarted
+    enabled: true
+    daemon_reload: true

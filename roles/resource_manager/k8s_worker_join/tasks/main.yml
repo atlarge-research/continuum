@@ -1,0 +1,67 @@
+---
+- name: Persist required kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    mode: "0644"
+    content: |
+      overlay
+      br_netfilter
+
+- name: Load required kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Configure Kubernetes networking sysctls
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - name: net.bridge.bridge-nf-call-iptables
+      value: "1"
+    - name: net.bridge.bridge-nf-call-ip6tables
+      value: "1"
+    - name: net.ipv4.ip_forward
+      value: "1"
+
+- name: Wait for join command to exist on control machine
+  ansible.builtin.wait_for:
+    path: "{{ rm_k8s_worker_join_continuum_home }}/join-command.txt"
+    timeout: 600
+  delegate_to: localhost
+  become: false
+
+- name: Copy join command to worker
+  ansible.builtin.copy:
+    src: "{{ rm_k8s_worker_join_continuum_home }}/join-command.txt"
+    dest: /tmp/join-command.txt
+    mode: "0755"
+
+- name: Add ignore preflight flag to join command when requested
+  ansible.builtin.lineinfile:
+    path: /tmp/join-command.txt
+    regexp: "^(.*)$"
+    line: "\\1 --ignore-preflight-errors all"
+    backrefs: true
+  when: rm_k8s_worker_join_ignore_preflight_errors | bool
+
+- name: Check whether worker already joined the cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: rm_k8s_worker_join_kubelet_conf
+
+- name: Execute cluster join command
+  ansible.builtin.command: bash /tmp/join-command.txt
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  when: not rm_k8s_worker_join_kubelet_conf.stat.exists
+
+- name: Remove temporary join command
+  ansible.builtin.file:
+    path: /tmp/join-command.txt
+    state: absent

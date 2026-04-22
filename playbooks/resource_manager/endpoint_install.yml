@@ -1,0 +1,8 @@
+---
+- name: Prepare endpoint hosts and endpoint base images
+  hosts: endpoints:base_endpoint
+  become: true
+  roles:
+    - role: endpoint_prereqs
+    - role: docker_setup
+    - role: endpoint_runtime

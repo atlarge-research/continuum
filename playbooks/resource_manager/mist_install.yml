@@ -1,0 +1,7 @@
+---
+- name: Configure Mist edge nodes
+  hosts: edges
+  become: true
+  roles:
+    - role: docker_setup
+    - role: mosquitto

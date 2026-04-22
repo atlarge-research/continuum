@@ -1,0 +1,12 @@
+---
+- name: Install mosquitto broker package
+  ansible.builtin.apt:
+    name: "mosquitto={{ rm_mosquitto_version }}"
+    state: present
+    update_cache: true
+
+- name: Ensure mosquitto service is enabled and running
+  ansible.builtin.systemd:
+    name: mosquitto
+    state: started
+    enabled: true

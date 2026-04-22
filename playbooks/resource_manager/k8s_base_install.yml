@@ -1,0 +1,12 @@
+---
+- name: Prepare Kubernetes-family base images
+  hosts: base_cloud:base_edge
+  become: true
+  roles:
+    - role: k8s_prereqs
+    - role: containerd_setup
+    - role: k8s_binary_override
+      when:
+        - (continuum_install_binary_override | default(false))
+          or ("kubecontrol" in inventory_hostname)
+          or ("kube_kata" in inventory_hostname)

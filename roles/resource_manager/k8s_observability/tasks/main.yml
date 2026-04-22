@@ -1,0 +1,48 @@
+---
+- name: Apply kube-prometheus setup manifests
+  ansible.builtin.command: kubectl apply -f /kube-prometheus/manifests/setup
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for CRDs to be established
+  ansible.builtin.command: kubectl wait --for=condition=Established --all crd --timeout=5m
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Apply kube-prometheus manifests
+  ansible.builtin.command: kubectl apply -f /kube-prometheus/manifests/
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for Grafana deployment availability
+  ansible.builtin.command: kubectl -n monitoring wait --for=condition=Available deployment/grafana --timeout=20m
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Ensure Grafana port-forward is running
+  ansible.builtin.shell: |
+    cmd="kubectl port-forward --namespace=monitoring"
+    cmd="$cmd --address={{ rm_k8s_observability_cloud_ip }},{{ rm_k8s_observability_cloud_ip_external }}"
+    cmd="$cmd svc/grafana 3000:3000"
+    pgrep -f "$cmd" >/dev/null || nohup $cmd >/dev/null 2>&1 &
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Ensure Prometheus port-forward is running
+  ansible.builtin.shell: |
+    cmd="kubectl port-forward --namespace=monitoring"
+    cmd="$cmd --address={{ rm_k8s_observability_cloud_ip }},{{ rm_k8s_observability_cloud_ip_external }}"
+    cmd="$cmd svc/prometheus-k8s 9090:9090"
+    pgrep -f "$cmd" >/dev/null || nohup $cmd >/dev/null 2>&1 &
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false

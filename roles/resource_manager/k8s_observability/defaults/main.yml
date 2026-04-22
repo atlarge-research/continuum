@@ -1,0 +1,6 @@
+---
+rm_k8s_observability_cloud_ip: >-
+  {{ cloud_ip | default(continuum_cloud_ip | default('127.0.0.1')) }}
+rm_k8s_observability_cloud_ip_external: >-
+  {{ cloud_ip_external | default(continuum_cloud_ip_external |
+  default(rm_k8s_observability_cloud_ip)) }}

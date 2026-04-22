@@ -1,0 +1,37 @@
+---
+- name: Install docker engine package
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+    update_cache: true
+
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ rm_docker_setup_username }}"
+    groups: docker
+    append: true
+
+- name: Configure insecure docker registry
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {
+        "insecure-registries": ["{{ rm_docker_setup_registry_ip }}"]
+      }
+  when: rm_docker_setup_registry_ip | length > 0
+  register: rm_docker_setup_registry_cfg
+
+- name: Ensure docker service is enabled and running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Restart docker after config update
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  when: rm_docker_setup_registry_cfg is defined and rm_docker_setup_registry_cfg.changed

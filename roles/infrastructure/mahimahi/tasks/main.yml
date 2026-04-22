@@ -1,0 +1,95 @@
+---
+- name: Copy Mahimahi source tree to target nodes
+  ansible.builtin.copy:
+    src: "{{ mahimahi_source_dir }}"
+    dest: "{{ mahimahi_build_dir }}/"
+    mode: "0755"
+
+- name: Install Mahimahi build dependencies
+  ansible.builtin.apt:
+    update_cache: true
+    state: present
+    name:
+      - protobuf-compiler
+      - libprotobuf-dev
+      - autoconf
+      - automake
+      - libtool
+      - autotools-dev
+      - dh-autoreconf
+      - pkg-config
+      - iptables
+      - dnsmasq-base
+      - apache2-bin
+      - debhelper
+      - libssl-dev
+      - ssl-cert
+      - libxcb-present-dev
+      - libcairo2-dev
+      - libpango1.0-dev
+      - apache2-dev
+      - g++-7
+
+- name: Set GCC 7 as default alternative
+  community.general.alternatives:
+    name: gcc
+    path: /usr/bin/gcc-7
+    link: /usr/bin/gcc
+    priority: 60
+    slaves:
+      - name: g++
+        path: /usr/bin/g++-7
+        link: /usr/bin/g++
+
+- name: Check whether Mahimahi binary is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/mm-link
+  register: mahimahi_installed
+
+- name: Ensure autogen script is executable
+  ansible.builtin.file:
+    path: "{{ mahimahi_build_dir }}/autogen.sh"
+    state: file
+    mode: "0755"
+  when: not mahimahi_installed.stat.exists
+
+- name: Run Mahimahi autogen step
+  ansible.builtin.command: ./autogen.sh
+  args:
+    chdir: "{{ mahimahi_build_dir }}"
+  when: not mahimahi_installed.stat.exists
+
+- name: Run Mahimahi configure step
+  ansible.builtin.command: ./configure
+  args:
+    chdir: "{{ mahimahi_build_dir }}"
+  when: not mahimahi_installed.stat.exists
+
+- name: Build Mahimahi
+  ansible.builtin.command: make
+  args:
+    chdir: "{{ mahimahi_build_dir }}"
+  when: not mahimahi_installed.stat.exists
+
+- name: Install Mahimahi
+  ansible.builtin.command: make install
+  args:
+    chdir: "{{ mahimahi_build_dir }}"
+    creates: /usr/local/bin/mm-link
+
+- name: Ensure setup_container.sh is executable
+  ansible.builtin.file:
+    path: "{{ mahimahi_build_dir }}/setup_container.sh"
+    mode: "0755"
+
+- name: Ensure setup_traffic.sh is executable
+  ansible.builtin.file:
+    path: "{{ mahimahi_build_dir }}/setup_traffic.sh"
+    mode: "0755"
+
+- name: Enable IPv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: true

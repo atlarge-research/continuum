@@ -1,0 +1,8 @@
+---
+rm_kubeedge_prereqs_repo_major_minor: "v1.31"
+rm_kubeedge_prereqs_k8s_pkg_version: "1.31.14-1.1"
+rm_kubeedge_prereqs_kubeedge_version: "v1.22.0"
+rm_kubeedge_prereqs_registry_ip: >-
+  {{ registry_ip | default(continuum_registry_ip | default('')) }}
+rm_kubeedge_prereqs_username: >-
+  {{ username | default(continuum_username | default('ubuntu')) }}

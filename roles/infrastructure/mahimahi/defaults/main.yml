@@ -1,0 +1,5 @@
+---
+# Directory where copied Mahimahi sources are built on target nodes.
+mahimahi_build_dir: "/home/mahimahi"
+# Source directory on control machine, copied to targets.
+mahimahi_source_dir: "{{ continuum_repo_root }}/mahimahi/"

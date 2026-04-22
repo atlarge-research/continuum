@@ -1,0 +1,5 @@
+---
+# Netperf source archive URL.
+netperf_src_url: "https://github.com/HewlettPackard/netperf/archive/refs/tags/netperf-2.7.0.tar.gz"
+# Build directory created by the Netperf archive extraction.
+netperf_build_dir: "/tmp/netperf-netperf-2.7.0"

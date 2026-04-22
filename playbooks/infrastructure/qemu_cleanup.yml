@@ -1,0 +1,5 @@
+---
+- name: Remove stale QEMU artifacts
+  hosts: all_hosts
+  roles:
+    - role: qemu_cleanup

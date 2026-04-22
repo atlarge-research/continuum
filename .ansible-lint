@@ -1,0 +1,6 @@
+---
+# Keep variable names readable while still enforcing lowercase snake_case.
+# We intentionally do not require role-name prefixes like "<role>_".
+var_naming_pattern: "^[a-z_][a-z0-9_]*$"
+skip_list:
+  - var-naming[no-role-prefix]

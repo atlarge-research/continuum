@@ -1,0 +1,146 @@
+---
+- name: Configure kubelet node ip
+  ansible.builtin.lineinfile:
+    path: /etc/default/kubelet
+    line: "KUBELET_EXTRA_ARGS=--node-ip={{ rm_k8s_control_plane_cloud_ip }}"
+    create: true
+    mode: "0644"
+
+- name: Restart kubelet
+  ansible.builtin.systemd:
+    name: kubelet
+    daemon_reload: true
+    state: restarted
+
+- name: Persist required kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    mode: "0644"
+    content: |
+      overlay
+      br_netfilter
+
+- name: Load required kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Configure Kubernetes networking sysctls
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - name: net.bridge.bridge-nf-call-iptables
+      value: "1"
+    - name: net.bridge.bridge-nf-call-ip6tables
+      value: "1"
+    - name: net.ipv4.ip_forward
+      value: "1"
+
+- name: Check if control-plane is already initialized
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: rm_k8s_control_plane_admin_conf
+
+- name: Initialize Kubernetes cluster with kubeadm config file
+  ansible.builtin.command: >-
+    kubeadm init
+    --node-name {{ ansible_hostname }}
+    {% if rm_k8s_control_plane_ignore_preflight_errors %}--ignore-preflight-errors all{% endif %}
+    --config {{ rm_k8s_control_plane_kubeadm_config_file }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+  when:
+    - not rm_k8s_control_plane_admin_conf.stat.exists
+    - rm_k8s_control_plane_kubeadm_config_file | length > 0
+
+- name: Initialize Kubernetes cluster with default kubeadm options
+  ansible.builtin.command: >-
+    kubeadm init
+    --apiserver-advertise-address={{ rm_k8s_control_plane_cloud_ip }}
+    --apiserver-cert-extra-sans={{ rm_k8s_control_plane_cloud_ip }}
+    --node-name {{ ansible_hostname }}
+    {% if rm_k8s_control_plane_ignore_preflight_errors %}--ignore-preflight-errors all{% endif %}
+    --pod-network-cidr=10.244.0.0/16
+  args:
+    creates: /etc/kubernetes/admin.conf
+  when:
+    - not rm_k8s_control_plane_admin_conf.stat.exists
+    - rm_k8s_control_plane_kubeadm_config_file | length == 0
+
+- name: Ensure user kubeconfig directory exists
+  ansible.builtin.file:
+    path: "/home/{{ rm_k8s_control_plane_username }}/.kube"
+    state: directory
+    owner: "{{ rm_k8s_control_plane_username }}"
+    group: "{{ rm_k8s_control_plane_username }}"
+    mode: "0755"
+
+- name: Copy admin kubeconfig to user home
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ rm_k8s_control_plane_username }}/.kube/config"
+    owner: "{{ rm_k8s_control_plane_username }}"
+    group: "{{ rm_k8s_control_plane_username }}"
+    mode: "0600"
+    remote_src: true
+
+- name: Persist KUBECONFIG in /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: "export KUBECONFIG=/home/{{ rm_k8s_control_plane_username }}/.kube/config"
+    create: true
+    mode: "0644"
+
+- name: Check whether flannel is already installed
+  ansible.builtin.stat:
+    path: /etc/cni/net.d/10-flannel.conflist
+  register: rm_k8s_control_plane_flannel_state
+  when: (rm_k8s_control_plane_cloud_mode | int) > 0
+
+- name: Install Flannel CNI
+  ansible.builtin.command: >-
+    kubectl apply -f {{ rm_k8s_control_plane_flannel_manifest }}
+  when:
+    - (rm_k8s_control_plane_cloud_mode | int) > 0
+    - not rm_k8s_control_plane_flannel_state.stat.exists
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Generate kubeadm worker join command
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: rm_k8s_control_plane_join_cmd
+  changed_when: false
+
+- name: Write worker join command script
+  ansible.builtin.copy:
+    dest: /tmp/join-command.txt
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      {{ rm_k8s_control_plane_join_cmd.stdout }}
+
+- name: Ensure local continuum directory exists for join command
+  ansible.builtin.file:
+    path: "{{ rm_k8s_control_plane_continuum_home }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Fetch join command file to local controller
+  ansible.builtin.fetch:
+    src: /tmp/join-command.txt
+    dest: "{{ rm_k8s_control_plane_continuum_home }}/"
+    flat: true
+
+- name: Remove temporary join command on control plane
+  ansible.builtin.file:
+    path: /tmp/join-command.txt
+    state: absent

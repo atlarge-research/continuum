@@ -1,0 +1,5 @@
+---
+rm_k8s_binary_override_tarball_path: >-
+  /mnt/sdb/matthijs/kubernetes-node-linux-amd64-{{ kubeversionstrp
+  | default(continuum_kubeversionstrp | default('1270')) }}.tar.gz
+rm_k8s_binary_override_remote_archive: /tmp/kubernetes-node-linux-amd64.tar.gz

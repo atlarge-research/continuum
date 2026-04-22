@@ -1,0 +1,33 @@
+---
+- name: Create QEMU overlay images for all tiers
+  hosts: all_hosts
+  tasks:
+    - name: Create cloud VM images for this host
+      ansible.builtin.include_role:
+        name: qemu_vm_image
+      vars:
+        base_image_name: "{{ cloud_base_image_by_host[inventory_hostname] | default('') }}"
+        vm_nodes: "{{ cloud_vm_nodes_by_host[inventory_hostname] | default([]) }}"
+      when:
+        - (cloud_vm_nodes_by_host[inventory_hostname] | default([])) | length > 0
+        - (cloud_base_image_by_host[inventory_hostname] | default('')) | length > 0
+
+    - name: Create edge VM images for this host
+      ansible.builtin.include_role:
+        name: qemu_vm_image
+      vars:
+        base_image_name: "{{ edge_base_image_by_host[inventory_hostname] | default('') }}"
+        vm_nodes: "{{ edge_vm_nodes_by_host[inventory_hostname] | default([]) }}"
+      when:
+        - (edge_vm_nodes_by_host[inventory_hostname] | default([])) | length > 0
+        - (edge_base_image_by_host[inventory_hostname] | default('')) | length > 0
+
+    - name: Create endpoint VM images for this host
+      ansible.builtin.include_role:
+        name: qemu_vm_image
+      vars:
+        base_image_name: "{{ endpoint_base_image_by_host[inventory_hostname] | default('') }}"
+        vm_nodes: "{{ endpoint_vm_nodes_by_host[inventory_hostname] | default([]) }}"
+      when:
+        - (endpoint_vm_nodes_by_host[inventory_hostname] | default([])) | length > 0
+        - (endpoint_base_image_by_host[inventory_hostname] | default('')) | length > 0

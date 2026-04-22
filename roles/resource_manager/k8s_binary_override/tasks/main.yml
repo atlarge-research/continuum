@@ -1,0 +1,48 @@
+---
+- name: Stop kubelet before replacing binaries
+  ansible.builtin.systemd:
+    name: kubelet
+    state: stopped
+    daemon_reload: true
+
+- name: Copy Kubernetes node tarball
+  ansible.builtin.copy:
+    src: "{{ rm_k8s_binary_override_tarball_path }}"
+    dest: "{{ rm_k8s_binary_override_remote_archive }}"
+    mode: "0644"
+
+- name: Extract Kubernetes node tarball
+  ansible.builtin.unarchive:
+    src: "{{ rm_k8s_binary_override_remote_archive }}"
+    dest: /tmp/
+    remote_src: true
+
+- name: Overwrite Kubernetes binaries in /usr/bin
+  ansible.builtin.copy:
+    src: /tmp/kubernetes/node/bin/
+    dest: /usr/bin/
+    remote_src: true
+    mode: preserve
+    force: true
+
+- name: Configure crictl endpoints
+  ansible.builtin.copy:
+    dest: /etc/crictl.yaml
+    mode: "0644"
+    content: |
+      runtime-endpoint: unix:///run/containerd/containerd.sock
+      image-endpoint: unix:///run/containerd/containerd.sock
+
+- name: Start kubelet after binary override
+  ansible.builtin.systemd:
+    name: kubelet
+    state: started
+    daemon_reload: true
+
+- name: Remove temporary Kubernetes override archive
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ rm_k8s_binary_override_remote_archive }}"
+    - /tmp/kubernetes

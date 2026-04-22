@@ -1,0 +1,48 @@
+---
+- name: Validate vm_nodes input type
+  ansible.builtin.assert:
+    that:
+      - vm_nodes is sequence
+    fail_msg: "qemu_vm_image role expects vm_nodes to be a list."
+
+- name: Ensure QEMU images directory exists
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images"
+    state: directory
+    mode: "0755"
+
+- name: Check base image exists
+  ansible.builtin.stat:
+    path: "{{ base_path }}/.continuum/images/{{ base_image_name }}.qcow2"
+  register: qemu_vm_base_stat
+
+- name: Fail if base image is missing for VM generation
+  ansible.builtin.fail:
+    msg: >-
+      Base image not found: {{ base_path }}/.continuum/images/{{ base_image_name }}.qcow2.
+      Ensure the corresponding base image role has completed.
+  when:
+    - vm_nodes | length > 0
+    - not qemu_vm_base_stat.stat.exists
+
+- name: Create qcow2 overlay images for VM nodes
+  ansible.builtin.command: >
+    qemu-img create -f qcow2 -F qcow2
+    -b {{ base_path }}/.continuum/images/{{ base_image_name }}.qcow2
+    {{ base_path }}/.continuum/images/{{ item }}.qcow2
+  args:
+    creates: "{{ base_path }}/.continuum/images/{{ item }}.qcow2"
+  loop: "{{ vm_nodes }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Create cloud-init disks for VM nodes
+  ansible.builtin.command: >
+    cloud-localds
+    {{ base_path }}/.continuum/images/user_data_{{ item }}.img
+    {{ base_path }}/.continuum/user_data_{{ item }}.yml
+  args:
+    creates: "{{ base_path }}/.continuum/images/user_data_{{ item }}.img"
+  loop: "{{ vm_nodes }}"
+  loop_control:
+    label: "{{ item }}"

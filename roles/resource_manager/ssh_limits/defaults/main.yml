@@ -1,0 +1,3 @@
+---
+rm_ssh_limits_max_sessions: 10000
+rm_ssh_limits_max_startups: 10000

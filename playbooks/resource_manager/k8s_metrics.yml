@@ -1,0 +1,6 @@
+---
+- name: Install Kubernetes metrics components
+  hosts: cloudcontroller
+  become: true
+  roles:
+    - role: k8s_metrics_server

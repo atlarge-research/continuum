@@ -1,0 +1,99 @@
+---
+- name: Install Kubernetes prerequisite packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+      - software-properties-common
+      - git
+    state: present
+    update_cache: true
+
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Load required kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Persist required kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    mode: "0644"
+    content: |
+      overlay
+      br_netfilter
+
+- name: Ensure Kubernetes networking sysctls are configured
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - name: net.ipv4.ip_forward
+      value: "1"
+    - name: net.bridge.bridge-nf-call-iptables
+      value: "1"
+    - name: net.bridge.bridge-nf-call-ip6tables
+      value: "1"
+
+- name: Disable swap when enabled
+  ansible.builtin.command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+  changed_when: ansible_swaptotal_mb > 0
+
+- name: Disable swap persistently in fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: "^(.*\\s+swap\\s+.*)$"
+    replace: "# \\1"
+
+- name: Download Kubernetes apt repo release key
+  ansible.builtin.get_url:
+    url: >-
+      https://pkgs.k8s.io/core:/stable:/{{ 'v1.29'
+      if rm_k8s_repo_major == 'v1.27'
+      else rm_k8s_repo_major }}/deb/Release.key
+    dest: /tmp/kubernetes-release.key
+    mode: "0644"
+
+- name: Install Kubernetes apt keyring
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Configure Kubernetes apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    mode: "0644"
+    content: |
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ rm_k8s_repo_major }}/deb/ /
+
+- name: Install Kubernetes binaries
+  ansible.builtin.apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: true
+
+- name: Hold Kubernetes packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl

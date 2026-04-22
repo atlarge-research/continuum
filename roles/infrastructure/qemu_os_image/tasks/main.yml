@@ -1,0 +1,70 @@
+---
+- name: Ensure QEMU images directory exists
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images"
+    state: directory
+    mode: "0755"
+
+- name: Check curl is available on host
+  ansible.builtin.command: which curl
+  register: qemu_os_image_curl
+  changed_when: false
+  failed_when: false
+
+- name: Fail when curl is missing
+  ansible.builtin.fail:
+    msg: >-
+      curl is required on the QEMU host to download the Ubuntu source image.
+      Install host prerequisites first.
+  when: qemu_os_image_curl.rc != 0
+
+- name: Check qemu-img is available on host
+  ansible.builtin.command: which qemu-img
+  register: qemu_os_image_qemu_img
+  changed_when: false
+  failed_when: false
+
+- name: Fail when qemu-img is missing
+  ansible.builtin.fail:
+    msg: >-
+      qemu-img is required on the QEMU host to prepare VM images.
+      Install host prerequisites first.
+  when: qemu_os_image_qemu_img.rc != 0
+
+- name: Download Ubuntu source image
+  ansible.builtin.get_url:
+    url: "{{ qemu_os_image_source_url }}"
+    dest: "{{ base_path }}/.continuum/images/{{ qemu_os_image_download_name }}"
+    mode: "0644"
+
+- name: Convert Ubuntu source image to qcow2
+  ansible.builtin.command: >
+    qemu-img convert -O qcow2
+    {{ base_path }}/.continuum/images/{{ qemu_os_image_download_name }}
+    {{ base_path }}/.continuum/images/{{ qemu_os_image_qcow2_name }}
+  args:
+    creates: "{{ base_path }}/.continuum/images/{{ qemu_os_image_qcow2_name }}"
+
+- name: Remove downloaded source image
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images/{{ qemu_os_image_download_name }}"
+    state: absent
+
+- name: Check whether OS image resize marker exists
+  ansible.builtin.stat:
+    path: "{{ base_path }}/.continuum/images/.{{ qemu_os_image_qcow2_name }}_resized"
+  register: qemu_os_image_resize_marker
+
+- name: Resize qcow2 OS image once
+  ansible.builtin.command: >
+    qemu-img resize
+    {{ base_path }}/.continuum/images/{{ qemu_os_image_qcow2_name }}
+    {{ qemu_os_image_resize_delta }}
+  when: not qemu_os_image_resize_marker.stat.exists
+
+- name: Persist resize marker
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images/.{{ qemu_os_image_qcow2_name }}_resized"
+    state: touch
+    mode: "0644"
+  when: not qemu_os_image_resize_marker.stat.exists

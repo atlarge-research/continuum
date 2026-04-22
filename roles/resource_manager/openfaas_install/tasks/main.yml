@@ -1,0 +1,75 @@
+---
+- name: Install arkade
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -SLsf https://get.arkade.dev/ | sh
+  args:
+    executable: /bin/bash
+    creates: /usr/local/bin/arkade
+
+- name: Check if OpenFaaS namespace exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: openfaas
+    kubeconfig: "{{ rm_openfaas_install_kubeconfig }}"
+  register: openfaas_ns
+  changed_when: false
+
+- name: Install OpenFaaS CE with arkade
+  ansible.builtin.command: arkade install openfaas-ce
+  when: openfaas_ns.resources | length == 0
+  changed_when: true
+
+- name: Install faas-cli
+  ansible.builtin.command: arkade get faas-cli --path /usr/local/bin
+  args:
+    creates: /usr/local/bin/faas-cli
+
+- name: Wait for OpenFaaS gateway deployment
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: openfaas
+    name: gateway
+    kubeconfig: "{{ rm_openfaas_install_kubeconfig }}"
+    wait: true
+    wait_timeout: 1800
+    wait_sleep: 5
+    wait_condition:
+      type: Available
+      status: "True"
+  changed_when: false
+
+- name: Ensure OpenFaaS port-forward is running
+  ansible.builtin.shell: |
+    pgrep -f "kubectl port-forward -n openfaas svc/gateway {{ rm_openfaas_install_gateway_port }}:8080" >/dev/null \
+      || nohup kubectl port-forward -n openfaas svc/gateway {{ rm_openfaas_install_gateway_port }}:8080 >/dev/null 2>&1 &
+  args:
+    executable: /bin/bash
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ rm_openfaas_install_kubeconfig }}"
+
+- name: Wait for OpenFaaS gateway health endpoint
+  ansible.builtin.shell: |
+    for i in $(seq 1 60); do
+      curl -sf http://127.0.0.1:{{ rm_openfaas_install_gateway_port }}/healthz >/dev/null && exit 0
+      sleep 2
+    done
+    exit 1
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Login OpenFaaS CLI
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" \
+      | base64 --decode \
+      | faas-cli login --username admin --password-stdin
+  args:
+    executable: /bin/bash
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ rm_openfaas_install_kubeconfig }}"

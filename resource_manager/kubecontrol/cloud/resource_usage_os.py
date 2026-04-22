@@ -2,8 +2,8 @@
 
 import argparse
 import logging
-import sys
 import subprocess
+import sys
 import time
 
 
@@ -45,7 +45,7 @@ def execute(command):
             stderr=subprocess.PIPE,
         )
     except Exception as _:
-        sys.exit()
+        sys.exit(1)
 
     return process
 
@@ -64,22 +64,22 @@ def get_output(process):
 
     if not output:
         logging.error("stdout is empty, stderr: %s", " ".join(error))
-        sys.exit()
+        sys.exit(1)
     elif error:
         logging.error("stderr is not empty: %s", " ".join(error))
-        sys.exit()
+        sys.exit(1)
 
     # We only expect 1 line of output
     if len(output) != 1:
         logging.error("stdout should have contained only 1 line, stdout: %s", " ".join(output))
-        sys.exit()
+        sys.exit(1)
 
     # The output should be a float
     try:
         percentage = float(output[0].strip())
     except Exception as _:
         logging.error("Couldn't convert expected percentage to float: %s", " ".join(output))
-        sys.exit()
+        sys.exit(1)
 
     return percentage
 
@@ -131,7 +131,7 @@ def main(args):
                 logging.error(
                     "This line does not contain the expected %i columns: %s", len(columns), line
                 )
-                sys.exit()
+                sys.exit(1)
 
             f.write(line + "\n")
             f.flush()

@@ -1,0 +1,139 @@
+---
+- name: Configure kubelet node ip
+  ansible.builtin.lineinfile:
+    path: /etc/default/kubelet
+    line: "KUBELET_EXTRA_ARGS=--node-ip={{ rm_kubeedge_cloudcore_cloud_ip }}"
+    create: true
+    mode: "0644"
+
+- name: Restart kubelet
+  ansible.builtin.systemd:
+    name: kubelet
+    daemon_reload: true
+    state: restarted
+
+- name: Check whether Kubernetes control plane already exists
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: rm_kubeedge_cloudcore_admin_conf
+
+- name: Initialize Kubernetes control plane for KubeEdge
+  ansible.builtin.command: >-
+    kubeadm init
+    --kubernetes-version=v1.31.14
+    --apiserver-advertise-address={{ rm_kubeedge_cloudcore_cloud_ip }}
+    --apiserver-cert-extra-sans={{ rm_kubeedge_cloudcore_cloud_ip }}
+    --node-name {{ ansible_hostname }}
+    --pod-network-cidr=10.244.0.0/16
+  args:
+    creates: /etc/kubernetes/admin.conf
+  when: not rm_kubeedge_cloudcore_admin_conf.stat.exists
+
+- name: Ensure user kubeconfig directory exists
+  ansible.builtin.file:
+    path: "/home/{{ rm_kubeedge_cloudcore_username }}/.kube"
+    state: directory
+    owner: "{{ rm_kubeedge_cloudcore_username }}"
+    group: "{{ rm_kubeedge_cloudcore_username }}"
+    mode: "0755"
+
+- name: Copy admin kubeconfig to user
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ rm_kubeedge_cloudcore_username }}/.kube/config"
+    owner: "{{ rm_kubeedge_cloudcore_username }}"
+    group: "{{ rm_kubeedge_cloudcore_username }}"
+    mode: "0600"
+    remote_src: true
+
+- name: Install flannel CNI for KubeEdge cloud core
+  ansible.builtin.command: kubectl apply -f https://github.com/flannel-io/flannel/releases/download/v0.28.0/kube-flannel.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for flannel rollout
+  ansible.builtin.command: kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=600s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Initialize KubeEdge CloudCore
+  ansible.builtin.command: >-
+    keadm init
+    --kube-config=/etc/kubernetes/admin.conf
+    --advertise-address={{ rm_kubeedge_cloudcore_cloud_ip }}
+    --kubeedge-version={{ rm_kubeedge_cloudcore_kubeedge_version }}
+    --force
+    --set mosquitto.enabled=false
+    --set cloudCore.tolerations[0].key=node-role.kubernetes.io/control-plane
+    --set cloudCore.tolerations[0].operator=Exists
+    --set cloudCore.tolerations[0].effect=NoSchedule
+    --set cloudCore.tolerations[1].key=node-role.kubernetes.io/master
+    --set cloudCore.tolerations[1].operator=Exists
+    --set cloudCore.tolerations[1].effect=NoSchedule
+  changed_when: false
+
+- name: Wait for cloudcore deployment rollout
+  ansible.builtin.command: kubectl -n kubeedge rollout status deploy/cloudcore --timeout=600s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait until KubeEdge tokensecret exists
+  ansible.builtin.shell: |
+    set -e
+    for i in $(seq 1 60); do
+      kubectl -n kubeedge get secret tokensecret && exit 0
+      sleep 5
+    done
+    echo "tokensecret did not appear" && exit 1
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Get KubeEdge join token
+  ansible.builtin.command: "keadm gettoken --kube-config=/home/{{ rm_kubeedge_cloudcore_username }}/.kube/config"
+  register: rm_kubeedge_cloudcore_token
+  changed_when: false
+
+- name: Write KubeEdge join token file
+  ansible.builtin.copy:
+    dest: /tmp/join-command.txt
+    mode: "0644"
+    content: "{{ rm_kubeedge_cloudcore_token.stdout }}\n"
+
+- name: Ensure local continuum home exists for join token
+  ansible.builtin.file:
+    path: "{{ rm_kubeedge_cloudcore_continuum_home }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Fetch KubeEdge join token file
+  ansible.builtin.fetch:
+    src: /tmp/join-command.txt
+    dest: "{{ rm_kubeedge_cloudcore_continuum_home }}/"
+    flat: true
+
+- name: Remove temporary join token file on cloud core node
+  ansible.builtin.file:
+    path: /tmp/join-command.txt
+    state: absent
+
+- name: Add KubeEdge kubectl logs/exec DNAT rules
+  ansible.builtin.shell: |
+    iptables -t nat -C PREROUTING -p tcp --dport 10350 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003 \
+      || iptables -t nat -I PREROUTING 1 -p tcp --dport 10350 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003
+    iptables -t nat -C OUTPUT -p tcp --dport 10350 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003 \
+      || iptables -t nat -I OUTPUT 1 -p tcp --dport 10350 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003
+    iptables -t nat -C PREROUTING -p tcp --dport 10351 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003 \
+      || iptables -t nat -I PREROUTING 1 -p tcp --dport 10351 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003
+    iptables -t nat -C OUTPUT -p tcp --dport 10351 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003 \
+      || iptables -t nat -I OUTPUT 1 -p tcp --dport 10351 -j DNAT --to-destination {{ rm_kubeedge_cloudcore_cloud_ip }}:10003
+  args:
+    executable: /bin/bash
+  changed_when: false

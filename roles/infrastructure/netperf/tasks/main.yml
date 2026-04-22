@@ -1,0 +1,53 @@
+---
+- name: Install Netperf build dependencies
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+      - build-essential
+      - autoconf
+      - automake
+      - texinfo
+    state: present
+    update_cache: true
+
+- name: Download and extract Netperf source
+  ansible.builtin.unarchive:
+    src: "{{ netperf_src_url }}"
+    dest: "/tmp"
+    remote_src: true
+  register: netperf_download
+  until: netperf_download is succeeded
+  retries: 5
+  delay: 10
+
+- name: Remove Netperf source archive
+  ansible.builtin.file:
+    path: "/tmp/netperf-2.7.0.tar.gz"
+    state: absent
+
+- name: Check if Netperf is already installed
+  ansible.builtin.stat:
+    path: "/usr/local/bin/netperf"
+  register: netperf_installed
+
+- name: Configure Netperf
+  ansible.builtin.command: ./configure --enable-spin
+  args:
+    chdir: "{{ netperf_build_dir }}"
+  when: not netperf_installed.stat.exists
+
+- name: Build Netperf
+  ansible.builtin.command: make
+  args:
+    chdir: "{{ netperf_build_dir }}"
+  when: not netperf_installed.stat.exists
+
+- name: Install Netperf
+  ansible.builtin.command: make install
+  args:
+    chdir: "{{ netperf_build_dir }}"
+    creates: /usr/local/bin/netperf

@@ -1,0 +1,6 @@
+---
+- name: Install OpenFaaS on Kubernetes
+  hosts: cloudcontroller
+  become: true
+  roles:
+    - role: openfaas_install

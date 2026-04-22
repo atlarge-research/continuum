@@ -1,0 +1,12 @@
+---
+- name: Configure KubeEdge cloud core
+  hosts: cloudcontroller
+  become: true
+  roles:
+    - role: kubeedge_cloudcore
+
+- name: Join KubeEdge edge nodes
+  hosts: edges
+  become: true
+  roles:
+    - role: kubeedge_edge_join

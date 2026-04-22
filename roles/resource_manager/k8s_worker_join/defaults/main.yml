@@ -1,0 +1,4 @@
+---
+rm_k8s_worker_join_continuum_home: "{{ continuum_home | default('/tmp') }}"
+rm_k8s_worker_join_ignore_preflight_errors: >-
+  {{ ignore_preflight_errors | default(false) }}

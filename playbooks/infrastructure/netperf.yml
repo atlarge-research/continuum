@@ -1,0 +1,6 @@
+---
+- name: Install netperf on base nodes
+  hosts: base
+  become: true
+  roles:
+    - role: netperf

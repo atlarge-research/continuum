@@ -4,37 +4,67 @@
   hosts: cloudcontroller
   become: true
   tasks:
-    - name: Install Arkade
-      shell: curl -SLsf https://get.arkade.dev/ | sudo sh
+    - name: Install arkade via official installer
+      ansible.builtin.shell: |
+        set -o pipefail
+        curl -SLsf https://get.arkade.dev/ | sudo sh
+      args:
+        executable: /bin/bash
+        creates: /usr/local/bin/arkade
 
-    - name: Create openfaas namespace
-      command: kubectl create ns openfaas
+    - name: Check if OpenFaaS namespace exists
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: openfaas
+        kubeconfig: /etc/kubernetes/admin.conf
+      register: ns_info
+      changed_when: false
 
-    - name: Create openfaas-fn namespace
-      command: kubectl create ns openfaas-fn
+    - name: Install OpenFaaS via arkade (only if namespace missing)
+      ansible.builtin.command: arkade install openfaas-ce
+      when: ns_info.resources | length == 0
 
-    - name: Install OpenFaaS through Arkade
-      command: >
-        arkade install openfaas --set openfaasPRO=False
+    - name: Install OpenFaaS CLI into /usr/local/bin
+      ansible.builtin.command: arkade get faas-cli --path /usr/local/bin
+      args:
+        creates: "/usr/local/bin/faas-cli"
 
-    - name: Install OpenFaaS CLI
-      shell: curl -SLsf https://cli.openfaas.com | sudo sh
+    - name: Wait for gateway to be Available
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: openfaas
+        name: gateway
+        kubeconfig: /etc/kubernetes/admin.conf
+        wait: true
+        wait_timeout: 1800   # 30m
+        wait_sleep: 5
+        wait_condition:
+          type: Available
+          status: "True"
+      changed_when: false
 
-    - name: kubectl - gateway
-      command: >
-        kubectl rollout status -n openfaas deploy/gateway
-
-    - name: Add OpenFaaS Prefix to bashrc
-      lineinfile:
-        dest: "/home/{{ username }}/.bashrc"
-        state: present
-        line: "export OPENFAAS_PREFIX=redplanet00"
-
+    ########################################################
     - name: Enable OpenFaaS port forwarding
-      shell: |
-        nohup kubectl port-forward -n openfaas svc/gateway 8080:8080 > /dev/null 2>&1 &
+      ansible.builtin.shell: nohup kubectl port-forward -n openfaas svc/gateway 8080:8080 >/dev/null 2>&1 &
+      changed_when: true
+
+    - name: Wait for gateway to respond on port-forward
+      ansible.builtin.shell: |
+        for i in $(seq 1 60); do
+          curl -sf http://127.0.0.1:8080/healthz >/dev/null && exit 0
+          sleep 2
+        done
+        exit 1
+      changed_when: true
 
     - name: Login to OpenFaaS
-      shell: |
-        kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" | \
-          base64 --decode | faas-cli login --username admin --password-stdin
+      ansible.builtin.shell: |
+        set -o pipefail
+        kubectl get secret -n openfaas basic-auth -o jsonpath="{.data.basic-auth-password}" \
+          | base64 --decode \
+          | faas-cli login --username admin --password-stdin
+      args:
+        executable: /bin/bash
+      changed_when: false

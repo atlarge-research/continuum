@@ -1,0 +1,29 @@
+---
+- name: Install endpoint prerequisite packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+    state: present
+    update_cache: true
+
+- name: Disable swap when enabled
+  ansible.builtin.command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+  changed_when: ansible_swaptotal_mb > 0
+
+- name: Disable swap persistently in fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: "^(.*\\s+swap\\s+.*)$"
+    replace: "# \\1"
+
+- name: Enable ipv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: true

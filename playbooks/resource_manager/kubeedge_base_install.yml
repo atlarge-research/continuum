@@ -1,0 +1,6 @@
+---
+- name: Prepare KubeEdge base images
+  hosts: base_cloud:base_edge
+  become: true
+  roles:
+    - role: kubeedge_prereqs

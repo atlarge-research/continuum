@@ -1,0 +1,7 @@
+---
+- name: Install Kata runtime components
+  hosts: clouds:edges
+  become: true
+  roles:
+    - role: kata_containers
+    - role: kata_runtime_classes

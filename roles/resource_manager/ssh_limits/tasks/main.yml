@@ -1,0 +1,8 @@
+---
+- name: Configure SSH daemon high-concurrency limits
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    block: |
+      MaxSessions {{ rm_ssh_limits_max_sessions }}
+      MaxStartups {{ rm_ssh_limits_max_startups }}
+  notify: Restart sshd

@@ -1,0 +1,6 @@
+---
+- name: Install Kubernetes observability stack
+  hosts: cloudcontroller
+  become: true
+  roles:
+    - role: k8s_observability

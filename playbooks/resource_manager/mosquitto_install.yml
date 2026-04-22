@@ -1,0 +1,6 @@
+---
+- name: Install Mosquitto broker
+  hosts: "{{ continuum_mosquitto_hosts | default('cloudcontroller') }}"
+  become: true
+  roles:
+    - role: mosquitto

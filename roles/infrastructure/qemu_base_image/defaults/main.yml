@@ -1,0 +1,7 @@
+---
+# Name of the base image to generate (without extension).
+image_name: ""
+# Base path where .continuum runtime assets live.
+base_path: ""
+# VM username suffix used in cloud-init file names.
+username: ""

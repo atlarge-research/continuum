@@ -1,0 +1,11 @@
+---
+# Base path where .continuum runtime assets live.
+base_path: ""
+# Ubuntu release image URL used for the QEMU base image.
+qemu_os_image_source_url: "https://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-amd64.img"
+# Name of the intermediate downloaded image.
+qemu_os_image_download_name: "ubuntu2004.img"
+# Name of the converted qcow2 image used by base image generation.
+qemu_os_image_qcow2_name: "ubuntu2004.qcow2"
+# Additional virtual size to add once when preparing the OS image.
+qemu_os_image_resize_delta: "+8G"

@@ -1,0 +1,12 @@
+---
+- name: Configure Kubernetes control plane
+  hosts: cloudcontroller
+  become: true
+  roles:
+    - role: k8s_control_plane
+
+- name: Join Kubernetes worker nodes
+  hosts: clouds:edges
+  become: true
+  roles:
+    - role: k8s_worker_join

@@ -1,0 +1,132 @@
+---
+- name: Install KubeEdge prerequisite packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - jq
+      - socat
+      - conntrack
+      - ipset
+    state: present
+    update_cache: true
+
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Persist required kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    mode: "0644"
+    content: |
+      overlay
+      br_netfilter
+
+- name: Load required kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Configure Kubernetes networking sysctls
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - name: net.ipv4.ip_forward
+      value: "1"
+    - name: net.bridge.bridge-nf-call-iptables
+      value: "1"
+    - name: net.bridge.bridge-nf-call-ip6tables
+      value: "1"
+
+- name: Disable swap when enabled
+  ansible.builtin.command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+  changed_when: ansible_swaptotal_mb > 0
+
+- name: Disable swap persistently in fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: "^(.*\\s+swap\\s+.*)$"
+    replace: "# \\1"
+
+- name: Include docker setup role for KubeEdge nodes
+  ansible.builtin.include_role:
+    name: docker_setup
+  vars:
+    rm_docker_setup_registry_ip: "{{ rm_kubeedge_prereqs_registry_ip }}"
+    rm_docker_setup_username: "{{ rm_kubeedge_prereqs_username }}"
+
+- name: Download Kubernetes apt repo release key
+  ansible.builtin.get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/{{ rm_kubeedge_prereqs_repo_major_minor }}/deb/Release.key"
+    dest: /tmp/kubernetes-release.key
+    mode: "0644"
+
+- name: Install Kubernetes apt keyring
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Configure Kubernetes apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg]
+      https://pkgs.k8s.io/core:/stable:/{{ rm_kubeedge_prereqs_repo_major_minor }}/deb/ /
+    state: present
+    filename: kubernetes
+
+- name: Install pinned Kubernetes binaries for KubeEdge
+  ansible.builtin.apt:
+    name:
+      - "kubelet={{ rm_kubeedge_prereqs_k8s_pkg_version }}"
+      - "kubeadm={{ rm_kubeedge_prereqs_k8s_pkg_version }}"
+      - "kubectl={{ rm_kubeedge_prereqs_k8s_pkg_version }}"
+    state: present
+    update_cache: true
+
+- name: Hold Kubernetes packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Download and extract keadm
+  ansible.builtin.unarchive:
+    src: >-
+      https://github.com/kubeedge/kubeedge/releases/download/{{ rm_kubeedge_prereqs_kubeedge_version
+      }}/keadm-{{ rm_kubeedge_prereqs_kubeedge_version }}-linux-amd64.tar.gz
+    dest: /tmp
+    remote_src: true
+
+- name: Install keadm binary
+  ansible.builtin.copy:
+    src: "/tmp/keadm-{{ rm_kubeedge_prereqs_kubeedge_version }}-linux-amd64/keadm/keadm"
+    dest: /usr/local/bin/keadm
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Remove temporary keadm artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/keadm-{{ rm_kubeedge_prereqs_kubeedge_version }}-linux-amd64"
+    - "/tmp/keadm-{{ rm_kubeedge_prereqs_kubeedge_version }}-linux-amd64.tar.gz"

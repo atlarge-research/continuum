@@ -1,0 +1,5 @@
+---
+rm_containerd_setup_registry_ip: >-
+  {{ registry_ip | default(continuum_registry_ip | default('')) }}
+rm_containerd_setup_config_src: >-
+  {{ continuum_repo_root }}/resource_manager/{{ continuum_resource_manager_type }}/cloud/config.toml

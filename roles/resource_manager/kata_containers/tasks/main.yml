@@ -1,0 +1,86 @@
+---
+- name: Download Kata static release archive
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/kata-containers/kata-containers/releases/download/{{ rm_kata_containers_version
+      }}/kata-static-{{ rm_kata_containers_version }}-x86_64.tar.xz
+    dest: "/tmp/kata-static-{{ rm_kata_containers_version }}-x86_64.tar.xz"
+    mode: "0644"
+
+- name: Extract Kata runtime under /
+  ansible.builtin.shell: |
+    set -o pipefail
+    xzcat /tmp/kata-static-{{ rm_kata_containers_version }}-x86_64.tar.xz | tar -xvf - -C /
+  args:
+    executable: /bin/bash
+    creates: /opt/kata/bin/kata-runtime
+
+- name: Ensure kata-runtime symlink exists
+  ansible.builtin.file:
+    src: /opt/kata/bin/kata-runtime
+    dest: /usr/local/bin/kata-runtime
+    state: link
+
+- name: Ensure kata shim wrapper for Firecracker exists
+  ansible.builtin.copy:
+    dest: /usr/local/bin/containerd-shim-kata-fc-v2
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-fc.toml /opt/kata/bin/containerd-shim-kata-v2 "$@"
+
+- name: Ensure kata shim wrapper for QEMU exists
+  ansible.builtin.copy:
+    dest: /usr/local/bin/containerd-shim-kata-qemu-v2
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      KATA_CONF_FILE=/opt/kata/share/defaults/kata-containers/configuration-qemu.toml /opt/kata/bin/containerd-shim-kata-v2 "$@"
+
+- name: Ensure containerd runtime stanza for kata-fc exists
+  ansible.builtin.blockinfile:
+    path: /etc/containerd/config.toml
+    marker: "# {mark} CONTINUUM KATA FC"
+    insertafter: "\\[plugins\\.\"io\\.containerd\\.grpc\\.v1\\.cri\"\\.containerd\\.runtimes\\]"
+    block: |
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-fc]
+        runtime_type = "io.containerd.kata-fc.v2"
+
+- name: Ensure containerd runtime stanza for kata-qemu exists
+  ansible.builtin.blockinfile:
+    path: /etc/containerd/config.toml
+    marker: "# {mark} CONTINUUM KATA QEMU"
+    insertafter: "\\[plugins\\.\"io\\.containerd\\.grpc\\.v1\\.cri\"\\.containerd\\.runtimes\\]"
+    block: |
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu]
+        runtime_type = "io.containerd.kata-qemu.v2"
+
+- name: Switch containerd snapshotter to overlayfs when requested
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: 'snapshotter = "devmapper"'
+    replace: 'snapshotter = "overlayfs"'
+  when: rm_kata_containers_use_overlayfs | bool
+
+- name: Enable kata tracing in configuration files
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ item.replace }}"
+  loop:
+    - path: /opt/kata/share/defaults/kata-containers/configuration-fc.toml
+      regexp: "^#(enable_tracing = true)$"
+      replace: "\\1"
+    - path: /opt/kata/share/defaults/kata-containers/configuration-qemu.toml
+      regexp: "^#(enable_tracing = true)$"
+      replace: "\\1"
+
+- name: Restart containerd after Kata configuration
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+
+- name: Remove Kata archive
+  ansible.builtin.file:
+    path: "/tmp/kata-static-{{ rm_kata_containers_version }}-x86_64.tar.xz"
+    state: absent

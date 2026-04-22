@@ -1,0 +1,10 @@
+---
+- name: Fetch Kubernetes metrics CSV from cloud controller
+  hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Copy resource_usage csv to local storage
+      ansible.builtin.fetch:
+        src: "/home/{{ username }}/resource_usage.csv"
+        dest: "{{ continuum_home }}/"
+        flat: true

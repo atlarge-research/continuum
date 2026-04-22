@@ -1,0 +1,25 @@
+---
+- name: Collect stale QEMU artifacts
+  ansible.builtin.find:
+    paths: "{{ base_path }}/.continuum/images"
+    file_type: file
+    recurse: false
+    patterns:
+      - "user_data_base*.img"
+      - "cloud_controller*.qcow2"
+      - "user_data_cloud_controller*.img"
+      - "cloud*.qcow2"
+      - "user_data_cloud*.img"
+      - "edge*.qcow2"
+      - "user_data_edge*.img"
+      - "endpoint*.qcow2"
+      - "user_data_endpoint*.img"
+  register: qemu_cleanup_files
+
+- name: Remove stale QEMU artifacts
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ qemu_cleanup_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"

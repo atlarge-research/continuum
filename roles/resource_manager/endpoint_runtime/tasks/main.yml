@@ -1,0 +1,18 @@
+---
+- name: Ensure docker service is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add endpoint user to docker/systemd-journal groups
+  ansible.builtin.user:
+    name: "{{ rm_endpoint_runtime_username }}"
+    groups: docker,systemd-journal
+    append: true
+
+- name: Ensure mosquitto service is enabled and running
+  ansible.builtin.systemd:
+    name: mosquitto
+    state: started
+    enabled: true

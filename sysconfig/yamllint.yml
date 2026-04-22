@@ -7,3 +7,5 @@ rules:
 
 ignore: |
   .tmp
+  application/stress/launch_benchmark_kubecontrol_pod.yml
+  application/mem_usage/launch_benchmark_kubecontrol_pod.yml

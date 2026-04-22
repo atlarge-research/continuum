@@ -1,0 +1,26 @@
+---
+- name: Download metrics-server manifest
+  ansible.builtin.get_url:
+    url: https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+    dest: "{{ rm_k8s_metrics_server_manifest_path }}"
+    mode: "0644"
+
+- name: Enable insecure kubelet TLS in metrics-server manifest
+  ansible.builtin.shell: |
+    grep -q -- '--kubelet-insecure-tls' {{ rm_k8s_metrics_server_manifest_path }} || \
+    sed -i '/--metric-resolution=15s/a\        - --kubelet-insecure-tls' {{ rm_k8s_metrics_server_manifest_path }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Apply metrics-server manifest
+  ansible.builtin.command: kubectl apply -f "{{ rm_k8s_metrics_server_manifest_path }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for metrics-server rollout
+  ansible.builtin.command: kubectl -n kube-system rollout status deployment/metrics-server --timeout=10m
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false

@@ -1,0 +1,61 @@
+---
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Install Docker apt signing key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    keyring: /etc/apt/keyrings/docker.gpg
+
+- name: Configure Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/docker.gpg]
+      https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+    state: present
+    filename: docker
+
+- name: Install containerd package
+  ansible.builtin.apt:
+    name: containerd.io
+    state: present
+    update_cache: true
+
+- name: Ensure containerd config directory exists
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    mode: "0755"
+
+- name: Copy containerd config template
+  ansible.builtin.copy:
+    src: "{{ rm_containerd_setup_config_src }}"
+    dest: /etc/containerd/config.toml
+    mode: "0644"
+  register: rm_containerd_setup_config_copy
+
+- name: Inject registry address in containerd config
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: REGISTRY-IP
+    replace: "{{ rm_containerd_setup_registry_ip }}"
+  when: rm_containerd_setup_registry_ip | length > 0
+  register: rm_containerd_setup_registry_replace
+
+- name: Restart containerd when config changes
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+    daemon_reload: true
+  when:
+    - rm_containerd_setup_config_copy.changed
+      or (rm_containerd_setup_registry_replace is defined and rm_containerd_setup_registry_replace.changed)
+
+- name: Ensure containerd service is enabled and running
+  ansible.builtin.systemd:
+    name: containerd
+    state: started
+    enabled: true

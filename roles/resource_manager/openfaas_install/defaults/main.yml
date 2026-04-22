@@ -1,0 +1,3 @@
+---
+rm_openfaas_install_kubeconfig: /etc/kubernetes/admin.conf
+rm_openfaas_install_gateway_port: 8080
