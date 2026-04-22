@@ -1,0 +1,206 @@
+# Smoke Runner Isolation
+
+This document describes the canonical host setup for letting an agent run real
+VM-backed Continuum smoke and benchmark paths without granting broad shell
+access.
+
+## 1. Goal
+
+The desired operating model is:
+
+1. Continuum can reach real host QEMU/libvirt and `/dev/kvm`.
+2. The agent cannot execute arbitrary host commands.
+3. The executed Continuum checkout is as immutable as practical.
+4. All runtime logs and test artifacts live under the selected `base_path`, not
+   inside the repository checkout.
+
+## 2. Canonical Model
+
+The preferred design is:
+
+1. a dedicated local account such as `continuum-smoke`,
+2. a root-owned installed wrapper such as `/usr/local/bin/run-continuum-smoke`,
+3. a dedicated synced repo copy at `/srv/continuum/repo`,
+4. that dedicated repo copy owned by `root:continuum-smoke` and not writable by
+   the runner user,
+5. one setup script that provisions the full model:
+   - [setup_agent_host.sh](/home/matthijs/continuum/scripts/test/setup_agent_host.sh)
+
+The repo-local development wrapper is still:
+
+- [run_smoke_host.sh](/home/matthijs/continuum/scripts/test/run_smoke_host.sh)
+
+That file is useful for local/manual runs, but it should not be the external
+allowlisted command when it lives in a mutable checkout.
+
+## 3. Why This Boundary Is Tight
+
+The smoke path actually needs:
+
+1. host `virsh` / libvirt access,
+2. `/dev/kvm` access,
+3. host bridge and route inspection commands,
+4. write access to a dedicated runtime workspace such as
+   `/home/continuum-smoke/continuum_smoke/`,
+5. read access to the executed Continuum checkout.
+
+It does not need:
+
+1. a general unsandboxed shell,
+2. write access to the executed repo copy,
+3. repo-local runtime logs,
+4. repo-local test-result artifacts.
+
+That last point matters. Continuum now writes runtime logs and smoke-test result
+artifacts under `base_path/.continuum/...`, and the wrapper exports
+`PYTHONDONTWRITEBYTECODE=1`, so the dedicated execution checkout can stay
+read-only for the runner.
+
+## 4. Single-Script Setup
+
+The default and recommended setup is the dedicated read-only repo mode:
+
+```bash
+./scripts/test/setup_agent_host.sh show-config
+./scripts/test/setup_agent_host.sh install
+./scripts/test/setup_agent_host.sh verify
+./scripts/test/setup_agent_host.sh print-agent-command benchmark_k8s_resume
+```
+
+`install` defaults to `dedicated`. That flow:
+
+1. creates or verifies the `continuum-smoke` account,
+2. adds it to `libvirt` and `kvm`,
+3. creates `/srv/continuum/repo`,
+4. syncs the current workspace into that repo copy,
+5. locks that repo copy down as non-writable for the runner,
+6. prepares `/home/continuum-smoke/continuum_smoke`,
+7. installs host prerequisites,
+8. creates the dedicated runner venv,
+9. installs the root-owned wrapper,
+10. installs the narrow `sudoers` rule,
+11. verifies libvirt, `/dev/kvm`, repo readability, and wrapper prereqs.
+
+If you update the live workspace later, refresh the dedicated execution copy
+with:
+
+```bash
+./scripts/test/setup_agent_host.sh sync-repo
+```
+
+The exact command the agent should use after installation is:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume
+```
+
+To advance the retained benchmark state one phase at a time, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_infra
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_software
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application
+```
+
+## 5. Weaker Live-Repo Mode
+
+If you want the wrapper to execute the current working tree directly, the setup
+script still supports:
+
+```bash
+./scripts/test/setup_agent_host.sh install live
+```
+
+That mode is weaker because the executed code remains mutable by the caller. It
+is still tighter than before because the runner only receives read/traverse ACLs
+to the live checkout, not write access.
+
+Use live mode only when you explicitly want zero sync friction and accept that
+weaker code-integrity boundary.
+
+## 6. Wrapper Contract
+
+The installed wrapper supports only these values:
+
+1. `infra_one_vm`
+2. `software_k8s_two_vm`
+3. `network_netperf_two_vm`
+4. `benchmark_k8s_resume_infra`
+5. `benchmark_k8s_resume_software`
+6. `benchmark_k8s_resume_application`
+7. `benchmark_k8s_resume`
+8. `check-prereqs`
+9. `list-suites`
+
+The wrapper contract is:
+
+1. whitelists those scenarios,
+2. forces a fixed `base_path` per scenario under the runner home,
+3. uses `env -i`,
+4. forces a minimal `PATH` with the dedicated venv first,
+5. forces `PYTHONPATH=.`,
+6. forces `PYTHONDONTWRITEBYTECODE=1`,
+7. forces `LIBVIRT_DEFAULT_URI=qemu:///system` unless overridden at install
+   time,
+8. forwards only the explicitly whitelisted bridge overrides:
+   - `CONTINUUM_QEMU_BRIDGE_NAME`
+   - `CONTINUUM_QEMU_BRIDGE_GATEWAY`
+9. writes runtime logs, matplotlib state, and test artifacts under
+   `<base_path>/.continuum/...`,
+10. runs with `umask 022` so libvirt/QEMU can traverse generated image paths.
+
+## 7. Host Requirements
+
+The dedicated smoke user should have:
+
+1. membership in `libvirt`,
+2. membership in `kvm`,
+3. read access to the executed repo copy,
+4. write access to the selected `base_path`,
+5. access to host commands used by the smoke path.
+
+The scripted host-prereq step currently installs:
+
+1. `acl`
+2. `curl`
+3. `qemu-utils`
+4. `cloud-image-utils`
+
+## 8. Sudoers Shape
+
+If direct login as `continuum-smoke` is not desirable, prefer a narrow wrapper
+rule over broad shell access.
+
+The installed script writes a rule shaped like:
+
+```text
+Cmnd_Alias CONTINUUM_SMOKE = /usr/local/bin/run-continuum-smoke *
+your-user ALL=(continuum-smoke) NOPASSWD: CONTINUUM_SMOKE
+```
+
+The important part is not the alias name. The important part is that the caller
+can invoke only the approved wrapper, not an arbitrary shell.
+
+## 9. External Allowlisting
+
+If the surrounding harness supports external-command allowlisting, the allowed
+prefix should be only:
+
+1. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke`
+
+Do not allow broader prefixes such as `/bin/bash`, `python3`, or `sudo` more
+generally.
+
+## 10. Operational Advice
+
+For first real host runs:
+
+1. start with `infra_one_vm`,
+2. then `software_k8s_two_vm`,
+3. then `benchmark_k8s_resume_infra` if you want only the retained infrastructure step,
+4. then `benchmark_k8s_resume_software` and `benchmark_k8s_resume_application` to advance the retained state one phase at a time,
+5. or use `benchmark_k8s_resume` to run the full three-step suite end-to-end,
+4. inspect retained artifacts under
+   `/home/continuum-smoke/continuum_smoke/<scenario>/.continuum/`,
+5. keep failed VM state until the failure is understood,
+6. resync the dedicated repo before reruns if the live workspace changed.
