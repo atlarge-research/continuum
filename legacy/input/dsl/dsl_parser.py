@@ -7,7 +7,7 @@ import os
 from subprocess import PIPE, Popen
 
 from application import application
-from input.configuration.configuration_parser import (
+from legacy.input.configuration.ini_parser import (
     add_constants,
     add_options,
     dynamic_import,

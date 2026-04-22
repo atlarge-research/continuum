@@ -11,9 +11,44 @@ import socket
 import sys
 
 from application import application
-from execution_model import execution_model
 from infrastructure import infrastructure
+from input.configuration import config_access
 from resource_manager import resource_manager
+
+
+def resolve_runtime_targets(config):
+    """Resolve requested runtime phases from config.
+
+    Args:
+        config (dict): Parsed Continuum configuration.
+
+    Returns:
+        tuple[bool, bool, bool]: run_infrastructure, run_software, run_application.
+
+    Raises:
+        ValueError: On invalid target combinations.
+    """
+    target_set = set(config_access.run_targets(config))
+    run_infrastructure = "infrastructure" in target_set
+    run_software = "software" in target_set
+    run_application = "application" in target_set
+
+    if run_infrastructure and run_application and not run_software:
+        raise ValueError(
+            "run.targets cannot request application without software when infrastructure is selected"
+        )
+    return run_infrastructure, run_software, run_application
+
+
+def required_state_phase_for_targets(run_infrastructure, run_software, run_application):
+    """Return minimum completed phase required when skipping infrastructure."""
+    if run_infrastructure:
+        return None
+    if run_software:
+        return "infrastructure"
+    if run_application:
+        return "software"
+    return None
 
 
 def dynamic_import(parser, config):
@@ -21,7 +56,6 @@ def dynamic_import(parser, config):
     Find an implementation for every used project component:
     - Infrastructure provider
     - Resource manager
-    - Execution model
     - Application
 
     Args:
@@ -33,9 +67,10 @@ def dynamic_import(parser, config):
     config["module"] = {
         "provider": False,
         "resource_manager": False,
-        "execution_model": False,
         "application": False,
     }
+    orchestrator_name = config_access.orchestrator_name(config)
+    workload_name = config_access.workload_name(config)
 
     # Check if infrastructure provider directory exists
     dirs = list(os.walk("./infrastructure"))[0][1]
@@ -55,11 +90,11 @@ def dynamic_import(parser, config):
         # Not all RM have modules (e.g., mist, none)
         dirs = list(os.walk("./resource_manager"))[0][1]
         dirs = [d for d in dirs if d[0] != "_"]
-        if config["benchmark"]["resource_manager"] in dirs:
+        if orchestrator_name in dirs:
             config["module"]["resource_manager"] = importlib.import_module(
-                "resource_manager.%s.%s" % ((config["benchmark"]["resource_manager"],) * 2)
+                "resource_manager.%s.%s" % ((orchestrator_name,) * 2)
             )
-        elif config["benchmark"]["resource_manager"] == "mist":
+        elif orchestrator_name == "mist":
             # Mist provider uses KubeEdge
             # TODO: Make a separate Mist provider
             #       Mist already has its own Ansible file, should be easy
@@ -67,34 +102,17 @@ def dynamic_import(parser, config):
                 "resource_manager.%s.%s" % (("kubeedge",) * 2)
             )
 
-        # Now for execution model
-        if "execution_model" in config:
-            # Check if resource manager directory exists
-            dirs = list(os.walk("./execution_model"))[0][1]
-            dirs = [d for d in dirs if d[0] != "_"]
-            if config["execution_model"]["model"] in dirs:
-                config["module"]["execution_model"] = importlib.import_module(
-                    "execution_model.%s.%s" % ((config["execution_model"]["model"],) * 2)
-                )
-            else:
-                parser.error(
-                    "ERROR: Given execution model %s does not have an implementation",
-                    config["execution_model"]["model"],
-                )
-
         # Now for applications
-        if not config["benchmark"]["resource_manager_only"]:
+        if config_access.runs_application(config):
             # Check if infrastructure provider directory exists
             dirs = list(os.walk("./application"))[0][1]
             dirs = [d for d in dirs if d[0] != "_"]
-            if config["benchmark"]["application"] in dirs:
+            if workload_name in dirs:
                 config["module"]["application"] = importlib.import_module(
-                    "application.%s.%s" % ((config["benchmark"]["application"],) * 2)
+                    "application.%s.%s" % ((workload_name,) * 2)
                 )
             else:
-                parser.error(
-                    "ERROR: Application %s does not exist", config["benchmark"]["application"]
-                )
+                parser.error("ERROR: Application %s does not exist", workload_name)
 
 
 def add_constants(parser, config):
@@ -120,9 +138,9 @@ def add_constants(parser, config):
     # Get Docker registry IP
     if not config["infrastructure"]["infra_only"]:
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            host_ip = s.getsockname()[0]
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.connect(("8.8.8.8", 80))
+                host_ip = sock.getsockname()[0]
         except socket.gaierror as e:
             parser.error("Could not get host ip with error: %s", e)
 
@@ -491,26 +509,6 @@ def parse_benchmark(parser, input_config, config):
         option_check(parser, input_config, config, sec, s[0], s[1], s[2], s[3], s[4])
 
 
-def parse_execution_model(parser, input_config, config):
-    """Parse config file, section execution_model
-
-    Args:
-        parser (ArgumentParser): Argparse object
-        config (configparser obj): Parsed configuration from the configparser library
-        config (dict): Parsed configuration for Continuum
-    """
-    sec = "execution_model"
-    if not input_config.has_section(sec):
-        return
-
-    # Get a list of all execution models
-    models = list(os.walk("./execution_model"))[0][1]
-    models = [d for d in models if d[0] != "_"]
-
-    config[sec] = {}
-    option_check(parser, input_config, config, sec, "model", str, lambda x: x in models, True, None)
-
-
 def start(parser, arg):
     """Parse config file, check valid input
 
@@ -531,7 +529,6 @@ def start(parser, arg):
     parse_infrastructure(parser, input_config, config)
     parse_infrastructure_network(parser, input_config, config)
     parse_benchmark(parser, input_config, config)
-    parse_execution_model(parser, input_config, config)
 
     # Add stuff based on the parsed config
     dynamic_import(parser, config)
@@ -566,12 +563,6 @@ def add_options(parser, input_config, config):
             for s in setting:
                 s.append("benchmark")
             settings.append(setting)
-    if config["module"]["execution_model"]:
-        setting = execution_model.add_options(config)
-        if setting:
-            for s in setting:
-                s.append("execution_model")
-            settings.append(setting)
     if config["module"]["provider"]:
         setting = infrastructure.add_options(config)
         if setting:
@@ -591,6 +582,27 @@ def add_options(parser, input_config, config):
             option_check(parser, input_config, config, s[5], s[0], s[1], s[2], s[3], s[4])
 
 
+def verify_addon_compatibility(parser, config):
+    """Verify addon compatibility constraints.
+
+    Args:
+        parser (ArgumentParser): Argparse object.
+        config (dict): Parsed Continuum configuration.
+    """
+    if not config_access.openfaas_enabled(config):
+        return
+
+    if not config_access.orchestrator_is(config, "kubernetes"):
+        parser.error("ERROR: OpenFaaS addon requires orchestrator Kubernetes")
+    if config_access.orchestrator_bool(config, "cache_worker", False):
+        parser.error("ERROR: OpenFaaS app does not support application caching")
+    if (
+        config_access.runs_application(config)
+        and config_access.workload_name(config) != "image_classification"
+    ):
+        parser.error("ERROR: Serverless OpenFaaS only works with the image_classification app")
+
+
 def verify_options(parser, config):
     """Verify the config from the module's requirements
 
@@ -601,8 +613,7 @@ def verify_options(parser, config):
     # Get the options from each module
     if config["module"]["application"]:
         application.verify_options(parser, config)
-    if config["module"]["execution_model"]:
-        execution_model.verify_options(parser, config)
+    verify_addon_compatibility(parser, config)
     if config["module"]["provider"]:
         infrastructure.verify_options(parser, config)
     if config["module"]["resource_manager"]:
