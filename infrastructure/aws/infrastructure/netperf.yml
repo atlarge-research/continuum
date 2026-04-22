@@ -1,47 +1,57 @@
 ---
-- hosts: base
+- name: Install Netperf
+  hosts: base
   become: true
   tasks:
-    - name: Install packages that allow apt to be used over HTTPS
-      apt:
-        name: "{{ packages }}"
-        state: present
-        update_cache: true
-      vars:
-        packages:
+    - name: Install apt HTTPS and other base packages
+      ansible.builtin.apt:
+        name:
           - apt-transport-https
           - ca-certificates
           - curl
           - gnupg-agent
           - software-properties-common
+        state: present
+        update_cache: true
 
     - name: Get Netperf and unarchive it
-      unarchive:
+      ansible.builtin.unarchive:
         src: https://github.com/HewlettPackard/netperf/archive/refs/tags/netperf-2.7.0.tar.gz
         dest: "/tmp"
         remote_src: true
 
     - name: Remove unneeded Netperf files
-      file:
-        path: "{{ item }}"
+      ansible.builtin.file:
+        path: "/tmp/netperf-2.7.0.tar.gz"
         state: absent
-      with_items:
-        - "/tmp/netperf-2.7.0.tar.gz"
 
     - name: Install netperf dependencies
-      apt:
-        name: "{{ packages }}"
-        state: present
-        update_cache: true
-      vars:
-        packages:
+      ansible.builtin.apt:
+        name:
           - gcc
           - make
+        state: present
+        update_cache: true
 
-    - name: Install NetPerf
-      shell: |
-        ./configure --enable-spin
-        make
-        make install
+    - name: Check if NetPerf is already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/netperf
+      register: netperf_installed
+
+    - name: Configure NetPerf
+      ansible.builtin.command: ./configure --enable-spin
       args:
         chdir: "/tmp/netperf-netperf-2.7.0/"
+      when: not netperf_installed.stat.exists
+
+    - name: Build NetPerf
+      ansible.builtin.command: make
+      args:
+        chdir: "/tmp/netperf-netperf-2.7.0/"
+      when: not netperf_installed.stat.exists
+
+    - name: Install NetPerf
+      ansible.builtin.command: make install
+      args:
+        chdir: "/tmp/netperf-netperf-2.7.0/"
+        creates: /usr/local/bin/netperf

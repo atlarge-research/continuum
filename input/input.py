@@ -5,8 +5,7 @@ Handle any kind of input, such as configuration files or DSLs
 import logging
 import os
 
-from .configuration import configuration_parser
-from .dsl import dsl_parser
+from .configuration import yaml_parser
 
 
 def print_input(config):
@@ -43,7 +42,7 @@ def print_input(config):
 
 
 def start(parser, arg):
-    """Parse a config or typescript file
+    """Parse a YAML experiment config file.
 
     Args:
         parser (ArgumentParser): Argparse object
@@ -56,10 +55,14 @@ def start(parser, arg):
         parser.error("The given config file does not exist: %s" % (arg))
 
     _, file_extension = os.path.splitext(arg)
-    if file_extension == ".cfg":
-        return configuration_parser.start(parser, arg)
+    if file_extension in (".yaml", ".yml"):
+        return yaml_parser.start(parser, arg)
 
-    if file_extension == ".ts":
-        return dsl_parser.start(parser, arg)
-
-    return parser.error("ERROR: Only extentions .cfg and .ts are supported, not %s", file_extension)
+    if file_extension in (".cfg", ".ts"):
+        return parser.error(
+            "ERROR: Legacy input formats are no longer supported. "
+            "Use YAML experiment configs (.yaml/.yml). Got %s" % (file_extension)
+        )
+    return parser.error(
+        "ERROR: Only extensions .yaml/.yml are supported, not %s" % (file_extension)
+    )

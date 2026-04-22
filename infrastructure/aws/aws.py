@@ -4,8 +4,10 @@ import logging
 import os
 import sys
 
-from infrastructure import ansible, infrastructure
+from input.configuration import config_access
+from infrastructure import ansible, image_registry, infrastructure
 from infrastructure import machine as m
+from resource_manager import plans as rm_plans
 
 from . import generate
 
@@ -88,7 +90,7 @@ def set_ip_names(_config, machines, nodes_per_machine):
 
     if len(machines) > 1 or len(nodes_per_machine) > 1:
         logging.error("ERROR: AWS/Terraform only uses 1 machine")
-        sys.exit()
+        sys.exit(1)
 
     if nodes_per_machine[0]["cloud"] > 0:
         machines[0].cloud_controller = 1
@@ -242,47 +244,36 @@ def copy(config, machines):
             out.append(
                 machine.copy_files(
                     config,
-                    os.path.join(config["base"], ".tmp", "%s.tf" % (tf)),
+                    os.path.join(
+                        config.get("tmp_dir", os.path.join(config["base"], ".tmp")),
+                        "%s.tf" % (tf),
+                    ),
                     dest_image,
                 )
             )
 
-        # Copy Ansible files for infrastructure (such as netperf installs)
-        path = os.path.join(
-            config["base"],
-            "infrastructure",
-            config["infrastructure"]["provider"],
-            "infrastructure",
-        )
-        out.append(machine.copy_files(config, path, dest, recursive=True))
-
         for output, error in out:
             if error:
                 logging.error("".join(error))
-                sys.exit()
+                sys.exit(1)
             elif output:
                 logging.error("".join(output))
-                sys.exit()
+                sys.exit(1)
 
 
-def netperf_install(config, machines):
+def netperf_install(config, machines, runner=None):
     """Install NetPerf on AWS with Terraform.
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner, optional): Shared runner instance for playbook execution.
     """
+    if runner is None:
+        runner = ansible.AnsibleRunner(config, machines)
+
     logging.info("Install NetPerf on AWS with Terraform")
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/infrastructure/netperf.yml",
-        ),
-    ]
-    ansible.check_output(machines[0].process(config, command)[0])
+    runner.run_playbook("playbooks/infrastructure/netperf.yml", inventory="vms")
 
 
 def set_timezone(config, machines):
@@ -298,10 +289,10 @@ def set_timezone(config, machines):
 
     if not output or "/etc/localtime" not in output[0]:
         logging.error("Could not get host timezone: %s", "".join(output))
-        sys.exit()
+        sys.exit(1)
     elif error:
         logging.error("Could not get host timezone: %s", "".join(error))
-        sys.exit()
+        sys.exit(1)
 
     timezone = output[0].split("-> ")[1].strip()
 
@@ -318,215 +309,51 @@ def set_timezone(config, machines):
     for output, error in results:
         if output:
             logging.error("Could not set VM timezone: %s", "".join(output))
-            sys.exit()
+            sys.exit(1)
         elif error:
             logging.error("Could not set VM timezone: %s", "".join(error))
-            sys.exit()
+            sys.exit(1)
 
 
-def move_registry(config, machines):
-    """Move the Docker Registry from your local machine to the cloud_controller VM (cloud0)
-    in AWS. For the VMs in AWS to make use of the registry on the local machine, you need to
-    open port 5000 to these specific IPs. This will result in all AWS VMs pulling Docker containers
-    over the internet to the cloud, which can be slow with many VMs.
-    Therefore, we move the registry to the cloud_controller VM in the cloud, so containers
-    can be quickly shared between VMs in the same cloud datacenter.
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    # Determine to new location of the registry
-    if config["infrastructure"]["cloud_nodes"]:
-        ssh = config["cloud_ssh"][0]
-    elif config["infrastructure"]["edge_nodes"]:
-        ssh = config["edge_ssh"][0]
-    else:
-        ssh = config["endpoint_ssh"][0]
-
-    # Create a registry on the cloud controller
-    logging.info("Create Docker registry on %s - %s", ssh, config["registry"])
-
-    port = config["old_registry"].split(":")[-1]
-    command = [
-        "docker",
-        "run",
-        "-d",
-        "-p",
-        "%s:%s" % (port, port),
-        "--restart=always",
-        "--name",
-        "registry",
-        "registry:2",
-    ]
-    _, error = machines[0].process(config, command, ssh=ssh)[0]
-
-    if error and not (
-        any("Unable to find image" in line for line in error)
-        and any("Pulling from" in line for line in error)
-    ):
-        logging.error("".join(error))
-        sys.exit()
-
-    # Move all Docker containers from the local registry to the new remote registry
-    logging.info("Copy all container images to new remote registry")
-    for image in config["images"].values():
-        image_name = image.split(":")[1]
-        full_image = os.path.join(config["old_registry"], image_name)
-
-        # Pull the image from the local registry to the local machine
-        command = ["docker", "pull", full_image]
-        _, error = machines[0].process(config, command)[0]
-
-        if error:
-            logging.error("ERROR: Docker save on image %s failed with error: %s", full_image, error)
-
-        # Save the image as tar
-        source = os.path.join(
-            config["infrastructure"]["base_path"], ".continuum", "%s.tar" % (image_name)
-        )
-        command = ["docker", "save", "-o", source, full_image]
-        _, error = machines[0].process(config, command)[0]
-
-        if error:
-            logging.error("ERROR: Docker save on image %s failed with error: %s", full_image, error)
-
-        # Copy the image over to the new registry location
-        dest = "%s:/tmp/" % (ssh)
-        command = ["scp", "-i", config["ssh_key"], source, dest]
-        output, error = machines[0].process(config, command)[0]
-
-        if error:
-            logging.error("".join(error))
-            sys.exit()
-        elif output and not any("Your public key has been saved in" in line for line in output):
-            logging.error("".join(output))
-            sys.exit()
-
-        # Load the image into the remote docker storage
-        command = ["docker", "load", "-i", os.path.join("/tmp", "%s.tar" % (image_name))]
-        _, error = machines[0].process(config, command, ssh=ssh)[0]
-
-        if error:
-            logging.error("ERROR: Docker load on image %s failed with error: %s", full_image, error)
-
-        # Finally, load the image from the remote docker storage into the remote docker registry
-        tag = os.path.join(config["registry"], image_name)
-        commands = [
-            ["docker", "tag", full_image, tag],
-            ["docker", "push", tag],
-        ]
-
-        for command in commands:
-            _, error = machines[0].process(config, command, ssh=ssh)[0]
-
-            if error:
-                logging.error("".join(error))
-                sys.exit()
-
-
-def set_registry(config, machines, control=False):
-    """Registry will be moved to the cloud controller, see the move_registry function.
-    We need to change the registry IP before installing base software.
-    We can only configure the registry itself afterward.
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-        is_control (bool): For kubecontrol, use the public dockerhub registry instead of local
-    """
-    config["old_registry"] = config["registry"]
-
-    # Determine to new location of the registry
-    if control:
-        registry = "docker.io/redplanet00"
-    else:
-        if config["infrastructure"]["cloud_nodes"]:
-            registry = machines[0].cloud_controller_ips_internal[0] + ":5000"
-        elif config["infrastructure"]["edge_nodes"]:
-            registry = machines[0].edge_ips_internal[0] + ":5000"
-        else:
-            registry = machines[0].endpoint_ips_internal[0] + ":5000"
-
-    config["registry"] = registry
-
-
-def base_install(config, machines):
+def base_install(config, machines, runner=None):
     """Install Software on the VMs, without user configuration still
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner, optional): Shared runner instance for playbook execution.
     """
+    if runner is None:
+        runner = ansible.AnsibleRunner(config, machines)
+
     logging.info("Install software in the VMs")
-    commands = []
-
-    if not config["infrastructure"]["infra_only"]:
-        if any("cloud" in base_name for base_name in machines[0].base_names):
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/cloud/base_install.yml",
-                ),
-            ]
-            commands.append(command)
-
-        if any("edge" in base_name for base_name in machines[0].base_names):
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/edge/base_install.yml",
-                ),
-            ]
-            commands.append(command)
-
-        if any("endpoint" in base_name for base_name in machines[0].base_names):
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/endpoint/base_install.yml",
-                ),
-            ]
-            commands.append(command)
-
-        if commands:
-            results = machines[0].process(config, commands)
-
-            for command, (output, error) in zip(commands, results):
-                logging.debug("Check output for command [%s]", " ".join(command))
-                ansible.check_output((output, error))
+    if not config_access.infra_only(config):
+        playbooks = rm_plans.build_base_image_playbooks(config, machines[0].base_names)
+        if playbooks:
+            runner.run_playbooks(playbooks, inventory="vms")
 
     # Install netperf (only if netperf=True)
     if config["infrastructure"]["netperf"]:
-        netperf_install(config, machines)
+        netperf_install(config, machines, runner=runner)
 
-    # Install docker containers if required
-    if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
+    # Install docker containers if required by prefetch image requirements
+    if image_registry.has_prefetch_requirements(config):
         # Kubecontrol won't use docker registries in the cloud due to conflicts with containerd
-        if config["benchmark"]["resource_manager"] == "kubecontrol":
+        if config_access.orchestrator_name(config) == "kubecontrol":
             docker_base_names = []
         else:
-            move_registry(config, machines)
+            image_registry.move_prefetched_images_to_remote_registry(config, machines)
             docker_base_names = machines[0].base_names
 
         # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
         # These RM will automatically pull images, so we can skip this here.
         # Only pull endpoint images instead
-        if config["benchmark"]["resource_manager"] in ["kubernetes", "kubeedge", "kubecontrol"]:
+        if config_access.orchestrator_name(config) in ("kubernetes", "kubeedge", "kubecontrol"):
             docker_base_names = [
                 base_name for base_name in docker_base_names if "endpoint" in base_name
             ]
 
-        infrastructure.docker_pull(config, machines, docker_base_names)
+        image_registry.docker_pull(config, machines, docker_base_names)
 
     set_timezone(config, machines)
 
@@ -554,27 +381,27 @@ def start_vms(config, machines):
 
         if error:
             logging.error("ERROR: %s", "".join(error))
-            sys.exit()
+            sys.exit(1)
         elif "init" in command and not any(
             "Terraform has been successfully initialized!" in out for out in output
         ):
             logging.error("ERROR on init: %s", "".join(output))
-            sys.exit()
+            sys.exit(1)
         elif "validate" in command and not any(
             "The configuration is valid." in out for out in output
         ):
             logging.error("ERROR on validate: %s", "".join(output))
-            sys.exit()
+            sys.exit(1)
         elif "apply" in command and not any("Apply complete!" in out for out in output):
             logging.error("ERROR: Could not apply Terraform configuration: %s", "".join(output))
-            sys.exit()
+            sys.exit(1)
 
     set_ips(machines, output)
 
     # Kubecontrol doesn't use docker registries in the cloud due to conflicts with containerd
-    if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
-        is_control = config["benchmark"]["resource_manager"] == "kubecontrol"
-        set_registry(config, machines, control=is_control)
+    if image_registry.has_prefetch_requirements(config):
+        is_control = config_access.orchestrator_name(config) == "kubecontrol"
+        image_registry.set_remote_registry_endpoint(config, machines, control=is_control)
 
 
 def start(config, machines):
@@ -598,7 +425,16 @@ def start(config, machines):
     for machine in machines:
         logging.debug(machine)
 
+    runner = ansible.AnsibleRunner(config, machines)
     ansible.create_inventory_vm(config, machines)
+    ansible.generate_group_vars(
+        config,
+        machines,
+        os.path.join(
+            config.get("tmp_dir", os.path.join(config["base"], ".tmp")),
+            "inventory_group_vars",
+        ),
+    )
     ansible.copy(config, machines)
 
-    base_install(config, machines)
+    base_install(config, machines, runner=runner)

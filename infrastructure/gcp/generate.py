@@ -1,5 +1,7 @@
 """Generate a Terraform configuration for GCP"""
 
+import os
+
 ###################################################################################################
 
 HEADER = """
@@ -24,13 +26,19 @@ provider "google" {
 """
 
 
+def _tmp_path(config, name):
+    """Return the canonical generated-artifact path for one temp file."""
+    root = config.get("tmp_dir", os.path.join(config.get("base", "."), ".tmp"))
+    return os.path.join(root, name)
+
+
 def generate_header(config):
     """Write the Terraform config header
 
     Args:
         config (dict): Parsed configuration
     """
-    with open(".tmp/header.tf", mode="w", encoding="utf-8") as f:
+    with open(_tmp_path(config, "header.tf"), mode="w", encoding="utf-8") as f:
         f.write(HEADER)
 
         f.write(
@@ -111,7 +119,7 @@ def generate_network(config):
     Args:
         config (dict): Parsed configuration
     """
-    with open(".tmp/network.tf", mode="w", encoding="utf-8") as f:
+    with open(_tmp_path(config, "network.tf"), mode="w", encoding="utf-8") as f:
         f.write(MAIN_NETWORK)
 
         if config["infrastructure"]["cloud_nodes"] > 0:
@@ -260,7 +268,7 @@ def generate_vm(config):
         config (dict): Parsed configuration
     """
     if config["infrastructure"]["cloud_nodes"] > 0:
-        with open(".tmp/cloud_vm.tf", mode="w", encoding="utf-8") as f:
+        with open(_tmp_path(config, "cloud_vm.tf"), mode="w", encoding="utf-8") as f:
             f.write(CLOUD_IP % (config["infrastructure"]["cloud_nodes"]))
             f.write(
                 CLOUD
@@ -272,7 +280,7 @@ def generate_vm(config):
             )
 
     if config["infrastructure"]["edge_nodes"] > 0:
-        with open(".tmp/edge_vm.tf", mode="w", encoding="utf-8") as f:
+        with open(_tmp_path(config, "edge_vm.tf"), mode="w", encoding="utf-8") as f:
             f.write(EDGE_IP % (config["infrastructure"]["edge_nodes"]))
             f.write(
                 EDGE
@@ -284,7 +292,7 @@ def generate_vm(config):
             )
 
     if config["infrastructure"]["endpoint_nodes"] > 0:
-        with open(".tmp/endpoint_vm.tf", mode="w", encoding="utf-8") as f:
+        with open(_tmp_path(config, "endpoint_vm.tf"), mode="w", encoding="utf-8") as f:
             f.write(ENDPOINT_IP % (config["infrastructure"]["endpoint_nodes"]))
             f.write(
                 ENDPOINT
@@ -335,7 +343,7 @@ def generate_output(config):
     Args:
         config (dict): Parsed configuration
     """
-    with open(".tmp/outputs.tf", mode="w", encoding="utf-8") as f:
+    with open(_tmp_path(config, "outputs.tf"), mode="w", encoding="utf-8") as f:
         if config["infrastructure"]["cloud_nodes"] > 0:
             f.write(OUTPUT_CLOUD)
 

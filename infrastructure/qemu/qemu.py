@@ -2,16 +2,101 @@
 Create and use QEMU Vms
 """
 
+import json
 import logging
 import os
-import string
 import sys
 import time
 
-from infrastructure import ansible, infrastructure
+from input.configuration import config_access
+from infrastructure import ansible, image_registry, infrastructure
 from infrastructure import machine as m
+from infrastructure import network, orchestration_schema
+from resource_manager import plans as rm_plans
 
 from . import generate
+
+
+def _machine_playbook_env():
+    """Return environment overrides for local host-side QEMU playbooks.
+
+    These playbooks operate on the physical QEMU host and should not inherit the
+    global Ansible ``become = True`` default. Host prerequisites are installed
+    explicitly during smoke-host setup instead.
+    """
+
+    return {"ANSIBLE_BECOME": "False"}
+
+
+def _delete_local_path(path):
+    """Best-effort local cache cleanup for unreadable QEMU artifacts."""
+    if os.path.exists(path):
+        os.remove(path)
+
+
+def _base_image_metadata_path(config, raw_base_name):
+    """Return the cache metadata path for one raw base image name."""
+    return os.path.join(
+        config["infrastructure"]["base_path"],
+        ".continuum/images/%s.meta.json" % (raw_base_name),
+    )
+
+
+def _expected_base_image_metadata(raw_base_name):
+    """Return the expected ready-marker payload for one base image."""
+    return {
+        "schema_version": 1,
+        "status": "ready",
+        "guest_user": orchestration_schema.guest_login_name(raw_base_name),
+    }
+
+
+def _base_image_cache_invalid_reason(config, raw_base_name):
+    """Return a human-readable cache validation reason, or None when valid."""
+    metadata_path = _base_image_metadata_path(config, raw_base_name)
+    if not os.path.exists(metadata_path):
+        return "metadata missing"
+
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as filep:
+            payload = json.load(filep)
+    except (OSError, json.JSONDecodeError):
+        return "metadata unreadable"
+
+    if not isinstance(payload, dict):
+        return "metadata invalid"
+
+    expected = _expected_base_image_metadata(raw_base_name)
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            return "metadata %s mismatch" % (key,)
+    return None
+
+
+def _write_base_image_metadata(config, raw_base_name):
+    """Persist the ready-marker metadata for one successfully prepared base image."""
+    metadata_path = _base_image_metadata_path(config, raw_base_name)
+    with open(metadata_path, "w", encoding="utf-8") as filep:
+        json.dump(_expected_base_image_metadata(raw_base_name), filep, sort_keys=True)
+
+
+def _base_profile_token(config):
+    """Return a deterministic feature-profile token for base image identity.
+
+    The token encodes software/features baked into base images so cache reuse
+    is safe across runs with different feature toggles.
+
+    Args:
+        config (dict): Parsed Continuum configuration.
+
+    Returns:
+        str: Stable token that identifies base-image feature selection.
+    """
+    wireless_preset = config["infrastructure"].get("wireless_network_preset", "")
+    enable_mahimahi = isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
+
+    # Netperf is currently always installed in the QEMU base flow.
+    return "np1_mm%s" % (int(enable_mahimahi))
 
 
 def delete_vms(config, machines):
@@ -39,7 +124,7 @@ xargs -I %% sh -c "virsh destroy %%"'
 xargs -I %% sh -c \"virsh destroy %%\""
                 % (config["username"])
             )
-            command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
+            command = "ssh %s 'bash -l -c \"%s\"'" % (machine.name, comm)
 
         commands.append(command)
         sshs.append(None)
@@ -76,27 +161,6 @@ def verify_options(parser, config):
         parser.error("ERROR: Infrastructure provider should be qemu")
 
 
-def update_ip(config, middle_ip, postfix_ip):
-    """Update IPs. Once the last number of the IP string (the zzz in www.xxx.yyy.zzz)
-    reaches the configured upperbound, reset this number to the lower bound and reset
-    the yyy number to += 1 to go to the next IP range.
-
-    Args:
-        config (dict): Parsed configuration
-        middle_ip (int): yyy part of IP in www.xxx.yyy.zzz
-        postfix_ip (int): zzz part of IP in www.xxx.yyy.zzz
-
-    Returns:
-        int, int: Updated middle_ip and postfix_ip
-    """
-    postfix_ip += 1
-    if postfix_ip == config["postfixIP_upper"]:
-        middle_ip += 1
-        postfix_ip = config["postfixIP_lower"]
-
-    return middle_ip, postfix_ip
-
-
 def set_ip_names(config, machines, nodes_per_machine):
     """Set amount of cloud / edge / endpoints nodes per machine, and their IPs / hostnames.
 
@@ -116,14 +180,15 @@ def set_ip_names(config, machines, nodes_per_machine):
     cloud_index = 0
     edge_index = 0
     endpoint_index = 0
+    infra_only = config_access.infra_only(config)
 
     for i, (machine, nodes) in enumerate(zip(machines, nodes_per_machine)):
         # Set IP / name for controller (on first machine only)
         if (
             machine == machines[0]
-            and not config["infrastructure"]["infra_only"]
             and not config["mode"] == "endpoint"
-            and not config["benchmark"]["resource_manager"] == "mist"
+            and config_access.orchestrator_name(config) != "mist"
+            and nodes["cloud"] > 0
         ):
             machine.cloud_controller = int(nodes["cloud"] > 0)
             machine.clouds = nodes["cloud"] - int(nodes["cloud"] > 0)
@@ -134,7 +199,7 @@ def set_ip_names(config, machines, nodes_per_machine):
 
             name = "cloud_controller_%s" % (config["username"])
             machine.cloud_controller_names.append(name)
-            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+            middle_ip, postfix_ip = network.next_configured_ip(config, middle_ip, postfix_ip)
         else:
             machine.cloud_controller = 0
             machine.clouds = nodes["cloud"]
@@ -147,7 +212,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.cloud_ips.append(ip)
             machine.cloud_ips_internal.append(ip)
-            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+            middle_ip, postfix_ip = network.next_configured_ip(config, middle_ip, postfix_ip)
 
             name = "cloud%i_%s" % (cloud_index, config["username"])
             machine.cloud_names.append(name)
@@ -158,7 +223,7 @@ def set_ip_names(config, machines, nodes_per_machine):
             ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.edge_ips.append(ip)
             machine.edge_ips_internal.append(ip)
-            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+            middle_ip, postfix_ip = network.next_configured_ip(config, middle_ip, postfix_ip)
 
             name = "edge%i_%s" % (edge_index, config["username"])
             machine.edge_names.append(name)
@@ -169,14 +234,14 @@ def set_ip_names(config, machines, nodes_per_machine):
             ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
             machine.endpoint_ips.append(ip)
             machine.endpoint_ips_internal.append(ip)
-            middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+            middle_ip, postfix_ip = network.next_configured_ip(config, middle_ip, postfix_ip)
 
             name = "endpoint%i_%s" % (endpoint_index, config["username"])
             machine.endpoint_names.append(name)
             endpoint_index += 1
 
         # Set IP / name for base image(s)
-        if config["infrastructure"]["infra_only"]:
+        if infra_only:
             ip = "%s.%s.%s" % (
                 config["infrastructure"]["prefixIP"],
                 middle_ip_base,
@@ -186,14 +251,16 @@ def set_ip_names(config, machines, nodes_per_machine):
 
             name = "base%i_%s" % (i, config["username"])
             machine.base_names.append(name)
-            middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+            middle_ip_base, postfix_ip_base = network.next_configured_ip(
+                config, middle_ip_base, postfix_ip_base
+            )
         else:
             # Base images for resource manager images
-            if "resource_manager" in config["benchmark"]:
-                # Use Kubeedge setup code for mist computing
-                rm = config["benchmark"]["resource_manager"]
-                if config["benchmark"]["resource_manager"] == "mist":
-                    rm = "kubeedge"
+            # Use KubeEdge setup code for mist computing.
+            rm = config_access.orchestrator_name(config) or "none"
+            if rm == "mist":
+                rm = "kubeedge"
+            profile_token = _base_profile_token(config)
 
             if machine.cloud_controller + machine.clouds > 0:
                 ip = "%s.%s.%s" % (
@@ -203,9 +270,11 @@ def set_ip_names(config, machines, nodes_per_machine):
                 )
                 machine.base_ips.append(ip)
 
-                name = "base_cloud_%s%i_%s" % (rm, i, config["username"])
+                name = "base_cloud_%s_%s_%i_%s" % (rm, profile_token, i, config["username"])
                 machine.base_names.append(name)
-                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+                middle_ip_base, postfix_ip_base = network.next_configured_ip(
+                    config, middle_ip_base, postfix_ip_base
+                )
 
             if machine.edges > 0:
                 ip = "%s.%s.%s" % (
@@ -215,9 +284,11 @@ def set_ip_names(config, machines, nodes_per_machine):
                 )
                 machine.base_ips.append(ip)
 
-                name = "base_edge_%s%i_%s" % (rm, i, config["username"])
+                name = "base_edge_%s_%s_%i_%s" % (rm, profile_token, i, config["username"])
                 machine.base_names.append(name)
-                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+                middle_ip_base, postfix_ip_base = network.next_configured_ip(
+                    config, middle_ip_base, postfix_ip_base
+                )
 
             if machine.endpoints > 0:
                 ip = "%s.%s.%s" % (
@@ -227,9 +298,11 @@ def set_ip_names(config, machines, nodes_per_machine):
                 )
                 machine.base_ips.append(ip)
 
-                name = "base_endpoint%i_%s" % (i, config["username"])
+                name = "base_endpoint_%s_%i_%s" % (profile_token, i, config["username"])
                 machine.base_names.append(name)
-                middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
+                middle_ip_base, postfix_ip_base = network.next_configured_ip(
+                    config, middle_ip_base, postfix_ip_base
+                )
 
 
 def copy(config, machines):
@@ -260,81 +333,101 @@ def copy(config, machines):
         ):
             out.append(
                 machine.copy_files(
-                    config, os.path.join(config["base"], ".tmp", "domain_" + name + ".xml"), dest
+                    config,
+                    os.path.join(
+                        config.get("tmp_dir", os.path.join(config["base"], ".tmp")),
+                        "domain_" + name + ".xml",
+                    ),
+                    dest,
                 )
             )
             out.append(
                 machine.copy_files(
-                    config, os.path.join(config["base"], ".tmp", "user_data_" + name + ".yml"), dest
+                    config,
+                    os.path.join(
+                        config.get("tmp_dir", os.path.join(config["base"], ".tmp")),
+                        "user_data_" + name + ".yml",
+                    ),
+                    dest,
                 )
             )
-
-        # Copy Ansible files for infrastructure
-        path = os.path.join(
-            config["base"], "infrastructure", config["infrastructure"]["provider"], "infrastructure"
-        )
-        out.append(machine.copy_files(config, path, dest, recursive=True))
 
         for output, error in out:
             if error:
                 logging.error("".join(error))
-                sys.exit()
+                sys.exit(1)
             elif output:
                 logging.error("".join(output))
-                sys.exit()
+                sys.exit(1)
 
 
-def os_image(config, machines):
+def os_image(config, machines, runner=None):
     """Check if the os image with Ubuntu 20.04 already exists,
     and if not create the image (on all machines)
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner, optional): Shared runner instance for playbook execution.
     """
     logging.info("Check if a new OS image needs to be created")
     need_image = False
     for machine in machines:
+        image_path = os.path.join(
+            config["infrastructure"]["base_path"], ".continuum/images/ubuntu2004.qcow2"
+        )
         command = [
             "find",
-            os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/images/ubuntu2004.qcow2"
-            ),
+            image_path,
         ]
         output, error = machine.process(config, command, ssh=machine.name)[0]
 
         if error or not output:
             need_image = True
             break
+        if machine.is_local and not os.access(image_path, os.R_OK):
+            logging.info("Cached OS image is unreadable; removing and rebuilding: %s", image_path)
+            _delete_local_path(image_path)
+            resize_marker = os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/images/.ubuntu2004.qcow2_resized",
+            )
+            _delete_local_path(resize_marker)
+            need_image = True
+            break
+
+    if runner is None:
+        runner = ansible.AnsibleRunner(config, machines)
 
     if need_image:
         logging.info("Need to install OS image")
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/os.yml"),
-        ]
-        ansible.check_output(machines[0].process(config, command)[0])
+        runner.run_playbook(
+            "playbooks/infrastructure/qemu_prepare_os.yml",
+            inventory="machine",
+            env=_machine_playbook_env(),
+        )
     else:
         logging.info("OS image is already there")
 
 
-def base_image(config, machines):
+def base_image(config, machines, runner=None):
     """Check if a base image already exists, and if not create the image
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner, optional): Shared runner instance for playbook execution.
     """
+    if runner is None:
+        runner = ansible.AnsibleRunner(config, machines)
+
     logging.info("Check if new base image(s) needs to be created")
 
     # Create a flat list of base_names, without any special characters
     base_names = []
     for machine in machines:
         for base_name in machine.base_names:
-            name = base_name.rsplit("_", 1)[0]
-            name = name.rstrip(string.digits)
+            name = orchestration_schema.normalized_base_name(base_name)
             base_names.append(name)
 
     # Create a mask for the previous list
@@ -343,18 +436,48 @@ def base_image(config, machines):
     # Check if all images are available on each machine, otherwise set need_images
     for machine in machines:
         for base_name in machine.base_names:
+            raw_base_name = base_name
+            image_path = os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/images/%s.qcow2" % (base_name),
+            )
             command = [
                 "find",
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/images/%s.qcow2" % (base_name),
-                ),
+                image_path,
             ]
             output, error = machine.process(config, command, ssh=machine.name)[0]
 
             if error or not output:
-                base_name = base_name.rsplit("_", 1)[0].rstrip(string.digits)
+                base_name = orchestration_schema.normalized_base_name(base_name)
                 need_images[base_names.index(base_name)] = True
+            elif machine.is_local and not os.access(image_path, os.R_OK):
+                logging.info("Cached base image is unreadable; removing and rebuilding: %s", image_path)
+                _delete_local_path(image_path)
+                user_data_path = os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/images/user_data_%s.img" % (raw_base_name),
+                )
+                _delete_local_path(user_data_path)
+                _delete_local_path(_base_image_metadata_path(config, raw_base_name))
+                base_name = orchestration_schema.normalized_base_name(base_name)
+                need_images[base_names.index(base_name)] = True
+            elif machine.is_local:
+                invalid_reason = _base_image_cache_invalid_reason(config, raw_base_name)
+                if invalid_reason:
+                    logging.info(
+                        "Cached base image is stale (%s); removing and rebuilding: %s",
+                        invalid_reason,
+                        image_path,
+                    )
+                    _delete_local_path(image_path)
+                    user_data_path = os.path.join(
+                        config["infrastructure"]["base_path"],
+                        ".continuum/images/user_data_%s.img" % (raw_base_name),
+                    )
+                    _delete_local_path(user_data_path)
+                    _delete_local_path(_base_image_metadata_path(config, raw_base_name))
+                    base_name = orchestration_schema.normalized_base_name(base_name)
+                    need_images[base_names.index(base_name)] = True
 
     # Stop if no base images are required
     base_names = [name for name, need in zip(base_names, need_images) if need]
@@ -362,58 +485,24 @@ def base_image(config, machines):
         logging.info("Base image(s) are all already present")
         return
 
-    # Create base images
-    for base_name in base_names:
-        logging.info("Create base image %s", base_name)
-        if base_name == "base":
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/infrastructure/base_start.yml",
-                ),
-            ]
-        elif "base_cloud" in base_name:
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/infrastructure/base_cloud_start.yml",
-                ),
-            ]
-        elif "base_edge" in base_name:
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/infrastructure/base_edge_start.yml",
-                ),
-            ]
-        elif "base_endpoint" in base_name:
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-                os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/infrastructure/base_endpoint_start.yml",
-                ),
-            ]
-
-        ansible.check_output(machines[0].process(config, command)[0])
+    logging.info("Create base image set via qemu_prepare_base.yml")
+    runner.run_playbook(
+        "playbooks/infrastructure/qemu_prepare_base.yml",
+        inventory="machine",
+        extra_vars={
+            "continuum_base_images_by_host": orchestration_schema.base_images_by_host(
+                machines, base_names
+            )
+        },
+        env=_machine_playbook_env(),
+    )
 
     # Create commands to launch the base VMs concurrently
     commands = []
     base_ips = []
     for machine in machines:
         for base_name, base_ip in zip(machine.base_names, machine.base_ips):
-            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
+            base_name_r = orchestration_schema.normalized_base_name(base_name)
             if base_name_r in base_names:
                 path = os.path.join(
                     config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (base_name)
@@ -421,9 +510,9 @@ def base_image(config, machines):
                 if machine.is_local:
                     command = "virsh --connect qemu:///system create %s" % (path)
                 else:
-                    command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
-                        % (machine.name, path)
+                    command = "ssh %s 'bash -l -c \"virsh --connect qemu:///system create %s\"'" % (
+                        machine.name,
+                        path,
                     )
 
                 commands.append(command)
@@ -438,100 +527,50 @@ def base_image(config, machines):
 
         if error and "Connection to " not in error[0]:
             logging.error("ERROR: %s", "".join(error))
-            sys.exit()
+            sys.exit(1)
         elif "Domain " not in output[0] or " created from " not in output[0]:
             logging.error("ERROR: %s", "".join(output))
-            sys.exit()
+            sys.exit(1)
 
     # Fix SSH keys for each base image
     infrastructure.add_ssh(config, machines, base=base_ips)
 
     # Install software concurrently (infra_only won't get anything installed)
-    commands = []
-    for base_name in base_names:
-        command = []
-        if "base_cloud" in base_name:
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/cloud/base_install.yml"
-                ),
-            ]
-        elif "base_edge" in base_name:
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/edge/base_install.yml"
-                ),
-            ]
-        elif "base_endpoint" in base_name:
-            command = [
-                "ansible-playbook",
-                "-i",
-                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-                os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/endpoint/base_install.yml"
-                ),
-            ]
+    playbooks = rm_plans.build_base_image_playbooks(config, base_names)
 
-        if command:
-            commands.append(command)
-
-    if commands:
+    if playbooks:
         logging.info("Install software in the base VMs")
-        results = machines[0].process(config, commands)
+        runner.run_playbooks(playbooks, inventory="vms")
 
-        for command, (output, error) in zip(commands, results):
-            logging.debug("Check output for command [%s]", " ".join(command))
-            ansible.check_output((output, error))
-
-    # Install netperf (always, because base images aren't updated)
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
-        ),
-    ]
-    ansible.check_output(machines[0].process(config, command)[0])
-
-    # Install Mahimahi support only when using a Mahimahi-based preset
+    # Install common infrastructure software (netperf + optional Mahimahi)
     wireless_preset = config["infrastructure"].get("wireless_network_preset", "")
-    if isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi"):
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/infrastructure/mahimati.yml",
-            ),
-        ]
-
-        ansible.check_output(machines[0].process(config, command)[0])
+    runner.run_playbook(
+        "playbooks/infrastructure/common_base_install.yml",
+        inventory="vms",
+        extra_vars={
+            "continuum_enable_mahimahi": (
+                isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
+            )
+        },
+    )
 
     # Install docker containers if required
-    if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
+    if image_registry.has_prefetch_requirements(config):
         # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
         # These RM will automatically pull images, so we can skip this here.
         # Only pull endpoint images instead
         docker_base_names = base_names
-        if config["benchmark"]["resource_manager"] in [
+        if config_access.orchestrator_name(config) in (
             "kubernetes",
             "kubeedge",
             "kubecontrol",
             "kube_kata",
-        ]:
+        ):
             docker_base_names = [
                 base_name for base_name in docker_base_names if "endpoint" in base_name
             ]
 
-        infrastructure.docker_pull(config, machines, docker_base_names)
+        image_registry.docker_pull(config, machines, docker_base_names)
 
     # Get host timezone
     command = ["ls", "-alh", "/etc/localtime"]
@@ -539,10 +578,10 @@ def base_image(config, machines):
 
     if not output or "/etc/localtime" not in output[0]:
         logging.error("Could not get host timezone: %s", "".join(output))
-        sys.exit()
+        sys.exit(1)
     elif error:
         logging.error("Could not get host timezone: %s", "".join(error))
-        sys.exit()
+        sys.exit(1)
 
     timezone = output[0].split("-> ")[1].strip()
 
@@ -551,9 +590,9 @@ def base_image(config, machines):
     sshs = []
     for machine in machines:
         for ip, name in zip(machine.base_ips, machine.base_names):
-            name_r = name.rsplit("_", 1)[0].rstrip(string.digits)
+            name_r = orchestration_schema.normalized_base_name(name)
             if name_r in base_names:
-                ssh = "%s@%s" % (name, ip)
+                ssh = "%s@%s" % (orchestration_schema.guest_login_name(name), ip)
                 sshs.append(ssh)
 
     results = machines[0].process(config, command, ssh=sshs)
@@ -561,41 +600,37 @@ def base_image(config, machines):
     for output, error in results:
         if output:
             logging.error("Could not set VM timezone: %s", "".join(output))
-            sys.exit()
+            sys.exit(1)
         elif error:
             logging.error("Could not set VM timezone: %s", "".join(error))
-            sys.exit()
+            sys.exit(1)
 
     # Clean the VM
-    commands = []
+    command = ["sudo", "cloud-init", "clean"]
+    sshs = []
     for machine in machines:
         for base_name, ip in zip(machine.base_names, machine.base_ips):
-            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
+            base_name_r = orchestration_schema.normalized_base_name(base_name)
             if base_name_r in base_names:
-                command = "ssh %s@%s -i %s sudo cloud-init clean" % (
-                    base_name,
-                    ip,
-                    config["ssh_key"],
-                )
-                commands.append(command)
+                sshs.append("%s@%s" % (orchestration_schema.guest_login_name(base_name), ip))
 
-    results = machines[0].process(config, commands, shell=True)
+    results = machines[0].process(config, command, ssh=sshs)
 
-    for command, (output, error) in zip(commands, results):
-        logging.info("Check output for command [%s]", command)
+    for ssh, (output, error) in zip(sshs, results):
+        logging.info("Check output for command [sudo cloud-init clean] on [%s]", ssh)
         ansible.check_output((output, error))
 
     # Shutdown VMs
     commands = []
     for machine in machines:
         for base_name in machine.base_names:
-            base_name_r = base_name.rsplit("_", 1)[0].rstrip(string.digits)
+            base_name_r = orchestration_schema.normalized_base_name(base_name)
             if base_name_r in base_names:
                 if machine.is_local:
                     command = "virsh --connect qemu:///system shutdown %s" % (base_name)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system shutdown %s\"'"
+                        "ssh %s 'bash -l -c \"virsh --connect qemu:///system shutdown %s\"'"
                         % (machine.name, base_name)
                     )
 
@@ -610,10 +645,18 @@ def base_image(config, machines):
             command.split(" ")[0] == "ssh" and any("Connection to " in e for e in error)
         ):
             logging.error("".join(error))
-            sys.exit()
+            sys.exit(1)
         elif "Domain " not in output[0] or " is being shutdown" not in output[0]:
             logging.error("".join(output))
-            sys.exit()
+            sys.exit(1)
+
+    for machine in machines:
+        if not machine.is_local:
+            continue
+        for raw_base_name in machine.base_names:
+            normalized_base_name = orchestration_schema.normalized_base_name(raw_base_name)
+            if normalized_base_name in base_names:
+                _write_base_image_metadata(config, raw_base_name)
 
     # Wait for the shutdown to be completed
     time.sleep(5)
@@ -653,9 +696,9 @@ def launch_vms(config, machines, repeat=None):
                 if machine.is_local:
                     command = "virsh --connect qemu:///system create %s" % (path)
                 else:
-                    command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
-                        % (machine.name, path)
+                    command = "ssh %s 'bash -l -c \"virsh --connect qemu:///system create %s\"'" % (
+                        machine.name,
+                        path,
                     )
 
                 commands.append(command)
@@ -676,72 +719,77 @@ def launch_vms(config, machines, repeat=None):
             repeat.append(command)
         elif error and "Connection to " not in error[0]:
             logging.error("ERROR: %s", "".join(error))
-            sys.exit()
+            sys.exit(1)
         elif "Domain " not in output[0] or " created from " not in output[0]:
             logging.error("ERROR: %s", "".join(output))
-            sys.exit()
+            sys.exit(1)
 
     return repeat
 
 
-def start_vms(config, machines):
+def start_vms(config, machines, runner=None):
     """Create and launch QEMU cloud and edge VMs
 
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+        runner (AnsibleRunner, optional): Shared runner instance for playbook execution.
     """
     logging.info("Start VM creation using QEMU")
 
+    if runner is None:
+        runner = ansible.AnsibleRunner(config, machines)
+
     # Delete older VM images
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/infrastructure/remove.yml"),
-    ]
-    ansible.check_output(machines[0].process(config, command)[0])
+    runner.run_playbook(
+        "playbooks/infrastructure/qemu_cleanup.yml",
+        inventory="machine",
+        env=_machine_playbook_env(),
+    )
 
     # Check if os and base image need to be created, and if so do create them
-    os_image(config, machines)
-    base_image(config, machines)
+    os_image(config, machines, runner=runner)
+    base_image(config, machines, runner=runner)
 
-    # Create cloud images
-    if config["infrastructure"]["cloud_nodes"]:
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/infrastructure/cloud_start.yml"
-            ),
+    # Create VM overlay images for all tiers in one playbook call
+    if any(
+        [
+            config["infrastructure"]["cloud_nodes"],
+            config["infrastructure"]["edge_nodes"],
+            config["infrastructure"]["endpoint_nodes"],
         ]
-        ansible.check_output(machines[0].process(config, command)[0])
-
-    # Create edge images
-    if config["infrastructure"]["edge_nodes"]:
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/infrastructure/edge_start.yml"
-            ),
-        ]
-        ansible.check_output(machines[0].process(config, command)[0])
-
-    # Create endpoint images
-    if config["infrastructure"]["endpoint_nodes"]:
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory"),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/infrastructure/endpoint_start.yml",
-            ),
-        ]
-        ansible.check_output(machines[0].process(config, command)[0])
+    ):
+        cloud_vm_nodes_by_host = orchestration_schema.tier_vm_nodes_by_host(machines, "cloud")
+        cloud_base_image_by_host = orchestration_schema.tier_base_image_by_host(machines, "cloud")
+        edge_vm_nodes_by_host = orchestration_schema.tier_vm_nodes_by_host(machines, "edge")
+        edge_base_image_by_host = orchestration_schema.tier_base_image_by_host(machines, "edge")
+        endpoint_vm_nodes_by_host = orchestration_schema.tier_vm_nodes_by_host(machines, "endpoint")
+        endpoint_base_image_by_host = orchestration_schema.tier_base_image_by_host(
+            machines, "endpoint"
+        )
+        logging.info(
+            "QEMU VM image mapping: cloud_nodes=%s cloud_base=%s edge_nodes=%s edge_base=%s endpoint_nodes=%s endpoint_base=%s",
+            cloud_vm_nodes_by_host,
+            cloud_base_image_by_host,
+            edge_vm_nodes_by_host,
+            edge_base_image_by_host,
+            endpoint_vm_nodes_by_host,
+            endpoint_base_image_by_host,
+        )
+        output, _ = runner.run_playbook(
+            "playbooks/infrastructure/qemu_create_vms.yml",
+            inventory="machine",
+            extra_vars={
+                "cloud_vm_nodes_by_host": cloud_vm_nodes_by_host,
+                "cloud_base_image_by_host": cloud_base_image_by_host,
+                "edge_vm_nodes_by_host": edge_vm_nodes_by_host,
+                "edge_base_image_by_host": edge_base_image_by_host,
+                "endpoint_vm_nodes_by_host": endpoint_vm_nodes_by_host,
+                "endpoint_base_image_by_host": endpoint_base_image_by_host,
+            },
+            env=_machine_playbook_env(),
+        )
+        logging.info("qemu_create_vms playbook output:\n%s", "".join(output))
 
     # Start VMs
     repeat = []
@@ -753,7 +801,7 @@ def start_vms(config, machines):
 
         if i == 1:
             logging.error("ERROR AFTER %i REPS: %s", i + 1, " | ".join(repeat))
-            sys.exit()
+            sys.exit(1)
 
         i += 1
 
@@ -774,14 +822,23 @@ def start(config, machines):
 
     logging.info("Generate configuration files for Infrastructure and Ansible")
     infrastructure.create_keypair(config, machines)
+    runner = ansible.AnsibleRunner(config, machines)
 
     ansible.create_inventory_machine(config, machines)
     ansible.create_inventory_vm(config, machines)
+    ansible.generate_group_vars(
+        config,
+        machines,
+        os.path.join(
+            config.get("tmp_dir", os.path.join(config["base"], ".tmp")),
+            "inventory_group_vars",
+        ),
+    )
     ansible.copy(config, machines)
 
     generate.start(config, machines)
     copy(config, machines)
 
     logging.info("Setting up the infrastructure")
-    start_vms(config, machines)
+    start_vms(config, machines, runner=runner)
     infrastructure.add_ssh(config, machines)

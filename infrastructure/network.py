@@ -6,6 +6,50 @@ import json
 import logging
 import os
 import sys
+import time
+
+
+def _is_transient_tc_error(lines):
+    """Return true when TC error looks transient (e.g., temporary SSH issues).
+
+    Args:
+        lines (list(str)): List of lines to check for transient errors
+
+    Returns:
+        bool: True if the error looks transient, False otherwise
+    """
+    if not lines:
+        return False
+    combined = " ".join(lines).lower()
+    patterns = [
+        "timeout, server",
+        "not responding",
+        "connection timed out",
+        "connection reset by peer",
+        "broken pipe",
+    ]
+    return any(pattern in combined for pattern in patterns)
+
+
+def next_configured_ip(config, middle_ip, postfix_ip):
+    """Advance to the next IP address within the configured postfix window. The window is set to
+    2-252. In practice, this means you would have to use >250 VMs to reach the upper bound. We
+    still keep this function for satefy.
+
+    Args:
+        config (dict): Parsed configuration with postfix bounds.
+        middle_ip (int): Middle octet value.
+        postfix_ip (int): Last octet value.
+
+    Returns:
+        tuple[int, int]: Updated middle and postfix octets.
+    """
+    postfix_ip += 1
+    if postfix_ip == config["postfixIP_upper"]:
+        middle_ip += 1
+        postfix_ip = config["postfixIP_lower"]
+
+    return middle_ip, postfix_ip
 
 
 def generate_tc_commands(config, values, ips, disk):
@@ -127,6 +171,7 @@ def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
         return [[]]
 
     commands = []
+    target_args = " ".join(targets)
 
     commands.append(["export", "SRC_TO_IGNORE=10.0.0.1"])
 
@@ -141,7 +186,7 @@ def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
             uplink,
             downlink,
             "sudo",
-            f"/home/mahimahi/setup_container.sh {endpoint_ip} {' '.join([target for target in targets])}",
+            f"/home/mahimahi/setup_container.sh {endpoint_ip} {target_args}",
             ">output_mahi.txt",
             "2>&1",
             "&",
@@ -155,7 +200,7 @@ def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
         [
             "(",
             "sudo",
-            f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {" ".join([target for target in targets])}",
+            f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {target_args}",
             ">output_reroute.txt",
             "2>&1",
             "&",
@@ -221,71 +266,77 @@ def tc_values(config):
     Returns:
         5x list(int, int, int): TC network values to be used
     """
+    infrastructure = config.get("infrastructure", {})
+    wireless_preset = infrastructure.get("wireless_network_preset", "")
+    edge_location = infrastructure.get("edge_location", "")
+    cloud_location = infrastructure.get("cloud_location", "")
+
     # Default values
     cloud = [0, 0, 1000]  # Between cloud nodes (wired)
     edge = [7.5, 2.5, 1000]  # Between edge nodes (wired)
     cloud_edge = [7.5, 2.5, 1000]  # Between cloud and edge (wired)
+    cloud_endpoint = [0, 0, 1000]  # Between cloud and endpoint (default wired)
+    edge_endpoint = [0, 0, 1000]  # Between edge and endpoint (default wired)
 
     if (
-        config["infrastructure"]["wireless_network_preset"] == "4g_us_verizon_mahimahi"
-        or config["infrastructure"]["wireless_network_preset"] == "evdo_us_verizon_mahimahi"
-        or config["infrastructure"]["wireless_network_preset"] == "5g_nl_kpn_mahimahi"
-        or config["infrastructure"]["wireless_network_preset"] == "6g_nl_kpn_mahimahi"
+        wireless_preset == "4g_us_verizon_mahimahi"
+        or wireless_preset == "evdo_us_verizon_mahimahi"
+        or wireless_preset == "5g_nl_kpn_mahimahi"
     ):
         cloud_endpoint = [0, 0, 1000]
         edge_endpoint = [0, 0, 1000]
 
-    if config["infrastructure"]["edge_location"] == "aws_vodafone_edge":
+    if edge_location == "aws_vodafone_edge":
         edge_endpoint = [0.07, 0.01, 10000]
-    elif config["infrastructure"]["edge_location"] == "base_edge":
+    elif edge_location == "base_edge":
         edge_endpoint = [0, 0, 1000]
 
-    if config["infrastructure"]["cloud_location"] == "eu_central_1":
+    if cloud_location == "eu_central_1":
         cloud_endpoint = [3.125, 0.01, 10000]
-    elif config["infrastructure"]["cloud_location"] == "us_east_1":
+    elif cloud_location == "us_east_1":
         cloud_endpoint = [45, 0.01, 10000]
-    elif config["infrastructure"]["cloud_location"] == "eu_west_3":
+    elif cloud_location == "eu_west_3":
         cloud_endpoint = [7.5, 0.01, 10000]
 
     # Set values based on 4g/5g preset (if the user didn't set anything, 4g is default)
-    if config["infrastructure"]["wireless_network_preset"] == "4g":
+    if wireless_preset == "4g":
         cloud_endpoint = [45, 5, 7.21]
         edge_endpoint = [7.5, 2.5, 7.21]
-    elif config["infrastructure"]["wireless_network_preset"] == "5g":
+    elif wireless_preset == "5g":
         cloud_endpoint = [45, 5, 29.66]
         edge_endpoint = [7.5, 2.5, 29.66]
 
     # Overwrite with custom values
-    if config["infrastructure"]["cloud_latency_avg"] != -1:
-        cloud[0] = config["infrastructure"]["cloud_latency_avg"]
-    if config["infrastructure"]["cloud_latency_var"] != -1:
-        cloud[1] = config["infrastructure"]["cloud_latency_var"]
-    if config["infrastructure"]["cloud_throughput"] != -1:
-        cloud[2] = config["infrastructure"]["cloud_throughput"]
-    if config["infrastructure"]["edge_latency_avg"] != -1:
-        edge[0] = config["infrastructure"]["edge_latency_avg"]
-    if config["infrastructure"]["edge_latency_var"] != -1:
-        edge[1] = config["infrastructure"]["edge_latency_var"]
-    if config["infrastructure"]["edge_throughput"] != -1:
-        edge[2] = config["infrastructure"]["edge_throughput"]
-    if config["infrastructure"]["cloud_edge_latency_avg"] != -1:
-        cloud_edge[0] = config["infrastructure"]["cloud_edge_latency_avg"]
-    if config["infrastructure"]["cloud_edge_latency_var"] != -1:
-        cloud_edge[1] = config["infrastructure"]["cloud_edge_latency_var"]
-    if config["infrastructure"]["cloud_edge_throughput"] != -1:
-        cloud_edge[2] = config["infrastructure"]["cloud_edge_throughput"]
-    if config["infrastructure"]["cloud_endpoint_latency_avg"] != -1:
-        cloud_endpoint[0] = config["infrastructure"]["cloud_endpoint_latency_avg"]
-    if config["infrastructure"]["cloud_endpoint_latency_var"] != -1:
-        cloud_endpoint[1] = config["infrastructure"]["cloud_endpoint_latency_var"]
-    if config["infrastructure"]["cloud_endpoint_throughput"] != -1:
-        cloud_endpoint[2] = config["infrastructure"]["cloud_endpoint_throughput"]
-    if config["infrastructure"]["edge_endpoint_latency_avg"] != -1:
-        edge_endpoint[0] = config["infrastructure"]["edge_endpoint_latency_avg"]
-    if config["infrastructure"]["edge_endpoint_latency_var"] != -1:
-        edge_endpoint[1] = config["infrastructure"]["edge_endpoint_latency_var"]
-    if config["infrastructure"]["edge_endpoint_throughput"] != -1:
-        edge_endpoint[2] = config["infrastructure"]["edge_endpoint_throughput"]
+    if infrastructure.get("cloud_latency_avg", -1) != -1:
+        cloud[0] = infrastructure["cloud_latency_avg"]
+    if infrastructure.get("cloud_latency_var", -1) != -1:
+        cloud[1] = infrastructure["cloud_latency_var"]
+    if infrastructure.get("cloud_throughput", -1) != -1:
+        cloud[2] = infrastructure["cloud_throughput"]
+    if infrastructure.get("edge_latency_avg", -1) != -1:
+        edge[0] = infrastructure["edge_latency_avg"]
+    if infrastructure.get("edge_latency_var", -1) != -1:
+        edge[1] = infrastructure["edge_latency_var"]
+    if infrastructure.get("edge_throughput", -1) != -1:
+        edge[2] = infrastructure["edge_throughput"]
+    if infrastructure.get("cloud_edge_latency_avg", -1) != -1:
+        cloud_edge[0] = infrastructure["cloud_edge_latency_avg"]
+    if infrastructure.get("cloud_edge_latency_var", -1) != -1:
+        cloud_edge[1] = infrastructure["cloud_edge_latency_var"]
+    if infrastructure.get("cloud_edge_throughput", -1) != -1:
+        cloud_edge[2] = infrastructure["cloud_edge_throughput"]
+    if infrastructure.get("cloud_endpoint_latency_avg", -1) != -1:
+        cloud_endpoint[0] = infrastructure["cloud_endpoint_latency_avg"]
+    if infrastructure.get("cloud_endpoint_latency_var", -1) != -1:
+        cloud_endpoint[1] = infrastructure["cloud_endpoint_latency_var"]
+    if infrastructure.get("cloud_endpoint_throughput", -1) != -1:
+        cloud_endpoint[2] = infrastructure["cloud_endpoint_throughput"]
+    if infrastructure.get("edge_endpoint_latency_avg", -1) != -1:
+        edge_endpoint[0] = infrastructure["edge_endpoint_latency_avg"]
+    if infrastructure.get("edge_endpoint_latency_var", -1) != -1:
+        edge_endpoint[1] = infrastructure["edge_endpoint_latency_var"]
+    if infrastructure.get("edge_endpoint_throughput", -1) != -1:
+        edge_endpoint[2] = infrastructure["edge_endpoint_throughput"]
 
     return cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint
 
@@ -382,7 +433,8 @@ def start(config, machines):
         )
         if targets:
             command += generate_mahimati_command(endpoint_ip, targets, uplink, downlink)
-            commands.append(command)
+
+        commands.append(command)
 
     # Generate all TC commands and the ssh addresses where they need to be executed
     commands_final = []
@@ -398,24 +450,52 @@ def start(config, machines):
         logging.debug("TC commands for node: %s\n\t%s", ssh, "\n\t".join(c))
 
         c = ";".join(c)
-        c = '"' + c + '"'
 
         commands_final.append(c)
         sshs.append(ssh)
 
     # Execute TC command in parallel
     if commands_final:
-        results = machines[0].process(config, commands_final, shell=True, ssh=sshs)
+        MAX_RETRIES = 2
+        RETRY_DELAY = 3
+        base_commands = list(commands_final)
+        base_sshs = list(sshs)
+        pending_indices = list(range(len(base_commands)))
+        attempt = 0
 
-        # Check output of TC commands
-        logging.info("Check output from TC operations")
-        for output, error in results:
-            if error:
-                logging.error("".join(error))
-                sys.exit(1)
-            elif output:
-                logging.error("".join(output))
-                sys.exit(1)
+        while True:
+            pending_commands = [base_commands[i] for i in pending_indices]
+            pending_sshs = [base_sshs[i] for i in pending_indices]
+            results = machines[0].process(config, pending_commands, shell=True, ssh=pending_sshs)
+
+            # Check output of TC commands
+            logging.info("Check output from TC operations")
+            transient_failures = []
+            for idx, (output, error) in enumerate(results):
+                lines = (error or []) + (output or [])
+                if error or output:
+                    if _is_transient_tc_error(lines) and attempt < MAX_RETRIES:
+                        transient_failures.append(pending_indices[idx])
+                        continue
+                    if error:
+                        logging.error("".join(error))
+                    if output:
+                        logging.error("".join(output))
+                    sys.exit(1)
+
+            if not transient_failures:
+                break
+
+            attempt += 1
+            pending_indices = transient_failures
+            logging.warning(
+                "Transient TC error detected, retrying %i node(s) in %ss (attempt %i/%i)",
+                len(pending_indices),
+                RETRY_DELAY,
+                attempt,
+                MAX_RETRIES,
+            )
+            time.sleep(RETRY_DELAY)
 
 
 def netperf_commands(target_ips):
@@ -449,6 +529,33 @@ transaction_rate,p50_latency,p90_latency,p99_latency",
     return lat_commands, tp_commands
 
 
+def expected_profile_values(config, source_name, target_name):
+    """Return expected latency/throughput values for a source/target pair.
+
+    Args:
+        config (dict): Parsed configuration.
+        source_name (str): Logical source tier name.
+        target_name (str): Logical target tier name.
+
+    Returns:
+        tuple[float, float] | tuple[None, None]: Expected latency in ms and throughput in mbit.
+    """
+    cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint = tc_values(config)
+    pair = frozenset((str(source_name), str(target_name)))
+
+    mapping = {
+        frozenset(("cloud", "cloud")): cloud,
+        frozenset(("edge", "edge")): edge,
+        frozenset(("cloud", "edge")): cloud_edge,
+        frozenset(("cloud", "endpoint")): cloud_endpoint,
+        frozenset(("edge", "endpoint")): edge_endpoint,
+    }
+    values = mapping.get(pair)
+    if values is None:
+        return None, None
+    return float(values[0]), float(values[2])
+
+
 def benchmark_output(
     config, machine, targets, lat_commands, tp_commands, ssh, source_name, target_name
 ):
@@ -465,10 +572,10 @@ def benchmark_output(
         target_name (str): Type of VMs on the receiving side of netperf
     """
     # Prepare path for optional structured netperf results (NDJSON)
-    base_dir = config.get("base", os.getcwd())
+    base_dir = config["base"]
     results_dir = os.path.join(base_dir, "logs", "network_validation")
     os.makedirs(results_dir, exist_ok=True)
-    ts = config.get("timestamp", "unknown")
+    ts = config["timestamp"]
     results_path = os.path.join(results_dir, f"netperf_results_{ts}.ndjson")
 
     all_targets = targets + targets
@@ -482,6 +589,9 @@ def benchmark_output(
 
         # Write one NDJSON entry per netperf invocation for later validation
         direction = "latency" if idx < len(targets) else "throughput"
+        expected_latency_ms, expected_throughput_mbps = expected_profile_values(
+            config, source_name, target_name
+        )
         entry = {
             "timestamp": ts,
             "source": source_name,
@@ -492,6 +602,8 @@ def benchmark_output(
             "command": command,
             "output": "".join(output),
             "error": "".join(error),
+            "expected_latency_ms": expected_latency_ms,
+            "expected_throughput_mbps": expected_throughput_mbps,
         }
         try:
             with open(results_path, "a", encoding="utf-8") as f:

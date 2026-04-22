@@ -3,12 +3,250 @@ Define Machine object and functions to work with this object
 The Machine object represents a physical machine used to run this benchmark
 """
 
+import fcntl  # Linux-only, which is OK for Continuum deployments
 import getpass
 import logging
-import math
+import os
+import random
 import re
+import shlex
 import subprocess
 import sys
+import threading
+import time
+
+# -----------------------------
+# Helper utilities
+# -----------------------------
+
+
+def _shlex_join(argv):
+    """Fallback for shlex.join() on Python <3.8
+
+    Args:
+        argv (list(str)): List of arguments to join
+
+    Returns:
+        str: Joined arguments
+    """
+    try:
+        return shlex.join(argv)
+    except AttributeError:
+        return " ".join(shlex.quote(a) for a in argv)
+
+
+def _normalize_commands(command, shell):
+    """Normalize 'command' into a list of commands.
+
+    Returned format:
+      - list[str] if shell==True  (each element is a shell command string)
+      - list[list[str]] if shell==False (each element is argv list)
+
+    Args:
+        command (str or list(str)): Command to normalize
+        shell (bool): If True, return a list of shell commands
+
+    Returns:
+        list(str) or list(list(str)): Normalized command
+    """
+    if command is None:
+        return []
+
+    # Single command string
+    if isinstance(command, str):
+        if shell:
+            return [command]
+        # shell=False: split if needed (safe default; preserves single-word too)
+        return [shlex.split(command) if any(c.isspace() for c in command) else [command]]
+
+    # Already a list
+    if not isinstance(command, list) or len(command) == 0:
+        return []
+
+    # If it's a list of argv tokens for ONE command (classic case: ["ssh", "u@h", "cmd"])
+    if (
+        all(isinstance(x, str) for x in command)
+        and not shell
+        and all(" " not in x for x in command)
+    ):
+        return [command]
+
+    # Otherwise it's a list of commands (each element either str or argv list)
+    normalized = []
+    for c in command:
+        if isinstance(c, str):
+            if shell:
+                normalized.append(c)
+            else:
+                normalized.append(shlex.split(c) if any(ch.isspace() for ch in c) else [c])
+        elif isinstance(c, list) and all(isinstance(x, str) for x in c):
+            if shell:
+                normalized.append(_shlex_join(c))
+            else:
+                normalized.append(c)
+        else:
+            raise TypeError(f"Unsupported command element type: {type(c)}")
+    return normalized
+
+
+def _ssh_target_host(target):
+    """Return host/IP component from ssh target.
+
+    Args:
+        target (str): SSH target
+
+    Returns:
+        str: Host/IP component from ssh target
+    """
+    if not target:
+        return None
+    return target.split("@")[-1]
+
+
+def _classify_ssh_error(stderr_lines, stdout_lines):
+    """Classify SSH error type based primarily on stderr (fallback to stdout).
+
+    Args:
+        stderr_lines (list(str)): List of stderr lines
+        stdout_lines (list(str)): List of stdout lines
+
+    Returns:
+        str: SSH error type
+    """
+    lines = (stderr_lines or []) + (stdout_lines or [])
+    if not lines:
+        return None
+
+    combined = " ".join(lines).lower()
+
+    # Host key issues
+    hostkey_patterns = [
+        "remote host identification has changed",
+        "host key verification failed",
+        "possible dns spoofing detected",
+        "offending key",
+        "offending ecdsa key",
+        "offending ed25519 key",
+    ]
+    if any(p in combined for p in hostkey_patterns):
+        return "hostkey"
+
+    # Auth issues
+    auth_patterns = [
+        "permission denied",
+        "publickey",
+        "authentication failed",
+        "too many authentication failures",
+    ]
+    if any(p in combined for p in auth_patterns):
+        return "auth"
+
+    # Transient connectivity issues
+    transient_patterns = [
+        "connection timed out",
+        "connection reset by peer",
+        "broken pipe",
+        "no route to host",
+        "connection closed",
+        "connection refused",
+        "network is unreachable",
+        "could not resolve hostname",
+        "operation timed out",
+        "kex_exchange_identification",
+        "connection aborted",
+    ]
+    if any(p in combined for p in transient_patterns):
+        return "transient"
+
+    return None
+
+
+def _locked_known_hosts_update(known_hosts_path, fn):
+    """Acquire an exclusive lock on known_hosts while mutating it.
+
+    Args:
+        known_hosts_path (str): Path to known_hosts file
+        fn (function): Function to execute with the lock
+    """
+    os.makedirs(os.path.dirname(known_hosts_path), exist_ok=True)
+    # a+ ensures file exists
+    with open(known_hosts_path, "a+", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            fn()
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+def _repair_known_hosts(known_hosts_path, host):
+    """Remove stale known_hosts entry and re-scan host key.
+
+    Note: We keep this as a pragmatic 'self-healing' step, but we do it under a file lock
+    and without shell=True to reduce surprises/races.
+
+    Args:
+        known_hosts_path (str): Path to known_hosts file
+        host (str): Host to remove and re-scan
+    """
+    if not host:
+        return
+
+    def _do():
+        subprocess.run(
+            ["ssh-keygen", "-f", known_hosts_path, "-R", host],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        scan = subprocess.run(
+            ["ssh-keyscan", "-H", host],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if scan.stdout:
+            with open(known_hosts_path, "a", encoding="utf-8") as out:
+                out.write(scan.stdout.decode("utf-8", errors="replace"))
+
+    _locked_known_hosts_update(known_hosts_path, _do)
+
+
+def _async_reap(process, desc=""):
+    """Reap a child process without blocking the caller.
+
+    Args:
+        process (subprocess.Popen): Process to reap
+        desc (str): Description of the process
+    """
+
+    def _waiter():
+        try:
+            process.wait()
+        except Exception as e:
+            logging.debug("Async reap failed for %s: %s", desc, e)
+
+    t = threading.Thread(target=_waiter, daemon=True)
+    t.start()
+
+
+def _backoff_seconds(attempt, cap=30.0):
+    """Exponential backoff with jitter; attempt starts at 1.
+
+    Args:
+        attempt (int): Attempt number
+        cap (float): Maximum backoff time
+
+    Returns:
+        float: Backoff time in seconds
+    """
+    base = min(cap, 2**attempt)
+    jitter = random.uniform(0, 0.25 * base)
+    return base + jitter
+
+
+# -----------------------------
+# Machine class
+# -----------------------------
 
 
 class Machine:
@@ -54,7 +292,6 @@ class Machine:
         self.base_ips = []
 
         # Internal IPs, used for communication between VMs
-        # These IPs may differ from the external IPs, most notably for cloud providers
         self.cloud_controller_ips_internal = []
         self.cloud_ips_internal = []
         self.edge_ips_internal = []
@@ -126,209 +363,298 @@ BASE_NAMES                  %s""" % (
         retryonoutput=False,
         wait=True,
     ):
-        """Execute a process using the subprocess library, return the output/error of the process
+        """Execute a process using subprocess, return the output/error of the process.
 
         Args:
-            command (str or list(str)): Command to be executed. Either a string can be given
-                (when using the shell) or a list of strings (when not using the shell)
+            command (str or list): command(s) to be executed
             config (dict): Parsed configuration
-            shell (bool, optional): Use the shell for the subprocess. Defaults to False.
-            env (dict, optional): Environment variables. Defaults to None.
-            ssh (str, optional): VM to SSH into (instead of physical machine). Default to None
-            ssh_key (bool, optional): Use the custom SSH key for VMs. Default to True
-            retryonoutput (bool, optional): Retry command on empty output. Default to False
-            wait (bool, optional): Should we wait for output? Default to true
+            shell (bool): run locally via /bin/bash if True
+            env (dict): env vars
+            ssh (str or list[str]): SSH target(s) for running inside VM(s)
+            ssh_key (bool): Use the custom SSH key for VMs
+            retryonoutput (bool): Retry on empty output
+            wait (bool): If False, return immediately (used for nohup/& patterns)
 
         Returns:
-            list(list(str), list(str)): Return a list of [output, error] lists, one per command.
+            list([output_lines, error_lines]) one per command
         """
-        # Set the right shell executable (such as bash, or pass it directly)
-        executable = None
-        if shell:
-            executable = "/bin/bash"
+        executable = "/bin/bash" if shell else None
 
-        # You can pass a single string if you want to execute 1 command without bash
-        # OR: Passing one list without bash, move into a nested list
-        if isinstance(command, str) or (
-            isinstance(command[0], str) and all(len(c.split(" ")) == 1 for c in command)
-        ):
-            command = [command]
+        commands = _normalize_commands(command, shell=shell)
+        if not commands:
+            return [] if not wait else []
 
-        # Add SSH logic to the command
+        # Expand ssh targets to per-command list
+        ssh_targets = [None] * len(commands)
         if ssh is not None:
-            # SSH can be a list of multiple SSHs
             if isinstance(ssh, str):
                 ssh = [ssh]
+            if len(ssh) == 1 and len(commands) > 1:
+                ssh = ssh * len(commands)
+            if len(commands) == 1 and len(ssh) > 1:
+                commands = commands * len(ssh)
+                ssh_targets = [None] * len(commands)
 
-            # User can pass a single ssh for many commands, fix that
-            if len(ssh) == 1 and len(command) > 1:
-                ssh = ssh * len(command)
+            # known_hosts handling (default: user's file, to stay compatible with Ansible/SSH behavior)
+            home = config.get("home", os.path.expanduser("~"))
+            known_hosts = config.get(
+                "ssh_known_hosts_file",
+                os.path.join(home, ".ssh", "known_hosts"),
+            )
 
-            # Other way around: one command, many ssh commands
-            if len(command) == 1 and len(ssh) > 1:
-                command = command * len(ssh)
+            # SSH options
+            connect_timeout = str(config.get("ssh_connect_timeout", 10))
+            alive_interval = str(config.get("ssh_server_alive_interval", 5))
+            alive_count = str(config.get("ssh_server_alive_count_max", 3))
 
-            for i, (c, s) in enumerate(zip(command, ssh)):
+            strict_hkc = config.get("ssh_strict_host_key_checking", "accept-new")
+
+            for i, (c, s) in enumerate(zip(commands, ssh)):
                 if s is None:
-                    # Don't SSH if no target was set
                     continue
-
                 if self.is_local and s == self.name:
-                    # You can't ssh to the machine you're already on
+                    # can't ssh to the machine you're already on
                     continue
 
-                add = ["ssh", s]
+                # IMPORTANT: options MUST come before destination
+                ssh_argv = [
+                    "ssh",
+                    "-o",
+                    "BatchMode=yes",
+                    "-o",
+                    f"ConnectTimeout={connect_timeout}",
+                    "-o",
+                    f"ServerAliveInterval={alive_interval}",
+                    "-o",
+                    f"ServerAliveCountMax={alive_count}",
+                    "-o",
+                    f"UserKnownHostsFile={known_hosts}",
+                    "-o",
+                    f"StrictHostKeyChecking={strict_hkc}",
+                ]
                 if ssh_key and s != self.name:
-                    # You can only use this custom key to SSH to VMs, not to physical machines
-                    add += ["-i", config["ssh_key"]]
+                    ssh_argv += ["-i", config["ssh_key"]]
 
+                # remote command portion
                 if shell:
-                    # Use bash shell = use a string
-                    command[i] = " ".join(add) + " " + c
+                    # local shell=True => entire local command must be a string
+                    remote_cmd = c if isinstance(c, str) else _shlex_join(c)
+                    full_argv = ssh_argv + [s, remote_cmd]
+                    commands[i] = _shlex_join(full_argv)  # safe string for local bash
                 else:
-                    # Don't use a shell, so a list
-                    command[i] = add + c
+                    # local shell=False => argv list
+                    remote_argv = (
+                        c
+                        if isinstance(c, list)
+                        else (shlex.split(c) if any(ch.isspace() for ch in c) else [c])
+                    )
+                    commands[i] = ssh_argv + [s] + remote_argv
+
+                ssh_targets[i] = s
 
         # Execute all commands, max 100 at a time
         batchsize = 100
-        outputs = []
+        outputs = [None] * len(commands)
+        rcs = [None] * len(commands)
 
-        new_retries = []
+        def _run_indices(indices, do_wait):
+            """Run a batch of commands.
 
-        # pylint: disable=consider-using-with
+            Args:
+                indices (list(int)): List of indices to run
+                do_wait (bool): If True, wait for the commands to complete
+            """
+            for i in range(0, len(indices), batchsize):
+                batch_indices = indices[i : i + batchsize]
+                processes = []
 
-        for i in range(math.ceil(len(command) / batchsize)):
-            processes = []
-            for j, c in enumerate(command[i * batchsize : (i + 1) * batchsize]):
-                logging.debug("Start subprocess: %s", c)
-                process = subprocess.Popen(
-                    c,
-                    shell=shell,
-                    executable=executable,
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                processes.append(process)
+                for idx in batch_indices:
+                    c = commands[idx]
+                    logging.debug("Start subprocess: %s", c)
+                    p = subprocess.Popen(
+                        c,
+                        shell=shell,
+                        executable=executable,
+                        env=env,
+                        stdout=subprocess.PIPE if do_wait else subprocess.DEVNULL,
+                        stderr=subprocess.PIPE if do_wait else subprocess.DEVNULL,
+                    )
+                    processes.append((idx, p))
 
-            # We may not be interested in the output at all
-            if not wait:
-                continue
+                if not do_wait:
+                    # Do not block, but ensure children are reaped eventually
+                    for idx, p in processes:
+                        _async_reap(p, desc=str(commands[idx])[:80])
+                    continue
 
-            # Get outputs for this batch of commmands (blocking)
-            for j, process in enumerate(processes):
-                # Use communicate() to prevent buffer overflows
-                stdout, stderr = process.communicate()
-                output = stdout.decode("utf-8").split("\n")
-                error = stderr.decode("utf-8").split("\n")
+                for idx, p in processes:
+                    stdout, stderr = p.communicate()
+                    rcs[idx] = p.returncode
 
-                # Byproduct of split
-                if len(output) >= 1 and output[-1] == "":
-                    output = output[:-1]
-                if len(error) >= 1 and error[-1] == "":
-                    error = error[:-1]
+                    out_lines = (
+                        stdout.decode("utf-8", errors="replace").split("\n") if stdout else []
+                    )
+                    err_lines = (
+                        stderr.decode("utf-8", errors="replace").split("\n") if stderr else []
+                    )
 
-                outputs.append([output, error])
+                    if out_lines and out_lines[-1] == "":
+                        out_lines = out_lines[:-1]
+                    if err_lines and err_lines[-1] == "":
+                        err_lines = err_lines[:-1]
 
-                if retryonoutput and not output:
-                    new_retries.append(i * batchsize + j)
+                    outputs[idx] = [out_lines, err_lines]
 
-        # Retry commands with empty output
-        max_tries = 5
-        for t in range(max_tries):
-            if not new_retries:
+        all_indices = list(range(len(commands)))
+        _run_indices(all_indices, do_wait=wait)
+
+        if not wait:
+            # preserve current semantics: fire-and-forget returns empty list
+            return []
+
+        # Retry policy (configurable via config keys, but defaults keep behavior compact)
+        max_transient_retries = int(config.get("ssh_transient_retries", 3))
+        max_hostkey_retries = int(config.get("ssh_hostkey_retries", 2))
+        max_auth_retries = int(config.get("ssh_auth_retries", 1))
+        max_output_retries = int(config.get("output_retries", 5))
+
+        transient_counts = {i: 0 for i in all_indices}
+        hostkey_counts = {i: 0 for i in all_indices}
+        auth_counts = {i: 0 for i in all_indices}
+        output_counts = {i: 0 for i in all_indices}
+
+        while True:
+            retry_indices = []
+            max_attempt_for_sleep = 0
+            any_sleep = False
+
+            for idx in all_indices:
+                out, err = outputs[idx]
+                rc = rcs[idx]
+
+                # Only retry failures (except retryonoutput behaviour)
+                is_failure = (rc is None) or (rc != 0)
+
+                # Retry on empty output (even if rc==0) when explicitly requested
+                if retryonoutput and (not out) and output_counts[idx] < max_output_retries:
+                    output_counts[idx] += 1
+                    retry_indices.append(idx)
+                    any_sleep = True
+                    max_attempt_for_sleep = max(max_attempt_for_sleep, output_counts[idx])
+                    continue
+
+                # SSH-specific retries
+                target = ssh_targets[idx]
+                if not target or not is_failure:
+                    continue
+
+                err_type = _classify_ssh_error(err, out)
+                if not err_type:
+                    continue
+
+                host = _ssh_target_host(target)
+
+                if err_type == "transient" and transient_counts[idx] < max_transient_retries:
+                    transient_counts[idx] += 1
+                    retry_indices.append(idx)
+                    any_sleep = True
+                    max_attempt_for_sleep = max(max_attempt_for_sleep, transient_counts[idx])
+
+                elif err_type == "hostkey" and hostkey_counts[idx] < max_hostkey_retries:
+                    hostkey_counts[idx] += 1
+                    # Repair known_hosts for this host and retry
+                    home = config.get("home", os.path.expanduser("~"))
+                    known_hosts = config.get(
+                        "ssh_known_hosts_file",
+                        os.path.join(home, ".ssh", "known_hosts"),
+                    )
+                    logging.warning("SSH hostkey issue for %s; repairing %s", host, known_hosts)
+                    _repair_known_hosts(known_hosts, host)
+                    retry_indices.append(idx)
+                    any_sleep = True
+                    max_attempt_for_sleep = max(max_attempt_for_sleep, hostkey_counts[idx])
+
+                elif err_type == "auth" and auth_counts[idx] < max_auth_retries:
+                    auth_counts[idx] += 1
+                    # One retry only; if it keeps failing, surface it clearly.
+                    logging.warning(
+                        "SSH auth issue for %s; retrying (%d/%d)",
+                        host,
+                        auth_counts[idx],
+                        max_auth_retries,
+                    )
+                    retry_indices.append(idx)
+                    any_sleep = True
+                    max_attempt_for_sleep = max(max_attempt_for_sleep, auth_counts[idx])
+
+            if not retry_indices:
                 break
 
-            retries = new_retries
-            new_retries = []
+            sleep_s = _backoff_seconds(max_attempt_for_sleep, cap=30.0) if any_sleep else 0.0
+            logging.warning(
+                "Retrying %d command(s) in %.1fs (attempt=%d)",
+                len(retry_indices),
+                sleep_s,
+                max_attempt_for_sleep,
+            )
+            time.sleep(sleep_s)
 
-            retries.sort()
-            processes = []
-
-            for i in retries:
-                logging.debug("Retry %i, subprocess %i: %s", t, i, command[i])
-                process = subprocess.Popen(
-                    command[i],
-                    shell=shell,
-                    executable=executable,
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                processes.append(process)
-
-            # Get outputs for this batch of commmands (blocking)
-            for i, process in zip(retries, processes):
-                stdout, stderr = process.communicate()
-                output = stdout.decode("utf-8").split("\n")
-                error = stderr.decode("utf-8").split("\n")
-
-                # Byproduct of split
-                if len(output) >= 1 and output[-1] == "":
-                    output = output[:-1]
-                if len(error) >= 1 and error[-1] == "":
-                    error = error[:-1]
-
-                outputs[i] = [output, error]
-
-                if not output:
-                    new_retries.append(i)
-
-        # pylint: enable=consider-using-with
+            _run_indices(retry_indices, do_wait=True)
 
         return outputs
 
     def check_hardware(self, config):
-        """Get the amount of physical cores for this machine.
-        This automatically functions as reachability check for this machine.
+        """Get the amount of physical cores for this machine. This automatically functions as
+        reachability check for this machine.
+
+        Args:
+            config (dict): Parsed configuration
         """
-        # GCP and AWS uses Terraform (cloud), so the number of local cores won't matter
-        # Just set the value extremely high so everything can be scheduled on the
-        # same "machine" (your local machine is seen as the cloud provider)
+        # Cloud providers have seemingly unlimited cores
         if config["infrastructure"]["provider"] in ["gcp", "aws"]:
             self.cores = 100000
             return
 
         logging.info("Check hardware of node %s", self.name)
-        command = "lscpu"
+        cmd = "lscpu"
 
         if self.is_local:
-            command = [command]
+            command = [cmd]
         else:
-            command = ["ssh", self.name, command]
+            command = ["ssh", self.name, cmd]
 
         output, error = self.process(config, command)[0]
 
         if not output:
             logging.error("".join(error))
-            sys.exit()
-        else:
-            threads = -1
-            threads_per_core = -1
-            for line in output:
-                if line.startswith("CPU(s):"):
-                    threads = int(line.split(":")[-1])
-                if line.startswith("Thread(s) per core:"):
-                    threads_per_core = int(line.split(":")[-1])
+            sys.exit(1)
 
-            if threads == -1 or threads_per_core == -1:
-                logging.error("Command did not produce the expected output: %s", "".join(output))
-                sys.exit()
+        threads = -1
+        threads_per_core = -1
+        for line in output:
+            if line.startswith("CPU(s):"):
+                threads = int(line.split(":")[-1])
+            if line.startswith("Thread(s) per core:"):
+                threads_per_core = int(line.split(":")[-1])
 
-            logging.debug("Threads: %s | Threads_per_core: %s", threads, threads_per_core)
+        if threads == -1 or threads_per_core == -1:
+            logging.error("Command did not produce the expected output: %s", "".join(output))
+            sys.exit(1)
 
-            self.cores = int(threads / threads_per_core)
+        logging.debug("Threads: %s | Threads_per_core: %s", threads, threads_per_core)
+        self.cores = int(threads / threads_per_core)
 
     def copy_files(self, config, source, dest, recursive=False):
         """Copy files from host machine to destination machine.
 
         Args:
-            source (str): Source file
-            dest (str): Destination file
-            recursive (bool, optional): Copy recursively (default: false)
+            config (dict): Parsed configuration
+            source (str): Source file or directory
+            dest (str): Destination file or directory
+            recursive (bool, optional): Copy recursively. Defaults to False
 
         Returns:
-            process: The output of the copy command
+            list(list(str), list(str)): Return a list of [output, error] lists, one per command.
         """
         rec = ""
         if recursive:
@@ -352,19 +678,12 @@ def make_machine_objects(config):
         list(Machine object): List of machine objects representing physical machines
     """
     logging.info("Initialize machine objects")
-    machines = []
     names = ["local"] + config["infrastructure"]["external_physical_machines"]
-
-    for name in names:
-        machine = Machine(name, "local" in name)
-        machines.append(machine)
-
-    return machines
+    return [Machine(name, "local" in name) for name in names]
 
 
 def remove_idle(machines, nodes_per_machine):
-    """Check whether each machine will actually be used according to the scheduler.
-    Remove the machines that won't be used.
+    """Remove (physical) machines that won't be used.
 
     Args:
         machines (list(Machine object)): List of machine objects representing physical machines
@@ -372,7 +691,9 @@ def remove_idle(machines, nodes_per_machine):
             the number of those machines per physical node
 
     Returns:
-        list(Machine object): List of machine objects representing physical machines
+        tuple(list(Machine object), list(set)): Tuple containing the updated list of physical
+            machines and the updated list of 'cloud', 'edge', 'endpoint' sets containing the number
+            of those machines per physical node
     """
     logging.info("Update machine list based on whether they will actually be used")
     new_machines = []
@@ -391,7 +712,7 @@ def remove_idle(machines, nodes_per_machine):
         len(new_machines),
         m2,
     )
-    return new_machines, new_nodes_per_machine
+    return (new_machines, new_nodes_per_machine)
 
 
 def gather_ssh(config, machines):
@@ -401,27 +722,24 @@ def gather_ssh(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.debug("Get ips of controllers/workers")
-    cloud_ssh = []
-    edge_ssh = []
-    endpoint_ssh = []
+    logging.debug("Get SSH targets of controllers/workers")
+
+    config["cloud_ssh"] = []
+    config["edge_ssh"] = []
+    config["endpoint_ssh"] = []
 
     for machine in machines:
         for name, ip in zip(
             machine.cloud_controller_names + machine.cloud_names,
             machine.cloud_controller_ips + machine.cloud_ips,
         ):
-            cloud_ssh += [name + "@" + ip]
+            config["cloud_ssh"].append(name + "@" + ip)
 
         for name, ip in zip(machine.edge_names, machine.edge_ips):
-            edge_ssh += [name + "@" + ip]
+            config["edge_ssh"].append(name + "@" + ip)
 
         for name, ip in zip(machine.endpoint_names, machine.endpoint_ips):
-            endpoint_ssh += [name + "@" + ip]
-
-    config["cloud_ssh"] = cloud_ssh
-    config["edge_ssh"] = edge_ssh
-    config["endpoint_ssh"] = endpoint_ssh
+            config["endpoint_ssh"].append(name + "@" + ip)
 
     logging.debug("Cloud SSH: %s", ", ".join(config["cloud_ssh"]))
     logging.debug("Edge SSH: %s", ", ".join(config["edge_ssh"]))
@@ -435,7 +753,8 @@ def gather_ips(config, machines):
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
     """
-    logging.debug("Get ips of controllers/workers")
+    logging.debug("Get IP addresses of controllers/workers")
+
     config["control_ips"] = [ip for machine in machines for ip in machine.cloud_controller_ips]
     config["cloud_ips"] = [ip for machine in machines for ip in machine.cloud_ips]
     config["edge_ips"] = [ip for machine in machines for ip in machine.edge_ips]
@@ -459,11 +778,7 @@ def gather_ips(config, machines):
 
 
 def print_schedule(machines):
-    """Print the VM to physical machine scheduling
-
-    Args:
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
+    """Print the VM to physical machine scheduling"""
     logging.info("-" * 78)
     logging.info("Schedule of VMs and containers on physical machines")
     logging.info("-" * 78)

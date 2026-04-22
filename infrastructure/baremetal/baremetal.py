@@ -4,6 +4,7 @@ import logging
 import sys
 
 from infrastructure import machine as m
+from infrastructure import network
 
 
 def delete_vms(_config, _machines):
@@ -46,27 +47,6 @@ def verify_options(parser, config):
         parser.error("ERROR: Baremetal only supports 1 physical machine at the moment")
 
 
-def update_ip(config, middle_ip, postfix_ip):
-    """Update IPs. Once the last number of the IP string (the zzz in www.xxx.yyy.zzz)
-    reaches the configured upperbound, reset this number to the lower bound and reset
-    the yyy number to += 1 to go to the next IP range.
-
-    Args:
-        config (dict): Parsed configuration
-        middle_ip (int): yyy part of IP in www.xxx.yyy.zzz
-        postfix_ip (int): zzz part of IP in www.xxx.yyy.zzz
-
-    Returns:
-        int, int: Updated middle_ip and postfix_ip
-    """
-    postfix_ip += 1
-    if postfix_ip == config["postfixIP_upper"]:
-        middle_ip += 1
-        postfix_ip = config["postfixIP_lower"]
-
-    return middle_ip, postfix_ip
-
-
 def set_ip_names(config, machines, nodes_per_machine):
     """Set amount of cloud / edge / endpoints nodes per machine, and their IPs / hostnames.
 
@@ -86,7 +66,7 @@ def set_ip_names(config, machines, nodes_per_machine):
     for machine, nodes in enumerate(zip(machines, nodes_per_machine)):
         if nodes["edge"] > 0:
             logging.error("ERROR: Baremetal does not support edge at the moment")
-            sys.exit()
+            sys.exit(1)
 
         # Set cloud information
         machine.clouds = nodes["cloud"]
@@ -98,13 +78,13 @@ def set_ip_names(config, machines, nodes_per_machine):
         name = "cloud%i_%s" % (cloud_index, config["username"])
         machine.cloud_names.append(name)
         cloud_index += 1
-        middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+        middle_ip, postfix_ip = network.next_configured_ip(config, middle_ip, postfix_ip)
 
         # Set endpoint information
         ip = "%s.%s.%s" % (config["infrastructure"]["prefixIP"], middle_ip, postfix_ip)
         machine.endpoint_ips.append(ip)
         machine.endpoint_ips_internal.append(ip)
-        middle_ip, postfix_ip = update_ip(config, middle_ip, postfix_ip)
+        middle_ip, postfix_ip = network.next_configured_ip(config, middle_ip, postfix_ip)
 
         name = "endpoint%i_%s" % (endpoint_index, config["username"])
         machine.endpoint_names.append(name)
