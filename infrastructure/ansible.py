@@ -35,7 +35,11 @@ class AnsibleRunner:
         self.base_path = config["infrastructure"]["base_path"]
         self.ansible_config = os.path.join(self.repo_root, "ansible.cfg")
         self.ansible_local_tmp = os.path.join(self.base_path, ".continuum", "ansible", "tmp")
-        self.ansible_remote_tmp = "/tmp/.continuum-ansible/tmp"
+        tmp_owner = re.sub(r"[^A-Za-z0-9_.-]", "_", str(config.get("username", "continuum")))
+        # Ansible creates ``remote_tmp`` as the SSH user before privilege escalation.
+        # Keep it under that user's home so resumed runs cannot get stuck on a stale
+        # root-owned directory under /tmp from an earlier upload.
+        self.ansible_remote_tmp = "~/.continuum-ansible-%s/tmp" % (tmp_owner)
         os.makedirs(self.ansible_local_tmp, exist_ok=True)
         preferred_playbook_bin = os.path.join(os.path.dirname(sys.executable), "ansible-playbook")
         if os.path.isfile(preferred_playbook_bin) and os.access(preferred_playbook_bin, os.X_OK):
@@ -185,6 +189,15 @@ def check_output(out):
     """
     output, error = out
 
+    def _tail(lines, limit=80):
+        if not lines:
+            return []
+        if len(lines) <= limit:
+            return lines
+        trimmed = ["... (%i lines omitted) ..." % (len(lines) - limit)]
+        trimmed.extend(lines[-limit:])
+        return trimmed
+
     # Print summary of executioo times
     summary = False
     lines = [""]
@@ -200,10 +213,22 @@ def check_output(out):
 
     # Check if executino was succesful
     if error != [] and not all("WARNING" in line for line in error):
-        logging.error("".join(error))
+        failure_lines = ["Ansible command failed."]
+        if output:
+            failure_lines.append("stdout:")
+            failure_lines.extend(_tail(output))
+        if error:
+            failure_lines.append("stderr:")
+            failure_lines.extend(_tail(error))
+        logging.error("\n".join(failure_lines))
         sys.exit(1)
     elif any("FAILED!" in out for out in output):
-        logging.error("".join(output))
+        failure_lines = ["Ansible playbook reported FAILED!"]
+        failure_lines.extend(_tail(output))
+        if error:
+            failure_lines.append("stderr:")
+            failure_lines.extend(_tail(error))
+        logging.error("\n".join(failure_lines))
         sys.exit(1)
 
 
@@ -460,32 +485,40 @@ ansible_user=%s username=%s\n"
                     % (name, ip, guest_user, guest_user)
                 )
 
-        # Make specific groups for cloud/edge/endpoint base VM
-        if not infra_only:
-            if config["mode"] == "cloud" or config["mode"] == "edge":
-                f.write("\n[base_cloud]\n")
-                for machine in machines:
-                    for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "cloud" in name:
-                            guest_user = orchestration_schema.guest_login_name(name)
-                            f.write(
-                                "%s ansible_connection=ssh ansible_host=%s \
+        # Make specific groups for cloud/edge/endpoint base VM. Infra-only QEMU
+        # can still use generic names like ``base0_user``; in that compatibility
+        # path, infer base tier membership from the scheduled VM counts.
+        if config["mode"] == "cloud" or config["mode"] == "edge":
+            f.write("\n[base_cloud]\n")
+            for machine in machines:
+                for name, ip in zip(machine.base_names, machine.base_ips):
+                    if infra_only:
+                        include = machine.cloud_controller + machine.clouds > 0
+                    else:
+                        include = "cloud" in name
+                    if include:
+                        guest_user = orchestration_schema.guest_login_name(name)
+                        f.write(
+                            "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s kubeversion=%s kubeversionstrp=%s kubeversion_major=%s\n"
-                                % (
-                                    name,
-                                    ip,
-                                    guest_user,
-                                    guest_user,
-                                    kube_version[1:],
-                                    kube_version.replace(".", ""),
-                                    kube_version[:-2],
-                                )
+                            % (
+                                name,
+                                ip,
+                                guest_user,
+                                guest_user,
+                                kube_version[1:],
+                                kube_version.replace(".", ""),
+                                kube_version[:-2],
                             )
+                        )
 
-            if config["mode"] == "edge":
-                f.write("\n[base_edge]\n")
-                for machine in machines:
-                    for name, ip in zip(machine.base_names, machine.base_ips):
+        if config["mode"] == "edge":
+            f.write("\n[base_edge]\n")
+            for machine in machines:
+                for name, ip in zip(machine.base_names, machine.base_ips):
+                    if infra_only:
+                        include = machine.edges > 0
+                    else:
                         # The resource manager "kubeedge" has "edge" in the name,
                         # so cloud_kubeedge may be caught as "edge", filter this out.
                         # Only occurs for Qemu, because GCP doesn't really use base images.
@@ -495,26 +528,27 @@ ansible_user=%s username=%s kubeversion=%s kubeversionstrp=%s kubeversion_major=
                             config["infrastructure"]["provider"] == "qemu"
                             and config_access.orchestrator_name(config) in ("kubeedge", "mist")
                         )
+                        include = occurences == 1 + is_qemu_kubeedge
 
-                        if occurences == 1 + is_qemu_kubeedge:
-                            guest_user = orchestration_schema.guest_login_name(name)
-                            f.write(
-                                "%s ansible_connection=ssh ansible_host=%s \
+                    if include:
+                        guest_user = orchestration_schema.guest_login_name(name)
+                        f.write(
+                            "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
-                                % (name, ip, guest_user, guest_user)
-                            )
+                            % (name, ip, guest_user, guest_user)
+                        )
 
-            if config["infrastructure"]["endpoint_nodes"]:
-                f.write("\n[base_endpoint]\n")
-                for machine in machines:
-                    for name, ip in zip(machine.base_names, machine.base_ips):
-                        if "endpoint" in name:
-                            guest_user = orchestration_schema.guest_login_name(name)
-                            f.write(
-                                "%s ansible_connection=ssh ansible_host=%s \
+        if not infra_only and config["infrastructure"]["endpoint_nodes"]:
+            f.write("\n[base_endpoint]\n")
+            for machine in machines:
+                for name, ip in zip(machine.base_names, machine.base_ips):
+                    if "endpoint" in name:
+                        guest_user = orchestration_schema.guest_login_name(name)
+                        f.write(
+                            "%s ansible_connection=ssh ansible_host=%s \
 ansible_user=%s username=%s\n"
-                                % (name, ip, guest_user, guest_user)
-                            )
+                            % (name, ip, guest_user, guest_user)
+                        )
 
 
 def copy(config, machines):

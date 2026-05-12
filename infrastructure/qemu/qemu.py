@@ -42,16 +42,73 @@ def _base_image_metadata_path(config, raw_base_name):
     )
 
 
-def _expected_base_image_metadata(raw_base_name):
+def _base_install_playbooks_for_base_names(config, machines, normalized_base_names):
+    """Return required base-image install playbooks for the selected base names.
+
+    QEMU infra-only resume still uses generic base names such as ``base0_user``.
+    Those names do not encode a tier, so planner-level tier detection skips the
+    resource-manager base install playbook. Infer cloud/edge intent from the
+    machine schedule in that compatibility path so retained infra-only runs can
+    still bake orchestrator prerequisites into shared base images.
+    """
+    try:
+        playbooks = rm_plans.build_base_image_playbooks(config, normalized_base_names)
+    except (KeyError, TypeError, ValueError):
+        playbooks = []
+
+    try:
+        infra_only = config_access.infra_only(config)
+    except (KeyError, TypeError, ValueError):
+        infra_only = False
+
+    rm_module = config.get("module", {}).get("resource_manager")
+    if not infra_only or not rm_module:
+        return playbooks
+
+    normalized_set = set(normalized_base_names)
+    for machine in machines:
+        for raw_base_name in getattr(machine, "base_names", []):
+            normalized_name = orchestration_schema.normalized_base_name(raw_base_name)
+            if normalized_name not in normalized_set:
+                continue
+            if orchestration_schema.tier_from_base_name(normalized_name) is not None:
+                continue
+
+            for tier, count in (
+                ("cloud", getattr(machine, "cloud_controller", 0) + getattr(machine, "clouds", 0)),
+                ("edge", getattr(machine, "edges", 0)),
+            ):
+                if count <= 0:
+                    continue
+                if not hasattr(rm_module, "base_install_playbook"):
+                    logging.error(
+                        "Resource manager %s does not define base_install_playbook()",
+                        config_access.orchestrator_name(config),
+                    )
+                    sys.exit(1)
+                playbook = rm_module.base_install_playbook(config, tier)
+                if playbook and playbook not in playbooks:
+                    playbooks.append(playbook)
+
+    return playbooks
+
+
+def _expected_base_image_metadata(config, machines, raw_base_name):
     """Return the expected ready-marker payload for one base image."""
+    normalized_name = orchestration_schema.normalized_base_name(raw_base_name)
     return {
         "schema_version": 1,
         "status": "ready",
         "guest_user": orchestration_schema.guest_login_name(raw_base_name),
+        "base_install_playbooks": _base_install_playbooks_for_base_names(
+            config,
+            machines,
+            [normalized_name],
+        ),
     }
 
 
-def _base_image_cache_invalid_reason(config, raw_base_name):
+def _base_image_cache_invalid_reason(config, machines, raw_base_name):
     """Return a human-readable cache validation reason, or None when valid."""
     metadata_path = _base_image_metadata_path(config, raw_base_name)
     if not os.path.exists(metadata_path):
@@ -66,18 +123,22 @@ def _base_image_cache_invalid_reason(config, raw_base_name):
     if not isinstance(payload, dict):
         return "metadata invalid"
 
-    expected = _expected_base_image_metadata(raw_base_name)
+    expected = _expected_base_image_metadata(config, machines, raw_base_name)
     for key, value in expected.items():
         if payload.get(key) != value:
             return "metadata %s mismatch" % (key,)
     return None
 
 
-def _write_base_image_metadata(config, raw_base_name):
+def _write_base_image_metadata(config, machines, raw_base_name):
     """Persist the ready-marker metadata for one successfully prepared base image."""
     metadata_path = _base_image_metadata_path(config, raw_base_name)
     with open(metadata_path, "w", encoding="utf-8") as filep:
-        json.dump(_expected_base_image_metadata(raw_base_name), filep, sort_keys=True)
+        json.dump(
+            _expected_base_image_metadata(config, machines, raw_base_name),
+            filep,
+            sort_keys=True,
+        )
 
 
 def _base_profile_token(config):
@@ -462,7 +523,7 @@ def base_image(config, machines, runner=None):
                 base_name = orchestration_schema.normalized_base_name(base_name)
                 need_images[base_names.index(base_name)] = True
             elif machine.is_local:
-                invalid_reason = _base_image_cache_invalid_reason(config, raw_base_name)
+                invalid_reason = _base_image_cache_invalid_reason(config, machines, raw_base_name)
                 if invalid_reason:
                     logging.info(
                         "Cached base image is stale (%s); removing and rebuilding: %s",
@@ -536,7 +597,7 @@ def base_image(config, machines, runner=None):
     infrastructure.add_ssh(config, machines, base=base_ips)
 
     # Install software concurrently (infra_only won't get anything installed)
-    playbooks = rm_plans.build_base_image_playbooks(config, base_names)
+    playbooks = _base_install_playbooks_for_base_names(config, machines, base_names)
 
     if playbooks:
         logging.info("Install software in the base VMs")
@@ -656,7 +717,7 @@ def base_image(config, machines, runner=None):
         for raw_base_name in machine.base_names:
             normalized_base_name = orchestration_schema.normalized_base_name(raw_base_name)
             if normalized_base_name in base_names:
-                _write_base_image_metadata(config, raw_base_name)
+                _write_base_image_metadata(config, machines, raw_base_name)
 
     # Wait for the shutdown to be completed
     time.sleep(5)

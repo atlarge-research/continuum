@@ -5,7 +5,6 @@ Impelemnt infrastructure
 import logging
 import os
 import shutil
-import shlex
 import sys
 import time
 
@@ -208,31 +207,45 @@ def create_keypair(config, machines):
     logging.info("Create SSH keys to be used with VMs")
     for machine in machines:
         if machine.is_local:
-            ssh_key_dir = shlex.quote(os.path.dirname(config["ssh_key"]))
-            ssh_key_path = shlex.quote(config["ssh_key"])
-            command = "mkdir -p %s && [[ ! -f %s ]] && ssh-keygen -t rsa -b 4096 -f %s -N '' -q" % (
-                ssh_key_dir,
-                ssh_key_path,
-                ssh_key_path,
-            )
-            output, error = machine.process(config, command, shell=True)[0]
+            ssh_key_dir = os.path.dirname(config["ssh_key"])
+            ssh_public_key = "%s.pub" % (config["ssh_key"])
+            commands = [["mkdir", "-p", ssh_key_dir]]
+
+            if not os.path.isfile(config["ssh_key"]):
+                commands.append(
+                    [
+                        "ssh-keygen",
+                        "-t",
+                        "rsa",
+                        "-b",
+                        "4096",
+                        "-f",
+                        config["ssh_key"],
+                        "-N",
+                        "",
+                        "-q",
+                    ]
+                )
+
+            results = machine.process(config, commands)
         else:
             source = "%s*" % (config["ssh_key"])
             dest = machine.name + ":./.ssh/"
-            output, error = machine.copy_files(config, source, dest)
+            results = [machine.copy_files(config, source, dest)]
 
-        if error:
-            logging.error("".join(error))
-            sys.exit(1)
-        elif output and not any("Your public key has been saved in" in line for line in output):
-            logging.error("".join(output))
-            sys.exit(1)
+        for output, error in results:
+            if error:
+                logging.error("".join(error))
+                sys.exit(1)
+            elif output:
+                logging.error("".join(output))
+                sys.exit(1)
 
         # Set correct key permissions to be sure
         if machine.is_local:
             commands = [
                 ["chmod", "600", config["ssh_key"]],
-                ["chmod", "600", "%s.pub" % (config["ssh_key"])],
+                ["chmod", "600", ssh_public_key],
             ]
             results = machine.process(config, commands)
             for output, error in results:

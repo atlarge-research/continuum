@@ -4,6 +4,7 @@ import argparse
 import continuum as continuum_module
 import contextlib
 import io
+import json
 import os
 import pathlib
 import tempfile
@@ -186,6 +187,72 @@ class QemuInfrastructureResumeTopologyTests(unittest.TestCase):
         self.assertEqual(machine.cloud_controller, 0)
         self.assertEqual(machine.cloud_controller_names, [])
         self.assertEqual(machine.cloud_names, ["cloud0_continuum-smoke", "cloud1_continuum-smoke"])
+
+
+class MachineProcessDiagnosticsTests(unittest.TestCase):
+    def test_process_surfaces_silent_nonzero_return_code(self):
+        machine = Machine("local", True)
+
+        result = machine.process({}, ["false"])[0]
+
+        self.assertEqual(result[0], [])
+        self.assertEqual(len(result[1]), 1)
+        self.assertIn("non-zero return code 1", result[1][0])
+        self.assertIn("false", result[1][0])
+
+    def test_process_appends_nonzero_return_code_to_warning_stderr(self):
+        machine = Machine("local", True)
+
+        result = machine.process({}, [["sh", "-c", "printf '[WARNING]: test\\n' >&2; exit 7"]])[0]
+
+        self.assertEqual(result[0], [])
+        self.assertEqual(len(result[1]), 2)
+        self.assertEqual(result[1][0], "[WARNING]: test")
+        self.assertIn("non-zero return code 7", result[1][1])
+
+
+class AnsibleCheckOutputDiagnosticsTests(unittest.TestCase):
+    def test_check_output_logs_stdout_context_for_synthetic_nonzero_failure(self):
+        stdout_lines = [
+            "PLAY [Example]",
+            "TASK [Launch jobs]",
+            "fatal: [node]: FAILED! => msg=boom",
+        ]
+        stderr_lines = [
+            "Command exited with non-zero return code 2: ansible-playbook -i inventory example.yml"
+        ]
+
+        with (
+            self.assertRaises(SystemExit),
+            mock.patch.object(infrastructure_ansible.logging, "error") as mock_error,
+        ):
+            infrastructure_ansible.check_output((stdout_lines, stderr_lines))
+
+        logged = mock_error.call_args.args[0]
+        self.assertIn("Ansible command failed.", logged)
+        self.assertIn("stdout:", logged)
+        self.assertIn("TASK [Launch jobs]", logged)
+        self.assertIn("fatal: [node]: FAILED! => msg=boom", logged)
+        self.assertIn("stderr:", logged)
+        self.assertIn("non-zero return code 2", logged)
+
+    def test_check_output_logs_failed_playbook_output(self):
+        stdout_lines = [
+            "PLAY [Example]",
+            "TASK [Launch jobs]",
+            "fatal: [node]: FAILED! => msg=boom",
+        ]
+
+        with (
+            self.assertRaises(SystemExit),
+            mock.patch.object(infrastructure_ansible.logging, "error") as mock_error,
+        ):
+            infrastructure_ansible.check_output((stdout_lines, []))
+
+        logged = mock_error.call_args.args[0]
+        self.assertIn("Ansible playbook reported FAILED!", logged)
+        self.assertIn("TASK [Launch jobs]", logged)
+        self.assertIn("fatal: [node]: FAILED! => msg=boom", logged)
 
 
 class ContinuumMainApplicationPhaseTests(unittest.TestCase):
@@ -876,6 +943,58 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         written = "".join(call.args[0] for call in open_mock().write.call_args_list)
         self.assertIn("[clouds]", written)
         self.assertIn("cloud0 ansible_connection=ssh", written)
+
+    def test_create_inventory_vm_infra_only_cloud_maps_generic_base_into_base_cloud(self):
+        config = {
+            "mode": "cloud",
+            "ssh_key": "/tmp/id_rsa_continuum",
+            "infrastructure": {
+                "base_path": "/tmp/continuum-smoke",
+                "provider": "qemu",
+                "endpoint_nodes": 1,
+            },
+            "domains": {
+                "run": {"targets": ["infrastructure"]},
+                "software": {
+                    "modules": [
+                        {
+                            "id": "k8s-main",
+                            "type": "kubernetes",
+                            "assign_to": {"match": {"cluster": "cloud-1"}},
+                            "config": {},
+                        }
+                    ]
+                },
+            },
+        }
+        machine = mock.Mock(
+            cloud_controller_ips_internal=["10.0.0.10"],
+            cloud_controller_ips=["192.168.122.10"],
+            cloud_controller_names=["cloudcontroller0"],
+            cloud_names=["cloud0"],
+            cloud_ips=["192.168.122.11"],
+            edge_names=[],
+            edge_ips=[],
+            endpoint_names=["endpoint0"],
+            endpoint_ips=["192.168.122.12"],
+            base_ips=["192.168.90.2"],
+            base_names=["base0_continuum-smoke"],
+            cloud_controller=1,
+            clouds=1,
+            edges=0,
+            endpoints=1,
+        )
+
+        with mock.patch("builtins.open", mock.mock_open()) as open_mock:
+            infrastructure_ansible.create_inventory_vm(config, [machine])
+
+        written = "".join(call.args[0] for call in open_mock().write.call_args_list)
+        self.assertIn("[base_cloud]", written)
+        self.assertIn(
+            "base0_continuum-smoke ansible_connection=ssh ansible_host=192.168.90.2",
+            written,
+        )
+        self.assertIn("kubeversion=1.27.0", written)
 
     def test_create_inventory_vm_shortens_long_base_login_user(self):
         long_base_name = "base_cloud_kubernetes_np1_mm0_0_continuum-smoke"
@@ -2373,6 +2492,7 @@ class QemuMachinePlaybookEnvTests(unittest.TestCase):
             config = {
                 "base": tempdir,
                 "infrastructure": {"base_path": tempdir},
+                "username": "continuum-smoke",
             }
 
             with mock.patch.dict("os.environ", {}, clear=False):
@@ -2384,7 +2504,7 @@ class QemuMachinePlaybookEnvTests(unittest.TestCase):
                 runner.ansible_local_tmp,
                 str(pathlib.Path(tempdir) / ".continuum" / "ansible" / "tmp"),
             )
-            self.assertEqual(runner.ansible_remote_tmp, "/tmp/.continuum-ansible/tmp")
+            self.assertEqual(runner.ansible_remote_tmp, "~/.continuum-ansible-continuum-smoke/tmp")
             self.assertTrue(pathlib.Path(runner.ansible_local_tmp).is_dir())
 
     def test_ansible_runner_merges_default_env_with_call_env(self):
@@ -2394,6 +2514,7 @@ class QemuMachinePlaybookEnvTests(unittest.TestCase):
             config = {
                 "base": tempdir,
                 "infrastructure": {"base_path": tempdir},
+                "username": "continuum-smoke",
             }
             runner = infrastructure_ansible.AnsibleRunner(config, [machine])
 
@@ -2488,30 +2609,133 @@ class QemuMachinePlaybookEnvTests(unittest.TestCase):
 class QemuBaseImageMetadataTests(unittest.TestCase):
     def test_base_image_cache_invalid_without_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            config = {"infrastructure": {"base_path": tempdir}}
+            config = {"infrastructure": {"base_path": tempdir}, "module": {}}
             raw_base_name = "base_cloud_kubernetes_np1_mm0_0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
             (images_dir / ("%s.qcow2" % (raw_base_name))).write_text("", encoding="utf-8")
 
             self.assertEqual(
-                qemu_module._base_image_cache_invalid_reason(config, raw_base_name),
+                qemu_module._base_image_cache_invalid_reason(config, [], raw_base_name),
                 "metadata missing",
             )
 
     def test_base_image_cache_valid_with_matching_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            config = {"infrastructure": {"base_path": tempdir}}
+            config = {"infrastructure": {"base_path": tempdir}, "module": {}}
             raw_base_name = "base_cloud_kubernetes_np1_mm0_0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
 
-            qemu_module._write_base_image_metadata(config, raw_base_name)
+            qemu_module._write_base_image_metadata(config, [], raw_base_name)
 
-            self.assertIsNone(qemu_module._base_image_cache_invalid_reason(config, raw_base_name))
+            self.assertIsNone(qemu_module._base_image_cache_invalid_reason(config, [], raw_base_name))
+
+    def test_base_image_cache_invalid_when_required_playbooks_change(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = {
+                "mode": "cloud",
+                "module": {
+                    "resource_manager": mock.Mock(
+                        base_install_playbook=mock.Mock(
+                            side_effect=lambda _config, tier: "playbooks/%s_base.yml" % (tier)
+                        )
+                    )
+                },
+                "infrastructure": {"base_path": tempdir},
+                "domains": {"run": {"targets": ["infrastructure"]}},
+            }
+            raw_base_name = "base0_continuum-smoke"
+            images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
+            images_dir.mkdir(parents=True, exist_ok=True)
+            machines = [
+                mock.Mock(
+                    base_names=[raw_base_name],
+                    cloud_controller=1,
+                    clouds=1,
+                    edges=0,
+                    endpoints=1,
+                )
+            ]
+            (images_dir / ("%s.meta.json" % (raw_base_name))).write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "status": "ready",
+                        "guest_user": orchestration_schema.guest_login_name(raw_base_name),
+                        "base_install_playbooks": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                qemu_module._base_image_cache_invalid_reason(config, machines, raw_base_name),
+                "metadata base_install_playbooks mismatch",
+            )
 
 
 class InfrastructureWorkspacePermissionTests(unittest.TestCase):
+    def test_create_keypair_creates_local_keys_without_shell_compound_command(self):
+        machine = mock.Mock()
+        machine.is_local = True
+        machine.process.side_effect = [
+            [([], []), ([], [])],
+            [([], []), ([], [])],
+        ]
+        config = {"ssh_key": "/tmp/continuum-smoke/.continuum/ssh/id_rsa_continuum"}
+
+        with mock.patch("infrastructure.infrastructure.os.path.isfile", return_value=False):
+            infrastructure_module.create_keypair(config, [machine])
+
+        create_call = machine.process.call_args_list[0]
+        self.assertEqual(
+            create_call.args[1],
+            [
+                ["mkdir", "-p", "/tmp/continuum-smoke/.continuum/ssh"],
+                [
+                    "ssh-keygen",
+                    "-t",
+                    "rsa",
+                    "-b",
+                    "4096",
+                    "-f",
+                    "/tmp/continuum-smoke/.continuum/ssh/id_rsa_continuum",
+                    "-N",
+                    "",
+                    "-q",
+                ],
+            ],
+        )
+        self.assertNotIn("shell", create_call.kwargs)
+
+        chmod_call = machine.process.call_args_list[1]
+        self.assertEqual(
+            chmod_call.args[1],
+            [
+                ["chmod", "600", "/tmp/continuum-smoke/.continuum/ssh/id_rsa_continuum"],
+                ["chmod", "600", "/tmp/continuum-smoke/.continuum/ssh/id_rsa_continuum.pub"],
+            ],
+        )
+
+    def test_create_keypair_skips_regeneration_when_private_key_exists(self):
+        machine = mock.Mock()
+        machine.is_local = True
+        machine.process.side_effect = [
+            [([], [])],
+            [([], []), ([], [])],
+        ]
+        config = {"ssh_key": "/tmp/continuum-smoke/.continuum/ssh/id_rsa_continuum"}
+
+        with mock.patch("infrastructure.infrastructure.os.path.isfile", return_value=True):
+            infrastructure_module.create_keypair(config, [machine])
+
+        create_call = machine.process.call_args_list[0]
+        self.assertEqual(
+            create_call.args[1],
+            [["mkdir", "-p", "/tmp/continuum-smoke/.continuum/ssh"]],
+        )
+
     def test_create_tmp_dir_uses_base_path_workspace(self):
         with tempfile.TemporaryDirectory() as tempdir:
             repo_root = pathlib.Path(tempdir) / "repo"

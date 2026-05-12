@@ -601,6 +601,23 @@ BASE_NAMES                  %s""" % (
 
             _run_indices(retry_indices, do_wait=True)
 
+        for idx in all_indices:
+            out, err = outputs[idx]
+            rc = rcs[idx]
+            if rc in (None, 0):
+                continue
+
+            has_explicit_failure = any("FAILED!" in line for line in out)
+            if has_explicit_failure:
+                continue
+
+            command_text = commands[idx] if shell else _shlex_join(commands[idx])
+            err = list(err)
+            synthetic = "Command exited with non-zero return code %s: %s" % (rc, command_text)
+            if synthetic not in err:
+                err.append(synthetic)
+            outputs[idx] = [out, err]
+
         return outputs
 
     def check_hardware(self, config):
