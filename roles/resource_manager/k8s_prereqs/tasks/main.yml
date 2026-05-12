@@ -89,6 +89,13 @@
     state: present
     update_cache: true
 
+- name: Install Kubernetes Python client for Ansible modules
+  ansible.builtin.apt:
+    name:
+      - python3-kubernetes
+      - python3-jsonpatch
+    state: present
+
 - name: Hold Kubernetes packages
   ansible.builtin.dpkg_selections:
     name: "{{ item }}"

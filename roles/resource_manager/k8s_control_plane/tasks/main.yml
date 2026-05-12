@@ -42,6 +42,13 @@
     - name: net.ipv4.ip_forward
       value: "1"
 
+- name: Install Kubernetes Python client for Ansible modules on control plane
+  ansible.builtin.apt:
+    name:
+      - python3-kubernetes
+      - python3-jsonpatch
+    state: present
+
 - name: Check if control-plane is already initialized
   ansible.builtin.stat:
     path: /etc/kubernetes/admin.conf

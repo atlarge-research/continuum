@@ -1,7 +1,28 @@
 ---
+- name: Detect Docker upstream apt repository
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/docker.list
+  register: rm_docker_setup_upstream_repo
+
+- name: Gather installed package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Select compatible docker engine packages
+  ansible.builtin.set_fact:
+    rm_docker_setup_engine_packages: >-
+      {{
+        rm_docker_setup_upstream_engine_packages
+        if (
+          rm_docker_setup_upstream_repo.stat.exists
+          or "containerd.io" in (ansible_facts.packages | default({}))
+        )
+        else rm_docker_setup_ubuntu_engine_packages
+      }}
+
 - name: Install docker engine package
   ansible.builtin.apt:
-    name: docker.io
+    name: "{{ rm_docker_setup_engine_packages }}"
     state: present
     update_cache: true
 

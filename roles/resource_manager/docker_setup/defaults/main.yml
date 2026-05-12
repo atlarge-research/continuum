@@ -3,3 +3,8 @@ rm_docker_setup_registry_ip: >-
   {{ registry_ip | default(continuum_registry_ip | default('')) }}
 rm_docker_setup_username: >-
   {{ username | default(continuum_username | default('ubuntu')) }}
+rm_docker_setup_ubuntu_engine_packages:
+  - docker.io
+rm_docker_setup_upstream_engine_packages:
+  - docker-ce
+  - docker-ce-cli
