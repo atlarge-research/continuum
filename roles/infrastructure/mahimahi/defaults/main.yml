@@ -1,5 +1,12 @@
 ---
+# Mahimahi is an optional runtime dependency. Continuum fetches the modded
+# source tree into the run workspace instead of vendoring it in this repo.
+mahimahi_repo_url: "https://github.com/atlarge-research/continuum-modded-mahimahi.git"
+mahimahi_repo_version: "master"
+mahimahi_repo_update: false
+mahimahi_cache_dir: "{{ continuum_base_path }}/.continuum/mahimahi"
+mahimahi_repo_dir: "{{ mahimahi_cache_dir }}/repo"
+mahimahi_source_dir: "{{ mahimahi_cache_dir }}/source"
+
 # Directory where copied Mahimahi sources are built on target nodes.
 mahimahi_build_dir: "/home/mahimahi"
-# Source directory on control machine, copied to targets.
-mahimahi_source_dir: "{{ continuum_repo_root }}/mahimahi/"

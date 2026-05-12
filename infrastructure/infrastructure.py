@@ -332,11 +332,6 @@ def create_continuum_dir(config, machines):
     """
     commands = []
 
-    # Mahimahi support is only required when using a Mahimahi-based wireless preset.
-    # For non-mahimahi presets, we should not assume Mahimahi is needed or installed.
-    wireless_preset = config["infrastructure"].get("wireless_network_preset", "")
-    need_mahimahi = isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
-
     for machine in machines:
         if machine.is_local:
             command = (
@@ -384,70 +379,6 @@ def create_continuum_dir(config, machines):
             )
 
         commands.append(command)
-
-        # Only copy Mahimahi support files when using a Mahimahi-based preset.
-        if machine.is_local and need_mahimahi:
-            src_dir = os.path.join(config["base"], "mahimahi")
-            if not os.path.isdir(src_dir):
-                # Attempt to automatically fetch the modded Mahimahi implementation
-                # from the official Continuum Mahimahi repository:
-                # https://github.com/atlarge-research/continuum-modded-mahimahi
-                logging.info(
-                    "Mahimahi directory not found at %s; cloning continuum-modded-mahimahi...",
-                    src_dir,
-                )
-                clone_cmd = (
-                    "git clone https://github.com/atlarge-research/continuum-modded-mahimahi.git %s"
-                    % src_dir
-                )
-                clone_out, clone_err = machines[0].process(config, clone_cmd, shell=True)[0]
-
-                # Git prints normal progress (like "Cloning into ...", "remote: ...")
-                # to stderr. We should only treat *real* errors as fatal here.
-                if clone_err:
-                    non_empty_err = [line for line in clone_err if line.strip()]
-
-                    # Consider lines that clearly indicate a problem. Everything else
-                    # (progress, informational messages) is treated as benign.
-                    fatal_err = [
-                        line
-                        for line in non_empty_err
-                        if (
-                            "fatal:" in line
-                            or "error:" in line.lower()
-                            or "Permission denied" in line
-                        )
-                    ]
-
-                    if fatal_err:
-                        logging.error("Failed to clone continuum-modded-mahimahi repository.")
-                        logging.error("".join(clone_err))
-                        sys.exit(1)
-                    else:
-                        # Benign stderr from git clone, keep it for debugging purposes.
-                        logging.debug("Git clone stderr (benign): %s", "".join(clone_err))
-
-            # After ensuring src_dir exists, perform the copy; fail hard if it still doesn't.
-            if os.path.isdir(src_dir):
-                # Use rsync instead of cp so we can safely exclude the Git metadata.
-                # Copying the .git directory has been observed to fail with "Permission denied"
-                # on packed objects when they were created by a different user. We don't need
-                # the repository metadata for running experiments, so we explicitly skip it.
-                dst_base = os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum", "mahimahi"
-                )
-                os.makedirs(dst_base, exist_ok=True)
-
-                command = "rsync -a --exclude='.git' %s/ %s" % (src_dir, dst_base)
-                commands.append(command)
-            else:
-                logging.error(
-                    "Mahimahi directory not found at %s after clone attempt; required for preset %s. "
-                    "Either create/populate this directory or use a non-mahimahi preset.",
-                    src_dir,
-                    wireless_preset,
-                )
-                sys.exit(1)
 
     results = machines[0].process(config, commands, shell=True)
 

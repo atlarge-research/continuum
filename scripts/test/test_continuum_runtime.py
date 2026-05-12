@@ -2784,6 +2784,69 @@ class InfrastructureWorkspacePermissionTests(unittest.TestCase):
         self.assertIn("setfacl -m u:continuum-smoke:rwx,g:kvm:rwx /tmp/continuum_smoke/.continuum/images >/dev/null 2>&1 || true", command)
         self.assertIn("setfacl -d -m u:continuum-smoke:rwx,g:kvm:rwx /tmp/continuum_smoke/.continuum/images >/dev/null 2>&1 || true", command)
 
+    def test_create_continuum_dir_does_not_fetch_mahimahi_for_mahimahi_preset(self):
+        machine = mock.Mock()
+        machine.is_local = True
+        machine.process.return_value = [([], [])]
+        config = {
+            "infrastructure": {
+                "base_path": "/tmp/continuum_smoke",
+                "wireless_network_preset": "4g_us_verizon_mahimahi",
+            },
+            "base": "/tmp/repo",
+            "username": "continuum-smoke",
+        }
+
+        infrastructure_module.create_continuum_dir(config, [machine])
+
+        machine.process.assert_called_once()
+        commands = machine.process.call_args.args[1]
+        self.assertEqual(len(commands), 1)
+        joined = "\n".join(commands)
+        self.assertNotIn("git clone", joined)
+        self.assertNotIn("rsync", joined)
+        self.assertNotIn("/tmp/repo/mahimahi", joined)
+
+
+class MahimahiRoleTests(unittest.TestCase):
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+
+    def test_role_defaults_use_runtime_cache(self):
+        defaults = (
+            self.repo_root / "roles" / "infrastructure" / "mahimahi" / "defaults" / "main.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            'mahimahi_repo_url: "https://github.com/atlarge-research/continuum-modded-mahimahi.git"',
+            defaults,
+        )
+        self.assertIn('mahimahi_repo_version: "master"', defaults)
+        self.assertIn("mahimahi_repo_update: false", defaults)
+        self.assertIn(
+            'mahimahi_cache_dir: "{{ continuum_base_path }}/.continuum/mahimahi"',
+            defaults,
+        )
+        self.assertIn('mahimahi_repo_dir: "{{ mahimahi_cache_dir }}/repo"', defaults)
+        self.assertIn('mahimahi_source_dir: "{{ mahimahi_cache_dir }}/source"', defaults)
+        self.assertNotIn("continuum_repo_root", defaults)
+
+    def test_role_fetches_and_exports_clean_source_on_control_host(self):
+        tasks = (
+            self.repo_root / "roles" / "infrastructure" / "mahimahi" / "tasks" / "main.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("ansible.builtin.git:", tasks)
+        self.assertIn("repo: \"{{ mahimahi_repo_url }}\"", tasks)
+        self.assertIn("dest: \"{{ mahimahi_repo_dir }}\"", tasks)
+        self.assertIn("update: \"{{ mahimahi_repo_update }}\"", tasks)
+        self.assertIn("delegate_to: localhost", tasks)
+        self.assertIn("run_once: true", tasks)
+        self.assertIn("become: false", tasks)
+        self.assertIn("path: \"{{ mahimahi_source_dir }}/.git\"", tasks)
+        self.assertIn("state: absent", tasks)
+        self.assertIn("src: \"{{ mahimahi_source_dir }}/\"", tasks)
+        self.assertIn("dest: \"{{ mahimahi_build_dir }}/\"", tasks)
+
 
 class QemuGatewayDetectionTests(unittest.TestCase):
     def test_extract_gateway_from_proc_net_route_decodes_default_gateway(self):

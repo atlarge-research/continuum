@@ -1,7 +1,61 @@
 ---
+- name: Ensure Mahimahi cache directory exists on control host
+  ansible.builtin.file:
+    path: "{{ mahimahi_cache_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Fetch Mahimahi source repository on control host
+  ansible.builtin.git:
+    repo: "{{ mahimahi_repo_url }}"
+    dest: "{{ mahimahi_repo_dir }}"
+    version: "{{ mahimahi_repo_version }}"
+    update: "{{ mahimahi_repo_update }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Remove previous clean Mahimahi source export
+  ansible.builtin.file:
+    path: "{{ mahimahi_source_dir }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Recreate clean Mahimahi source export directory
+  ansible.builtin.file:
+    path: "{{ mahimahi_source_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Export clean Mahimahi source tree on control host
+  ansible.builtin.copy:
+    src: "{{ mahimahi_repo_dir }}/"
+    dest: "{{ mahimahi_source_dir }}/"
+    remote_src: true
+    mode: preserve
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Remove Git metadata from Mahimahi source export
+  ansible.builtin.file:
+    path: "{{ mahimahi_source_dir }}/.git"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  become: false
+
 - name: Copy Mahimahi source tree to target nodes
   ansible.builtin.copy:
-    src: "{{ mahimahi_source_dir }}"
+    src: "{{ mahimahi_source_dir }}/"
     dest: "{{ mahimahi_build_dir }}/"
     mode: "0755"
 
