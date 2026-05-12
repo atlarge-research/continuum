@@ -4,6 +4,12 @@ This directory contains small configuration files that exercise Continuum's
 network emulation paths (TC + optional Mahimahi), without deploying any
 resource manager or applications.
 
+Mahimahi is fetched only when a `_mahimahi` wireless preset is active. The
+Ansible role clones the Continuum-modified Mahimahi repository into
+`<base_path>/.continuum/mahimahi/repo`, exports a clean source tree under
+`<base_path>/.continuum/mahimahi/source`, and builds it on the base VMs. The
+Continuum repository should not vendor a repo-root `mahimahi/` directory.
+
 All configs:
 - set `run.targets: [infrastructure]` so only infrastructure is created;
 - set `infrastructure.network.emulation: true` so TC rules are applied;

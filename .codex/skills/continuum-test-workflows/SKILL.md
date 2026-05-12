@@ -68,6 +68,11 @@ python3 scripts/test/run_tests.py --suite smoke
 python3 scripts/test/run_tests.py --config configs/experiments/smoke/infra_one_vm.yaml
 ```
 
+Configs with `_mahimahi` wireless presets also fetch the external
+`continuum-modded-mahimahi` repository through the Mahimahi Ansible role and
+cache it under `<base_path>/.continuum/mahimahi`. Do not rely on or create a
+repo-root `mahimahi/` checkout for tests.
+
 Do not run those directly from a cloud/sandboxed agent. For the dedicated local
 host path, use the `continuum-smoke-host-runner` skill and the installed wrapper.
 

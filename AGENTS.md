@@ -6,7 +6,7 @@ Continuum automates infrastructure deployment, software installation, and applic
 
 ## Project Structure & Module Organization
 
-The main entry point is `continuum.py`. Core Python modules live in `infrastructure/`, `resource_manager/`, `application/`, `execution_model/`, and `input/configuration/`. Ansible automation is in `playbooks/` and `roles/`, with root-level `ansible.cfg` and `.ansible-lint`. New YAML profiles and experiments live in `configs/`; legacy `.cfg` examples remain under `configuration/`. Tests are in `scripts/test/`. Docs and diagrams are under `docs/`. Avoid broad refactors in `mahimahi/` unless the task targets the bundled network emulator.
+The main entry point is `continuum.py`. Core Python modules live in `infrastructure/`, `resource_manager/`, `application/`, `execution_model/`, and `input/configuration/`. Ansible automation is in `playbooks/` and `roles/`, with root-level `ansible.cfg` and `.ansible-lint`. New YAML profiles and experiments live in `configs/`; legacy `.cfg` examples remain under `configuration/`. Tests are in `scripts/test/`. Docs and diagrams are under `docs/`. Mahimahi is an optional runtime dependency fetched into `<base_path>/.continuum/mahimahi` by the Ansible role for `_mahimahi` presets; do not vendor or edit a repo-root `mahimahi/` checkout unless the task explicitly targets that external project.
 
 ## Dev Environment Tips
 
