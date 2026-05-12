@@ -15,4 +15,4 @@ scripts/*.pdf
 .idea
 .vscode/settings.json
 .venv*
-.cursor/
+.ansible/
