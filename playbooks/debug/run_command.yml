@@ -1,0 +1,27 @@
+---
+- name: Run diagnostic command on selected hosts
+  hosts: "{{ debug_hosts | default(debug_host_pattern | default('all')) }}"
+  gather_facts: false
+  become: "{{ debug_become | default(true) }}"
+  tasks:
+    - name: Require diagnostic command input
+      ansible.builtin.assert:
+        that:
+          - debug_command is defined
+          - (debug_command | string | length) > 0
+        fail_msg: "Provide -e debug_command='<command>' when using this playbook."
+
+    - name: Execute diagnostic command
+      ansible.builtin.shell: "{{ debug_command }}"
+      args:
+        executable: /bin/bash
+      register: debug_command_result
+      changed_when: false
+
+    - name: Print diagnostic command result
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          rc: "{{ debug_command_result.rc }}"
+          stdout: "{{ debug_command_result.stdout }}"
+          stderr: "{{ debug_command_result.stderr }}"
