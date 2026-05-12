@@ -3,8 +3,8 @@
 import logging
 import time
 
+from application import runtime_helpers
 from input.configuration import config_access
-from resource_manager.kubernetes import kubernetes
 
 from ..empty.empty import cache_worker as empty_cache_worker
 from ..empty.empty import set_container_location as empty_set_container_location
@@ -90,7 +90,12 @@ def get_mem_usage(config, machines, _start_worker_kube):
     def deploy_memory_deployment(config, machines, replicas: int):
         app_vars = start_worker(config, machines)
 
-        kubernetes.start_worker_kube(config, machines, app_vars, get_starttime=True)
+        runtime_helpers.start_kubernetes_workers(
+            config,
+            machines,
+            app_vars,
+            get_starttime=True,
+        )
 
         command = "kubectl get pods | grep -c Running"
 

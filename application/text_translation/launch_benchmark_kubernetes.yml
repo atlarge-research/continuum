@@ -22,7 +22,7 @@
                   image: {{ image }}
                   ports:
                   - containerPort: 1883
-                  imagePullPolicy: Always
+                  imagePullPolicy: {{ pull_policy | default('Always') }}
                   resources:
                     requests:
                       ephemeral-storage: "12Gi"
@@ -62,7 +62,11 @@
       loop: "{{ range(1, replicas + 1) | list }}"
 
     - name: Launch jobs
-      kubernetes.core.k8s:
-        state: present
-        src: "/home/{{ username }}/jobs"
-        kubeconfig: /etc/kubernetes/admin.conf
+      ansible.builtin.command:
+        cmd: kubectl apply -f /home/{{ username }}/jobs
+      register: launch_jobs_result
+      changed_when: >-
+        'created' in launch_jobs_result.stdout or
+        'configured' in launch_jobs_result.stdout
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf

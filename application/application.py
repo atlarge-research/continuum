@@ -140,7 +140,12 @@ def baremetal(config, machines, runner=None):
     """
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    container_names_work = kubernetes.start_worker(config, machines, app_vars, runner=runner)
+    container_names_work = application_runtime_helpers.start_worker(
+        config,
+        machines,
+        app_vars,
+        runner=runner,
+    )
 
     # Start the endpoint
     container_names = endpoint.start_endpoint(config, machines)
@@ -178,7 +183,12 @@ def mist(config, machines, runner=None):
     """
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    container_names_work = kubernetes.start_worker(config, machines, app_vars, runner=runner)
+    container_names_work = application_runtime_helpers.start_worker(
+        config,
+        machines,
+        app_vars,
+        runner=runner,
+    )
 
     # Start the endpoint
     container_names = endpoint.start_endpoint(config, machines)
@@ -226,8 +236,9 @@ def _start_openfaas_worker(runner):
         "cpu_req": cpu,
         "cpu_threads": max(1, int(cpu)),
     }
-    playbook = os.path.join(
-        config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"
+    playbook = application_runtime_helpers.resolve_benchmark_launch_playbook(
+        config,
+        runner=runner,
     )
     runner.run_playbook(playbook, inventory="vms", extra_vars=extra_vars)
     logging.info("Deployed %s serverless application", config["mode"])
@@ -292,11 +303,21 @@ def kube(config, machines, runner=None):
     # Cache the worker to prevent loading
     if config_access.orchestrator_bool_optional(config, "cache_worker", default=False):
         app_vars = config["module"]["application"].cache_worker(config, machines)
-        kubernetes.cache_worker(config, machines, app_vars, runner=runner)
+        application_runtime_helpers.cache_kubernetes_workers(
+            config,
+            machines,
+            app_vars,
+            runner=runner,
+        )
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    kubernetes.start_worker(config, machines, app_vars, runner=runner)
+    application_runtime_helpers.start_worker(
+        config,
+        machines,
+        app_vars,
+        runner=runner,
+    )
 
     # Start the endpoint
     container_names = endpoint.start_endpoint(config, machines)
@@ -329,12 +350,17 @@ def kube_control(config, machines, runner=None):
         machines (list(Machine object)): List of machine objects representing physical machines
     """
     # Start the resource utilization metrics
-    kubernetes.start_resource_metrics(config, machines)
+    application_runtime_helpers.start_kubernetes_resource_metrics(config, machines)
 
     # Cache the worker to prevent loading
     if config_access.orchestrator_bool_optional(config, "cache_worker", default=False):
         app_vars = config["module"]["application"].cache_worker(config, machines)
-        kubernetes.cache_worker(config, machines, app_vars, runner=runner)
+        application_runtime_helpers.cache_kubernetes_workers(
+            config,
+            machines,
+            app_vars,
+            runner=runner,
+        )
 
     benchmark_stage_type = config_access.benchmark_primary_stage_type(config)
     if benchmark_stage_type == "mem_usage":
@@ -342,7 +368,7 @@ def kube_control(config, machines, runner=None):
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
-    starttime, kubectl_out, status = kubernetes.start_worker(
+    starttime, kubectl_out, status = application_runtime_helpers.start_worker(
         config, machines, app_vars, get_starttime=True, runner=runner
     )
 
@@ -359,9 +385,14 @@ def kube_control(config, machines, runner=None):
         get_description=True,
     )
 
-    control_output, endtime = kubernetes.get_control_output(config, machines, starttime, status)
+    control_output, endtime = application_runtime_helpers.get_kubernetes_control_output(
+        config,
+        machines,
+        starttime,
+        status,
+    )
 
-    resource_output = kubernetes.get_resource_output(
+    resource_output = application_runtime_helpers.get_kubernetes_resource_output(
         config, machines, starttime, endtime, runner=runner
     )
 
