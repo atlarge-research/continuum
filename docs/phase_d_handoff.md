@@ -3,6 +3,28 @@
 This document is the clean handoff note for the current Phase-D runtime state.
 This is the primary continuation point for the next agent.
 
+## 0. Immediate Next-Session Priority
+
+The next session should start with the harness boundary, not with more
+benchmark/application code changes.
+
+Current reality:
+
+1. the dedicated runner and root-owned maintenance helper now exist and are the
+   right security shape,
+2. the remaining reason a human still has to run commands is that this coding
+   harness cannot execute any `sudo` invocation itself, even for the narrow
+   allowlisted commands,
+3. that harness limitation is now the main source of development slowdown.
+
+So the first task next session is:
+
+1. make the harness able to invoke only these prefixes directly:
+   - `sudo -n /usr/local/bin/continuum-hostctl`
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke`
+2. once that is working, resume the retained benchmark path from the installed
+   wrapper without any human copy/paste loop.
+
 For active implementation resume, the minimum read set is still:
 
 1. `docs/rework_kickoff.md`
@@ -59,6 +81,33 @@ Read after:
    - The default install path is now a dedicated synced repo copy that can stay non-writable for `continuum-smoke`.
    - Runtime logs and test-result artifacts now go under `base_path/.continuum/...` instead of repo-local `./logs`.
    - The smoke wrappers now preserve the explicit QEMU bridge override env when present and disable Python bytecode writes in the executed repo.
+9. Host-maintenance and retained benchmark diagnostics are substantially tighter now.
+   - Installed maintenance helper: `/usr/local/bin/continuum-hostctl`
+   - The helper exposes only a tiny allowlist:
+     - `show-config`
+     - `sync-repo`
+     - `install-wrapper`
+     - `verify`
+     - `print-agent-command`
+   - The helper is intentionally separate from `run-continuum-smoke`, so root
+     maintenance actions and runner-user execution stay distinct.
+10. Retained benchmark debugging now requires fewer ad hoc host commands.
+   - `playbooks/debug/run_command.yml` exists for allowlisted replay/debug.
+   - It accepts `debug_hosts` and the compatibility alias `debug_host_pattern`.
+   - `infrastructure/ansible.py` now logs useful stdout/stderr tails for failed
+     playbooks instead of only surfacing the synthetic nonzero-return line.
+11. The retained application path was hardened to remove Ansible Python-module fragility.
+   - `application/image_classification/launch_benchmark_kubernetes.yml`
+   - `application/text_translation/launch_benchmark_kubernetes.yml`
+   - both now use `kubectl apply -f` instead of `kubernetes.core.k8s`
+   - this avoids repeated failures caused by missing remote Python packages on
+     resumed control-plane VMs.
+12. Additional K8s runtime package hardening landed while debugging the retained application path.
+   - `roles/resource_manager/k8s_prereqs/tasks/main.yml`
+   - `roles/resource_manager/k8s_control_plane/tasks/main.yml`
+   - both now install `python3-kubernetes` and `python3-jsonpatch`
+   - these should remain useful for other Ansible K8s callsites even though the
+     benchmark launch playbooks no longer depend on them directly.
 
 ## 2. Files Touched In This Session
 
@@ -101,6 +150,16 @@ Read after:
 37. `scripts/test/test_application_runtime_helpers.py`
 38. `scripts/test/test_config_access.py`
 39. `scripts/test/test_yaml_parser.py`
+40. `playbooks/debug/run_command.yml`
+41. `roles/resource_manager/docker_setup/tasks/main.yml`
+42. `roles/resource_manager/docker_setup/defaults/main.yml`
+43. `roles/resource_manager/k8s_prereqs/tasks/main.yml`
+44. `roles/resource_manager/k8s_control_plane/tasks/main.yml`
+45. `playbooks/resource_manager/endpoint_install.yml`
+46. `application/image_classification/launch_benchmark_kubernetes.yml`
+47. `application/text_translation/launch_benchmark_kubernetes.yml`
+48. `scripts/test/test_role_contracts.py`
+49. `scripts/test/test_host_runner_scripts.py`
 
 ## 3. Validation Run
 
@@ -146,6 +205,19 @@ Passed:
 38. `env PYTHONPATH=. pytest -q scripts/test/test_continuum_runtime.py` (`96 passed`)
 39. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`307 tests OK`)
 40. `env PYTHONPATH=. pytest -q scripts/test` (`307 passed`)
+41. `python3 -m py_compile infrastructure/infrastructure.py infrastructure/ansible.py scripts/test/test_continuum_runtime.py`
+42. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime.QemuMachinePlaybookEnvTests scripts.test.test_continuum_runtime.InfrastructureWorkspacePermissionTests scripts.test.test_continuum_runtime.MachineProcessDiagnosticsTests`
+43. `python3 -m py_compile application/runtime_helpers.py application/application.py application/mem_usage/mem_usage.py resource_manager/kubernetes/kubernetes.py scripts/test/test_application_runtime_helpers.py`
+44. `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_continuum_runtime`
+45. `env PYTHONPATH=. python3 -m unittest scripts.test.test_example_configs`
+46. `python3 -m py_compile scripts/test/test_host_runner_scripts.py scripts/test/test_role_contracts.py`
+47. `env PYTHONPATH=. python3 -m unittest scripts.test.test_host_runner_scripts scripts.test.test_role_contracts`
+48. `python3 -m py_compile infrastructure/ansible.py scripts/test/test_continuum_runtime.py scripts/test/test_role_contracts.py`
+49. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime.AnsibleCheckOutputDiagnosticsTests scripts.test.test_continuum_runtime.MachineProcessDiagnosticsTests scripts.test.test_role_contracts`
+50. `yamllint -c sysconfig/yamllint.yml application/image_classification/launch_benchmark_kubernetes.yml application/text_translation/launch_benchmark_kubernetes.yml roles/resource_manager/k8s_prereqs/tasks/main.yml roles/resource_manager/k8s_control_plane/tasks/main.yml`
+51. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`342 tests OK`)
+52. `env PYTHONPATH=. pytest -q scripts/test` (`342 passed`)
+53. `scripts/test/run_cloud_static_audit.sh` (required gates passed; ansible-lint OK; YAML lint baseline still has existing findings)
 
 Observed host-run attempts:
 
@@ -223,6 +295,23 @@ Observed host-run attempts:
 22. follow-up design concern to carry forward
    - pure infrastructure-only runs and “prepare retained infra for later software/application resume” are not cleanly distinguished today
    - future cleanup should separate those intents, so software-shaped base-image preparation is opt-in and explicit rather than implied by the presence of a software profile during an infra-only run
+23. the main operational annoyance is now outside Continuum itself
+   - the human copy/paste loop is only still happening because this coding
+     harness cannot execute `sudo`, even for the two narrow commands above
+   - this is now the primary thing to fix next session
+24. retained application debugging reached the point where the benchmark launch playbook itself was the only failing surface
+   - the direct `debug-playbook` replay confirmed `python3-kubernetes` first
+     missing, then present
+   - to avoid repeating Python dependency churn, the K8s benchmark launch
+     playbooks were switched from `kubernetes.core.k8s` to `kubectl apply -f`
+25. after that playbook change landed, the retained application path was **not**
+   rerun yet in this session
+   - the next actual retained benchmark step is therefore to rerun
+     `benchmark_k8s_resume_application` from the installed wrapper after syncing
+     the dedicated repo copy
+   - because `infrastructure/ansible.py` now logs the stdout/stderr tail on
+     failure, that rerun should provide the real failing task directly if it
+     still breaks
 
 ## 4. Current Phase-D State
 
@@ -231,11 +320,11 @@ Observed host-run attempts:
 3. resumed `software + application` runs require saved `phase_completed=infrastructure` state,
 4. the repository now has a concrete resumed `benchmark_smoke` suite and wrapper scenario for the K8s benchmark path,
 5. the dedicated host-backed benchmark path now reaches a refreshed retained topology with the expected control-plane VM, but the currently retained base image still predates the infra-only resource-manager bootstrap fix,
-6. remaining Phase-D work is refreshing the dedicated synced repo/wrapper with that bootstrap fix, rerunning the retained infra step once more so Kubernetes prereqs are baked in, then rerunning resumed software/application on that refreshed state, plus any remaining application-role consolidation cleanup,
-7. full benchmark closure still requires a real unsandboxed host context because this coding harness cannot reliably issue fresh `sudo` diagnostics,
-8. the forever/canonical agent host setup path is now `scripts/test/setup_agent_host.sh`, with dedicated read-only repo execution as the default boundary.
-9. do not generalize the current fix into unconditional orchestrator package installs for unrelated infra-only runs; the open design task is to make retained-resume preparation explicit.
-10. if `sync-repo` and `install-wrapper dedicated` have already been rerun after the latest `runtime_module_loader.py` fix, the next exact host command is `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_infra`.
+6. retained infrastructure and retained software have both been rerun successfully on the dedicated host path after the recent fixes,
+7. retained application is still the open benchmark leg, but the launch playbooks were just simplified to `kubectl apply -f` and have not been rerun yet,
+8. full benchmark closure no longer primarily depends on Continuum code plumbing; it now depends on eliminating the harness-side inability to run the narrow `sudo` wrapper/helper commands from the agent,
+9. the forever/canonical agent host setup path is now `scripts/test/setup_agent_host.sh`, with dedicated read-only repo execution as the default boundary,
+10. do not generalize the current fix into unconditional orchestrator package installs for unrelated infra-only runs; the open design task is to make retained-resume preparation explicit.
 
 ## 5. Next Clean Start Point
 
@@ -246,9 +335,12 @@ Primary resume entry:
 
 Then continue here:
 
-1. Refresh the dedicated repo/wrapper on the host so the retained benchmark path picks up the infra-only resource-manager bootstrap fix.
-   - the retained infra state at `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume` should then be rebuilt once more
-   - if `sh scripts/test/setup_agent_host.sh sync-repo` and `sh scripts/test/setup_agent_host.sh install-wrapper dedicated` were already run after that fix, skip straight to step 3
+1. Fix the harness integration first.
+   - goal: the agent itself must be able to run:
+     - `sudo -n /usr/local/bin/continuum-hostctl ...`
+     - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke ...`
+   - do **not** widen that into arbitrary `sudo` or shell access
+   - once this works, stop using the human copy/paste loop entirely
 2. Reuse the current hardening already landed here instead of re-debugging them:
    - best-effort `setfacl`
    - optional QEMU bridge overrides
@@ -256,14 +348,20 @@ Then continue here:
    - interpreter-local `ansible-playbook` resolution
    - `scripts/test/setup_agent_host.sh install` as the canonical host bootstrap path
    - runtime/test outputs under `base_path/.continuum/...` rather than repo-local `./logs`
-3. Continue with the dedicated wrapper commands on that same base path:
-   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_infra`
-   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_software`
+3. After harness integration is fixed, sync the dedicated repo copy through the
+   installed helper and rerun only the retained application leg first.
+   - `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
-   - current expected immediate next command is the first one above (`benchmark_k8s_resume_infra`)
-4. If the next real host run still fails, treat it as a post-infrastructure runtime/software/application issue, not as a parser/runtime-target or guest-bootstrap issue.
-5. Update this file with the first resumed software/application result and any benchmark-specific artifact assertions that need tightening.
-6. Keep the design concern visible: if more fixes are needed in this area, prefer making retained-resume base-image prep explicit rather than broadening “infra-only” side effects.
+4. If retained application still fails, use the now-improved main-run logging
+   first. Only if needed, use the dedicated debug replay entrypoint:
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook ...`
+5. If retained application finally passes, then resume the remaining Phase-D
+   cleanup work. The next best cleanup target after benchmark closure is the
+   harness integration documentation plus any remaining explicit separation of
+   pure infra-only intent vs retained-resume prep intent.
+6. If the next real host run still fails, treat it as a post-infrastructure runtime/software/application issue, not as a parser/runtime-target or guest-bootstrap issue.
+7. Update this file with the resumed application result and any benchmark-specific artifact assertions that need tightening.
+8. Keep the design concern visible: if more fixes are needed in this area, prefer making retained-resume base-image prep explicit rather than broadening “infra-only” side effects.
    - the current Kubernetes prereq baking is a compatibility behavior for runs whose selected software profile already declares `kubernetes`; it is not the desired long-term meaning of generic infrastructure-only execution.
 
 ## 6. Things Not To Reconstruct Again

@@ -20,10 +20,11 @@ The preferred design is:
 
 1. a dedicated local account such as `continuum-smoke`,
 2. a root-owned installed wrapper such as `/usr/local/bin/run-continuum-smoke`,
-3. a dedicated synced repo copy at `/srv/continuum/repo`,
-4. that dedicated repo copy owned by `root:continuum-smoke` and not writable by
+3. a root-owned maintenance helper such as `/usr/local/bin/continuum-hostctl`,
+4. a dedicated synced repo copy at `/srv/continuum/repo`,
+5. that dedicated repo copy owned by `root:continuum-smoke` and not writable by
    the runner user,
-5. one setup script that provisions the full model:
+6. one setup script that provisions the full model:
    - [setup_agent_host.sh](/home/matthijs/continuum/scripts/test/setup_agent_host.sh)
 
 The repo-local development wrapper is still:
@@ -78,14 +79,27 @@ The default and recommended setup is the dedicated read-only repo mode:
 7. installs host prerequisites,
 8. creates the dedicated runner venv,
 9. installs the root-owned wrapper,
-10. installs the narrow `sudoers` rule,
-11. verifies libvirt, `/dev/kvm`, repo readability, and wrapper prereqs.
+10. installs the root-owned maintenance helper,
+11. installs the narrow `sudoers` rules,
+12. verifies libvirt, `/dev/kvm`, repo readability, and wrapper prereqs.
+
+`sync-repo` now also writes a small sync marker inside the dedicated repo. That
+marker records which live checkout was synced and when. `show-config` prints the
+marker path and contents when present, and `verify` now fails fast if:
+
+1. the installed wrapper points at the wrong repo root,
+2. the dedicated sync marker is missing,
+3. the dedicated repo was synced from a different live checkout, or
+4. a curated set of critical files differs between the live checkout and the
+   dedicated repo copy.
 
 If you update the live workspace later, refresh the dedicated execution copy
 with:
 
 ```bash
-./scripts/test/setup_agent_host.sh sync-repo
+sudo -n /usr/local/bin/continuum-hostctl sync-repo
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl verify
 ```
 
 The exact command the agent should use after installation is:
@@ -101,6 +115,48 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resu
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_software
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application
 ```
+
+For phase-level Ansible replay after a retained-state failure, the installed
+wrapper also supports:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  debug-playbook benchmark_k8s_resume_software playbooks/resource_manager/k8s_cluster.yml
+```
+
+That reuses the retained benchmark workspace, inventory, and Ansible temp-path
+settings, and adds `-vvv` automatically.
+
+The maintenance helper exists so future agents do not need a broad root shell
+just to refresh the dedicated repo copy or reinstall the fixed wrapper. It is a
+separate command from the runner wrapper on purpose:
+
+1. `run-continuum-smoke` executes Continuum as the unprivileged runner user,
+2. `continuum-hostctl` performs only a tiny allowlisted maintenance surface as
+   root,
+3. the helper never shells out to the mutable repo setup script, so root does
+   not execute arbitrary checkout code.
+
+## 4a. Current Blocker
+
+At the repo level, this model is now in place.
+
+The remaining reason a human is still typing host commands is external to the
+repo:
+
+1. this coding harness still cannot execute any `sudo` command itself,
+2. that includes both the narrow maintenance helper and the narrow runner
+   wrapper,
+3. so the agent cannot yet use the new safe boundary directly even though the
+   boundary now exists.
+
+The next environment-side fix should therefore be:
+
+1. allow the harness to execute only:
+   - `sudo -n /usr/local/bin/continuum-hostctl`
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke`
+2. do not broaden that to arbitrary `sudo`, `bash`, or `python3`
+3. once that is working, the human copy/paste step should disappear entirely
 
 ## 5. Weaker Live-Repo Mode
 
@@ -131,10 +187,11 @@ The installed wrapper supports only these values:
 7. `benchmark_k8s_resume`
 8. `check-prereqs`
 9. `list-suites`
+10. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 
-1. whitelists those scenarios,
+1. whitelists those scenarios and the dedicated debug-playbook entrypoint,
 2. forces a fixed `base_path` per scenario under the runner home,
 3. uses `env -i`,
 4. forces a minimal `PATH` with the dedicated venv first,
@@ -148,6 +205,8 @@ The wrapper contract is:
 9. writes runtime logs, matplotlib state, and test artifacts under
    `<base_path>/.continuum/...`,
 10. runs with `umask 022` so libvirt/QEMU can traverse generated image paths.
+11. `debug-playbook` is for bounded replay only; it should not become a shell
+    escape hatch.
 
 ## 7. Host Requirements
 
@@ -171,22 +230,26 @@ The scripted host-prereq step currently installs:
 If direct login as `continuum-smoke` is not desirable, prefer a narrow wrapper
 rule over broad shell access.
 
-The installed script writes a rule shaped like:
+The installed setup writes rules shaped like:
 
 ```text
 Cmnd_Alias CONTINUUM_SMOKE = /usr/local/bin/run-continuum-smoke *
+Cmnd_Alias CONTINUUM_HOSTCTL = /usr/local/bin/continuum-hostctl *
 your-user ALL=(continuum-smoke) NOPASSWD: CONTINUUM_SMOKE
+your-user ALL=(root) NOPASSWD: CONTINUUM_HOSTCTL
 ```
 
-The important part is not the alias name. The important part is that the caller
-can invoke only the approved wrapper, not an arbitrary shell.
+The important part is not the alias names. The important part is that the
+caller can invoke only the approved runner and maintenance helpers, not an
+arbitrary shell.
 
 ## 9. External Allowlisting
 
 If the surrounding harness supports external-command allowlisting, the allowed
-prefix should be only:
+prefixes should be only:
 
 1. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke`
+2. `sudo -n /usr/local/bin/continuum-hostctl`
 
 Do not allow broader prefixes such as `/bin/bash`, `python3`, or `sudo` more
 generally.
@@ -200,7 +263,20 @@ For first real host runs:
 3. then `benchmark_k8s_resume_infra` if you want only the retained infrastructure step,
 4. then `benchmark_k8s_resume_software` and `benchmark_k8s_resume_application` to advance the retained state one phase at a time,
 5. or use `benchmark_k8s_resume` to run the full three-step suite end-to-end,
-4. inspect retained artifacts under
+6. inspect retained artifacts under
    `/home/continuum-smoke/continuum_smoke/<scenario>/.continuum/`,
-5. keep failed VM state until the failure is understood,
-6. resync the dedicated repo before reruns if the live workspace changed.
+7. keep failed VM state until the failure is understood,
+8. run `sudo -n /usr/local/bin/continuum-hostctl verify` before reruns if the
+   live workspace changed,
+9. resync the dedicated repo before reruns if `verify` reports drift.
+
+For the next agent handoff specifically:
+
+1. start with fixing the harness-side allowlisting problem above,
+2. then rerun only `benchmark_k8s_resume_application`,
+3. the benchmark launch playbooks no longer use `kubernetes.core.k8s`; they now
+   use `kubectl apply -f`, so future retained application failures should be
+   benchmark/runtime failures rather than remote Python dependency failures,
+4. `infrastructure/ansible.py` now logs the failing stdout/stderr tail on
+   nonzero Ansible exits, so the main run should usually be enough to diagnose
+   the next issue.
