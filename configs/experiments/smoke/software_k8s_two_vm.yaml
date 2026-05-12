@@ -1,3 +1,4 @@
+---
 schema_version: 1
 kind: ContinuumExperiment
 
@@ -18,4 +19,7 @@ infrastructure:
       resources:
         vms:
           count: 2
-          spec: { cores: 2, memory_gb: 2, cpu_quota: 1.0 }
+          spec:
+            cores: 2
+            memory_gb: 2
+            cpu_quota: 1.0

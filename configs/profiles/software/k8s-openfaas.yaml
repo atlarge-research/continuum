@@ -1,3 +1,4 @@
+---
 schema_version: 1
 kind: ContinuumSoftware
 
@@ -5,15 +6,21 @@ software:
   modules:
     - id: k8s-main
       type: kubernetes
-      assign_to: { match: { cluster: cloud-1 } }
+      assign_to:
+        match:
+          cluster: cloud-1
       config:
         kube_version: "v1.27.0"
         cache_worker: false
     - id: endpoint-runtime
       type: endpoint_runtime
-      assign_to: { match: { cluster: endpoint-1 } }
+      assign_to:
+        match:
+          cluster: endpoint-1
       config: {}
     - id: openfaas-main
       type: openfaas
-      assign_to: { match: { cluster: cloud-1 } }
+      assign_to:
+        match:
+          cluster: cloud-1
       config: {}

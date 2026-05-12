@@ -1,3 +1,4 @@
+---
 schema_version: 1
 kind: ContinuumExperiment
 
@@ -18,13 +19,19 @@ infrastructure:
       resources:
         vms:
           count: 2
-          spec: { cores: 4, memory_gb: 4, cpu_quota: 1.0 }
+          spec:
+            cores: 4
+            memory_gb: 4
+            cpu_quota: 1.0
     - id: endpoint-1
       tier: endpoint
       resources:
         vms:
           count: 1
-          spec: { cores: 1, memory_gb: 1, cpu_quota: 0.5 }
+          spec:
+            cores: 1
+            memory_gb: 1
+            cpu_quota: 0.5
   network:
     emulation: false
     wireless_preset: 4g
