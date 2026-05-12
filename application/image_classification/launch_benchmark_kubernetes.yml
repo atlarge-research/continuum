@@ -50,6 +50,7 @@
       ansible.builtin.copy:
         src: "/home/{{ username }}/job-template.yaml"
         dest: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
+        remote_src: true
         mode: '0644'
       loop: "{{ range(1, replicas + 1) | list }}"
 

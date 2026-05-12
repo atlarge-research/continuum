@@ -312,6 +312,36 @@ Observed host-run attempts:
    - because `infrastructure/ansible.py` now logs the stdout/stderr tail on
      failure, that rerun should provide the real failing task directly if it
      still breaks
+26. 2026-05-12 follow-up: the runner prefix now works from the agent, but the
+    maintenance helper prefix still falls through to sandboxed `sudo`
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke list-suites`
+     succeeds
+   - `sudo -n /usr/local/bin/continuum-hostctl show-config` still fails before
+     host sudoers are reached with:
+     `sudo: /usr/bin/sudo must be owned by uid 0 and have the setuid bit set`
+   - inside the sandbox, `/usr/bin/sudo` is visible as owned by `nobody:nogroup`;
+     treat this as external harness allowlist behavior, not Continuum sudoers
+     drift
+27. because `hostctl sync-repo` is still unavailable from the agent, the live
+    `debug-playbook` path was used to replay the current checkout against the
+    retained benchmark inventory
+   - that replay exposed a real benchmark launch bug: the Kubernetes job
+     template is created on the remote control-plane VM, but the repeated job
+     copy task was trying to read it as a controller-local `src`
+   - both Kubernetes benchmark launch playbooks now set `remote_src: true` for
+     that copy task, with regression coverage in
+     `scripts/test/test_role_contracts.py`
+   - the live image-classification replay then completed the launch playbook and
+     created `job.batch/image-classification-1`
+28. the direct replay is not a full retained application closure
+   - a bounded status check showed the created pod at `ErrImageNeverPull` for
+     `192.168.1.104:5000/image_classification_subscriber` with
+     `pull_policy=Never`
+   - treat that as a direct-replay/image-availability boundary until the synced
+     installed wrapper can rerun the full application leg
+   - next real closure remains:
+     `sudo -n /usr/local/bin/continuum-hostctl sync-repo`, then
+     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
 
 ## 4. Current Phase-D State
 
@@ -321,7 +351,9 @@ Observed host-run attempts:
 4. the repository now has a concrete resumed `benchmark_smoke` suite and wrapper scenario for the K8s benchmark path,
 5. the dedicated host-backed benchmark path now reaches a refreshed retained topology with the expected control-plane VM, but the currently retained base image still predates the infra-only resource-manager bootstrap fix,
 6. retained infrastructure and retained software have both been rerun successfully on the dedicated host path after the recent fixes,
-7. retained application is still the open benchmark leg, but the launch playbooks were just simplified to `kubectl apply -f` and have not been rerun yet,
+7. retained application is still the open benchmark leg; a live `debug-playbook`
+   replay now confirms the launch playbook creates the Kubernetes Job, but the
+   full synced-wrapper application leg has not passed yet,
 8. full benchmark closure no longer primarily depends on Continuum code plumbing; it now depends on eliminating the harness-side inability to run the narrow `sudo` wrapper/helper commands from the agent,
 9. the forever/canonical agent host setup path is now `scripts/test/setup_agent_host.sh`, with dedicated read-only repo execution as the default boundary,
 10. do not generalize the current fix into unconditional orchestrator package installs for unrelated infra-only runs; the open design task is to make retained-resume preparation explicit.

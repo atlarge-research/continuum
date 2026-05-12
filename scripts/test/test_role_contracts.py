@@ -100,6 +100,18 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
 
 
 class BenchmarkLaunchPlaybookTests(unittest.TestCase):
+    def assert_launch_playbook_copies_remote_job_template(self, playbook_path):
+        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+
+        tasks = playbook[0]["tasks"]
+        copy_task = next(
+            task for task in tasks if task.get("name") == "Create job multiple times"
+        )
+        copy_args = copy_task["ansible.builtin.copy"]
+        self.assertEqual(copy_args["src"], "/home/{{ username }}/job-template.yaml")
+        self.assertEqual(copy_args["dest"], "/home/{{ username }}/jobs/job-{{ item }}.yaml")
+        self.assertIs(copy_args["remote_src"], True)
+
     def test_image_classification_kubernetes_launch_uses_kubectl_apply(self):
         repo_root = Path(__file__).resolve().parents[2]
         playbook_path = (
@@ -121,6 +133,14 @@ class BenchmarkLaunchPlaybookTests(unittest.TestCase):
             "/etc/kubernetes/admin.conf",
         )
 
+    def test_image_classification_kubernetes_launch_copies_remote_job_template(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        playbook_path = (
+            repo_root / "application/image_classification/launch_benchmark_kubernetes.yml"
+        )
+
+        self.assert_launch_playbook_copies_remote_job_template(playbook_path)
+
     def test_text_translation_kubernetes_launch_uses_kubectl_apply(self):
         repo_root = Path(__file__).resolve().parents[2]
         playbook_path = (
@@ -141,3 +161,11 @@ class BenchmarkLaunchPlaybookTests(unittest.TestCase):
             launch_task["environment"]["KUBECONFIG"],
             "/etc/kubernetes/admin.conf",
         )
+
+    def test_text_translation_kubernetes_launch_copies_remote_job_template(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        playbook_path = (
+            repo_root / "application/text_translation/launch_benchmark_kubernetes.yml"
+        )
+
+        self.assert_launch_playbook_copies_remote_job_template(playbook_path)
