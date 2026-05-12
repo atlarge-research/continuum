@@ -11,18 +11,20 @@ environment where the full VM-backed framework cannot run.
 ## Workflow
 
 1. Read `AGENTS.md` first.
-2. Inspect the audit entrypoints:
+2. For general test selection, also use `continuum-test-workflows`. For VM-backed
+   host runner work, use `continuum-smoke-host-runner` instead of this skill.
+3. Inspect the audit entrypoints:
    - `scripts/test/run_cloud_static_audit.sh`
    - `scripts/test/check_docs_paths.py`
    - `scripts/test/test_check_docs_paths.py`
-3. Run:
+4. Run:
 
    ```bash
    scripts/test/run_cloud_static_audit.sh
    ```
 
-4. Inspect the newest report under `logs/cloud_static_audit/`.
-5. Treat required gates as blockers and informational checks as evidence unless the user asks
+5. Inspect the newest report under `logs/cloud_static_audit/`.
+6. Treat required gates as blockers and informational checks as evidence unless the user asks
    to burn down a specific baseline.
 
 ## How To Interpret Results

@@ -1,0 +1,205 @@
+# .codex/rules/default.rules
+# Starlark rules for Codex execpolicy
+
+# ----------------------------
+# ALLOWLIST: read-only commands
+# ----------------------------
+
+# Allow cat for reading files
+prefix_rule(
+    pattern = ["cat"],
+    decision = "allow",
+    justification = "Read-only file viewing is allowed",
+    match = ["cat README.md"],
+)
+
+# Allow sed ONLY in read mode (sed -n ...p)
+prefix_rule(
+    pattern = ["sed", "-n"],
+    decision = "allow",
+    justification = "Read-only sed (-n) is allowed",
+    match = ["sed -n '1,120p' input/input.py"],
+    not_match = ["sed -i 's/a/b/' input/input.py"],
+)
+
+# Allow ripgrep searches
+prefix_rule(
+    pattern = ["rg"],
+    decision = "allow",
+    justification = "Read-only code search is allowed",
+    match = ["rg 'apply_patch' -n ."],
+)
+
+#prefix_rule(
+#    pattern = ["/bin/bash", "-lc", "rg "],
+#    decision = "allow",
+#    justification = "Allow read-only ripgrep searches when Cursor wraps commands in /bin/bash -lc.",
+#    match = ["/bin/bash -lc 'rg -n foo .'"],
+#)
+
+# Allow basic listing/navigation
+prefix_rule(
+    pattern = ["ls"],
+    decision = "allow",
+    justification = "Listing files is allowed",
+    match = ["ls -la"],
+)
+
+prefix_rule(
+    pattern = ["find"],
+    decision = "allow",
+    justification = "Finding files is allowed",
+    match = ["find . -maxdepth 2 -type f -name '*.py'"],
+)
+
+prefix_rule(
+    pattern = ["wc", "-l"],
+    decision = "allow",
+    justification = "Counting lines is read-only and safe.",
+    match = ["wc -l input/input.py"],
+)
+
+# (Optional) Allow git read-only inspection
+prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+    justification = "Read-only git inspection is allowed",
+    match = ["git status --porcelain"],
+)
+prefix_rule(
+    pattern = ["git", "diff"],
+    decision = "allow",
+    justification = "Read-only git inspection is allowed",
+    match = ["git diff --stat"],
+)
+
+prefix_rule(
+    pattern = ["git", "log"],
+    decision = "allow",
+    justification = "Git history inspection is read-only and safe.",
+    match = ["git log --oneline"],
+)
+
+prefix_rule(
+    pattern = ["git", "branch", "--show-current"],
+    decision = "allow",
+    justification = "Read-only query of current git branch.",
+    match = ["git branch --show-current"],
+)
+
+# ----------------------------
+# FORBID: terminal-based file mutation
+# ----------------------------
+
+# Block in-place sed edits
+prefix_rule(
+    pattern = ["sed", "-i"],
+    decision = "forbidden",
+    justification = "Do not mutate files via sed -i; use editor apply_patch instead.",
+    match = ["sed -i 's/a/b/' input/input.py"],
+)
+
+# Block perl in-place edits
+prefix_rule(
+    pattern = ["perl", "-pi"],
+    decision = "forbidden",
+    justification = "Do not mutate files via perl -pi; use editor apply_patch instead.",
+    match = ["perl -pi -e 's/a/b/' input/input.py"],
+)
+
+# Block shell wrappers that can hide redirections / compound scripts
+prefix_rule(
+    pattern = [["bash", "sh", "zsh"], ["-c", "-lc"]],
+    decision = "forbidden",
+    justification = "Avoid shell wrappers; run explicit commands or use apply_patch.",
+    match = ["bash -lc \"cat README.md\""],
+)
+
+# ----------------------------
+# ALLOWLIST: test instructions
+# ----------------------------
+
+prefix_rule(
+    pattern = ["python", "-m", "unittest"],
+    decision = "allow",
+    justification = "Unit tests are safe and should run without approval.",
+    match = ["python -m unittest"],
+)
+
+prefix_rule(
+    pattern = ["python3", "-m", "unittest"],
+    decision = "allow",
+    justification = "Unit tests are safe and should run without approval.",
+    match = ["python3 -m unittest"],
+)
+
+prefix_rule(
+    pattern = ["env", "PYTHONPATH=.", "python3", "-m", "unittest"],
+    decision = "allow",
+    justification = "Repo unit tests need PYTHONPATH=. and are safe to run locally.",
+    match = ["env PYTHONPATH=. python3 -m unittest discover scripts/test"],
+)
+
+prefix_rule(
+    pattern = ["python3", "-m", "py_compile"],
+    decision = "allow",
+    justification = "Python compilation checks are read-only validation.",
+    match = ["python3 -m py_compile continuum.py"],
+)
+
+prefix_rule(
+    pattern = ["python3", "scripts/test/check_docs_paths.py"],
+    decision = "allow",
+    justification = "Docs path reference checking is cloud-safe validation.",
+    match = ["python3 scripts/test/check_docs_paths.py"],
+)
+
+prefix_rule(
+    pattern = ["scripts/test/run_cloud_static_audit.sh"],
+    decision = "allow",
+    justification = "The cloud static audit is the canonical safe repository test gate.",
+    match = ["scripts/test/run_cloud_static_audit.sh"],
+)
+
+prefix_rule(
+    pattern = ["python3", "scripts/test/run_tests.py", "--list-suites"],
+    decision = "allow",
+    justification = "Listing configured suites is read-only and does not start VMs.",
+    match = ["python3 scripts/test/run_tests.py --list-suites"],
+)
+
+prefix_rule(
+    pattern = ["python3", "scripts/test/run_tests.py", "--check-prereqs"],
+    decision = "allow",
+    justification = "Suite prerequisite checks are preflight-only and do not start VMs.",
+    match = ["python3 scripts/test/run_tests.py --check-prereqs --suite smoke"],
+)
+
+prefix_rule(
+    pattern = ["python3", "scripts/test/verify_network_profiles.py"],
+    decision = "allow",
+    justification = "Network profile verification reads generated netperf results only.",
+    match = ["python3 scripts/test/verify_network_profiles.py --results-file logs/network_validation/netperf_results.ndjson"],
+)
+
+prefix_rule(
+    pattern = ["yamllint", "-c", "sysconfig/yamllint.yml"],
+    decision = "allow",
+    justification = "YAML linting is read-only validation.",
+    match = ["yamllint -c sysconfig/yamllint.yml configs"],
+)
+
+prefix_rule(
+    pattern = [
+        "env",
+        "XDG_CACHE_HOME=/tmp/continuum-xdg-cache",
+        "ANSIBLE_LOCAL_TEMP=/tmp/continuum-ansible-local",
+        "ANSIBLE_REMOTE_TEMP=/tmp/continuum-ansible-remote",
+        "ansible-lint",
+        "-c",
+        ".ansible-lint",
+    ],
+    decision = "allow",
+    justification = "Ansible linting with temp paths outside the repo is read-only validation.",
+    match = ["env XDG_CACHE_HOME=/tmp/continuum-xdg-cache ANSIBLE_LOCAL_TEMP=/tmp/continuum-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/continuum-ansible-remote ansible-lint -c .ansible-lint playbooks roles"],
+)
