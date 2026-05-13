@@ -13,6 +13,13 @@ prefix_rule(
     match = ["cat README.md"],
 )
 
+prefix_rule(
+    pattern = ["pwd"],
+    decision = "allow",
+    justification = "Get current directory path",
+    match = ["pwd"],
+)
+
 # Allow sed ONLY in read mode (sed -n ...p)
 prefix_rule(
     pattern = ["sed", "-n"],
@@ -202,4 +209,40 @@ prefix_rule(
     decision = "allow",
     justification = "Ansible linting with temp paths outside the repo is read-only validation.",
     match = ["env XDG_CACHE_HOME=/tmp/continuum-xdg-cache ANSIBLE_LOCAL_TEMP=/tmp/continuum-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/continuum-ansible-remote ansible-lint -c .ansible-lint playbooks roles"],
+)
+
+prefix_rule(
+    pattern = ["sudo", "-n", "/usr/local/bin/continuum-hostctl"],
+    decision = "allow",
+    justification = "Allow Continuum host helper for controlled smoke-test setup",
+    match = [
+        "sudo -n /usr/local/bin/continuum-hostctl show-config",
+        "sudo -n /usr/local/bin/continuum-hostctl sync-repo",
+        "sudo -n /usr/local/bin/continuum-hostctl install-wrapper",
+        "sudo -n /usr/local/bin/continuum-hostctl verify",
+        "sudo -n /usr/local/bin/continuum-hostctl print-agent-command",
+        "sudo -n /usr/local/bin/continuum-hostctl help",
+    ],
+)
+
+prefix_rule(
+    pattern = ["sudo", "-n", "-u", "continuum-smoke", "/usr/local/bin/run-continuum-smoke"],
+    decision = "allow",
+    justification = "Run continuum with a specific user to limit sudo access",
+)
+
+prefix_rule(
+    pattern = ["virsh", "list", "--all"],
+    decision = "allow",
+)
+
+prefix_rule(
+    pattern = ["ip", "route"],
+    decision = "allow",
+)
+
+prefix_rule(
+    pattern = ["bash", "scripts/test/setup_agent_host.sh"],
+    decision = "allow",
+    justification = "Setup agent host for smoke tests",
 )
