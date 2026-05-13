@@ -5,25 +5,26 @@ This is the primary continuation point for the next agent.
 
 ## 0. Immediate Next-Session Priority
 
-The next session should start with the harness boundary, not with more
-benchmark/application code changes.
+The next session should start with retained application cleanup, not with more
+harness integration work.
 
 Current reality:
 
 1. the dedicated runner and root-owned maintenance helper now exist and are the
    right security shape,
-2. the remaining reason a human still has to run commands is that this coding
-   harness cannot execute any `sudo` invocation itself, even for the narrow
-   allowlisted commands,
-3. that harness limitation is now the main source of development slowdown.
+2. the narrow helper and runner prefixes now work from the agent,
+3. `continuum-hostctl` can sync the dedicated repo and reinstall the wrapper,
+4. the retained application leg now reaches Kubernetes benchmark launch and is
+   blocked by stale retained Job state, not by harness access.
 
 So the first task next session is:
 
-1. make the harness able to invoke only these prefixes directly:
-   - `sudo -n /usr/local/bin/continuum-hostctl`
-   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke`
-2. once that is working, resume the retained benchmark path from the installed
-   wrapper without any human copy/paste loop.
+1. delete the stale retained Kubernetes Job before rerunning application:
+   `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application playbooks/debug/run_command.yml -e debug_hosts=cloud_controller_continuum-smoke -e debug_command='kubectl delete job image-classification-1 --ignore-not-found'`
+2. rerun only the retained application leg:
+   `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
+3. if it still fails, use the main-run stdout/stderr tail first, then bounded
+   `debug-playbook` diagnostics only if needed.
 
 For active implementation resume, the minimum read set is still:
 
@@ -312,8 +313,8 @@ Observed host-run attempts:
    - because `infrastructure/ansible.py` now logs the stdout/stderr tail on
      failure, that rerun should provide the real failing task directly if it
      still breaks
-26. 2026-05-12 follow-up: the runner prefix now works from the agent, but the
-    maintenance helper prefix still falls through to sandboxed `sudo`
+26. 2026-05-12 historical follow-up: the runner prefix worked from the agent,
+    but the maintenance helper prefix still fell through to sandboxed `sudo`
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke list-suites`
      succeeds
    - `sudo -n /usr/local/bin/continuum-hostctl show-config` still fails before
@@ -342,6 +343,61 @@ Observed host-run attempts:
    - next real closure remains:
      `sudo -n /usr/local/bin/continuum-hostctl sync-repo`, then
      `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
+29. because `hostctl` remained blocked, the working runner prefix was used as a
+    temporary live-checkout bridge:
+   - the command shape was:
+     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application /home/matthijs/continuum/playbooks/debug/run_command.yml -e '{"debug_hosts":"localhost","debug_become":false,"debug_command":"cd /home/matthijs/continuum && env ... python3 scripts/test/run_tests.py ..."}'`
+   - this runs the live checkout as the unprivileged `continuum-smoke` user and
+     avoids `/srv/continuum/repo` sync for active debugging
+   - prereqs passed through that route
+   - the retained application run then exposed two live code issues:
+     missing optional `kube_deployment` defaulting in runtime helpers, and a
+     quoted remote readiness command that produced empty SSH output
+30. retained runtime helper follow-up work after `bf345c1`
+   - `application/runtime_helpers.py` now defaults missing `kube_deployment` to
+     `pod` in the Kubernetes runtime helpers
+   - `wait_kubernetes_workers_ready()` now sends the remote readiness command
+     without wrapping the whole command in literal quotes and checks for empty
+     output before indexing it
+   - non-cache Kubernetes benchmark worker launches now use
+     `pull_policy=IfNotPresent`; cached-worker launches still use `Never`
+   - focused tests were added in `scripts/test/test_application_runtime_helpers.py`
+31. latest retained application status before wrapping
+   - after the first two fixes, the retained application progressed to a real
+     image availability failure
+   - `kubectl describe pod image-classification-1-b2fbt` reported
+     `ErrImageNeverPull` because image
+     `192.168.1.104:5000/image_classification_subscriber` was not present on
+     `cloud0continuum-smoke` while pull policy was `Never`
+   - the `IfNotPresent` change is intended to let the normal non-cache path
+     pull from the configured registry on the next rerun
+   - delete the stale failed job before rerunning if the Kubernetes Job template
+     has changed:
+     `kubectl delete job image-classification-1 --ignore-not-found`
+32. 2026-05-13 follow-up: the hostctl blocker is fixed
+   - the generated maintenance helper now quotes `SYNC_PROBE_FILES`, avoiding
+     the earlier startup failure where `/bin/sh` tried to execute
+     `infrastructure/ansible.py`
+   - these commands now work from the agent:
+     `sudo -n /usr/local/bin/continuum-hostctl show-config`
+     `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
+     `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated`
+     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke list-suites`
+33. the retained Kubernetes runtime helper fixes are now committed
+   - missing `kube_deployment` defaults to `pod` in Kubernetes runtime helpers
+   - worker readiness polling no longer wraps the remote command in literal
+     quotes and now fails explicitly on empty status output
+   - non-cache worker launches use `pull_policy=IfNotPresent`, while
+     cached-worker launches still use `Never`
+34. the synced-wrapper retained application leg now reaches the Kubernetes apply
+    task but fails on stale retained Job state
+   - command:
+     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
+   - result: `failure_class=nonzero_exit`
+   - Kubernetes rejected `image-classification-1` because the existing Job has
+     an immutable pod template from the earlier retained replay
+   - next action is to delete that Job through the retained debug-playbook path,
+     then rerun `benchmark_k8s_resume_application`
 
 ## 4. Current Phase-D State
 
@@ -349,12 +405,14 @@ Observed host-run attempts:
 2. application-only runs require saved `phase_completed=software` state when infrastructure/software are skipped,
 3. resumed `software + application` runs require saved `phase_completed=infrastructure` state,
 4. the repository now has a concrete resumed `benchmark_smoke` suite and wrapper scenario for the K8s benchmark path,
-5. the dedicated host-backed benchmark path now reaches a refreshed retained topology with the expected control-plane VM, but the currently retained base image still predates the infra-only resource-manager bootstrap fix,
+5. the dedicated host-backed benchmark path now reaches a refreshed retained topology with the expected control-plane VM,
 6. retained infrastructure and retained software have both been rerun successfully on the dedicated host path after the recent fixes,
-7. retained application is still the open benchmark leg; a live `debug-playbook`
-   replay now confirms the launch playbook creates the Kubernetes Job, but the
-   full synced-wrapper application leg has not passed yet,
-8. full benchmark closure no longer primarily depends on Continuum code plumbing; it now depends on eliminating the harness-side inability to run the narrow `sudo` wrapper/helper commands from the agent,
+7. retained application is still the open benchmark leg; the full synced-wrapper
+   application leg reaches Kubernetes apply and is blocked by stale retained Job
+   state for `image-classification-1`,
+8. full benchmark closure no longer primarily depends on Continuum code
+   plumbing or harness access; it now needs retained-cluster cleanup followed by
+   another application-leg rerun,
 9. the forever/canonical agent host setup path is now `scripts/test/setup_agent_host.sh`, with dedicated read-only repo execution as the default boundary,
 10. do not generalize the current fix into unconditional orchestrator package installs for unrelated infra-only runs; the open design task is to make retained-resume preparation explicit.
 
@@ -367,12 +425,9 @@ Primary resume entry:
 
 Then continue here:
 
-1. Fix the harness integration first.
-   - goal: the agent itself must be able to run:
-     - `sudo -n /usr/local/bin/continuum-hostctl ...`
-     - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke ...`
-   - do **not** widen that into arbitrary `sudo` or shell access
-   - once this works, stop using the human copy/paste loop entirely
+1. Clean up the stale retained Kubernetes Job first.
+   - use the installed wrapper debug path, not an arbitrary shell:
+     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application playbooks/debug/run_command.yml -e debug_hosts=cloud_controller_continuum-smoke -e debug_command='kubectl delete job image-classification-1 --ignore-not-found'`
 2. Reuse the current hardening already landed here instead of re-debugging them:
    - best-effort `setfacl`
    - optional QEMU bridge overrides
@@ -380,8 +435,8 @@ Then continue here:
    - interpreter-local `ansible-playbook` resolution
    - `scripts/test/setup_agent_host.sh install` as the canonical host bootstrap path
    - runtime/test outputs under `base_path/.continuum/...` rather than repo-local `./logs`
-3. After harness integration is fixed, sync the dedicated repo copy through the
-   installed helper and rerun only the retained application leg first.
+3. Sync the dedicated repo copy through the installed helper and rerun only the
+   retained application leg first.
    - `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
 4. If retained application still fails, use the now-improved main-run logging
