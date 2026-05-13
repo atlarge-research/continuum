@@ -189,6 +189,22 @@ def check_output(out):
     """
     output, error = out
 
+    def _warnings_only(lines):
+        in_warning = False
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("[WARNING]"):
+                in_warning = True
+                continue
+            if in_warning:
+                if stripped.startswith(("[", "ERROR!", "fatal:", "Traceback", "Command exited")):
+                    return False
+                continue
+            return False
+        return True
+
     def _tail(lines, limit=80):
         if not lines:
             return []
@@ -212,7 +228,7 @@ def check_output(out):
         logging.debug("\n".join(lines))
 
     # Check if executino was succesful
-    if error != [] and not all("WARNING" in line for line in error):
+    if error != [] and not _warnings_only(error):
         failure_lines = ["Ansible command failed."]
         if output:
             failure_lines.append("stdout:")

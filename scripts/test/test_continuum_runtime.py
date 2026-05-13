@@ -25,6 +25,7 @@ from input.configuration import (
     runtime_option_validation,
     runtime_phase_targets,
 )
+from resource_manager.endpoint import endpoint as endpoint_module
 
 
 class RuntimeTargetResolutionTests(unittest.TestCase):
@@ -211,7 +212,88 @@ class MachineProcessDiagnosticsTests(unittest.TestCase):
         self.assertIn("non-zero return code 7", result[1][1])
 
 
+class EndpointDockerStartDiagnosticsTests(unittest.TestCase):
+    class _FakeMachine:
+        def __init__(self, results):
+            self.results = results
+            self.calls = []
+
+        def process(self, config, commands, ssh=None):
+            self.calls.append({"config": config, "commands": commands, "ssh": ssh})
+            return self.results
+
+    def test_docker_container_status_command_uses_remote_shell_quotes(self):
+        command = endpoint_module._DOCKER_CONTAINER_STATUS_COMMAND
+
+        self.assertEqual(
+            command,
+            'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"',
+        )
+        self.assertNotIn("\\\"", command)
+
+    def test_docker_start_allows_pull_progress_with_container_id(self):
+        stderr = [
+            "Unable to find image '192.168.1.104:5000/image:latest' locally\n"
+            "latest: Pulling from image\n"
+            "Digest: sha256:abc\n"
+            "Status: Downloaded newer image for 192.168.1.104:5000/image:latest\n"
+            "WARNING: Your kernel does not support swap limit capabilities or the "
+            "cgroup is not mounted. Memory limited without swap."
+        ]
+
+        self.assertFalse(endpoint_module._docker_start_stderr_is_fatal(["abc123"], stderr))
+
+    def test_docker_start_treats_daemon_error_as_fatal_even_with_output(self):
+        stderr = ["docker: Error response from daemon: pull access denied for image."]
+
+        self.assertTrue(endpoint_module._docker_start_stderr_is_fatal(["abc123"], stderr))
+
+    def test_docker_start_requires_container_id_before_accepting_stderr(self):
+        stderr = ["WARNING: Your kernel does not support swap limit capabilities."]
+
+        self.assertTrue(endpoint_module._docker_start_stderr_is_fatal([], stderr))
+
+    def test_remove_existing_endpoint_containers_ignores_absent_container(self):
+        machine = self._FakeMachine(
+            [([], ["Error: No such container: cloud0_endpoint0"])]
+        )
+
+        endpoint_module._remove_existing_endpoint_containers(
+            {},
+            [machine],
+            ["cloud0_endpoint0"],
+            sshs=["endpoint0@192.168.100.4"],
+        )
+
+        self.assertEqual(
+            machine.calls[0]["commands"],
+            [["docker", "container", "rm", "--force", "cloud0_endpoint0"]],
+        )
+        self.assertEqual(machine.calls[0]["ssh"], ["endpoint0@192.168.100.4"])
+
+    def test_remove_existing_endpoint_containers_fails_on_real_error(self):
+        machine = self._FakeMachine([([], ["permission denied"])])
+
+        with self.assertRaises(SystemExit):
+            endpoint_module._remove_existing_endpoint_containers(
+                {},
+                [machine],
+                ["cloud0_endpoint0"],
+                sshs=["endpoint0@192.168.100.4"],
+            )
+
+
 class AnsibleCheckOutputDiagnosticsTests(unittest.TestCase):
+    def test_check_output_accepts_wrapped_ansible_warning_blocks(self):
+        stderr_lines = [
+            "[WARNING]: Module remote_tmp /root/.continuum-ansible/tmp did",
+            "not exist and was created with a mode of 0700, this may cause issues",
+            "when running as another user.",
+            "[WARNING]: Could not match supplied host pattern, ignoring: edges",
+        ]
+
+        infrastructure_ansible.check_output((["PLAY RECAP"], stderr_lines))
+
     def test_check_output_logs_stdout_context_for_synthetic_nonzero_failure(self):
         stdout_lines = [
             "PLAY [Example]",
@@ -256,6 +338,31 @@ class AnsibleCheckOutputDiagnosticsTests(unittest.TestCase):
 
 
 class ContinuumMainApplicationPhaseTests(unittest.TestCase):
+    class _FakeHostIpSocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def connect(self, _target):
+            return None
+
+        def getsockname(self):
+            return ("192.168.1.104", 5000)
+
+    class _FakeSocketModule:
+        AF_INET = runtime_module_loader.socket_lib.AF_INET
+        SOCK_DGRAM = runtime_module_loader.socket_lib.SOCK_DGRAM
+        gaierror = runtime_module_loader.socket_lib.gaierror
+
+        def __init__(self):
+            self.socket_calls = 0
+
+        def socket(self, *_args, **_kwargs):
+            self.socket_calls += 1
+            return ContinuumMainApplicationPhaseTests._FakeHostIpSocket()
+
     def _config(self, targets):
         return {
             "mode": "cloud",
@@ -773,6 +880,32 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             "resource_manager.kubernetes.kubernetes",
         )
 
+    def test_add_constants_sets_registry_for_infra_only_resumable_stack(self):
+        parser = argparse.ArgumentParser(prog="add-constants-infra-only-rm-registry")
+        config = {
+            "infrastructure": {"provider": "qemu", "base_path": "/tmp/continuum-smoke"},
+            "domains": {
+                "run": {"targets": ["infrastructure"]},
+                "software": {
+                    "modules": [
+                        {
+                            "id": "k8s-main",
+                            "type": "kubernetes",
+                            "assign_to": {"match": {"cluster": "cloud-1"}},
+                            "config": {"kube_version": "v1.27.0"},
+                        }
+                    ]
+                },
+            },
+        }
+        socket_module = self._FakeSocketModule()
+
+        runtime_module_loader.dynamic_import(parser, config)
+        runtime_module_loader.add_constants(parser, config, socket_module=socket_module)
+
+        self.assertEqual(config["registry"], "192.168.1.104:5000")
+        self.assertEqual(socket_module.socket_calls, 1)
+
     def test_dynamic_import_keeps_none_orchestrator_unloaded_for_infra_only(self):
         parser = argparse.ArgumentParser(prog="dynamic-import-infra-only-none")
         config = {
@@ -795,6 +928,32 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         runtime_module_loader.dynamic_import(parser, config)
 
         self.assertFalse(config["module"]["resource_manager"])
+
+    def test_add_constants_skips_registry_for_pure_infra_only_none_stack(self):
+        parser = argparse.ArgumentParser(prog="add-constants-infra-only-none-registry")
+        config = {
+            "infrastructure": {"provider": "qemu", "base_path": "/tmp/continuum-smoke"},
+            "domains": {
+                "run": {"targets": ["infrastructure"]},
+                "software": {
+                    "modules": [
+                        {
+                            "id": "none-main",
+                            "type": "none",
+                            "assign_to": {"match": {"cluster": "cloud-1"}},
+                            "config": {},
+                        }
+                    ]
+                },
+            },
+        }
+        socket_module = self._FakeSocketModule()
+
+        runtime_module_loader.dynamic_import(parser, config)
+        runtime_module_loader.add_constants(parser, config, socket_module=socket_module)
+
+        self.assertNotIn("registry", config)
+        self.assertEqual(socket_module.socket_calls, 0)
 
     def test_add_constants_host_ip_lookup_failure_fails_cleanly(self):
         parser = argparse.ArgumentParser(prog="add-constants-host-ip")
@@ -2672,6 +2831,71 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             self.assertEqual(
                 qemu_module._base_image_cache_invalid_reason(config, machines, raw_base_name),
                 "metadata base_install_playbooks mismatch",
+            )
+
+    def test_base_image_cache_invalid_when_base_install_role_changes(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo_root = pathlib.Path(tempdir)
+            playbook_path = repo_root / "playbooks/resource_manager/k8s_base_install.yml"
+            playbook_path.parent.mkdir(parents=True)
+            playbook_path.write_text(
+                "---\n- hosts: base_cloud\n  roles:\n    - role: containerd_setup\n",
+                encoding="utf-8",
+            )
+            role_task_path = (
+                repo_root
+                / "roles/resource_manager/containerd_setup/tasks/main.yml"
+            )
+            role_task_path.parent.mkdir(parents=True)
+            role_task_path.write_text("---\n- debug:\n    msg: old\n", encoding="utf-8")
+
+            config = {
+                "base": tempdir,
+                "mode": "cloud",
+                "module": {
+                    "resource_manager": mock.Mock(
+                        base_install_playbook=mock.Mock(
+                            return_value="playbooks/resource_manager/k8s_base_install.yml"
+                        )
+                    )
+                },
+                "infrastructure": {"base_path": tempdir},
+                "domains": {"run": {"targets": ["infrastructure"]}},
+            }
+            raw_base_name = "base0_continuum-smoke"
+            images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
+            images_dir.mkdir(parents=True, exist_ok=True)
+            machines = [
+                mock.Mock(
+                    base_names=[raw_base_name],
+                    cloud_controller=1,
+                    clouds=1,
+                    edges=0,
+                    endpoints=1,
+                )
+            ]
+            (images_dir / ("%s.meta.json" % (raw_base_name))).write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "status": "ready",
+                        "guest_user": orchestration_schema.guest_login_name(raw_base_name),
+                        "base_install_playbooks": [
+                            "playbooks/resource_manager/k8s_base_install.yml"
+                        ],
+                        "base_install_fingerprints": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                qemu_module._base_image_cache_invalid_reason(
+                    config,
+                    machines,
+                    raw_base_name,
+                ),
+                "metadata base_install_fingerprints mismatch",
             )
 
 

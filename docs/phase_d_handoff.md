@@ -5,8 +5,9 @@ This is the primary continuation point for the next agent.
 
 ## 0. Immediate Next-Session Priority
 
-The next session should start with retained application cleanup, not with more
-harness integration work.
+The retained benchmark application leg is closed. The next session should start
+with the explicit retained-resume prep design slice, not with more harness
+integration work.
 
 Current reality:
 
@@ -14,17 +15,23 @@ Current reality:
    right security shape,
 2. the narrow helper and runner prefixes now work from the agent,
 3. `continuum-hostctl` can sync the dedicated repo and reinstall the wrapper,
-4. the retained application leg now reaches Kubernetes benchmark launch and is
-   blocked by stale retained Job state, not by harness access.
+4. stale retained Job cleanup now works,
+5. retained infrastructure, software, and application legs all pass on the
+   dedicated host-backed `benchmark_k8s_resume_*` path,
+6. the retained application closure required repo fixes for registry wiring,
+   base-image invalidation, Mosquitto worker prep, endpoint Docker reruns,
+   publisher completion, and Kubernetes worker-log collection.
 
 So the first task next session is:
 
-1. delete the stale retained Kubernetes Job before rerunning application:
-   `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application playbooks/debug/run_command.yml -e debug_hosts=cloud_controller_continuum-smoke -e debug_command='kubectl delete job image-classification-1 --ignore-not-found'`
-2. rerun only the retained application leg:
-   `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
-3. if it still fails, use the main-run stdout/stderr tail first, then bounded
-   `debug-playbook` diagnostics only if needed.
+1. implement the explicit retained-resume prep API:
+   - add `run.prepare_for_resume`, boolean default `false`
+   - make it valid only for `run.targets: [infrastructure]`
+   - use it to opt retained benchmark infra prep into later software/application
+     prerequisites
+2. update the benchmark smoke infra config to opt in explicitly,
+3. rerun the cloud-safe config/runtime tests plus `scripts/test/run_cloud_static_audit.sh`,
+4. keep retained smoke artifacts and generated reports uncommitted.
 
 For active implementation resume, the minimum read set is still:
 
@@ -398,6 +405,69 @@ Observed host-run attempts:
      an immutable pod template from the earlier retained replay
    - next action is to delete that Job through the retained debug-playbook path,
      then rerun `benchmark_k8s_resume_application`
+35. 2026-05-13 follow-up: stale Job cleanup worked, exposing the next retained
+    infrastructure issue
+   - `sudo -n /usr/local/bin/continuum-hostctl sync-repo` succeeded
+   - the first debug-playbook cleanup command using split `-e` args was parsed
+     as bare `kubectl`; the JSON extra-vars form correctly deleted the Job:
+     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application playbooks/debug/run_command.yml -e '{"debug_hosts":"cloud_controller_continuum-smoke","debug_command":"kubectl delete job image-classification-1 --ignore-not-found"}'`
+   - `benchmark_k8s_resume_application` then timed out after 15.1 minutes in
+     `wait_kubernetes_workers_ready()`
+   - bounded diagnostics showed pod `image-classification-1-k27tk` in
+     `ImagePullBackOff`; kubelet tried to pull
+     `192.168.1.104:5000/image_classification_subscriber` over HTTPS and got
+     `http: server gave HTTP response to HTTPS client`
+   - the retained worker still had literal `REGISTRY-IP` entries in
+     `/etc/containerd/config.toml`, so the infra-only retained prep had not
+     written the local HTTP registry endpoint into containerd
+36. the repo fix for that registry seam is now landed
+   - `input/configuration/runtime_module_loader.py` sets `config["registry"]`
+     for infra-only runs that load a resource-manager module, so retained K8s
+     base-image prep can pass `registry_ip` into the Ansible inventory
+   - `roles/resource_manager/containerd_setup/tasks/main.yml` now fails fast if
+     `REGISTRY-IP` remains in `/etc/containerd/config.toml` after templating
+   - `infrastructure/qemu/qemu.py` now fingerprints base-install playbooks and
+     direct roles so retained base images rebuild when role content changes
+   - `playbooks/resource_manager/k8s_base_install.yml` now includes Mosquitto,
+     matching the benchmark worker broker dependency from the legacy K8s base
+     install path
+   - focused coverage exists in `scripts/test/test_continuum_runtime.py` and
+     `scripts/test/test_role_contracts.py`
+37. refreshed retained infrastructure/software passed after those fixes
+   - `sudo -n /usr/local/bin/continuum-hostctl sync-repo` succeeded
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_infra`
+     passed in 308.4 seconds
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_software`
+     passed in 189.0 seconds
+   - bounded debug check showed `systemctl is-active mosquitto` returned
+     `active` on `cloud0_continuum-smoke`
+38. retained application then exposed endpoint/runtime rerun issues, now fixed
+   - endpoint `docker run` can emit normal pull progress and swap-limit warning
+     text on stderr while still returning a container id; endpoint startup now
+     treats that as nonfatal unless stderr contains a clear Docker failure
+   - endpoint startup now removes stale same-name endpoint containers before
+     launching a retained rerun
+   - endpoint completion now uses remote-shell-safe `docker container ls`
+     formatting rather than escaped quote literals
+39. retained application also exposed an image publisher completion bug
+   - `image_classification` publisher could receive more responses than the
+     requested image count and then hang forever waiting for exact equality
+   - publisher completion now waits while `RECEIVED < MAX_IMGS`; the sibling
+     `text_translation` publisher uses the same at-least-target condition
+   - for the retained validation run, the patched image-classification
+     publisher source was copied into the retained local-registry image and
+     pushed as `192.168.1.104:5000/image_classification_publisher:latest`
+40. retained application result collection exposed one more SSH shell quoting bug
+   - Kubernetes worker log collection no longer wraps the whole batched
+     `kubectl logs ...; echo DELIMITER01234` command in literal quotes
+   - focused coverage exists in `scripts/test/test_application_runtime_helpers.py`
+41. final retained application closure passed
+   - before the final run, the stale Job was deleted with:
+     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application playbooks/debug/run_command.yml -e '{"debug_hosts":"cloud_controller_continuum-smoke","debug_command":"kubectl delete job image-classification-1 --ignore-not-found"}'`
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
+     passed in 64.6 seconds
+   - result artifact:
+     `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume/.continuum/test_results/test_results_2026-05-13_17-11-53.json`
 
 ## 4. Current Phase-D State
 
@@ -406,13 +476,11 @@ Observed host-run attempts:
 3. resumed `software + application` runs require saved `phase_completed=infrastructure` state,
 4. the repository now has a concrete resumed `benchmark_smoke` suite and wrapper scenario for the K8s benchmark path,
 5. the dedicated host-backed benchmark path now reaches a refreshed retained topology with the expected control-plane VM,
-6. retained infrastructure and retained software have both been rerun successfully on the dedicated host path after the recent fixes,
-7. retained application is still the open benchmark leg; the full synced-wrapper
-   application leg reaches Kubernetes apply and is blocked by stale retained Job
-   state for `image-classification-1`,
-8. full benchmark closure no longer primarily depends on Continuum code
-   plumbing or harness access; it now needs retained-cluster cleanup followed by
-   another application-leg rerun,
+6. retained infrastructure, retained software, and retained application have all
+   passed on the dedicated host-backed path after the recent fixes,
+7. retained application is no longer the open benchmark leg,
+8. the next design cleanup is to separate generic infrastructure-only execution
+   from retained benchmark resume preparation via an explicit opt-in,
 9. the forever/canonical agent host setup path is now `scripts/test/setup_agent_host.sh`, with dedicated read-only repo execution as the default boundary,
 10. do not generalize the current fix into unconditional orchestrator package installs for unrelated infra-only runs; the open design task is to make retained-resume preparation explicit.
 
@@ -425,30 +493,27 @@ Primary resume entry:
 
 Then continue here:
 
-1. Clean up the stale retained Kubernetes Job first.
-   - use the installed wrapper debug path, not an arbitrary shell:
-     `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application playbooks/debug/run_command.yml -e debug_hosts=cloud_controller_continuum-smoke -e debug_command='kubectl delete job image-classification-1 --ignore-not-found'`
-2. Reuse the current hardening already landed here instead of re-debugging them:
+1. Start the explicit retained-resume prep design slice.
+   - add `run.prepare_for_resume`, defaulting to `false`
+   - reject it outside `run.targets: [infrastructure]`
+   - use it to preserve retained benchmark base-image prep without making
+     every infrastructure-only Kubernetes run install later-phase prerequisites
+2. Update `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml` to
+   opt into retained-resume prep explicitly.
+3. Reuse the current hardening already landed here instead of re-debugging them:
    - best-effort `setfacl`
    - optional QEMU bridge overrides
    - Ansible local tmp pinning and env merge
    - interpreter-local `ansible-playbook` resolution
    - `scripts/test/setup_agent_host.sh install` as the canonical host bootstrap path
    - runtime/test outputs under `base_path/.continuum/...` rather than repo-local `./logs`
-3. Sync the dedicated repo copy through the installed helper and rerun only the
-   retained application leg first.
-   - `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
-   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
-4. If retained application still fails, use the now-improved main-run logging
-   first. Only if needed, use the dedicated debug replay entrypoint:
-   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook ...`
-5. If retained application finally passes, then resume the remaining Phase-D
-   cleanup work. The next best cleanup target after benchmark closure is the
-   harness integration documentation plus any remaining explicit separation of
-   pure infra-only intent vs retained-resume prep intent.
-6. If the next real host run still fails, treat it as a post-infrastructure runtime/software/application issue, not as a parser/runtime-target or guest-bootstrap issue.
-7. Update this file with the resumed application result and any benchmark-specific artifact assertions that need tightening.
-8. Keep the design concern visible: if more fixes are needed in this area, prefer making retained-resume base-image prep explicit rather than broadening “infra-only” side effects.
+4. For the explicit prep slice, prioritize cloud-safe validation first:
+   - config/runtime unit tests covering schema validation, config access,
+     legacy projection, runtime loading, and example configs
+   - `scripts/test/run_cloud_static_audit.sh`
+5. Only rerun retained host-backed smoke if the explicit prep slice changes the
+   retained benchmark execution contract.
+6. Keep the design concern visible: if more fixes are needed in this area, prefer making retained-resume base-image prep explicit rather than broadening “infra-only” side effects.
    - the current Kubernetes prereq baking is a compatibility behavior for runs whose selected software profile already declares `kubernetes`; it is not the desired long-term meaning of generic infrastructure-only execution.
 
 ## 6. Things Not To Reconstruct Again

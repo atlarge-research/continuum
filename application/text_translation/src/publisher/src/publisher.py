@@ -181,7 +181,7 @@ if __name__ == "__main__":
     send()
 
     print("Wait for all texts to be received back")
-    while RECEIVED != MAX_TXTS:
+    while RECEIVED < MAX_TXTS:
         print("Waiting progress: %i / %i" % (RECEIVED, MAX_TXTS))
         time.sleep(10)
 

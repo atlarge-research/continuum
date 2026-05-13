@@ -2,11 +2,14 @@
 Create and use QEMU Vms
 """
 
+import hashlib
 import json
 import logging
 import os
 import sys
 import time
+
+import yaml
 
 from input.configuration import config_access
 from infrastructure import ansible, image_registry, infrastructure
@@ -93,18 +96,118 @@ def _base_install_playbooks_for_base_names(config, machines, normalized_base_nam
     return playbooks
 
 
+def _repo_path(config, path):
+    """Return an absolute path for one repository-relative path."""
+    if os.path.isabs(path):
+        return path
+    return os.path.join(config.get("base", "."), path)
+
+
+def _role_path(config, role_name):
+    """Resolve an Ansible role name using this repo's configured role roots."""
+    if os.path.isabs(role_name):
+        return role_name if os.path.isdir(role_name) else None
+
+    role_roots = (
+        "roles/resource_manager",
+        "roles/infrastructure",
+        "roles/application",
+        "roles",
+    )
+    for root in role_roots:
+        candidate = _repo_path(config, os.path.join(root, role_name))
+        if os.path.isdir(candidate):
+            return candidate
+    return None
+
+
+def _playbook_role_names(config, playbook):
+    """Return role names referenced directly by an Ansible playbook."""
+    playbook_path = _repo_path(config, playbook)
+    try:
+        with open(playbook_path, "r", encoding="utf-8") as filep:
+            data = yaml.safe_load(filep)
+    except (OSError, yaml.YAMLError):
+        return []
+
+    if not isinstance(data, list):
+        return []
+
+    role_names = []
+    for play in data:
+        if not isinstance(play, dict):
+            continue
+        roles = play.get("roles", [])
+        if not isinstance(roles, list):
+            continue
+        for role in roles:
+            role_name = role if isinstance(role, str) else None
+            if isinstance(role, dict):
+                role_name = role.get("role")
+            if isinstance(role_name, str) and role_name:
+                role_names.append(role_name)
+    return role_names
+
+
+def _file_digest(path):
+    """Return a stable digest for one file."""
+    hasher = hashlib.sha256()
+    with open(path, "rb") as filep:
+        while True:
+            chunk = filep.read(1024 * 1024)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _files_under(path):
+    """Return all regular files under one file or directory path."""
+    if os.path.isfile(path):
+        return [path]
+    files = []
+    for root, _dirs, filenames in os.walk(path):
+        for filename in filenames:
+            files.append(os.path.join(root, filename))
+    return files
+
+
+def _base_install_fingerprints(config, playbooks):
+    """Return content fingerprints for base-install playbooks and direct roles."""
+    paths = set()
+    for playbook in playbooks:
+        playbook_path = _repo_path(config, playbook)
+        if os.path.exists(playbook_path):
+            paths.add(playbook_path)
+
+        for role_name in _playbook_role_names(config, playbook):
+            role_path = _role_path(config, role_name)
+            if not role_path:
+                continue
+            paths.update(_files_under(role_path))
+
+    base = os.path.abspath(config.get("base", "."))
+    fingerprints = []
+    for path in sorted(paths):
+        relpath = os.path.relpath(path, base)
+        fingerprints.append({"path": relpath, "sha256": _file_digest(path)})
+    return fingerprints
+
+
 def _expected_base_image_metadata(config, machines, raw_base_name):
     """Return the expected ready-marker payload for one base image."""
     normalized_name = orchestration_schema.normalized_base_name(raw_base_name)
+    playbooks = _base_install_playbooks_for_base_names(
+        config,
+        machines,
+        [normalized_name],
+    )
     return {
         "schema_version": 1,
         "status": "ready",
         "guest_user": orchestration_schema.guest_login_name(raw_base_name),
-        "base_install_playbooks": _base_install_playbooks_for_base_names(
-            config,
-            machines,
-            [normalized_name],
-        ),
+        "base_install_playbooks": playbooks,
+        "base_install_fingerprints": _base_install_fingerprints(config, playbooks),
     }
 
 

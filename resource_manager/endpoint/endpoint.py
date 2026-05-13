@@ -10,6 +10,11 @@ import time
 from input.configuration import config_access
 
 
+_DOCKER_CONTAINER_STATUS_COMMAND = (
+    'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"'
+)
+
+
 def _is_transient_ssh_error(lines):
     """Determine whether SSH stderr output indicates a transient failure.
 
@@ -32,6 +37,48 @@ def _is_transient_ssh_error(lines):
         "connection closed",
     ]
     return any(pattern in combined for pattern in patterns)
+
+
+def _docker_start_stderr_is_fatal(output, error):
+    """Return whether docker run stderr should fail endpoint startup."""
+    if not error:
+        return False
+    if not output:
+        return True
+
+    fatal_markers = [
+        "cannot connect to the docker daemon",
+        "denied:",
+        "docker: error",
+        "error response from daemon",
+        "manifest unknown",
+        "no such host",
+        "non-zero return code",
+        "pull access denied",
+        "unauthorized:",
+    ]
+    combined = "\n".join(error).lower()
+    return any(marker in combined for marker in fatal_markers)
+
+
+def _remove_existing_endpoint_containers(config, machines, container_names, sshs=None):
+    """Remove same-name endpoint containers left by earlier retained attempts."""
+    if not container_names:
+        return
+
+    commands = [
+        ["docker", "container", "rm", "--force", cont_name]
+        for cont_name in container_names
+    ]
+    results = machines[0].process(config, commands, ssh=sshs)
+
+    for cont_name, (output, error) in zip(container_names, results):
+        error_text = "".join(error)
+        if error and "No such container" not in error_text:
+            logging.error("".join(error))
+            sys.exit(1)
+        if output:
+            logging.info("Removed stale endpoint container %s", cont_name)
 
 
 def start(runner):
@@ -177,13 +224,14 @@ def start_endpoint_default(config, machines):
             sshs.append(endpoint_ssh)
             container_names.append(cont_name)
 
+    _remove_existing_endpoint_containers(config, machines, container_names, sshs=sshs)
     results = machines[0].process(config, commands, ssh=sshs)
 
     # Checkout process output
     for ssh, (output, error) in zip(sshs, results):
         logging.debug("Check output of endpoint start in ssh [%s]", ssh)
 
-        if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+        if _docker_start_stderr_is_fatal(output, error):
             logging.error("".join(error))
             sys.exit(1)
         elif not output:
@@ -259,13 +307,14 @@ def start_endpoint_baremetal(config, machines):
         commands.append(command)
         container_names.append(cont_name)
 
+    _remove_existing_endpoint_containers(config, machines, container_names)
     results = machines[0].process(config, commands)
 
     # Checkout process output
     for output, error in results:
         logging.debug("Check output of endpoint baremetal")
 
-        if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+        if _docker_start_stderr_is_fatal(output, error):
             logging.error("".join(error))
             sys.exit(1)
         elif not output:
@@ -296,10 +345,9 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
 
         while not finished:
             # Get list of docker containers
-            command = 'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"'
+            command = _DOCKER_CONTAINER_STATUS_COMMAND
             ssh_entry = ssh
             if config["infrastructure"]["provider"] == "baremetal":
-                command = 'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"'
                 ssh_entry = None
 
             output, error = machines[0].process(config, command, shell=True, ssh=ssh_entry)[0]

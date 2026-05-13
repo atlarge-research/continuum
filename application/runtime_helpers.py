@@ -37,6 +37,15 @@ def parse_custom_kubernetes_splits(line):
     return time_obj, line.split("[CONTINUUM] ")[1]
 
 
+def _batched_kubernetes_command(commands, delimiter="DELIMITER01234"):
+    """Join Kubernetes commands with a delimiter echo for output splitting."""
+    batched = []
+    for command in commands:
+        batched.append(" ".join(command))
+        batched.append('echo "%s"' % (delimiter,))
+    return ";".join(batched)
+
+
 def launch_kubernetes_with_starttime(config, machines):
     """Launch Kubernetes benchmark manifests and capture kubectl timing traces."""
     kube_deployment = kubernetes_deployment_mode(config)
@@ -328,10 +337,7 @@ def get_kubernetes_worker_output(config, machines, get_description=False):
             commands.append(["kubectl", "logs", "--timestamps=true", container])
             pods.append(container)
 
-    batched_command = '"'
-    for pod_command in commands:
-        batched_command += " ".join(pod_command) + ';echo "DELIMITER01234";'
-    batched_command += '"'
+    batched_command = _batched_kubernetes_command(commands)
 
     output, error = machines[0].process(
         config, batched_command, ssh=config["cloud_ssh"][0], shell=True

@@ -174,7 +174,7 @@ if __name__ == "__main__":
     send()
 
     print("Wait for all images to be received back")
-    while RECEIVED != MAX_IMGS:
+    while RECEIVED < MAX_IMGS:
         print("Waiting progress: %i / %i" % (RECEIVED, MAX_IMGS))
         time.sleep(10)
 

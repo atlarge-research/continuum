@@ -9,6 +9,13 @@ import sys
 from input.configuration import config_access
 
 
+def _needs_local_registry(config):
+    """Return whether runtime constants must include the local registry endpoint."""
+    if not config_access.infra_only(config):
+        return True
+    return bool(config.get("module", {}).get("resource_manager"))
+
+
 def dynamic_import(parser, config):
     """Find implementation modules for provider, orchestrator, and application."""
     sys.path.append(os.path.abspath(".."))
@@ -79,7 +86,7 @@ def add_constants(parser, config, socket_module=socket_lib):
     config["postfixIP_lower"] = 2
     config["postfixIP_upper"] = 252
 
-    if not config_access.infra_only(config):
+    if _needs_local_registry(config):
         try:
             with socket_module.socket(socket_module.AF_INET, socket_module.SOCK_DGRAM) as sock:
                 sock.connect(("8.8.8.8", 80))

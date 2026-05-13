@@ -45,6 +45,21 @@
   when: rm_containerd_setup_registry_ip | length > 0
   register: rm_containerd_setup_registry_replace
 
+- name: Check containerd registry placeholder replacement
+  ansible.builtin.command:
+    cmd: grep -q REGISTRY-IP /etc/containerd/config.toml
+  register: rm_containerd_setup_registry_placeholder
+  changed_when: false
+  failed_when: rm_containerd_setup_registry_placeholder.rc > 1
+
+- name: Fail when containerd registry placeholder remains
+  ansible.builtin.fail:
+    msg: >-
+      containerd registry config still contains REGISTRY-IP; set
+      rm_containerd_setup_registry_ip/registry_ip so Kubernetes can pull from
+      Continuum's local HTTP registry
+  when: rm_containerd_setup_registry_placeholder.rc == 0
+
 - name: Restart containerd when config changes
   ansible.builtin.systemd:
     name: containerd

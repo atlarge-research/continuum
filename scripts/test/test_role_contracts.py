@@ -46,6 +46,35 @@ class DockerSetupRoleTests(unittest.TestCase):
         )
 
 
+class ContainerdSetupRoleTests(unittest.TestCase):
+    def test_containerd_setup_fails_on_unreplaced_registry_placeholder(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        task_path = repo_root / "roles/resource_manager/containerd_setup/tasks/main.yml"
+        tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+
+        self.assertIsInstance(tasks, list)
+
+        check_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Check containerd registry placeholder replacement"
+        )
+        self.assertEqual(
+            check_task["ansible.builtin.command"]["cmd"],
+            "grep -q REGISTRY-IP /etc/containerd/config.toml",
+        )
+        self.assertEqual(
+            check_task["failed_when"],
+            "rm_containerd_setup_registry_placeholder.rc > 1",
+        )
+
+        fail_task = next(
+            task for task in tasks if task.get("name") == "Fail when containerd registry placeholder remains"
+        )
+        self.assertIn("REGISTRY-IP", fail_task["ansible.builtin.fail"]["msg"])
+        self.assertEqual(fail_task["when"], "rm_containerd_setup_registry_placeholder.rc == 0")
+
+
 class EndpointInstallPlaybookTests(unittest.TestCase):
     def test_endpoint_install_includes_mosquitto_before_endpoint_runtime(self):
         repo_root = Path(__file__).resolve().parents[2]
@@ -58,6 +87,21 @@ class EndpointInstallPlaybookTests(unittest.TestCase):
         roles = [entry["role"] if isinstance(entry, dict) else entry for entry in playbook[0]["roles"]]
         self.assertIn("mosquitto", roles)
         self.assertLess(roles.index("mosquitto"), roles.index("endpoint_runtime"))
+
+
+class KubernetesBaseInstallPlaybookTests(unittest.TestCase):
+    def test_k8s_base_install_includes_mosquitto_for_benchmark_workers(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        playbook_path = repo_root / "playbooks/resource_manager/k8s_base_install.yml"
+        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+
+        self.assertIsInstance(playbook, list)
+        self.assertEqual(len(playbook), 1)
+
+        roles = [entry["role"] if isinstance(entry, dict) else entry for entry in playbook[0]["roles"]]
+        self.assertIn("containerd_setup", roles)
+        self.assertIn("mosquitto", roles)
+        self.assertLess(roles.index("containerd_setup"), roles.index("mosquitto"))
 
 
 class KubernetesPrereqsRoleTests(unittest.TestCase):

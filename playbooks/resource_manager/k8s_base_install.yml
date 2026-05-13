@@ -5,6 +5,7 @@
   roles:
     - role: k8s_prereqs
     - role: containerd_setup
+    - role: mosquitto
     - role: k8s_binary_override
       when:
         - (continuum_install_binary_override | default(false))

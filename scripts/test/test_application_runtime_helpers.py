@@ -9,6 +9,24 @@ from application import runtime_helpers
 
 
 class ApplicationRuntimeHelpersTests(unittest.TestCase):
+    def test_batched_kubernetes_command_leaves_semicolons_for_remote_shell(self):
+        command = runtime_helpers._batched_kubernetes_command(
+            [
+                ["kubectl", "logs", "--timestamps=true", "image-classification-1-kltqv"],
+                ["kubectl", "logs", "--timestamps=true", "image-classification-1-kltqv", "empty-1"],
+            ]
+        )
+
+        self.assertEqual(
+            command,
+            'kubectl logs --timestamps=true image-classification-1-kltqv;'
+            'echo "DELIMITER01234";'
+            'kubectl logs --timestamps=true image-classification-1-kltqv empty-1;'
+            'echo "DELIMITER01234"',
+        )
+        self.assertFalse(command.startswith('"'))
+        self.assertNotRegex(command, r'^".*"$')
+
     def _planner_handoff_config(self):
         return {
             "registry": "registry.local:5000",

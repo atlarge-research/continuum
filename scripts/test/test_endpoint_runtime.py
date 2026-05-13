@@ -80,7 +80,8 @@ class EndpointRuntimeTests(unittest.TestCase):
         machine = _FakeMachine()
         endpoint.start_endpoint_default(cfg, [machine])
         self.assertTrue(machine.commands)
-        run_cmd = machine.commands[0]
+        self.assertEqual(machine.commands[0], ["docker", "container", "rm", "--force", "endpoint0"])
+        run_cmd = machine.commands[1]
         self.assertIn("--cpus=0.5", run_cmd)
         self.assertIn("--memory=1.5g", run_cmd)
         self.assertIn("--env CPU_THREADS=1", run_cmd)
