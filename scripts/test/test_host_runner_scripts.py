@@ -95,6 +95,14 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('HOSTCTL_PATH=/usr/local/bin/continuum-hostctl', result.stdout)
         self.assertIn('INSTALL_PATH=/usr/local/bin/run-continuum-smoke', result.stdout)
+        self.assertIn(
+            'SYNC_PROBE_FILES="continuum.py infrastructure/ansible.py '
+            'infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py '
+            'scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh '
+            'scripts/test/test_config.json"',
+            result.stdout,
+        )
+        self.assertNotIn("SYNC_PROBE_FILES=continuum.py infrastructure/ansible.py", result.stdout)
         self.assertIn('sync-repo)', result.stdout)
         self.assertIn('install-wrapper)', result.stdout)
         self.assertIn('verify)', result.stdout)
