@@ -20,6 +20,12 @@ prefix_rule(
     match = ["pwd"],
 )
 
+prefix_rule(
+    pattern = ["tail"],
+    decision = "allow",
+    justification = "Read-only file tailing is allowed",
+)
+
 # Allow sed ONLY in read mode (sed -n ...p)
 prefix_rule(
     pattern = ["sed", "-n"],
@@ -34,7 +40,10 @@ prefix_rule(
     pattern = ["rg"],
     decision = "allow",
     justification = "Read-only code search is allowed",
-    match = ["rg 'apply_patch' -n ."],
+    match = [
+        "rg 'apply_patch' -n .",
+        "rg -n",
+    ],
 )
 
 #prefix_rule(
