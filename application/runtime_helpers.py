@@ -15,6 +15,11 @@ import pandas as pd
 from input.configuration import config_access
 
 
+def kubernetes_deployment_mode(config):
+    """Return the Kubernetes launch strategy, matching the orchestrator default."""
+    return config_access.orchestrator_value_optional(config, "kube_deployment", default="pod")
+
+
 def parse_custom_kubernetes_splits(line):
     """Parse Continuum-tagged kubectl trace output into timestamp + marker text."""
     line = line.strip()
@@ -34,10 +39,11 @@ def parse_custom_kubernetes_splits(line):
 
 def launch_kubernetes_with_starttime(config, machines):
     """Launch Kubernetes benchmark manifests and capture kubectl timing traces."""
-    if config_access.orchestrator_value(config, "kube_deployment") == "file":
+    kube_deployment = kubernetes_deployment_mode(config)
+    if kube_deployment == "file":
         target = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
         command = "\"date +'%%s.%%N'; kubectl apply -f %s\"" % (target)
-    elif config_access.orchestrator_value(config, "kube_deployment") == "call":
+    elif kube_deployment == "call":
         target = "/home/%s/jobs/*" % (machines[0].cloud_controller_names[0])
         command = "\"date +'%%s.%%N'; for filename in %s; do kubectl apply -f $filename & done\"" % (
             target
@@ -89,7 +95,7 @@ def launch_kubernetes_with_starttime(config, machines):
 
     send_length = len([entry for entry in kubectl_output if "0401" in entry[1]])
     if len(start_list) != send_length:
-        if len(start_list) == 1 and config_access.orchestrator_value(config, "kube_deployment") == "file":
+        if len(start_list) == 1 and kubernetes_deployment_mode(config) == "file":
             start_list *= send_length
             end_list *= send_length
         else:
@@ -303,7 +309,7 @@ def get_kubernetes_worker_output(config, machines, get_description=False):
         pod = line.split(" ")[0]
         sub_pods_mode = False
         sub_pods = 1
-        if config_access.orchestrator_value(config, "kube_deployment") == "container":
+        if kubernetes_deployment_mode(config) == "container":
             sub_pods_mode = True
             sub_pods = (
                 (config["infrastructure"]["cloud_nodes"] - 1)
@@ -534,10 +540,11 @@ def cache_kubernetes_workers(config, machines, app_vars, runner=None):
     all_vars = {**global_vars, **app_vars}
     run_kubernetes_benchmark_playbook(config, all_vars, runner=runner)
 
-    if config_access.orchestrator_value(config, "kube_deployment") == "file":
+    kube_deployment = kubernetes_deployment_mode(config)
+    if kube_deployment == "file":
         manifest_path = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
         command = "kubectl apply -f %s" % (manifest_path)
-    elif config_access.orchestrator_value(config, "kube_deployment") == "call":
+    elif kube_deployment == "call":
         manifest_path = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
         command = "for filename in /home/%s/jobs/*; do kubectl apply -f $filename & done" % (
             machines[0].cloud_controller_names[0]
@@ -614,7 +621,7 @@ def cache_kubernetes_workers(config, machines, app_vars, runner=None):
 
 def wait_kubernetes_workers_ready(config, machines, get_starttime):
     """Wait for benchmark worker pods to reach Running/Succeeded after submission."""
-    if config_access.orchestrator_value(config, "kube_deployment") == "container":
+    if kubernetes_deployment_mode(config) == "container":
         worker_apps = 1
     else:
         worker_apps = kubernetes_worker_app_count(config)
@@ -625,20 +632,24 @@ def wait_kubernetes_workers_ready(config, machines, get_starttime):
 
     while True:
         command = (
-            "\"date +'%s.%N'; kubectl get pods "
-            + '-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase --sort-by=.spec.nodeName"'
+            "date +'%s.%N'; kubectl get pods "
+            + "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase --sort-by=.spec.nodeName"
         )
         output, error = machines[0].process(
             config, command, shell=True, ssh=config["cloud_ssh"][0]
         )[0]
-        start_t = float(output[0])
-        output = output[1:]
 
         if error and any("couldn't find any field with path" in line for line in error):
             continue
-        if (error and not all("[CONTINUUM]" in line for line in error)) or not output:
+        if error and not all("[CONTINUUM]" in line for line in error):
             logging.error("".join(error))
             sys.exit(1)
+        if not output:
+            logging.error("Could not fetch Kubernetes worker pod status")
+            sys.exit(1)
+
+        start_t = float(output[0])
+        output = output[1:]
 
         status_entry = {
             "time_orig": start_t,
@@ -700,11 +711,16 @@ def start_kubernetes_workers(config, machines, app_vars, get_starttime=False, ru
     logging.info("Start subscriber pods on %s", config["mode"])
 
     worker_apps = kubernetes_worker_app_count(config)
+    pull_policy = (
+        "Never"
+        if config_access.orchestrator_bool_optional(config, "cache_worker", default=False)
+        else "IfNotPresent"
+    )
     global_vars = kubernetes_worker_global_vars(
         config,
         worker_apps,
         config_access.benchmark_param_float(config, "application_worker_cpu"),
-        "Never",
+        pull_policy,
     )
     all_vars = {**global_vars, **app_vars}
     run_kubernetes_benchmark_playbook(config, all_vars, runner=runner)

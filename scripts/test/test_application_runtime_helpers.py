@@ -440,6 +440,54 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         )
         mock_wait.assert_called_once_with(config, [machine], True)
 
+    def test_wait_kubernetes_workers_ready_defaults_missing_kube_deployment_to_pod_mode(self):
+        config = self._planner_handoff_config()
+        config["domains"]["software"]["modules"][0]["config"].pop("kube_deployment")
+        config["mode"] = "cloud"
+        config["cloud_ssh"] = ["cloudcontroller@10.0.0.1"]
+        machine = mock.Mock()
+        machine.process.return_value = [
+            (
+                [
+                    "100.0\n",
+                    "NAME STATUS\n",
+                    "worker-a Running\n",
+                    "worker-b Running\n",
+                    "worker-c Succeeded\n",
+                    "worker-d Running\n",
+                ],
+                [],
+            )
+        ]
+
+        status = runtime_helpers.wait_kubernetes_workers_ready(
+            config,
+            [machine],
+            get_starttime=True,
+        )
+
+        self.assertEqual(status[0]["Arriving"], 0)
+        self.assertEqual(status[0]["Running"], 3)
+        self.assertEqual(status[0]["Succeeded"], 1)
+        machine.process.assert_called_once()
+        command = machine.process.call_args.args[1]
+        self.assertTrue(command.startswith("date +'%s.%N'; kubectl get pods "))
+        self.assertFalse(command.startswith("\""))
+
+    def test_wait_kubernetes_workers_ready_exits_on_empty_status_output(self):
+        config = self._planner_handoff_config()
+        config["mode"] = "cloud"
+        config["cloud_ssh"] = ["cloudcontroller@10.0.0.1"]
+        machine = mock.Mock()
+        machine.process.return_value = [([], [])]
+
+        with self.assertRaises(SystemExit):
+            runtime_helpers.wait_kubernetes_workers_ready(
+                config,
+                [machine],
+                get_starttime=False,
+            )
+
     def test_start_kubernetes_workers_runs_playbook_with_shared_vars(self):
         config = self._planner_handoff_config()
         config["mode"] = "cloud"
@@ -467,10 +515,31 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         self.assertEqual(extra_vars["benchmark_stage_id"], "classify")
         self.assertEqual(extra_vars["runtime"], "runc")
         self.assertEqual(extra_vars["runtime_filesystem"], "overlayfs")
+        self.assertEqual(extra_vars["pull_policy"], "IfNotPresent")
         self.assertEqual(
             mock_run_playbook.call_args.kwargs,
             {"runner": mock.sentinel.runner},
         )
+
+    def test_start_kubernetes_workers_uses_never_pull_policy_after_cache_worker(self):
+        config = self._planner_handoff_config()
+        config["mode"] = "cloud"
+        config["domains"]["software"]["modules"][0]["config"]["cache_worker"] = True
+        machine = mock.Mock()
+
+        with mock.patch.object(
+            runtime_helpers,
+            "run_kubernetes_benchmark_playbook",
+        ) as mock_run_playbook:
+            runtime_helpers.start_kubernetes_workers(
+                config,
+                [machine],
+                {"custom": "value"},
+                runner=mock.sentinel.runner,
+            )
+
+        _called_config, extra_vars = mock_run_playbook.call_args.args
+        self.assertEqual(extra_vars["pull_policy"], "Never")
 
     def test_cache_kubernetes_workers_runs_cache_lifecycle(self):
         config = self._planner_handoff_config()
