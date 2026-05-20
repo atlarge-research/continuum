@@ -174,16 +174,18 @@ This phase launches benchmark workload logic and waits for completion.
 ### Current status
 
 Application execution is now reachable for YAML runs.
-Phase D still owns the remaining role consolidation and the operational
-benchmark smoke/teardown closure, but `run.targets: application` no longer
-stops at runtime-target resolution.
+Phase D role consolidation moved benchmark launch and completion behavior under
+application-owned helpers and roles. `run.targets: application` no longer stops
+at runtime-target resolution and no longer silently skips when a runnable
+application module is missing.
 
 ### Primary code surfaces
 
 1. `continuum.py` -> `application.start(runner)`
 2. `application/application.py`
 3. application modules under `application/`
-4. resource-manager launch helpers, especially `resource_manager/kubernetes/kubernetes.py`
+4. `application/runtime_helpers.py`
+5. application roles under `roles/application/`
 
 ### Responsibilities
 
@@ -199,7 +201,7 @@ stops at runtime-target resolution.
 2. worker and endpoint outputs are collected,
 3. benchmark metrics are formatted without runtime fallback aliases,
 4. state file advances to `phase_completed=application`,
-5. host-backed benchmark smoke and teardown complete on the intended resume path.
+5. host-backed benchmark smoke completes on the intended resume path.
 
 ## 7. Phase 4: Artifact Capture, Resume, And Teardown
 
@@ -220,13 +222,15 @@ This is a cross-cutting runtime concern rather than a separately requested
 2. `infrastructure/state.py`
 3. `continuum.py`
 4. provider `delete_vms(...)` implementations
+5. `scripts/test/run_tests.py` and `scripts/test/test_utils.py` for operational evidence checks
 
 ### Operational success evidence
 
 1. lock and state files are present and internally compatible,
 2. resume rejects incompatible state cleanly,
 3. final artifact/log locations are discoverable,
-4. teardown leaves no unexpected provider resources behind when requested.
+4. teardown leaves no unexpected provider resources behind when requested,
+5. benchmark smoke reports a stable `teardown_failure` when retained QEMU domains remain after a delete-on-exit application leg.
 
 ## 8. Mapping To `run.targets`
 

@@ -22,13 +22,15 @@ Current reality:
    base-image invalidation, Mosquitto worker prep, endpoint Docker reruns,
    publisher completion, and Kubernetes worker-log collection.
 
-So the next task is:
+The current consolidation slice continues from that contract:
 
-1. continue Phase-D cleanup from this explicit contract, not from the old
-   implicit infra-only Kubernetes prereq behavior,
-2. rerun retained host-backed smoke only when the next change affects the
-   retained benchmark execution contract,
-3. keep retained smoke artifacts and generated reports uncommitted.
+1. application launch playbooks are thin wrappers around application roles,
+   not places for benchmark-specific task duplication,
+2. application runtime helpers own benchmark launch timing, worker output, and
+   Kubernetes pod completion,
+3. retained host-backed smoke should be rerun when a change affects the
+   benchmark execution or teardown contract,
+4. retained smoke artifacts and generated reports stay uncommitted.
 
 For active implementation resume, the minimum read set is still:
 
@@ -113,6 +115,29 @@ Read after:
    - both now install `python3-kubernetes` and `python3-jsonpatch`
    - these should remain useful for other Ansible K8s callsites even though the
      benchmark launch playbooks no longer depend on them directly.
+13. Application launch playbooks are now role-owned.
+   - `roles/application/k8s_job_deploy` renders all existing Kubernetes Job
+     launch variants and can optionally apply them with `kubectl apply -f`.
+   - `roles/application/openfaas_deploy` renders and deploys OpenFaaS
+     functions, including the existing scale-limit variants.
+   - The existing `application/*/launch_benchmark_*.yml` paths remain stable
+     wrappers so runtime playbook resolution does not change.
+14. The last application-specific Kubernetes completion loop moved out of the
+    Kubernetes resource-manager module.
+   - `application/runtime_helpers.py` now owns benchmark worker pod completion.
+   - `resource_manager/kubernetes/kubernetes.py` stays focused on software-phase
+     installation and cluster readiness.
+15. Application-phase execution now fails fast consistently.
+   - When `run.targets` includes `application`, `continuum.py` calls
+     `application.start(runner)` unconditionally.
+   - Missing runnable application modules therefore fail in the application
+     boundary instead of being logged as a successful skip.
+16. Benchmark-smoke success detection now has teardown evidence.
+   - `benchmark_smoke` sets `require_teardown`.
+   - For the final delete-on-exit application leg, the runner reads saved
+     `state.json` machine names and verifies matching QEMU/libvirt domains no
+     longer appear after teardown.
+   - Remaining domains are classified as `teardown_failure`.
 
 ## 2. Files Touched In This Session
 
@@ -167,6 +192,25 @@ Read after:
 49. `scripts/test/test_host_runner_scripts.py`
 
 ## 3. Validation Run
+
+Latest Phase-D consolidation validation (May 20, 2026):
+
+1. `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_role_contracts scripts.test.test_continuum_runtime scripts.test.test_e2e_test_utils scripts.test.test_run_tests`
+   - `183 tests OK`
+2. `env PYTHONPATH=. python3 -m unittest discover scripts/test`
+   - `387 tests OK`
+3. `scripts/test/run_cloud_static_audit.sh`
+   - required gates passed
+   - pytest: `387 passed`
+   - docs path references: `TOTAL_MISSING_REFERENCES=0`
+   - YAML and Ansible lint baselines OK
+4. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
+5. `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated`
+6. `sudo -n /usr/local/bin/continuum-hostctl verify`
+7. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume`
+   - infrastructure leg passed with `phase_completed=infrastructure`
+   - software leg passed with `phase_completed=software`
+   - application leg passed with `phase_completed=application, teardown_verified`
 
 Passed:
 

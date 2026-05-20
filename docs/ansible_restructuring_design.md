@@ -114,28 +114,38 @@ Status snapshot (updated April 11, 2026):
 
 Objective: standardize application deployment roles/templates and remove remaining duplication.
 
-Phase-D cleanup target: split application-specific launch/timing/runtime concerns out of `resource_manager/kubernetes/kubernetes.py` (`launch_with_starttime`, MQTT environment injection, and Mist/Baremetal worker-output handling) into application/role-owned paths once application execution is ungated.
+Phase-D cleanup target: keep benchmark/application launch, timing, worker-output,
+and completion concerns under application-owned Python helpers and application
+Ansible roles. Resource-manager modules should own platform installation and
+generic readiness checks, not benchmark-specific job/runtime behavior.
 
-Current prep snapshot:
+Current implementation snapshot (updated May 20, 2026):
 
 1. application bootstrap/module wiring is no longer fully gated:
    - the application module now imports during YAML bootstrap for `run.targets: application`,
    - application image selection and benchmark-stage option validation now run again at bootstrap.
-2. helper extraction has started:
-   - application-specific Kubernetes launch timing, worker-output collection, Mist/Baremetal worker runtime helpers, and shared MQTT worker env/var shaping now live in `application/runtime_helpers.py`,
-   - `resource_manager/kubernetes/kubernetes.py` delegates to those helpers.
+2. helper extraction is now application-owned:
+   - application-specific Kubernetes launch timing, worker-output collection, pod completion, Mist/Baremetal worker runtime helpers, and shared MQTT worker env/var shaping live in `application/runtime_helpers.py`,
+   - `resource_manager/kubernetes/kubernetes.py` is limited to Kubernetes software installation and cluster readiness.
 3. runtime execution is now ungated:
    - `input/configuration/runtime_phase_targets.py` no longer blocks Phase-3 execution,
+   - `continuum.py` always enters `application.start(runner)` when `run.targets` includes `application`, so missing runnable application modules fail fast instead of becoming a logged skip,
    - the dedicated host-backed benchmark path reached resumed software execution and exposed a retained-topology bug where infra-only QEMU runs had omitted the control-plane VM,
    - that topology bug is now fixed in-repo,
    - guest-side Ansible temp-path handling is now hardened with pinned `ANSIBLE_REMOTE_TMP`,
    - infra-only bootstrap now keeps the orchestrator resource-manager module loaded only when `run.prepare_for_resume: true`, so orchestrator base-image prep is explicit retained-resume intent,
    - retained-resume behavior should not become the long-term meaning of generic infra-only execution,
-   - the K8s retained benchmark infrastructure/software/application path has passed on the dedicated host-backed runner; teardown and future benchmark-smoke refinements remain Phase-D/Phase-E follow-up work.
-4. continuation note:
+   - the K8s retained benchmark infrastructure/software/application path has passed on the dedicated host-backed runner.
+4. application launch playbooks are now thin role wrappers:
+   - `roles/application/k8s_job_deploy` owns Kubernetes Job rendering and optional launch,
+   - `roles/application/openfaas_deploy` owns OpenFaaS function rendering, DNAT setup, and deploy execution,
+   - legacy `application/*/launch_benchmark_*.yml` paths remain stable for runtime playbook resolution.
+5. benchmark-smoke teardown evidence is now runner-visible:
+   - `benchmark_smoke` can opt into suite-level success detection with `require_teardown`,
+   - when the final application config uses `delete_on_exit: true`, the runner verifies saved QEMU domain names are absent after teardown and reports `teardown_failure` on drift.
+6. continuation note:
    - the active resume point is `docs/phase_d_handoff.md`,
-   - current host-backed progress already reaches retained benchmark infrastructure completion,
-   - the remaining blocker in this agent harness is sandboxed `sudo`, not parser/runtime gating or the earlier guest bootstrap issue.
+   - future Phase-E work should harden broader resume/state integrity, not reintroduce application behavior into resource-manager modules.
 
 ## Phase E: Resume and State Integrity Hardening
 

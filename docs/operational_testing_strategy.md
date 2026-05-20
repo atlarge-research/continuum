@@ -155,6 +155,8 @@ Current recommended baseline:
    - proves the resumed infrastructure -> software -> application path on one shared base path
    - target shape: two cloud VMs plus one endpoint VM using the supported
      `kubernetes + endpoint_runtime + image_classification` path
+   - the final application leg uses `delete_on_exit: true` and the runner verifies
+     saved QEMU domain names are absent after teardown.
 
 Preferred execution shape:
 
@@ -209,6 +211,7 @@ Concrete smoke success criteria currently agreed:
    - intermediate phases should reuse saved state rather than reprovisioning from scratch
    - all VMs should be cleaned up only at the end of the smoke run
    - exported state should remain available for inspection after the run
+   - benchmark-smoke success requires teardown evidence when the final config requests deletion
 6. network validation tolerance:
    - observed latency and throughput should be within 25% of the expected profile values,
      or within 10 ms / 10 mbit respectively, whichever tolerance is larger
@@ -228,8 +231,8 @@ Suite behavior policy currently agreed:
    or saved with the wrong `phase_completed` value for the requested target set.
 7. failed runs should be classified into stable debugging buckets such as
    `timeout`, `missing_lock`, `missing_state`, `wrong_state_phase`,
-   `missing_ssh`, `nonzero_exit`, or `ansible_failure` so smoke triage can
-   focus on the right layer first.
+   `missing_ssh`, `nonzero_exit`, `ansible_failure`, or `teardown_failure` so
+   smoke triage can focus on the right layer first.
 
 ## 7. Environment Matrix
 
@@ -286,18 +289,16 @@ What is already covered:
 
 What remains open:
 
-1. real host-backed execution of the resumed Kubernetes benchmark smoke pipeline,
-2. teardown verification in real environments beyond the final-run delete contract,
-3. benchmark/application artifact assertions tuned from real run output instead of design-only expectations.
+1. benchmark/application artifact assertions tuned from real run output instead of design-only expectations,
+2. broader scenario regressions beyond the canonical resumed Kubernetes benchmark smoke path.
 
 ## 9. Suggested Next Operational Work
 
 Recommended order:
 
-1. run the dedicated `benchmark_smoke` suite on a host-backed QEMU environment,
-2. add explicit teardown verification to the real host-backed smoke path,
-3. keep network-validation artifact checks aligned with the existing host-backed smoke runner output,
-4. tighten benchmark-smoke artifact assertions once the first real host-backed run is green.
+1. keep network-validation artifact checks aligned with the existing host-backed smoke runner output,
+2. tighten benchmark-smoke artifact assertions now that role consolidation and teardown evidence are available,
+3. expand scenario regressions only after the canonical smoke path stays green.
 
 Cache-integrity note:
 
