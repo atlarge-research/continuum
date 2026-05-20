@@ -11,6 +11,77 @@ from input.configuration import experiment_lock_writer
 
 
 class ExperimentLockWriterTests(unittest.TestCase):
+    def _minimal_config(self, root: Path, sources=None):
+        run = {
+            "targets": ["infrastructure"],
+            "dry_run": False,
+            "clean": False,
+            "image_prefetch": "off",
+            "prepare_for_resume": False,
+        }
+        module = {
+            "id": "none-main",
+            "type": "none",
+            "assign_to": {"match": {"cluster": "cloud-1"}},
+            "config": {},
+            "selector_id": "sel_none_main",
+            "resolved_vm_ids": [1],
+            "scope_identities": [{"kind": "selector", "selector_id": "sel_none_main"}],
+        }
+        resource = {
+            "vm_id": 1,
+            "cluster_id": "cloud-1",
+            "tier": "cloud",
+            "index_in_cluster": 0,
+            "tags": {"tier": "cloud", "cluster": "cloud-1"},
+        }
+        cluster = {
+            "id": "cloud-1",
+            "tier": "cloud",
+            "resources": {"vms": {"count": 1, "spec": {"cores": 1}}},
+        }
+        network = {"emulation": False, "wireless_preset": "4g", "overrides": {}}
+        provider = {
+            "name": "qemu",
+            "config": {
+                "base_path": str(root),
+                "cpu_pin": False,
+                "external_physical_machines": [],
+                "ip": {"prefix": "192.168", "middle": 100, "middle_base": 90},
+                "netperf": False,
+                "delete_on_exit": False,
+            },
+        }
+        return {
+            "config_format": "yaml",
+            "infrastructure": {"base_path": str(root), "endpoint_nodes": 0},
+            "module": {"resource_manager": False},
+            "domains": {
+                "run": run,
+                "provider": provider,
+                "software": {"modules": [module]},
+                "infrastructure": {
+                    "clusters": [cluster],
+                    "network": network,
+                    "resources": [resource],
+                },
+                "benchmark": {},
+            },
+            "normalized": {
+                "schema_version": 1,
+                "kind": "ContinuumNormalizedConfig",
+                "sources": sources or {},
+                "run": run,
+                "provider": provider,
+                "software": {"modules": [module]},
+                "infrastructure": {
+                    "clusters": [cluster],
+                    "network": network,
+                    "resources": [resource],
+                },
+            },
+        }
+
     def test_returns_none_for_non_yaml_config(self):
         self.assertIsNone(experiment_lock_writer.write_experiment_lock({"config_format": "ini"}))
 
@@ -34,19 +105,14 @@ class ExperimentLockWriterTests(unittest.TestCase):
             env.write_text("kind: ContinuumEnvironment\n", encoding="utf-8")
             sw.write_text("kind: ContinuumSoftware\n", encoding="utf-8")
 
-            config = {
-                "config_format": "yaml",
-                "infrastructure": {"base_path": str(root)},
-                "normalized": {
-                    "schema_version": 1,
-                    "kind": "ContinuumNormalizedConfig",
-                    "sources": {
-                        "experiment": str(exp),
-                        "environment_profile": str(env),
-                        "software_profile": str(sw),
-                    },
+            config = self._minimal_config(
+                root,
+                sources={
+                    "experiment": str(exp),
+                    "environment_profile": str(env),
+                    "software_profile": str(sw),
                 },
-            }
+            )
 
             lock_path = experiment_lock_writer.write_experiment_lock(config)
             self.assertIsNotNone(lock_path)
@@ -59,6 +125,8 @@ class ExperimentLockWriterTests(unittest.TestCase):
             self.assertIn("experiment_sha256", hashes)
             self.assertIn("environment_profile_sha256", hashes)
             self.assertIn("software_profile_sha256", hashes)
+            self.assertIn("resume_contract", payload)
+            self.assertTrue(payload["resume_contract"]["hash"].startswith("sha256:"))
 
     def test_writes_planner_snapshot_when_domains_are_available(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -135,7 +203,62 @@ class ExperimentLockWriterTests(unittest.TestCase):
                     "schema_version": 1,
                     "kind": "ContinuumNormalizedConfig",
                     "sources": {},
+                    "provider": {
+                        "name": "qemu",
+                        "config": {
+                            "base_path": str(root),
+                            "cpu_pin": False,
+                            "external_physical_machines": [],
+                            "ip": {"prefix": "192.168", "middle": 100, "middle_base": 90},
+                            "netperf": False,
+                            "delete_on_exit": False,
+                        },
+                    },
+                    "software": {
+                        "modules": [
+                            {
+                                "id": "k8s-main",
+                                "type": "kubernetes",
+                                "config": {},
+                                "selector_id": "sel_k8s_main",
+                                "resolved_vm_ids": [1],
+                                "scope_identities": [
+                                    {"kind": "selector", "selector_id": "sel_k8s_main"}
+                                ],
+                            },
+                            {
+                                "id": "endpoint-runtime-main",
+                                "type": "endpoint_runtime",
+                                "config": {},
+                                "selector_id": "sel_endpoint_runtime_main",
+                                "resolved_vm_ids": [2],
+                                "scope_identities": [
+                                    {
+                                        "kind": "selector",
+                                        "selector_id": "sel_endpoint_runtime_main",
+                                    }
+                                ],
+                            },
+                        ]
+                    },
                     "infrastructure": {
+                        "clusters": [
+                            {
+                                "id": "cloud-1",
+                                "tier": "cloud",
+                                "resources": {"vms": {"count": 1, "spec": {"cores": 2}}},
+                            },
+                            {
+                                "id": "endpoint-1",
+                                "tier": "endpoint",
+                                "resources": {"vms": {"count": 1, "spec": {"cores": 1}}},
+                            },
+                        ],
+                        "network": {
+                            "emulation": False,
+                            "wireless_preset": "4g",
+                            "overrides": {},
+                        },
                         "resources": [
                             {
                                 "vm_id": 1,

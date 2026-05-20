@@ -10,7 +10,7 @@ import yaml
 
 from resource_manager import plans
 
-from . import yaml_io
+from . import resume_contract, yaml_io
 
 
 def write_experiment_lock(config):
@@ -45,6 +45,14 @@ def write_experiment_lock(config):
         if source_path and Path(source_path).exists():
             hashes["%s_sha256" % key] = yaml_io.sha256(Path(source_path))
 
+    domains = config.get("domains")
+    planner_snapshot = None
+    contract_config = config
+    if isinstance(domains, dict):
+        planner_snapshot = plans.build_planner_snapshot(config)
+        contract_config = copy.copy(config)
+        contract_config["planner_snapshot"] = planner_snapshot
+
     lock_data = {
         "schema_version": 1,
         "kind": "ContinuumExperimentLock",
@@ -66,11 +74,11 @@ def write_experiment_lock(config):
                 "Local paths and network addressing may differ between sites.",
             ],
         },
+        "resume_contract": resume_contract.build_persisted_resume_contract(contract_config),
     }
 
-    domains = config.get("domains")
-    if isinstance(domains, dict):
-        lock_data["planner_snapshot"] = plans.build_planner_snapshot(config)
+    if planner_snapshot is not None:
+        lock_data["planner_snapshot"] = planner_snapshot
 
     with lock_path.open("w", encoding="utf-8") as filep:
         yaml.safe_dump(lock_data, filep, sort_keys=False)
