@@ -165,6 +165,65 @@ class RunTestsCliTests(unittest.TestCase):
         self.assertEqual(exc.exception.code, 0)
         self.assertTrue(run_tests_mock.call_args.kwargs["stop_on_failure"])
 
+    def test_main_merges_suite_success_detection_overrides(self):
+        fake_test_config = {
+            "success_detection": {
+                "require_exit_code_zero": True,
+            },
+            "test_suites": {
+                "benchmark_smoke": {
+                    "directories": ["configs/experiments/benchmark_smoke/"],
+                    "success_detection": {
+                        "require_teardown": True,
+                    },
+                },
+            },
+            "exclude_patterns": [],
+        }
+
+        with (
+            mock.patch.object(
+                run_tests_module.sys,
+                "argv",
+                [
+                    "run_tests.py",
+                    "--suite",
+                    "benchmark_smoke",
+                    "--test-config",
+                    self.test_config_path,
+                ],
+            ),
+            mock.patch.object(
+                run_tests_module, "load_test_config", return_value=fake_test_config
+            ),
+            mock.patch.object(
+                run_tests_module.test_utils,
+                "discover_config_files",
+                return_value=[
+                    "configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml"
+                ],
+            ),
+            mock.patch.object(
+                run_tests_module,
+                "run_tests",
+                return_value=[{"success": True, "execution_time": 0.1}],
+            ) as run_tests_mock,
+            mock.patch.object(run_tests_module, "print_summary"),
+            mock.patch.object(
+                run_tests_module.test_utils,
+                "save_test_results",
+                return_value="logs/test_results/test.json",
+            ),
+            mock.patch.object(run_tests_module, "print_colored"),
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                run_tests_module.main()
+
+        self.assertEqual(exc.exception.code, 0)
+        run_config = run_tests_mock.call_args.args[1]
+        self.assertTrue(run_config["success_detection"]["require_exit_code_zero"])
+        self.assertTrue(run_config["success_detection"]["require_teardown"])
+
     def test_main_rejects_suite_when_prerequisite_commands_are_missing(self):
         fake_test_config = {
             "test_suites": {

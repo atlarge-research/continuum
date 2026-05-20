@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from argparse import ArgumentParser
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -449,6 +450,108 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertIn("expected 'software'", reason)
 
+    def test_detect_success_verifies_qemu_teardown_when_requested(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            continuum_dir = Path(tempdir) / ".continuum"
+            continuum_dir.mkdir(parents=True)
+            (continuum_dir / "experiment_lock.yaml").write_text(
+                "kind: ContinuumExperimentLock\n",
+                encoding="utf-8",
+            )
+            (continuum_dir / "state.json").write_text(
+                json.dumps(
+                    {
+                        "phase_completed": "application",
+                        "machine_data": [{"cloud_names": ["cloud0_test"]}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "delete_on_exit": True,
+                    "infra_only": False,
+                    "provider": "qemu",
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            virsh_result = mock.Mock(returncode=0, stdout=" Id Name State\n", stderr="")
+            with mock.patch.object(test_utils.shutil, "which", return_value="/usr/bin/virsh"), mock.patch.object(
+                test_utils.subprocess,
+                "run",
+                return_value=virsh_result,
+            ) as run_mock:
+                success, reason = test_utils.detect_success(
+                    stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                    stderr="",
+                    exit_code=0,
+                    config=config,
+                    success_config={"require_teardown": True},
+                )
+
+            self.assertTrue(success)
+            self.assertIn("teardown_verified", reason)
+            run_mock.assert_called_once_with(
+                ["/usr/bin/virsh", "list", "--all"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+    def test_detect_success_rejects_remaining_qemu_domain(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            continuum_dir = Path(tempdir) / ".continuum"
+            continuum_dir.mkdir(parents=True)
+            (continuum_dir / "experiment_lock.yaml").write_text(
+                "kind: ContinuumExperimentLock\n",
+                encoding="utf-8",
+            )
+            (continuum_dir / "state.json").write_text(
+                json.dumps(
+                    {
+                        "phase_completed": "application",
+                        "machine_data": [{"cloud_names": ["cloud0_test"]}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "delete_on_exit": True,
+                    "infra_only": False,
+                    "provider": "qemu",
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            virsh_result = mock.Mock(
+                returncode=0,
+                stdout=" Id Name State\n 1 cloud0_test running\n",
+                stderr="",
+            )
+            with mock.patch.object(test_utils.shutil, "which", return_value="/usr/bin/virsh"), mock.patch.object(
+                test_utils.subprocess,
+                "run",
+                return_value=virsh_result,
+            ):
+                success, reason = test_utils.detect_success(
+                    stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                    stderr="",
+                    exit_code=0,
+                    config=config,
+                    success_config={"require_teardown": True},
+                )
+
+            self.assertFalse(success)
+            self.assertIn("VM domain(s) still present: cloud0_test", reason)
+
     def test_classify_test_failure_uses_stable_buckets(self):
         self.assertEqual(
             test_utils.classify_test_failure(
@@ -467,6 +570,17 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 {"success": False, "success_reason": "No SSH output found (expected SSH commands)"}
             ),
             "missing_ssh",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": (
+                        "Teardown verification failed: VM domain(s) still present: cloud0_test"
+                    ),
+                }
+            ),
+            "teardown_failure",
         )
         self.assertIsNone(test_utils.classify_test_failure({"success": True}))
 

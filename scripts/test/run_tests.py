@@ -48,6 +48,22 @@ def print_colored(message: str, color: str = Colors.RESET):
     print(f"{color}{message}{Colors.RESET}")
 
 
+def merge_success_detection_config(test_config: Dict, suite_config: Optional[Dict]) -> Dict:
+    """Return test config with suite-level success detection overrides applied."""
+    if not suite_config or "success_detection" not in suite_config:
+        return test_config
+
+    suite_success = suite_config.get("success_detection")
+    if not isinstance(suite_success, dict):
+        raise ValueError("Suite success_detection must be a mapping")
+
+    merged_config = dict(test_config)
+    merged_success = dict(test_config.get("success_detection", {}))
+    merged_success.update(suite_success)
+    merged_config["success_detection"] = merged_success
+    return merged_config
+
+
 def load_test_config(config_path: str) -> Dict:
     """Load test configuration from JSON file.
 
@@ -614,6 +630,7 @@ def main():
     stop_on_failure = test_config.get("stop_on_failure", False)
 
     # Determine which config files to test
+    selected_suite_config = None
     if args.config:
         # Single config file
         if not os.path.exists(args.config):
@@ -627,6 +644,7 @@ def main():
             suite_name = available_suites[0]
 
         suite_config = test_config["test_suites"][suite_name]
+        selected_suite_config = suite_config
         try:
             missing_commands = validate_suite_prerequisites(suite_name, suite_config)
         except ValueError as exc:
@@ -696,10 +714,16 @@ def main():
     if args.stop_on_failure is not None:
         stop_on_failure = args.stop_on_failure
 
+    try:
+        run_test_config = merge_success_detection_config(test_config, selected_suite_config)
+    except ValueError as exc:
+        print_colored("Error: %s" % (exc), Colors.RED)
+        sys.exit(1)
+
     # Run tests
     results = run_tests(
         config_files,
-        test_config,
+        run_test_config,
         base_path_override=args.base_path,
         middle_ip_override=args.middle_ip,
         middle_ip_base_override=args.middle_ip_base,

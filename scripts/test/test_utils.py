@@ -9,6 +9,8 @@ import getpass
 import json
 import os
 import re
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -187,6 +189,7 @@ def parse_yaml_config_simple(config_path: str) -> Dict:
             break
 
     result["infrastructure"]["provider"] = provider.get("name", "qemu")
+    result["infrastructure"]["delete_on_exit"] = bool(provider_cfg.get("delete_on_exit", False))
     target_set = set(_run_targets(data))
     result["infrastructure"]["infra_only"] = (
         "infrastructure" in target_set
@@ -457,6 +460,7 @@ def detect_success(
     require_experiment_lock = criteria.get("require_experiment_lock", True)
     require_state_file = criteria.get("require_state_file", True)
     require_state_phase = criteria.get("require_state_phase", True)
+    require_teardown = criteria.get("require_teardown", False)
     check_logs = criteria.get("check_log_files", False)
 
     reasons = []
@@ -504,6 +508,12 @@ def detect_success(
             return False, "State phase %r (expected %r)" % (actual_phase, expected_phase)
         reasons.append("state_phase=%s" % (expected_phase))
 
+    if require_teardown and config.get("infrastructure", {}).get("delete_on_exit", False):
+        teardown_ok, teardown_reason = verify_qemu_teardown(config, state_payload or {})
+        if not teardown_ok:
+            return False, teardown_reason
+        reasons.append(teardown_reason)
+
     # Optional: Check log files or stdout/stderr for explicit failure markers
     if check_logs:
         pass
@@ -515,6 +525,65 @@ def detect_success(
 
     reason_str = "Success: " + ", ".join(reasons) if reasons else "Success"
     return True, reason_str
+
+
+def verify_qemu_teardown(config: Dict, state_payload: Dict) -> Tuple[bool, str]:
+    """Verify that QEMU domains persisted in state are absent after teardown."""
+    infrastructure = config.get("infrastructure", {})
+    if infrastructure.get("provider") != "qemu":
+        return True, "teardown_skipped_non_qemu"
+
+    machine_data = state_payload.get("machine_data", [])
+    if not isinstance(machine_data, list) or not machine_data:
+        return False, "Teardown verification failed: state machine_data missing"
+
+    domain_name_fields = (
+        "cloud_controller_names",
+        "cloud_names",
+        "edge_names",
+        "endpoint_names",
+        "base_names",
+    )
+    domain_names = []
+    for machine_entry in machine_data:
+        if not isinstance(machine_entry, dict):
+            return False, "Teardown verification failed: malformed state machine_data entry"
+        for field in domain_name_fields:
+            names = machine_entry.get(field, [])
+            if isinstance(names, str):
+                names = [names]
+            if not isinstance(names, list):
+                return False, "Teardown verification failed: malformed state field %s" % (field)
+            domain_names.extend(name for name in names if isinstance(name, str) and name)
+
+    if not domain_names:
+        return False, "Teardown verification failed: state machine names missing"
+
+    virsh = shutil.which("virsh")
+    if virsh is None:
+        return False, "Teardown verification failed: virsh not found"
+
+    try:
+        result = subprocess.run(
+            [virsh, "list", "--all"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        return False, "Teardown verification failed: could not execute virsh: %s" % (exc)
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        return False, "Teardown verification failed: virsh list --all failed: %s" % (detail)
+
+    remaining = [name for name in domain_names if name in result.stdout]
+    if remaining:
+        return False, "Teardown verification failed: VM domain(s) still present: %s" % (
+            ", ".join(sorted(remaining))
+        )
+
+    return True, "teardown_verified"
 
 
 def _expected_phase_completed(config: Dict) -> str:
@@ -552,6 +621,8 @@ def classify_test_failure(result: Dict) -> Optional[str]:
         return "unreadable_state"
     if detail.startswith("State phase "):
         return "wrong_state_phase"
+    if detail.startswith("Teardown verification failed:"):
+        return "teardown_failure"
     if detail.startswith("No SSH output found"):
         return "missing_ssh"
     if detail.startswith("Exit code "):
