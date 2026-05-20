@@ -183,7 +183,9 @@ Cluster-level infra intent is normalized to concrete resource records with base 
 3. invalid combinations fail fast.
 4. `run.image_prefetch` is optional with allowed values `off` and `on`.
 5. default `run.image_prefetch` is `off`.
-6. parser/defaulting writes canonical `domains.run.image_prefetch`; runtime accessors treat this path as required and fail fast if missing.
+6. `run.prepare_for_resume` is optional boolean intent for retained-resume infrastructure prep and defaults to `false`.
+7. `run.prepare_for_resume: true` is valid only when `run.targets` is exactly `[infrastructure]`.
+8. parser/defaulting writes canonical `domains.run.image_prefetch` and `domains.run.prepare_for_resume`; runtime accessors treat these paths as required and fail fast if missing.
 
 ## 6.3 Phase-Aware Domains
 

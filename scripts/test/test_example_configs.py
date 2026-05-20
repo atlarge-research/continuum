@@ -51,6 +51,22 @@ class ExampleConfigTests(unittest.TestCase):
                 self.assertIn("domains", cfg)
                 self.assertIn("sources", cfg["normalized"])
 
+    def test_benchmark_smoke_infra_opts_into_resume_prep(self):
+        root = self._repo_root()
+        experiment_path = (
+            root
+            / "configs"
+            / "experiments"
+            / "benchmark_smoke"
+            / "01_infra_k8s_three_vm.yaml"
+        )
+        parser = argparse.ArgumentParser(prog="benchmark-smoke-infra-config-test")
+
+        cfg = input_module.start(parser, str(experiment_path))
+
+        self.assertTrue(cfg["domains"]["run"]["prepare_for_resume"])
+        self.assertTrue(cfg["module"]["resource_manager"])
+
     def test_shipped_environment_profiles_validate(self):
         root = self._repo_root()
         profile_paths = sorted((root / "configs" / "profiles" / "environment").glob("*.yaml"))

@@ -64,8 +64,15 @@ def _base_install_playbooks_for_base_names(config, machines, normalized_base_nam
     except (KeyError, TypeError, ValueError):
         infra_only = False
 
+    try:
+        prepare_for_resume = (
+            infra_only and config_access.prepare_for_resume_enabled(config)
+        )
+    except (KeyError, TypeError, ValueError):
+        prepare_for_resume = False
+
     rm_module = config.get("module", {}).get("resource_manager")
-    if not infra_only or not rm_module:
+    if not prepare_for_resume or not rm_module:
         return playbooks
 
     normalized_set = set(normalized_base_names)

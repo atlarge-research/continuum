@@ -35,6 +35,7 @@ class SchemaValidationTests(unittest.TestCase):
         )
         self.assertEqual(targets, ["infrastructure", "software"])
         self.assertEqual(run["image_prefetch"], "off")
+        self.assertFalse(run["prepare_for_resume"])
 
     def test_validate_run_defaults_clean_and_dry_run(self):
         run = {"targets": ["software"]}
@@ -49,6 +50,48 @@ class SchemaValidationTests(unittest.TestCase):
         self.assertFalse(run["dry_run"])
         self.assertFalse(run["clean"])
         self.assertEqual(run["image_prefetch"], "off")
+        self.assertFalse(run["prepare_for_resume"])
+
+    def test_validate_run_accepts_prepare_for_resume_for_infra_only(self):
+        run = {"targets": ["infrastructure"], "prepare_for_resume": True}
+        targets = run_schema_validation.validate_run(
+            run,
+            self.path,
+            "run",
+            self.allowed_targets,
+            self.allowed_image_prefetch_modes,
+        )
+        self.assertEqual(targets, ["infrastructure"])
+        self.assertTrue(run["prepare_for_resume"])
+
+    def test_validate_run_rejects_non_boolean_prepare_for_resume(self):
+        run = {"targets": ["infrastructure"], "prepare_for_resume": "true"}
+        with self.assertRaises(ValueError) as exc:
+            run_schema_validation.validate_run(
+                run,
+                self.path,
+                "run",
+                self.allowed_targets,
+                self.allowed_image_prefetch_modes,
+            )
+        self.assertIn("run.prepare_for_resume", str(exc.exception))
+        self.assertIn("must be boolean", str(exc.exception))
+
+    def test_validate_run_rejects_prepare_for_resume_outside_infra_only(self):
+        run = {
+            "targets": ["infrastructure", "software"],
+            "prepare_for_resume": True,
+        }
+        with self.assertRaises(ValueError) as exc:
+            run_schema_validation.validate_run(
+                run,
+                self.path,
+                "run",
+                self.allowed_targets,
+                self.allowed_image_prefetch_modes,
+            )
+        self.assertIn("run.prepare_for_resume", str(exc.exception))
+        self.assertIn("run.targets is exactly [infrastructure]", str(exc.exception))
 
     def test_validate_run_rejects_invalid_image_prefetch(self):
         run = {"targets": ["infrastructure"], "image_prefetch": "always"}

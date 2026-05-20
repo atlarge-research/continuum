@@ -172,12 +172,12 @@ If resuming after April 11, 2026:
    - application-specific Kubernetes launch, worker-output, Mist/Baremetal runtime helpers, and shared MQTT worker env/var shaping now live under `application/runtime_helpers.py`,
    - infra-only QEMU topology for resumable Kubernetes cloud layouts now preserves a control-plane VM instead of emitting worker-only cloud inventory,
    - Ansible runner env now pins guest-side `ANSIBLE_REMOTE_TMP` as well as controller-side `ANSIBLE_LOCAL_TEMP`,
-   - infra-only bootstrap now still loads the orchestrator resource-manager module for resumable stacks, so orchestrator base-image preparation is available during retained infrastructure setup,
+   - infra-only bootstrap now loads the orchestrator resource-manager module only when `run.prepare_for_resume: true`, so orchestrator base-image preparation is explicit for retained infrastructure setup,
    - runtime execution is ungated for YAML runs,
    - the first retained `benchmark_k8s_resume` infrastructure state exposed a missing-control-plane bug during resumed software execution; that topology bug is fixed,
    - the next retained-software attempt exposed missing `kubelet` because infra-only bootstrap had still skipped orchestrator base-image prep; that bootstrap seam is now fixed in-repo,
-   - the current next retry is: refresh the dedicated synced repo/wrapper, rerun `benchmark_k8s_resume_infra`, then rerun resumed software/application; this coding harness is still limited by sandboxed `sudo`, not by the Continuum runtime path itself.
-   - do not interpret that fix as “always install kubelet in base images”; the current behavior is only a compatibility seam for runs whose selected software profile already includes Kubernetes, and the longer-term cleanup is to distinguish pure infra-only execution from retained-resume preparation explicitly.
+   - the retained infrastructure/software/application path has since passed on the dedicated host-backed benchmark-smoke runner,
+   - do not interpret that fix as “always install kubelet in base images”; retained-resume preparation is now explicit via `run.prepare_for_resume`, while generic infrastructure-only runs should leave later-phase prerequisites untouched.
    - See `docs/phase_d_handoff.md`.
 6. Latest validation baseline is green:
    - `python3 -m py_compile infrastructure/qemu/qemu.py infrastructure/ansible.py input/configuration/runtime_module_loader.py application/runtime_helpers.py application/image_classification/image_classification.py application/text_translation/text_translation.py scripts/test/test_application_runtime_helpers.py scripts/test/test_continuum_runtime.py`

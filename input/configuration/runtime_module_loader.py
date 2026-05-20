@@ -13,7 +13,17 @@ def _needs_local_registry(config):
     """Return whether runtime constants must include the local registry endpoint."""
     if not config_access.infra_only(config):
         return True
-    return bool(config.get("module", {}).get("resource_manager"))
+    return (
+        config_access.prepare_for_resume_enabled(config)
+        and bool(config.get("module", {}).get("resource_manager"))
+    )
+
+
+def _should_load_resource_manager(config):
+    """Return whether bootstrap should import the configured resource-manager module."""
+    if not config_access.infra_only(config):
+        return True
+    return config_access.prepare_for_resume_enabled(config)
 
 
 def dynamic_import(parser, config):
@@ -39,11 +49,16 @@ def dynamic_import(parser, config):
         )
 
     try:
-        orchestrator_name = config_access.orchestrator_name(config)
+        load_resource_manager = _should_load_resource_manager(config)
     except ValueError as exc:
-        if not config_access.infra_only(config):
+        parser.error("ERROR: %s" % (exc,))
+
+    orchestrator_name = None
+    if load_resource_manager:
+        try:
+            orchestrator_name = config_access.orchestrator_name(config)
+        except ValueError as exc:
             parser.error("ERROR: %s" % (exc,))
-        orchestrator_name = None
 
     if orchestrator_name and orchestrator_name != "none":
         dirs = list(os.walk("./resource_manager"))[0][1]
@@ -86,7 +101,12 @@ def add_constants(parser, config, socket_module=socket_lib):
     config["postfixIP_lower"] = 2
     config["postfixIP_upper"] = 252
 
-    if _needs_local_registry(config):
+    try:
+        needs_local_registry = _needs_local_registry(config)
+    except ValueError as exc:
+        parser.error("ERROR: %s" % (exc,))
+
+    if needs_local_registry:
         try:
             with socket_module.socket(socket_module.AF_INET, socket_module.SOCK_DGRAM) as sock:
                 sock.connect(("8.8.8.8", 80))

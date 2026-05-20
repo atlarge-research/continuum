@@ -129,9 +129,9 @@ Current prep snapshot:
    - the dedicated host-backed benchmark path reached resumed software execution and exposed a retained-topology bug where infra-only QEMU runs had omitted the control-plane VM,
    - that topology bug is now fixed in-repo,
    - guest-side Ansible temp-path handling is now hardened with pinned `ANSIBLE_REMOTE_TMP`,
-   - infra-only bootstrap now also keeps the orchestrator resource-manager module loaded for resumable stacks so orchestrator base-image prep can run,
-   - that retained-resume behavior is a short-term compatibility seam for software profiles that already declare Kubernetes; it should not become the long-term meaning of generic infra-only execution,
-   - K8s benchmark smoke/teardown closure is now specifically: refresh the dedicated synced repo/wrapper, rerun the retained infra step once more with that bootstrap fix, then rerun resumed software/application.
+   - infra-only bootstrap now keeps the orchestrator resource-manager module loaded only when `run.prepare_for_resume: true`, so orchestrator base-image prep is explicit retained-resume intent,
+   - retained-resume behavior should not become the long-term meaning of generic infra-only execution,
+   - the K8s retained benchmark infrastructure/software/application path has passed on the dedicated host-backed runner; teardown and future benchmark-smoke refinements remain Phase-D/Phase-E follow-up work.
 4. continuation note:
    - the active resume point is `docs/phase_d_handoff.md`,
    - current host-backed progress already reaches retained benchmark infrastructure completion,

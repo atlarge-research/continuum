@@ -194,6 +194,7 @@ class ConfigAccessTests(unittest.TestCase):
                 "run": {
                     "targets": ["infrastructure", "software"],
                     "image_prefetch": "off",
+                    "prepare_for_resume": False,
                 }
             }
         }
@@ -204,6 +205,7 @@ class ConfigAccessTests(unittest.TestCase):
         self.assertFalse(config_access.infra_only(cfg))
         self.assertEqual(config_access.image_prefetch_mode(cfg), "off")
         self.assertFalse(config_access.image_prefetch_enabled(cfg))
+        self.assertFalse(config_access.prepare_for_resume_enabled(cfg))
 
     def test_run_helpers_require_domain_targets(self):
         cfg = {}
@@ -224,6 +226,36 @@ class ConfigAccessTests(unittest.TestCase):
         cfg = {"domains": {"run": {"targets": ["software"], "image_prefetch": "always"}}}
         with self.assertRaises(ValueError):
             config_access.image_prefetch_mode(cfg)
+
+    def test_prepare_for_resume_helpers(self):
+        cfg = {
+            "domains": {
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": True,
+                }
+            }
+        }
+        self.assertTrue(config_access.prepare_for_resume_enabled(cfg))
+
+    def test_prepare_for_resume_requires_domain_path(self):
+        cfg = {"domains": {"run": {"targets": ["infrastructure"]}}}
+        with self.assertRaises(ValueError) as exc:
+            config_access.prepare_for_resume_enabled(cfg)
+        self.assertIn("domains.run.prepare_for_resume", str(exc.exception))
+
+    def test_prepare_for_resume_rejects_invalid_type(self):
+        cfg = {
+            "domains": {
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": "true",
+                }
+            }
+        }
+        with self.assertRaises(ValueError) as exc:
+            config_access.prepare_for_resume_enabled(cfg)
+        self.assertIn("domains.run.prepare_for_resume", str(exc.exception))
 
     def test_runtime_logs_dir_uses_base_path_workspace(self):
         cfg = {

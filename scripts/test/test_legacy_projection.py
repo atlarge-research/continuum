@@ -31,6 +31,7 @@ class LegacyProjectionTests(unittest.TestCase):
                 "dry_run": False,
                 "clean": True,
                 "image_prefetch": "on",
+                "prepare_for_resume": False,
             },
             "provider": {
                 "name": "qemu",
@@ -96,7 +97,21 @@ class LegacyProjectionTests(unittest.TestCase):
         self.assertEqual(config["infrastructure"]["cloud_latency_avg"], 10)
         self.assertEqual(config["mode"], "cloud")
         self.assertEqual(config["domains"]["run"]["image_prefetch"], "on")
+        self.assertFalse(config["domains"]["run"]["prepare_for_resume"])
         self.assertEqual(config["config_format"], "yaml")
+
+    def test_to_legacy_config_projects_prepare_for_resume(self):
+        normalized = self._normalized()
+        normalized["run"]["targets"] = ["infrastructure"]
+        normalized["run"]["prepare_for_resume"] = True
+
+        config = legacy_projection.to_legacy_config(
+            normalized,
+            ("cloud", "edge", "endpoint"),
+            ("cloud_latency_avg", "cloud_location"),
+        )
+
+        self.assertTrue(config["domains"]["run"]["prepare_for_resume"])
 
     def test_to_legacy_config_rejects_missing_required_paths(self):
         normalized = self._normalized()

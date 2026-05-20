@@ -46,7 +46,12 @@ def validate_run(
 ) -> list[str]:
     if not isinstance(run, dict):
         _fail(path, prefix, "must be a mapping")
-    _fail_unknown_keys(path, prefix, run, {"targets", "dry_run", "clean", "image_prefetch"})
+    _fail_unknown_keys(
+        path,
+        prefix,
+        run,
+        {"targets", "dry_run", "clean", "image_prefetch", "prepare_for_resume"},
+    )
 
     targets = run.get("targets")
     if not isinstance(targets, list) or not targets:
@@ -56,11 +61,18 @@ def validate_run(
     if not normalized_targets:
         _fail(path, "%s.targets" % (prefix), "must contain at least one supported target")
 
-    for key in ("dry_run", "clean"):
+    for key in ("dry_run", "clean", "prepare_for_resume"):
         if key in run and not isinstance(run[key], bool):
             _fail(path, "%s.%s" % (prefix, key), "must be boolean")
         if key not in run:
             run[key] = False
+
+    if run["prepare_for_resume"] and normalized_targets != ["infrastructure"]:
+        _fail(
+            path,
+            "%s.prepare_for_resume" % (prefix),
+            "is only valid when run.targets is exactly [infrastructure]",
+        )
 
     image_prefetch = run.get("image_prefetch", "off")
     if not isinstance(image_prefetch, str):

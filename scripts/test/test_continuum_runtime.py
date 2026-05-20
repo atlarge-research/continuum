@@ -854,12 +854,41 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         self.assertFalse(config["module"]["application"])
         self.assertNotIn("images", config)
 
-    def test_dynamic_import_loads_resource_manager_for_infra_only_resumable_stack(self):
+    def test_dynamic_import_skips_resource_manager_for_plain_infra_only_stack(self):
+        parser = argparse.ArgumentParser(prog="dynamic-import-infra-only-no-prep")
+        config = {
+            "infrastructure": {"provider": "qemu"},
+            "domains": {
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": False,
+                },
+                "software": {
+                    "modules": [
+                        {
+                            "id": "k8s-main",
+                            "type": "kubernetes",
+                            "assign_to": {"match": {"cluster": "cloud-1"}},
+                            "config": {"kube_version": "v1.27.0"},
+                        }
+                    ]
+                },
+            },
+        }
+
+        runtime_module_loader.dynamic_import(parser, config)
+
+        self.assertFalse(config["module"]["resource_manager"])
+
+    def test_dynamic_import_loads_resource_manager_for_infra_only_resume_prep_stack(self):
         parser = argparse.ArgumentParser(prog="dynamic-import-infra-only-rm")
         config = {
             "infrastructure": {"provider": "qemu"},
             "domains": {
-                "run": {"targets": ["infrastructure"]},
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": True,
+                },
                 "software": {
                     "modules": [
                         {
@@ -880,12 +909,44 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             "resource_manager.kubernetes.kubernetes",
         )
 
-    def test_add_constants_sets_registry_for_infra_only_resumable_stack(self):
+    def test_add_constants_skips_registry_for_plain_infra_only_stack(self):
+        parser = argparse.ArgumentParser(prog="add-constants-infra-only-no-prep")
+        config = {
+            "infrastructure": {"provider": "qemu", "base_path": "/tmp/continuum-smoke"},
+            "domains": {
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": False,
+                },
+                "software": {
+                    "modules": [
+                        {
+                            "id": "k8s-main",
+                            "type": "kubernetes",
+                            "assign_to": {"match": {"cluster": "cloud-1"}},
+                            "config": {"kube_version": "v1.27.0"},
+                        }
+                    ]
+                },
+            },
+        }
+        socket_module = self._FakeSocketModule()
+
+        runtime_module_loader.dynamic_import(parser, config)
+        runtime_module_loader.add_constants(parser, config, socket_module=socket_module)
+
+        self.assertNotIn("registry", config)
+        self.assertEqual(socket_module.socket_calls, 0)
+
+    def test_add_constants_sets_registry_for_infra_only_resume_prep_stack(self):
         parser = argparse.ArgumentParser(prog="add-constants-infra-only-rm-registry")
         config = {
             "infrastructure": {"provider": "qemu", "base_path": "/tmp/continuum-smoke"},
             "domains": {
-                "run": {"targets": ["infrastructure"]},
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": True,
+                },
                 "software": {
                     "modules": [
                         {
@@ -911,7 +972,10 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         config = {
             "infrastructure": {"provider": "qemu"},
             "domains": {
-                "run": {"targets": ["infrastructure"]},
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": False,
+                },
                 "software": {
                     "modules": [
                         {
@@ -934,7 +998,10 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         config = {
             "infrastructure": {"provider": "qemu", "base_path": "/tmp/continuum-smoke"},
             "domains": {
-                "run": {"targets": ["infrastructure"]},
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": False,
+                },
                 "software": {
                     "modules": [
                         {
@@ -1001,7 +1068,12 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         parser = argparse.ArgumentParser(prog="add-constants-ssh-key")
         config = {
             "infrastructure": {"base_path": "/tmp/continuum-smoke"},
-            "domains": {"run": {"targets": ["infrastructure"]}},
+            "domains": {
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": False,
+                }
+            },
         }
 
         runtime_module_loader.add_constants(parser, config)
@@ -2790,6 +2862,42 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
             self.assertIsNone(qemu_module._base_image_cache_invalid_reason(config, [], raw_base_name))
 
+    def test_infra_only_base_install_playbooks_require_resume_prep(self):
+        rm_module = mock.Mock(
+            base_install_playbook=mock.Mock(
+                side_effect=lambda _config, tier: "playbooks/%s_base.yml" % (tier)
+            )
+        )
+        config = {
+            "mode": "cloud",
+            "module": {"resource_manager": rm_module},
+            "domains": {
+                "run": {
+                    "targets": ["infrastructure"],
+                    "prepare_for_resume": False,
+                }
+            },
+        }
+        raw_base_name = "base0_continuum-smoke"
+        machines = [
+            mock.Mock(
+                base_names=[raw_base_name],
+                cloud_controller=1,
+                clouds=1,
+                edges=0,
+                endpoints=0,
+            )
+        ]
+
+        playbooks = qemu_module._base_install_playbooks_for_base_names(
+            config,
+            machines,
+            [orchestration_schema.normalized_base_name(raw_base_name)],
+        )
+
+        self.assertEqual(playbooks, [])
+        rm_module.base_install_playbook.assert_not_called()
+
     def test_base_image_cache_invalid_when_required_playbooks_change(self):
         with tempfile.TemporaryDirectory() as tempdir:
             config = {
@@ -2802,7 +2910,12 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                     )
                 },
                 "infrastructure": {"base_path": tempdir},
-                "domains": {"run": {"targets": ["infrastructure"]}},
+                "domains": {
+                    "run": {
+                        "targets": ["infrastructure"],
+                        "prepare_for_resume": True,
+                    }
+                },
             }
             raw_base_name = "base0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
@@ -2860,7 +2973,12 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                     )
                 },
                 "infrastructure": {"base_path": tempdir},
-                "domains": {"run": {"targets": ["infrastructure"]}},
+                "domains": {
+                    "run": {
+                        "targets": ["infrastructure"],
+                        "prepare_for_resume": True,
+                    }
+                },
             }
             raw_base_name = "base0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"

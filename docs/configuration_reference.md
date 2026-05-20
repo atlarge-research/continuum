@@ -56,6 +56,7 @@ Top-level keys for `ContinuumExperiment`:
 | --- | --- | --- | --- | --- |
 | `targets` | list of strings | yes | none | Non-empty, no duplicates |
 | `image_prefetch` | string | no | `"off"` | Allowed: `"off"`, `"on"` |
+| `prepare_for_resume` | boolean | no | `false` | Only valid with `targets: [infrastructure]`; prepares retained infra for later resume |
 | `dry_run` | boolean | no | `false` | Parser-owned default |
 | `clean` | boolean | no | `false` | Parser-owned default |
 
@@ -66,6 +67,8 @@ Allowed `run.targets` values:
 - `application`
 
 `application` enables phase-3 benchmark/application execution and requires a `benchmark.pipeline` definition.
+
+`prepare_for_resume: true` keeps selected later-phase software prerequisites available during an infrastructure-only retained run. Use it only for retained-resume workflows such as the benchmark smoke infrastructure leg; generic infrastructure-only runs should leave it omitted or `false`.
 
 Use quotes for `image_prefetch` values in YAML examples. Plain `off`/`on` can be loaded as booleans by YAML parsers.
 

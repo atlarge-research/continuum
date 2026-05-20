@@ -83,6 +83,18 @@ def image_prefetch_enabled(config):
     return image_prefetch_mode(config) == "on"
 
 
+def prepare_for_resume_enabled(config):
+    enabled = _nested_value(config, "domains", "run", "prepare_for_resume", default=None)
+    if enabled is None:
+        raise ValueError("Missing required config path domains.run.prepare_for_resume")
+    if not isinstance(enabled, bool):
+        raise ValueError(
+            "Invalid prepare_for_resume type in domains.run.prepare_for_resume: %r"
+            % (enabled,)
+        )
+    return enabled
+
+
 def runs_infrastructure(config):
     return "infrastructure" in set(run_targets(config))
 

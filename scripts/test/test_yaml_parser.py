@@ -49,6 +49,7 @@ class YamlParserTests(unittest.TestCase):
         base_path: str,
         run_targets=None,
         run_image_prefetch: str | None = None,
+        run_prepare_for_resume: bool | str | None = None,
         clusters=None,
         modules=None,
         benchmark=None,
@@ -94,6 +95,8 @@ class YamlParserTests(unittest.TestCase):
         run = {"targets": run_targets}
         if run_image_prefetch is not None:
             run["image_prefetch"] = run_image_prefetch
+        if run_prepare_for_resume is not None:
+            run["prepare_for_resume"] = run_prepare_for_resume
 
         exp = {
             "schema_version": 1,
@@ -437,6 +440,53 @@ class YamlParserTests(unittest.TestCase):
             parser = argparse.ArgumentParser()
             cfg = input_module.start(parser, str(exp_path))
             self.assertEqual(cfg["domains"]["run"]["image_prefetch"], "off")
+
+    def test_run_prepare_for_resume_defaults_to_false(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            exp_path, _ = self._build_triplet(root, tempdir)
+            parser = argparse.ArgumentParser()
+            cfg = input_module.start(parser, str(exp_path))
+            self.assertFalse(cfg["domains"]["run"]["prepare_for_resume"])
+
+    def test_run_prepare_for_resume_accepts_infrastructure_only(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["infrastructure"],
+                run_prepare_for_resume=True,
+            )
+            parser = argparse.ArgumentParser()
+            cfg = input_module.start(parser, str(exp_path))
+            self.assertTrue(cfg["domains"]["run"]["prepare_for_resume"])
+
+    def test_run_prepare_for_resume_rejects_non_boolean(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["infrastructure"],
+                run_prepare_for_resume="true",
+            )
+            stderr = self._parse_error(exp_path)
+            self.assertIn("run.prepare_for_resume", stderr)
+            self.assertIn("must be boolean", stderr)
+
+    def test_run_prepare_for_resume_rejects_non_infrastructure_only(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["infrastructure", "software"],
+                run_prepare_for_resume=True,
+            )
+            stderr = self._parse_error(exp_path)
+            self.assertIn("run.prepare_for_resume", stderr)
+            self.assertIn("run.targets is exactly [infrastructure]", stderr)
 
     def test_run_image_prefetch_accepts_on_and_off(self):
         with tempfile.TemporaryDirectory() as tempdir:

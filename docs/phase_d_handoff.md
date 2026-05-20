@@ -5,9 +5,9 @@ This is the primary continuation point for the next agent.
 
 ## 0. Immediate Next-Session Priority
 
-The retained benchmark application leg is closed. The next session should start
-with the explicit retained-resume prep design slice, not with more harness
-integration work.
+The retained benchmark application leg is closed, and the explicit
+retained-resume prep API is now the intended contract for benchmark-smoke
+infrastructure preparation.
 
 Current reality:
 
@@ -22,16 +22,13 @@ Current reality:
    base-image invalidation, Mosquitto worker prep, endpoint Docker reruns,
    publisher completion, and Kubernetes worker-log collection.
 
-So the first task next session is:
+So the next task is:
 
-1. implement the explicit retained-resume prep API:
-   - add `run.prepare_for_resume`, boolean default `false`
-   - make it valid only for `run.targets: [infrastructure]`
-   - use it to opt retained benchmark infra prep into later software/application
-     prerequisites
-2. update the benchmark smoke infra config to opt in explicitly,
-3. rerun the cloud-safe config/runtime tests plus `scripts/test/run_cloud_static_audit.sh`,
-4. keep retained smoke artifacts and generated reports uncommitted.
+1. continue Phase-D cleanup from this explicit contract, not from the old
+   implicit infra-only Kubernetes prereq behavior,
+2. rerun retained host-backed smoke only when the next change affects the
+   retained benchmark execution contract,
+3. keep retained smoke artifacts and generated reports uncommitted.
 
 For active implementation resume, the minimum read set is still:
 
@@ -58,7 +55,7 @@ Read after:
    - shared MQTT worker launch vars/envs for `image_classification` and `text_translation` now also live in `application/runtime_helpers.py`, so those application modules no longer duplicate Kubernetes/Mist/Baremetal runtime shaping logic.
    - application-phase callsites now consume worker output through `application/runtime_helpers.py` rather than through Kubernetes-specific ownership.
    - QEMU infra-only topology now preserves a Kubernetes control-plane VM for resumable cloud deployments instead of collapsing all cloud VMs into worker nodes, which fixes resumed software-phase inventory/control-plane mismatches for `benchmark_k8s_resume`.
-   - infra-only bootstrap now still loads the orchestrator resource-manager module for resumable stacks such as Kubernetes, so base-image preparation can include orchestrator prereq installs instead of leaving `config["module"]["resource_manager"] = False`.
+   - infra-only bootstrap loads the orchestrator resource-manager module only when `run.prepare_for_resume: true`, so base-image preparation can include orchestrator prereq installs for retained-resume prep without broadening generic infrastructure-only runs.
    - bootstrap imports the application module, sets benchmark images, and validates benchmark-stage options during YAML startup when the primary benchmark stage maps to a runnable application module; planner-only stage types may still parse without one.
    - actual application execution now fails fast with an explicit error if phase 3 is reached without a runnable application module implementation.
    - optional orchestrator booleans such as `cache_worker` now read safely during bootstrap/validation, so parser fixtures without that key still reach the intended benchmark-stage contract checks.
@@ -293,16 +290,16 @@ Observed host-run attempts:
    - base-image preparation therefore skipped Kubernetes-family base-install playbooks entirely
    - resumed software then reached `k8s_control_plane` on the retained control-plane VM and failed with `Could not find the requested service kubelet`
 19. that bootstrap seam is now fixed in-repo
-   - infra-only resumable stacks still import the orchestrator resource-manager module unless the orchestrator type is the sentinel `none`
+   - infra-only resumable stacks import the orchestrator resource-manager module only when `run.prepare_for_resume: true`
    - this allows the retained infra step to include orchestrator base-image preparation for resumed software/application validation
-20. because the current retained infra state was created before that bootstrap fix, it should be refreshed once more before retrying `benchmark_k8s_resume_software`
+20. retained infra should opt into that behavior explicitly through the benchmark-smoke infra config
 21. important design clarification from the current debugging path
    - the fix does **not** mean “always install kubelet in base images”
-   - current behavior remains scoped to the selected software profile for the run: if the software stack declares `kubernetes`, infra-only retained-state preparation may still bake Kubernetes prereqs into the base image for later resumed software/application phases
-   - this is acceptable as a short-term compatibility fix for the resumed benchmark path, but the long-term design should make that intent explicit instead of overloading plain `run.targets: [infrastructure]`
+   - current retained-resume behavior is scoped to `run.prepare_for_resume: true`
+   - generic infrastructure-only runs should not bake Kubernetes prereqs merely because the selected software profile declares Kubernetes
 22. follow-up design concern to carry forward
-   - pure infrastructure-only runs and “prepare retained infra for later software/application resume” are not cleanly distinguished today
-   - future cleanup should separate those intents, so software-shaped base-image preparation is opt-in and explicit rather than implied by the presence of a software profile during an infra-only run
+   - pure infrastructure-only runs and “prepare retained infra for later software/application resume” are now distinguished by config intent
+   - future cleanup should preserve that separation rather than reintroducing software-shaped base-image preparation implied only by the presence of a software profile
 23. the main operational annoyance is now outside Continuum itself
    - the human copy/paste loop is only still happening because this coding
      harness cannot execute `sudo`, even for the two narrow commands above
@@ -479,10 +476,10 @@ Observed host-run attempts:
 6. retained infrastructure, retained software, and retained application have all
    passed on the dedicated host-backed path after the recent fixes,
 7. retained application is no longer the open benchmark leg,
-8. the next design cleanup is to separate generic infrastructure-only execution
-   from retained benchmark resume preparation via an explicit opt-in,
+8. generic infrastructure-only execution is now separated from retained
+   benchmark resume preparation via `run.prepare_for_resume`,
 9. the forever/canonical agent host setup path is now `scripts/test/setup_agent_host.sh`, with dedicated read-only repo execution as the default boundary,
-10. do not generalize the current fix into unconditional orchestrator package installs for unrelated infra-only runs; the open design task is to make retained-resume preparation explicit.
+10. do not generalize retained-resume prep into unconditional orchestrator package installs for unrelated infra-only runs.
 
 ## 5. Next Clean Start Point
 
@@ -493,28 +490,24 @@ Primary resume entry:
 
 Then continue here:
 
-1. Start the explicit retained-resume prep design slice.
-   - add `run.prepare_for_resume`, defaulting to `false`
-   - reject it outside `run.targets: [infrastructure]`
-   - use it to preserve retained benchmark base-image prep without making
-     every infrastructure-only Kubernetes run install later-phase prerequisites
-2. Update `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml` to
-   opt into retained-resume prep explicitly.
-3. Reuse the current hardening already landed here instead of re-debugging them:
+1. Reuse the explicit `run.prepare_for_resume` retained-resume contract instead
+   of reintroducing implicit infra-only Kubernetes preparation.
+2. Reuse the current hardening already landed here instead of re-debugging them:
    - best-effort `setfacl`
    - optional QEMU bridge overrides
    - Ansible local tmp pinning and env merge
    - interpreter-local `ansible-playbook` resolution
    - `scripts/test/setup_agent_host.sh install` as the canonical host bootstrap path
    - runtime/test outputs under `base_path/.continuum/...` rather than repo-local `./logs`
-4. For the explicit prep slice, prioritize cloud-safe validation first:
+3. For follow-up prep or runtime slices, prioritize cloud-safe validation first:
    - config/runtime unit tests covering schema validation, config access,
      legacy projection, runtime loading, and example configs
    - `scripts/test/run_cloud_static_audit.sh`
-5. Only rerun retained host-backed smoke if the explicit prep slice changes the
+4. Only rerun retained host-backed smoke if the next slice changes the
    retained benchmark execution contract.
-6. Keep the design concern visible: if more fixes are needed in this area, prefer making retained-resume base-image prep explicit rather than broadening “infra-only” side effects.
-   - the current Kubernetes prereq baking is a compatibility behavior for runs whose selected software profile already declares `kubernetes`; it is not the desired long-term meaning of generic infrastructure-only execution.
+5. Keep the design concern visible: if more fixes are needed in this area,
+   prefer explicit retained-resume intent over broadening “infra-only” side
+   effects.
 
 ## 6. Things Not To Reconstruct Again
 
