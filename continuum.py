@@ -186,12 +186,10 @@ def main(args):
     else:
         logging.info("Skipping software phase based on run targets")
 
-    if run_application and args.config["module"]["application"]:
+    if run_application:
         application.start(runner)
         state_path = infra_state.save_state(args.config, "application", machines)
         logging.info("Saved phase state: %s (phase=application)", state_path)
-    elif run_application:
-        logging.info("Application phase requested but no application module is configured")
 
     if args.config["infrastructure"]["delete"]:
         infrastructure.delete_vms(args.config, machines)

@@ -482,6 +482,42 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             ],
         )
 
+    def test_main_application_target_calls_application_start_even_without_module(self):
+        config = self._config(["application"])
+        config["module"]["application"] = False
+        args = argparse.Namespace(config=config)
+        machines = [mock.Mock()]
+        runner = mock.Mock()
+
+        with mock.patch.object(continuum_module.infrastructure, "start"), mock.patch.object(
+            continuum_module.infra_state,
+            "load_resume_state",
+            return_value=({"phase_completed": "software"}, machines),
+        ), mock.patch.object(
+            continuum_module.ansible, "AnsibleRunner", return_value=runner
+        ), mock.patch.object(
+            continuum_module.yaml_parser,
+            "write_experiment_lock",
+            return_value="/tmp/continuum-smoke/.continuum/experiment_lock.yaml",
+        ), mock.patch.object(
+            continuum_module.resource_manager, "start"
+        ) as mock_resource_manager_start, mock.patch.object(
+            continuum_module.application,
+            "start",
+            side_effect=SystemExit(1),
+        ) as mock_application_start, mock.patch.object(
+            continuum_module.infra_state,
+            "save_state",
+        ) as mock_save_state, mock.patch.object(
+            continuum_module, "_log_vm_access_hints"
+        ):
+            with self.assertRaises(SystemExit):
+                continuum_module.main(args)
+
+        mock_resource_manager_start.assert_not_called()
+        mock_application_start.assert_called_once_with(runner)
+        mock_save_state.assert_not_called()
+
     def test_apply_module_options_application_scope_defaults_primary_stage_config(self):
         parser = argparse.ArgumentParser(prog="apply-options-application")
         config = {

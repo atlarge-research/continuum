@@ -712,6 +712,56 @@ def wait_kubernetes_workers_ready(config, machines, get_starttime):
     return None
 
 
+def wait_kubernetes_worker_completion(config, machines):
+    """Wait until Kubernetes benchmark worker pods have completed."""
+    logging.info("Wait for pods on cloud/edge workers to finish")
+    get_list = True
+    index = 0
+
+    workers = config["infrastructure"]["cloud_nodes"] + config["infrastructure"]["edge_nodes"]
+    if config["mode"] in ("cloud", "edge"):
+        controllers = sum(machine.cloud_controller for machine in machines)
+        workers -= controllers
+
+    while index < workers:
+        if get_list:
+            command = [
+                "kubectl",
+                "get",
+                "pods",
+                "-o=custom-columns=NAME:.metadata.name,STATUS:.status.phase",
+                "--sort-by=.spec.nodeName",
+            ]
+            output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
+
+            if (error and not all("[CONTINUUM]" in line for line in error)) or not output:
+                logging.error("".join(error))
+                sys.exit(1)
+
+        offset = 0
+        for offset, line in enumerate(output):
+            if "NAME" in line and "STATUS" in line:
+                break
+
+        line = output[index + 1 + offset].rstrip().split(" ")
+        app_name = line[0]
+        app_status = line[-1]
+
+        if app_status == "Running":
+            time.sleep(5)
+            get_list = True
+        elif app_status == "Succeeded":
+            index += 1
+            get_list = False
+        else:
+            logging.error(
+                "ERROR: Container on cloud/edge %s has status %s, expected Running or Succeeded",
+                app_name,
+                app_status,
+            )
+            sys.exit(1)
+
+
 def start_kubernetes_workers(config, machines, app_vars, get_starttime=False, runner=None):
     """Render and launch Kubernetes benchmark worker jobs for the active benchmark stage."""
     logging.info("Start subscriber pods on %s", config["mode"])

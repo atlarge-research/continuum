@@ -12,7 +12,6 @@ from application import runtime_helpers as application_runtime_helpers
 from input.configuration import config_access
 from resource_manager.endpoint import endpoint
 from resource_manager.kube_kata import kube_kata
-from resource_manager.kubernetes import kubernetes
 
 
 def set_container_location(config):
@@ -324,7 +323,7 @@ def kube(config, machines, runner=None):
     endpoint.wait_endpoint_completion(config, machines, config["endpoint_ssh"], container_names)
 
     # Wait for benchmark to finish
-    kubernetes.wait_worker_completion(config, machines)
+    application_runtime_helpers.wait_kubernetes_worker_completion(config, machines)
 
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")
@@ -364,7 +363,11 @@ def kube_control(config, machines, runner=None):
 
     benchmark_stage_type = config_access.benchmark_primary_stage_type(config)
     if benchmark_stage_type == "mem_usage":
-        config["module"]["application"].get_mem_usage(config, machines, kubernetes)
+        config["module"]["application"].get_mem_usage(
+            config,
+            machines,
+            application_runtime_helpers.start_kubernetes_workers,
+        )
 
     # Start the worker
     app_vars = config["module"]["application"].start_worker(config, machines)
@@ -373,7 +376,7 @@ def kube_control(config, machines, runner=None):
     )
 
     # Wait for benchmark to finish
-    kubernetes.wait_worker_completion(config, machines)
+    application_runtime_helpers.wait_kubernetes_worker_completion(config, machines)
 
     # Now get raw output
     logging.info("Benchmark has been finished, prepare results")

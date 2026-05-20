@@ -506,6 +506,30 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
                 get_starttime=False,
             )
 
+    @mock.patch("application.runtime_helpers.time.sleep", autospec=True)
+    def test_wait_kubernetes_worker_completion_tracks_succeeded_pods(self, mock_sleep):
+        config = {
+            "mode": "cloud",
+            "cloud_ssh": ["cloud0@10.0.0.1"],
+            "infrastructure": {
+                "cloud_nodes": 2,
+                "edge_nodes": 0,
+            },
+        }
+        controller = mock.Mock()
+        controller.cloud_controller = True
+        worker = mock.Mock()
+        worker.cloud_controller = False
+        controller.process.side_effect = [
+            [(["NAME STATUS\n", "worker-a Running\n"], [])],
+            [(["NAME STATUS\n", "worker-a Succeeded\n"], [])],
+        ]
+
+        runtime_helpers.wait_kubernetes_worker_completion(config, [controller, worker])
+
+        self.assertEqual(controller.process.call_count, 2)
+        mock_sleep.assert_called_once_with(5)
+
     def test_start_kubernetes_workers_runs_playbook_with_shared_vars(self):
         config = self._planner_handoff_config()
         config["mode"] = "cloud"
