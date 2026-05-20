@@ -2,30 +2,11 @@
 - name: Launch benchmark for kubecontrol stress pod
   hosts: cloudcontroller
   become: true
-  tasks:
-    - name: Create job file
-      ansible.builtin.copy:
-        dest: "/home/{{ username }}/job-template.yaml"
-        mode: '0644'
-        content: |
-          apiVersion: batch/v1
-          kind: Job
-          metadata:
-            name: {{ app_name }}
-          spec:
-            parallelism: {{ replicas }}
-            template:
-              metadata:
-                name: {{ app_name }}
-              spec:
-{% if runtime is defined and runtime %}
-                runtimeClassName: {{ runtime }}
-{% endif %}
-                containers:
-                - name: {{ app_name }}
-                  image: {{ image }}
-                  imagePullPolicy: {{ pull_policy }}
-                  env:
-                  - name: TIMEOUT
-                    value: "{{ stress_app_timeout }}"
-                restartPolicy: Never
+  roles:
+    - role: k8s_job_deploy
+      vars:
+        app_k8s_job_deploy_layout: single_parallel
+        app_k8s_job_deploy_resources_enabled: false
+        app_k8s_job_deploy_env:
+          - name: TIMEOUT
+            value: "{{ stress_app_timeout }}"

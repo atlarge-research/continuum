@@ -1,0 +1,46 @@
+#jinja2: trim_blocks: False, lstrip_blocks: False
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ app_k8s_job_deploy_app_name }}
+spec:
+  template:
+    metadata:
+      name: {{ app_k8s_job_deploy_app_name }}
+    spec:
+{% if app_k8s_job_deploy_runtime | string | length > 0 %}
+      runtimeClassName: {{ app_k8s_job_deploy_runtime }}
+{% endif %}
+      restartPolicy: Never
+      containers:
+{% for item in range(1, (app_k8s_job_deploy_replicas | int) + 1) %}
+      - name: {{ app_k8s_job_deploy_app_name }}-{{ item }}
+        image: {{ app_k8s_job_deploy_image }}
+        imagePullPolicy: {{ app_k8s_job_deploy_pull_policy }}
+{% if app_k8s_job_deploy_resources_enabled | bool %}
+        resources:
+          requests:
+{% if app_k8s_job_deploy_ephemeral_storage | string | length > 0 %}
+            ephemeral-storage: "{{ app_k8s_job_deploy_ephemeral_storage }}"
+{% endif %}
+{% if app_k8s_job_deploy_memory_req | string | length > 0 %}
+            memory: "{{ app_k8s_job_deploy_memory_req }}Mi"
+{% endif %}
+{% if app_k8s_job_deploy_cpu_req | string | length > 0 %}
+            cpu: {{ app_k8s_job_deploy_cpu_req }}
+{% endif %}
+{% endif %}
+{% if app_k8s_job_deploy_env | length > 0 %}
+        env:
+{% for env_var in app_k8s_job_deploy_env %}
+        - name: {{ env_var.name }}
+{% if env_var.value_from_field_path is defined %}
+          valueFrom:
+            fieldRef:
+              fieldPath: {{ env_var.value_from_field_path }}
+{% else %}
+          value: "{{ env_var.value }}"
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}

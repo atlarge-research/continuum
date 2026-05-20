@@ -2,42 +2,7 @@
 - name: Launch benchmark for openfaas
   hosts: cloudcontroller
   become: true
-  tasks:
-    - name: Create OpenFaaS deployment file
-      ansible.builtin.copy:
-        dest: "/home/{{ username }}/function.yml"
-        mode: '0644'
-        content: |
-          provider:
-            name: openfaas
-            gateway: http://127.0.0.1:8080
-
-          functions:
-            {{ app_name }}:
-              image: {{ image }}
-              environment:
-                CPU_THREADS: "{{ cpu_threads }}"
-              requests:
-                memory: "{{ memory_req }}Mi"
-                cpu: {{ cpu_req }}
-              labels:
-                com.openfaas.scale.min: 1
-                com.openfaas.scale.max: 5
-
-    - name: Forward incoming 8080 traffic to localhost
-      ansible.builtin.iptables:
-        table: nat
-        chain: PREROUTING
-        protocol: tcp
-        destination_port: "8080"
-        jump: DNAT
-        to_destination: "127.0.0.1:8080"
-        state: present
-
-    - name: Launch jobs
-      ansible.builtin.command: faas-cli deploy --yaml "/home/{{ username }}/function.yml"
-      register: faas_deploy
-      changed_when: >
-        ('Deploying' in faas_deploy.stdout) or
-        ('Updating' in faas_deploy.stdout) or
-        ('Deployed' in faas_deploy.stdout)
+  roles:
+    - role: openfaas_deploy
+      vars:
+        app_openfaas_deploy_scale_max: 5

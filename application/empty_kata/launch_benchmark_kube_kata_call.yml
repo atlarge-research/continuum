@@ -2,37 +2,10 @@
 - name: Launch benchmark for kube_kata with one kubectl command call per job
   hosts: cloudcontroller
   become: true
-  tasks:
-    - name: Create job directory
-      ansible.builtin.file:
-        path: /home/{{ username }}/jobs
-        state: directory
-        mode: '0755'
-
-    - name: Create job files
-      ansible.builtin.copy:
-        dest: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
-        mode: '0644'
-        content: |
-          apiVersion: batch/v1
-          kind: Job
-          metadata:
-            name: {{ app_name }}-{{ item }}
-          spec:
-            template:
-              metadata:
-                name: {{ app_name }}-{{ item }}
-              spec:
-                restartPolicy: Never
-                containers:
-                - name: {{ app_name }}-{{ item }}
-                  image: {{ image }}
-                  imagePullPolicy: {{ pull_policy }}
-                  resources:
-                    requests:
-                      memory: "{{ memory_req }}Mi"
-                      cpu: {{ cpu_req }}
-                  env:
-                  - name: SLEEP_TIME
-                    value: "{{ sleep_time }}"
-      loop: "{{ range(1, replicas + 1) | list }}"
+  roles:
+    - role: k8s_job_deploy
+      vars:
+        app_k8s_job_deploy_layout: per_file_direct
+        app_k8s_job_deploy_env:
+          - name: SLEEP_TIME
+            value: "{{ sleep_time }}"

@@ -1,3 +1,35 @@
 ---
-# Phase A scaffold: role implemented in later phases.
-[]
+- name: Validate OpenFaaS deployment variables
+  ansible.builtin.assert:
+    that:
+      - app_openfaas_deploy_app_name | length > 0
+      - app_openfaas_deploy_image | length > 0
+      - app_openfaas_deploy_memory_req | string | length > 0
+      - app_openfaas_deploy_cpu_req | string | length > 0
+    fail_msg: "Invalid app_openfaas_deploy role variables"
+
+- name: Render OpenFaaS deployment file
+  ansible.builtin.template:
+    src: function.yml.j2
+    dest: "{{ app_openfaas_deploy_function_path }}"
+    mode: "0644"
+
+- name: Forward incoming 8080 traffic to localhost
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    protocol: tcp
+    destination_port: "8080"
+    jump: DNAT
+    to_destination: "127.0.0.1:8080"
+    state: present
+  when: app_openfaas_deploy_manage_prerouting | bool
+
+- name: Launch OpenFaaS function
+  ansible.builtin.command:
+    cmd: "faas-cli deploy --yaml {{ app_openfaas_deploy_function_path }}"
+  register: app_openfaas_deploy
+  changed_when: >-
+    ('Deploying' in app_openfaas_deploy.stdout) or
+    ('Updating' in app_openfaas_deploy.stdout) or
+    ('Deployed' in app_openfaas_deploy.stdout)

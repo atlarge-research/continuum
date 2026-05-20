@@ -144,72 +144,87 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
 
 
 class BenchmarkLaunchPlaybookTests(unittest.TestCase):
-    def assert_launch_playbook_copies_remote_job_template(self, playbook_path):
+    def _role_entry(self, relative_path):
+        repo_root = Path(__file__).resolve().parents[2]
+        playbook_path = repo_root / relative_path
         playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+        roles = playbook[0]["roles"]
+        self.assertEqual(len(roles), 1)
+        return roles[0]
 
-        tasks = playbook[0]["tasks"]
+    def test_k8s_job_deploy_role_materializes_templates_and_kubectl_apply(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        task_path = repo_root / "roles/application/k8s_job_deploy/tasks/main.yml"
+        tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+
+        self.assertIsInstance(tasks, list)
         copy_task = next(
-            task for task in tasks if task.get("name") == "Create job multiple times"
+            task
+            for task in tasks
+            if task.get("name") == "Create one-file-per-job Kubernetes files"
         )
         copy_args = copy_task["ansible.builtin.copy"]
-        self.assertEqual(copy_args["src"], "/home/{{ username }}/job-template.yaml")
-        self.assertEqual(copy_args["dest"], "/home/{{ username }}/jobs/job-{{ item }}.yaml")
+        self.assertEqual(copy_args["src"], "{{ app_k8s_job_deploy_job_template_path }}")
         self.assertIs(copy_args["remote_src"], True)
 
-    def test_image_classification_kubernetes_launch_uses_kubectl_apply(self):
-        repo_root = Path(__file__).resolve().parents[2]
-        playbook_path = (
-            repo_root / "application/image_classification/launch_benchmark_kubernetes.yml"
-        )
-        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
-
-        tasks = playbook[0]["tasks"]
-        launch_task = next(task for task in tasks if task.get("name") == "Launch jobs")
+        launch_task = next(task for task in tasks if task.get("name") == "Launch Kubernetes benchmark jobs")
         self.assertIn("ansible.builtin.command", launch_task)
         self.assertEqual(
             launch_task["ansible.builtin.command"]["cmd"],
-            "kubectl apply -f /home/{{ username }}/jobs",
+            "kubectl apply -f {{ app_k8s_job_deploy_apply_path }}",
         )
-        self.assertEqual(launch_task["register"], "launch_jobs_result")
-        self.assertIn("launch_jobs_result.stdout", launch_task["changed_when"])
+        self.assertEqual(launch_task["register"], "app_k8s_job_deploy_launch")
         self.assertEqual(
             launch_task["environment"]["KUBECONFIG"],
-            "/etc/kubernetes/admin.conf",
+            "{{ app_k8s_job_deploy_kubeconfig }}",
         )
+        self.assertEqual(launch_task["when"], "app_k8s_job_deploy_apply | bool")
 
-    def test_image_classification_kubernetes_launch_copies_remote_job_template(self):
-        repo_root = Path(__file__).resolve().parents[2]
-        playbook_path = (
-            repo_root / "application/image_classification/launch_benchmark_kubernetes.yml"
+    def test_image_classification_kubernetes_launch_uses_application_role(self):
+        role = self._role_entry(
+            "application/image_classification/launch_benchmark_kubernetes.yml"
         )
+        self.assertEqual(role["role"], "k8s_job_deploy")
+        vars_ = role["vars"]
+        self.assertEqual(vars_["app_k8s_job_deploy_layout"], "one_file_per_job")
+        self.assertIs(vars_["app_k8s_job_deploy_apply"], True)
+        self.assertEqual(vars_["app_k8s_job_deploy_ports"], [1883])
+        self.assertEqual(vars_["app_k8s_job_deploy_env"][0]["value_from_field_path"], "status.hostIP")
 
-        self.assert_launch_playbook_copies_remote_job_template(playbook_path)
-
-    def test_text_translation_kubernetes_launch_uses_kubectl_apply(self):
-        repo_root = Path(__file__).resolve().parents[2]
-        playbook_path = (
-            repo_root / "application/text_translation/launch_benchmark_kubernetes.yml"
+    def test_text_translation_kubernetes_launch_sets_ephemeral_storage(self):
+        role = self._role_entry(
+            "application/text_translation/launch_benchmark_kubernetes.yml"
         )
-        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+        self.assertEqual(role["role"], "k8s_job_deploy")
+        vars_ = role["vars"]
+        self.assertEqual(vars_["app_k8s_job_deploy_layout"], "one_file_per_job")
+        self.assertIs(vars_["app_k8s_job_deploy_apply"], True)
+        self.assertEqual(vars_["app_k8s_job_deploy_ephemeral_storage"], "12Gi")
 
-        tasks = playbook[0]["tasks"]
-        launch_task = next(task for task in tasks if task.get("name") == "Launch jobs")
-        self.assertIn("ansible.builtin.command", launch_task)
-        self.assertEqual(
-            launch_task["ansible.builtin.command"]["cmd"],
-            "kubectl apply -f /home/{{ username }}/jobs",
+    def test_kubeedge_launch_uses_k8s_job_role_instead_of_kubernetes_module(self):
+        role = self._role_entry(
+            "application/image_classification/launch_benchmark_kubeedge.yml"
         )
-        self.assertEqual(launch_task["register"], "launch_jobs_result")
-        self.assertIn("launch_jobs_result.stdout", launch_task["changed_when"])
-        self.assertEqual(
-            launch_task["environment"]["KUBECONFIG"],
-            "/etc/kubernetes/admin.conf",
-        )
+        self.assertEqual(role["role"], "k8s_job_deploy")
+        self.assertIs(role["vars"]["app_k8s_job_deploy_apply"], True)
+        self.assertEqual(role["vars"]["app_k8s_job_deploy_pull_policy"], "Always")
 
-    def test_text_translation_kubernetes_launch_copies_remote_job_template(self):
-        repo_root = Path(__file__).resolve().parents[2]
-        playbook_path = (
-            repo_root / "application/text_translation/launch_benchmark_kubernetes.yml"
-        )
+    def test_empty_file_mode_uses_render_only_one_file_role_variant(self):
+        role = self._role_entry("application/empty/launch_benchmark_kubecontrol_file.yml")
+        self.assertEqual(role["role"], "k8s_job_deploy")
+        vars_ = role["vars"]
+        self.assertEqual(vars_["app_k8s_job_deploy_layout"], "one_file_per_job")
+        self.assertIs(vars_["app_k8s_job_deploy_index_template_metadata"], True)
+        self.assertIs(vars_["app_k8s_job_deploy_index_container_name"], True)
+        self.assertNotIn("app_k8s_job_deploy_apply", vars_)
 
-        self.assert_launch_playbook_copies_remote_job_template(playbook_path)
+    def test_openfaas_launch_playbooks_use_application_role(self):
+        image_role = self._role_entry(
+            "application/image_classification/launch_benchmark_openfaas.yml"
+        )
+        signal_role = self._role_entry("application/signal_classification/launch_benchmark_openfaas.yml")
+
+        self.assertEqual(image_role["role"], "openfaas_deploy")
+        self.assertEqual(image_role["vars"]["app_openfaas_deploy_scale_max"], 5)
+        self.assertEqual(signal_role["role"], "openfaas_deploy")
+        self.assertEqual(signal_role["vars"]["app_openfaas_deploy_scale_max"], 3)

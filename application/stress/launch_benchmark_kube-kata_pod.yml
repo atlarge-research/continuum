@@ -1,27 +1,12 @@
 ---
-- hosts: cloudcontroller
+- name: Launch benchmark for kube-kata stress pod
+  hosts: cloudcontroller
   become: true
-  tasks:
-    - name: Create job file
-      shell: |
-        cat > "/home/{{ username }}/job-template.yaml" <<EOF
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {{ app_name }}
-        spec:
-          parallelism: {{ replicas }}
-          template:
-            metadata:
-              name: {{ app_name }}
-            spec:
-              runtimeClassName: {{ runtime }}
-              containers:
-              - name: {{ app_name }}
-                image: {{ image }}
-                imagePullPolicy: {{ pull_policy }}
-                env:
-                - name: TIMEOUT
-                  value: "{{ stress_app_timeout }}"
-              restartPolicy: Never
-        EOF
+  roles:
+    - role: k8s_job_deploy
+      vars:
+        app_k8s_job_deploy_layout: single_parallel
+        app_k8s_job_deploy_resources_enabled: false
+        app_k8s_job_deploy_env:
+          - name: TIMEOUT
+            value: "{{ stress_app_timeout }}"

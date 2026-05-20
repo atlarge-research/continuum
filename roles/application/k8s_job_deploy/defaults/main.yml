@@ -1,3 +1,30 @@
 ---
-# Phase A scaffold defaults.
-{}
+app_k8s_job_deploy_app_name: "{{ app_name | default('') }}"
+app_k8s_job_deploy_image: "{{ image | default('') }}"
+app_k8s_job_deploy_replicas: "{{ replicas | default(1) }}"
+app_k8s_job_deploy_pull_policy: "{{ pull_policy | default('Always') }}"
+app_k8s_job_deploy_memory_req: "{{ memory_req | default('') }}"
+app_k8s_job_deploy_cpu_req: "{{ cpu_req | default('') }}"
+app_k8s_job_deploy_runtime: "{{ runtime | default('') }}"
+app_k8s_job_deploy_sleep_time: "{{ sleep_time | default('') }}"
+app_k8s_job_deploy_timeout: "{{ stress_app_timeout | default('') }}"
+app_k8s_job_deploy_username: "{{ username | default(continuum_username | default('ubuntu')) }}"
+app_k8s_job_deploy_kubeconfig: "{{ kubeconfig | default('/etc/kubernetes/admin.conf') }}"
+
+app_k8s_job_deploy_layout: single_parallel
+app_k8s_job_deploy_apply: false
+app_k8s_job_deploy_resources_enabled: true
+app_k8s_job_deploy_ephemeral_storage: ""
+app_k8s_job_deploy_index_template_metadata: false
+app_k8s_job_deploy_index_container_name: false
+app_k8s_job_deploy_env: []
+app_k8s_job_deploy_ports: []
+
+app_k8s_job_deploy_job_template_path: "/home/{{ app_k8s_job_deploy_username }}/job-template.yaml"
+app_k8s_job_deploy_jobs_dir: "/home/{{ app_k8s_job_deploy_username }}/jobs"
+app_k8s_job_deploy_apply_path: >-
+  {{
+    app_k8s_job_deploy_jobs_dir
+    if app_k8s_job_deploy_layout in ['one_file_per_job', 'per_file_direct']
+    else app_k8s_job_deploy_job_template_path
+  }}

@@ -1,3 +1,12 @@
 ---
-# Phase A scaffold defaults.
-{}
+app_openfaas_deploy_app_name: "{{ app_name | default('') }}"
+app_openfaas_deploy_image: "{{ image | default('') }}"
+app_openfaas_deploy_memory_req: "{{ memory_req | default('') }}"
+app_openfaas_deploy_cpu_req: "{{ cpu_req | default('') }}"
+app_openfaas_deploy_cpu_threads: "{{ cpu_threads | default(1) }}"
+app_openfaas_deploy_username: "{{ username | default(continuum_username | default('ubuntu')) }}"
+app_openfaas_deploy_gateway: "http://127.0.0.1:8080"
+app_openfaas_deploy_scale_min: 1
+app_openfaas_deploy_scale_max: 5
+app_openfaas_deploy_manage_prerouting: true
+app_openfaas_deploy_function_path: "/home/{{ app_openfaas_deploy_username }}/function.yml"

@@ -1,3 +1,73 @@
 ---
-# Phase A scaffold: role implemented in later phases.
-[]
+- name: Validate Kubernetes job deployment variables
+  ansible.builtin.assert:
+    that:
+      - app_k8s_job_deploy_app_name | length > 0
+      - app_k8s_job_deploy_image | length > 0
+      - app_k8s_job_deploy_replicas | int >= 1
+      - app_k8s_job_deploy_layout in ['single_parallel', 'one_file_per_job', 'per_file_direct', 'multi_container']
+    fail_msg: "Invalid app_k8s_job_deploy role variables"
+
+- name: Create Kubernetes job directory
+  ansible.builtin.file:
+    path: "{{ app_k8s_job_deploy_jobs_dir }}"
+    state: directory
+    mode: "0755"
+  when: app_k8s_job_deploy_layout in ['one_file_per_job', 'per_file_direct']
+
+- name: Render single parallel Kubernetes job
+  ansible.builtin.template:
+    src: job_single_parallel.yaml.j2
+    dest: "{{ app_k8s_job_deploy_job_template_path }}"
+    mode: "0644"
+  when: app_k8s_job_deploy_layout == 'single_parallel'
+
+- name: Render one-file-per-job Kubernetes template
+  ansible.builtin.template:
+    src: job_one_file_per_job.yaml.j2
+    dest: "{{ app_k8s_job_deploy_job_template_path }}"
+    mode: "0644"
+  when: app_k8s_job_deploy_layout == 'one_file_per_job'
+
+- name: Create one-file-per-job Kubernetes files
+  ansible.builtin.copy:
+    src: "{{ app_k8s_job_deploy_job_template_path }}"
+    dest: "{{ app_k8s_job_deploy_jobs_dir }}/job-{{ item }}.yaml"
+    remote_src: true
+    mode: "0644"
+  loop: "{{ range(1, (app_k8s_job_deploy_replicas | int) + 1) | list }}"
+  when: app_k8s_job_deploy_layout == 'one_file_per_job'
+
+- name: Replace item placeholder in one-file-per-job Kubernetes files
+  ansible.builtin.replace:
+    path: "{{ app_k8s_job_deploy_jobs_dir }}/job-{{ item }}.yaml"
+    regexp: "%ITEM"
+    replace: "{{ item | string }}"
+  loop: "{{ range(1, (app_k8s_job_deploy_replicas | int) + 1) | list }}"
+  when: app_k8s_job_deploy_layout == 'one_file_per_job'
+
+- name: Render per-file direct Kubernetes jobs
+  ansible.builtin.template:
+    src: job_per_file_direct.yaml.j2
+    dest: "{{ app_k8s_job_deploy_jobs_dir }}/job-{{ item }}.yaml"
+    mode: "0644"
+  loop: "{{ range(1, (app_k8s_job_deploy_replicas | int) + 1) | list }}"
+  when: app_k8s_job_deploy_layout == 'per_file_direct'
+
+- name: Render multi-container Kubernetes job
+  ansible.builtin.template:
+    src: job_multi_container.yaml.j2
+    dest: "{{ app_k8s_job_deploy_job_template_path }}"
+    mode: "0644"
+  when: app_k8s_job_deploy_layout == 'multi_container'
+
+- name: Launch Kubernetes benchmark jobs
+  ansible.builtin.command:
+    cmd: "kubectl apply -f {{ app_k8s_job_deploy_apply_path }}"
+  register: app_k8s_job_deploy_launch
+  changed_when: >-
+    'created' in app_k8s_job_deploy_launch.stdout or
+    'configured' in app_k8s_job_deploy_launch.stdout
+  environment:
+    KUBECONFIG: "{{ app_k8s_job_deploy_kubeconfig }}"
+  when: app_k8s_job_deploy_apply | bool

@@ -2,72 +2,20 @@
 - name: Launch benchmark for kubernetes with one call, and one job per file
   hosts: cloudcontroller
   become: true
-  tasks:
-    - name: Create job template file
-      ansible.builtin.copy:
-        dest: "/home/{{ username }}/job-template.yaml"
-        mode: '0644'
-        content: |
-          apiVersion: batch/v1
-          kind: Job
-          metadata:
-            name: {{ app_name }}-%ITEM
-          spec:
-            template:
-              metadata:
-                name: {{ app_name }}
-              spec:
-                containers:
-                - name: {{ app_name }}
-                  image: {{ image }}
-                  ports:
-                  - containerPort: 1883
-                  imagePullPolicy: {{ pull_policy | default('Always') }}
-                  resources:
-                    requests:
-                      ephemeral-storage: "12Gi"
-                      memory: "{{ memory_req }}Mi"
-                      cpu: {{ cpu_req }}
-                  env:
-                  - name: MQTT_LOCAL_IP
-                    valueFrom:
-                      fieldRef:
-                        fieldPath: status.hostIP
-                  - name: MQTT_LOGS
-                    value: "{{ mqtt_logs }}"
-                  - name: CPU_THREADS
-                    value: "{{ cpu_threads }}"
-                  - name: ENDPOINT_CONNECTED
-                    value: "{{ endpoint_connected }}"
-                restartPolicy: Never
-
-    - name: Create job directory
-      ansible.builtin.file:
-        path: /home/{{ username }}/jobs
-        state: directory
-        mode: '0755'
-
-    - name: Create job multiple times
-      ansible.builtin.copy:
-        src: "/home/{{ username }}/job-template.yaml"
-        dest: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
-        remote_src: true
-        mode: '0644'
-      loop: "{{ range(1, replicas + 1) | list }}"
-
-    - name: Replace %ITEM placeholder in job files
-      ansible.builtin.replace:
-        path: "/home/{{ username }}/jobs/job-{{ item }}.yaml"
-        regexp: '%ITEM'
-        replace: "{{ item }}"
-      loop: "{{ range(1, replicas + 1) | list }}"
-
-    - name: Launch jobs
-      ansible.builtin.command:
-        cmd: kubectl apply -f /home/{{ username }}/jobs
-      register: launch_jobs_result
-      changed_when: >-
-        'created' in launch_jobs_result.stdout or
-        'configured' in launch_jobs_result.stdout
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+  roles:
+    - role: k8s_job_deploy
+      vars:
+        app_k8s_job_deploy_layout: one_file_per_job
+        app_k8s_job_deploy_apply: true
+        app_k8s_job_deploy_ephemeral_storage: 12Gi
+        app_k8s_job_deploy_ports:
+          - 1883
+        app_k8s_job_deploy_env:
+          - name: MQTT_LOCAL_IP
+            value_from_field_path: status.hostIP
+          - name: MQTT_LOGS
+            value: "{{ mqtt_logs }}"
+          - name: CPU_THREADS
+            value: "{{ cpu_threads }}"
+          - name: ENDPOINT_CONNECTED
+            value: "{{ endpoint_connected }}"
