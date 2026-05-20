@@ -68,11 +68,12 @@ Assert:
 1. the YAML triplet composes successfully,
 2. the lock file is written,
 3. the planner snapshot exists,
-4. invalid configs fail before provisioning starts.
+4. the resume contract is written before any provisioning or resume work,
+5. invalid configs fail before provisioning starts.
 
 Artifacts:
 
-1. `<base_path>/.continuum/experiment_lock.yaml`
+1. `<base_path>/.continuum/experiment_lock.yaml` with `resume_contract`
 2. parser/runtime logs
 
 ### Phase 1: Infrastructure Deployment
@@ -81,12 +82,12 @@ Assert:
 
 1. provider resources are created,
 2. SSH/IP values are usable,
-3. state file is written with `phase_completed=infrastructure`,
+3. schema-v2 state file is written with `phase_completed=infrastructure`,
 4. registry and netperf/network artifacts appear when requested.
 
 Artifacts:
 
-1. `<base_path>/.continuum/state.json`
+1. `<base_path>/.continuum/state.json` with schema, phase, and resume-contract metadata
 2. provider logs
 3. optional `logs/network_validation/netperf_results_<timestamp>.ndjson`
 
@@ -115,16 +116,17 @@ Assert:
 Current note:
 
 1. runtime application execution is now ungated,
-2. benchmark smoke and teardown remain the next operational closure step.
+2. benchmark smoke and teardown evidence are runner-visible on the resumed K8s path.
 
 ### Phase 4: Artifact Validation And Teardown
 
 Assert:
 
 1. resume works from saved state when earlier phases are skipped,
-2. artifacts match the executed phase,
-3. teardown removes resources at the end of the operational run,
-4. rerunning from a clean environment remains deterministic.
+2. lock and state resume-contract hashes match,
+3. artifacts match the executed phase,
+4. teardown removes resources at the end of the operational run,
+5. rerunning from a clean environment remains deterministic.
 
 ## 5. Minimum Smoke Matrix
 
@@ -179,9 +181,10 @@ Required evidence classes:
 2. Continuum log file,
 3. experiment lock file,
 4. phase state file,
-5. provider-specific provisioning evidence,
-6. software platform readiness evidence,
-7. benchmark result evidence once application execution is enabled.
+5. resume contract hash/details in both lock and state,
+6. provider-specific provisioning evidence,
+7. software platform readiness evidence,
+8. benchmark result evidence.
 
 The existing runner stores summary JSON under `logs/test_results/`.
 That should remain the top-level operational test index.
@@ -190,7 +193,8 @@ per-test `stdout.txt`, `stderr.txt`, and `metadata.json`, so failed VM-backed
 smoke runs can be debugged without extracting blobs from one aggregate JSON file.
 For YAML runs, the runner now also treats the resolved lockfile and saved state
 file as part of the baseline success contract instead of relying only on exit
-code and SSH output heuristics.
+code and SSH output heuristics. It also requires schema-v2 state payloads and
+matching `resume_contract` hashes between `experiment_lock.yaml` and `state.json`.
 
 Concrete smoke success criteria currently agreed:
 
@@ -212,6 +216,7 @@ Concrete smoke success criteria currently agreed:
    - all VMs should be cleaned up only at the end of the smoke run
    - exported state should remain available for inspection after the run
    - benchmark-smoke success requires teardown evidence when the final config requests deletion
+   - resume state without schema-v2 metadata or with a stale resume contract is a failure
 6. network validation tolerance:
    - observed latency and throughput should be within 25% of the expected profile values,
      or within 10 ms / 10 mbit respectively, whichever tolerance is larger
@@ -228,11 +233,13 @@ Suite behavior policy currently agreed:
    inspection after smoke failures.
 6. the e2e runner should reject a run as successful when the expected
    `experiment_lock.yaml` or `state.json` artifacts are missing, unreadable,
-   or saved with the wrong `phase_completed` value for the requested target set.
+   saved with the wrong `phase_completed` value for the requested target set,
+   or carry mismatched resume-contract metadata.
 7. failed runs should be classified into stable debugging buckets such as
-   `timeout`, `missing_lock`, `missing_state`, `wrong_state_phase`,
-   `missing_ssh`, `nonzero_exit`, `ansible_failure`, or `teardown_failure` so
-   smoke triage can focus on the right layer first.
+   `timeout`, `missing_lock`, `missing_state`, `state_schema_mismatch`,
+   `resume_contract_mismatch`, `wrong_state_phase`, `missing_ssh`,
+   `nonzero_exit`, `ansible_failure`, or `teardown_failure` so smoke triage can
+   focus on the right layer first.
 
 ## 7. Environment Matrix
 
@@ -258,7 +265,7 @@ Practical interpretation for the current smoke baseline:
 3. network-validation smoke:
    - a QEMU-capable environment with the extra host capabilities needed for emulated networking
 4. benchmark smoke:
-   - a QEMU-capable environment with the benchmark-specific runtime prerequisites; this remains the pending Phase-D operational slice
+   - a QEMU-capable environment with the benchmark-specific runtime prerequisites
 
 The runner should encode those prerequisites directly rather than rely only on
 human-readable docs. The active suite contract is now:
@@ -286,10 +293,13 @@ What is already covered:
 7. real host-backed infrastructure smoke via `configs/experiments/smoke/infra_one_vm.yaml`,
 8. real host-backed infrastructure-plus-software smoke via `configs/experiments/smoke/software_k8s_two_vm.yaml`,
 9. real host-backed network/netperf smoke via `configs/experiments/smoke/network_netperf_two_vm.yaml`.
+10. real host-backed resumed K8s benchmark smoke with teardown verification via
+    `configs/experiments/benchmark_smoke/`.
+11. lock/state resume-contract validation in runner success detection.
 
 What remains open:
 
-1. benchmark/application artifact assertions tuned from real run output instead of design-only expectations,
+1. richer benchmark metrics/artifact assertions beyond functional completion,
 2. broader scenario regressions beyond the canonical resumed Kubernetes benchmark smoke path.
 
 ## 9. Suggested Next Operational Work
@@ -297,8 +307,8 @@ What remains open:
 Recommended order:
 
 1. keep network-validation artifact checks aligned with the existing host-backed smoke runner output,
-2. tighten benchmark-smoke artifact assertions now that role consolidation and teardown evidence are available,
-3. expand scenario regressions only after the canonical smoke path stays green.
+2. add richer benchmark-result assertions after the functional K8s smoke path stays green,
+3. expand scenario regressions only after the canonical smoke path remains stable.
 
 Cache-integrity note:
 

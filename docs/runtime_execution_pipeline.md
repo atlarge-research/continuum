@@ -43,7 +43,7 @@ It covers:
 4. module loading and runtime option validation,
 5. deterministic planner snapshot construction,
 6. runtime target gating,
-7. resolved experiment lock writing.
+7. resolved experiment lock writing with the resume contract used by later state checks.
 
 ### Primary code surfaces
 
@@ -67,7 +67,8 @@ It covers:
 1. canonical `config` object,
 2. `config["normalized"]`,
 3. `config["planner_snapshot"]`,
-4. resolved lock file at `<base_path>/.continuum/experiment_lock.yaml`.
+4. resolved lock file at `<base_path>/.continuum/experiment_lock.yaml`, including
+   `resume_contract` metadata.
 
 ### Failure classes
 
@@ -82,7 +83,8 @@ It covers:
 1. config parses without `parser.error(...)`,
 2. lock file is written,
 3. planner snapshot exists and matches canonical config,
-4. runtime target resolution reports the expected executable phases.
+4. resume contract is stable across compatible retained phases,
+5. runtime target resolution reports the expected executable phases.
 
 ## 4. Phase 1: Infrastructure Deployment
 
@@ -118,7 +120,8 @@ real machines, IPs, registry state, and optional network emulation.
 2. SSH/IP materialized in runtime config,
 3. optional local registry content,
 4. optional network-validation NDJSON results,
-5. state file at `<base_path>/.continuum/state.json` with `phase_completed=infrastructure`.
+5. schema-v2 state file at `<base_path>/.continuum/state.json` with
+   `phase_completed=infrastructure` and matching `resume_contract`.
 
 ### Operational success evidence
 
@@ -126,7 +129,7 @@ real machines, IPs, registry state, and optional network emulation.
 2. SSH targets exist in config/state,
 3. provider resources are reachable,
 4. network emulation or netperf artifacts appear when requested,
-5. phase state file is written.
+5. phase state file is written atomically with schema and resume-contract metadata.
 
 ## 5. Phase 2: Software Deployment
 
@@ -156,14 +159,15 @@ the centralized software planner boundary.
 
 1. installed orchestrator/addon software,
 2. software execution order and assignment metadata already captured in `planner_snapshot`,
-3. state file with `phase_completed=software`.
+3. schema-v2 state file with `phase_completed=software`.
 
 ### Operational success evidence
 
 1. all software plan entries execute successfully,
 2. no direct module start path bypasses centralized planner execution,
 3. post-phase hook completes,
-4. state file advances from `infrastructure` to `software`.
+4. state file advances from `infrastructure` to `software` without changing the
+   resume contract.
 
 ## 6. Phase 3: Benchmark/Application Execution
 
@@ -210,9 +214,9 @@ This is a cross-cutting runtime concern rather than a separately requested
 
 ### Owned behaviors
 
-1. experiment lock writing before infrastructure/software/application execution,
-2. state persistence after each executable phase,
-3. resume validation when skipping earlier phases,
+1. experiment lock writing during bootstrap before infrastructure or resume execution,
+2. schema-v2 state persistence after each executable phase,
+3. resume validation by state schema, phase ordering, and resume-contract hash when skipping earlier phases,
 4. final SSH access hints,
 5. optional infrastructure teardown when `delete` is enabled.
 
@@ -226,8 +230,8 @@ This is a cross-cutting runtime concern rather than a separately requested
 
 ### Operational success evidence
 
-1. lock and state files are present and internally compatible,
-2. resume rejects incompatible state cleanly,
+1. lock and state files are present and have matching `resume_contract` hashes,
+2. resume rejects legacy, malformed, or incompatible state cleanly,
 3. final artifact/log locations are discoverable,
 4. teardown leaves no unexpected provider resources behind when requested,
 5. benchmark smoke reports a stable `teardown_failure` when retained QEMU domains remain after a delete-on-exit application leg.
@@ -245,7 +249,8 @@ Current mapping:
 Current runtime note:
 
 1. `application` is parsed, planned, and executable,
-2. benchmark smoke/teardown remains the active operational closure step.
+2. benchmark smoke/teardown has a concrete runner evidence path,
+3. Phase-E resume integrity uses the same contract in the lock and state artifacts.
 
 ## 9. Operational Testing Implications
 
@@ -258,7 +263,7 @@ Minimum assertions per phase:
 2. Phase 1: state file, SSH/IP materialization, and optional network artifacts exist.
 3. Phase 2: centralized software plan executes and state advances to `software`.
 4. Phase 3: benchmark artifacts and metrics are emitted once ungated.
-5. Phase 4: lock/state/resume/teardown artifacts behave consistently.
+5. Phase 4: lock/state resume contracts match and teardown artifacts behave consistently.
 
 Use `docs/operational_testing_strategy.md` for the test strategy that sits on
 top of this phase model.

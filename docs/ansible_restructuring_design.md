@@ -10,13 +10,13 @@ todos:
     status: completed
   - id: phase-c-rm-roles
     content: "Phase C: software/resource-manager orchestration refactor"
-    status: in_progress
+    status: completed
   - id: phase-d-app-roles
     content: "Phase D: application deployment role consolidation"
-    status: pending
+    status: completed
   - id: phase-e-phase-resume
     content: "Phase E: phase-resume and state integrity hardening"
-    status: pending
+    status: in_progress
   - id: phase-f-cleanup
     content: "Phase F: legacy removal and CI hardening"
     status: pending
@@ -82,7 +82,7 @@ Done criteria:
 2. infrastructure role/playbook extraction complete,
 3. idempotency/lintability baseline established.
 
-## Phase C: Software/Resource Manager Refactor (In Progress)
+## Phase C: Software/Resource Manager Refactor (Completed)
 
 Objectives:
 
@@ -92,7 +92,7 @@ Objectives:
 
 Execution detail: `docs/phase_c_implementation_plan.md`.
 
-Status snapshot (updated April 11, 2026):
+Status snapshot (updated May 20, 2026):
 
 1. PR-1 completed for canonical parser/runtime schema cutover (`infrastructure.clusters[]` + `software.modules[]`).
 2. Modules-only software config path is active (no runtime projection for legacy `orchestrator/addons` keys).
@@ -145,11 +145,31 @@ Current implementation snapshot (updated May 20, 2026):
    - when the final application config uses `delete_on_exit: true`, the runner verifies saved QEMU domain names are absent after teardown and reports `teardown_failure` on drift.
 6. continuation note:
    - the active resume point is `docs/phase_d_handoff.md`,
-   - future Phase-E work should harden broader resume/state integrity, not reintroduce application behavior into resource-manager modules.
+   - Phase-E work hardens broader resume/state integrity without reintroducing application behavior into resource-manager modules.
 
 ## Phase E: Resume and State Integrity Hardening
 
 Objective: finalize robust phase resume and state validation boundaries.
+
+Current implementation snapshot (updated May 20, 2026):
+
+1. `experiment_lock.yaml` and `state.json` share a canonical `resume_contract`
+   derived from provider identity/config, normalized infrastructure topology and
+   resources, network settings, software modules, software assignments, and
+   software execution plan metadata.
+2. The resume contract intentionally excludes phase-local request fields:
+   `run.targets`, `run.prepare_for_resume`, cleanup/delete intent, base path,
+   and benchmark pipeline content.
+3. `continuum.py` writes the resolved lock during bootstrap before provisioning
+   or state resume begins, so lock/contract failures stop before VM work.
+4. `state.json` is now schema v2 with `kind: ContinuumState`, timestamp,
+   `phase_completed`, atomic writes, machine data, and the persisted
+   `resume_contract`.
+5. Resume rejects legacy state, malformed machine data, invalid phases, and
+   stale contract hashes before software/application execution starts.
+6. The e2e runner validates lock/state schema and matching resume-contract
+   hashes, with `state_schema_mismatch` and `resume_contract_mismatch` failure
+   buckets for smoke triage.
 
 ## Phase F: Cleanup and CI Hardening
 

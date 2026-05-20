@@ -17,16 +17,19 @@ If you are resuming active implementation rather than reconstructing the full st
 
 1. `docs/rework_kickoff.md`
 2. `docs/phase_d_handoff.md`
+3. `docs/runtime_execution_pipeline.md`
 
 ## 2. Current Phase Focus
 
-Primary execution focus has moved from Phase-C closure to Phase D (application-role consolidation), but implementation must stay aligned with:
+Primary execution focus has moved from Phase-D closure to Phase E (resume and
+state integrity), but implementation must stay aligned with:
 
 1. cluster-first infrastructure model (`infrastructure.clusters[]`),
 2. final software model (`software.modules[]`, tag-based resource identity),
 3. benchmark assignment by selectors/tags,
 4. YAML parser/runtime configuration contracts,
-5. hard-cutover and fail-fast policy.
+5. hard-cutover and fail-fast policy,
+6. explicit retained-resume intent via `run.prepare_for_resume`.
 
 ## 3. Locked Decisions (Do Not Drift)
 
@@ -157,17 +160,17 @@ Start with these surfaces for module-registry and dependency-validator work:
 40. PR-5 real host-backed smoke closure is now complete for the currently active Phase-C runtime boundaries: `infra_one_vm`, `software_k8s_two_vm`, and `network_netperf_two_vm` all pass through the dedicated `continuum-smoke` wrapper path.
 41. The host-backed smoke work fixed several real runtime defects rather than only test harness issues, including bounded guest login names for QEMU guests/base images, controller-side repo asset path assumptions after the YAML handoff move, flannel manifest sourcing, and YAML-era network-emulation compatibility plus TC shell-command assembly in `infrastructure/network.py`.
 42. `.continuum` image-cache reuse is now safer: QEMU base images are reused only when companion success metadata marks them complete, so interrupted or partial base-image builds are invalidated and rebuilt instead of being silently trusted on later runs.
-43. PR-5 is now complete for its scoped objective; remaining operational work is Phase-D-owned benchmark/application smoke plus resumed K8s pipeline/teardown verification now that application execution is ungated.
+43. PR-5 is now complete for its scoped objective; Phase-D benchmark/application smoke plus resumed K8s pipeline/teardown verification has since landed, and Phase-E resume/state integrity is the active follow-up.
 
 ## 9. Resume Point
 
-If resuming after April 11, 2026:
+If resuming after May 20, 2026:
 
 1. Treat PR-3A registry/image-prefetch slice as closed and green.
 2. Treat PR-4 as closed and green: `resource_manager/plans.py` emits `software_execution_order`, owner-tagged `software_plan_entries`, `software_module_assignments`, and application-gated `benchmark_stage_assignments`; runtime handoff bundles add ordering indexes plus deep-copied stage/module config around those planner assignment records.
 3. Treat software-module planner assignment readers as available for runtime handoff consumers; use pre-snapshot module assignment metadata only inside deterministic planner snapshot construction.
 4. Treat PR-5 as closed and green from the PR-4 baseline: user-facing schema/migration docs are landed, shipped examples/profiles have parser-regression coverage, and the current real host-backed smoke matrix is green without enabling `run.targets: application` execution before Phase D.
-5. Treat the current Phase-D slice as partially landed:
+5. Treat Phase D as landed:
    - application bootstrap/module wiring is enabled again for benchmark stages with runnable application modules,
    - application-specific Kubernetes launch, worker-output, Mist/Baremetal runtime helpers, and shared MQTT worker env/var shaping now live under `application/runtime_helpers.py`,
    - infra-only QEMU topology for resumable Kubernetes cloud layouts now preserves a control-plane VM instead of emitting worker-only cloud inventory,
@@ -176,10 +179,15 @@ If resuming after April 11, 2026:
    - runtime execution is ungated for YAML runs,
    - the first retained `benchmark_k8s_resume` infrastructure state exposed a missing-control-plane bug during resumed software execution; that topology bug is fixed,
    - the next retained-software attempt exposed missing `kubelet` because infra-only bootstrap had still skipped orchestrator base-image prep; that bootstrap seam is now fixed in-repo,
-   - the retained infrastructure/software/application path has since passed on the dedicated host-backed benchmark-smoke runner,
+   - the retained infrastructure/software/application path has passed on the dedicated host-backed benchmark-smoke runner,
    - do not interpret that fix as “always install kubelet in base images”; retained-resume preparation is now explicit via `run.prepare_for_resume`, while generic infrastructure-only runs should leave later-phase prerequisites untouched.
    - See `docs/phase_d_handoff.md`.
-6. Latest validation baseline is green:
+6. Treat Phase E resume/state integrity as active:
+   - `experiment_lock.yaml` and schema-v2 `state.json` carry matching `resume_contract` metadata,
+   - old retained state without schema-v2 metadata is invalid and should be regenerated by rerunning the infrastructure leg,
+   - lock writing happens before provisioning or resume execution,
+   - e2e success detection validates lock/state schema and matching contract hashes.
+7. Latest validation baseline is green:
    - `python3 -m py_compile infrastructure/qemu/qemu.py infrastructure/ansible.py input/configuration/runtime_module_loader.py application/runtime_helpers.py application/image_classification/image_classification.py application/text_translation/text_translation.py scripts/test/test_application_runtime_helpers.py scripts/test/test_continuum_runtime.py`
    - `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_continuum_runtime` (`102 tests OK`)
    - `env PYTHONPATH=. pytest -q scripts/test/test_application_runtime_helpers.py scripts/test/test_continuum_runtime.py` (`102 passed`)
@@ -190,11 +198,11 @@ If resuming after April 11, 2026:
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke infra_one_vm` (`passed`)
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke software_k8s_two_vm` (`passed`)
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_netperf_two_vm` (`passed`)
-   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume` exposed the missing-control-plane retained-topology bug during resumed software execution; that was fixed, but the next retained-software attempt then exposed missing base-image Kubernetes prereqs because infra-only bootstrap had skipped loading the resource-manager module. The next host step is therefore to refresh the dedicated repo/wrapper if needed, rerun `benchmark_k8s_resume_infra`, then rerun resumed software/application; if the repo/wrapper are already refreshed after that fix, start directly at `benchmark_k8s_resume_infra`. See `docs/phase_d_handoff.md`
-7. Use this quick validation set before handing off again:
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume` (`passed` in the Phase-D closure baseline; rerun after Phase-E state changes when host access is available)
+8. Use this quick validation set before handing off again:
    - `python3 -m py_compile input/configuration/config_access.py resource_manager/kubernetes/kubernetes.py resource_manager/plans.py continuum.py infrastructure/network.py scripts/test/test_config_access.py scripts/test/test_kubernetes_runtime.py scripts/test/test_resource_manager_plans.py scripts/test/test_experiment_lock_writer.py scripts/test/test_example_configs.py scripts/test/run_tests.py scripts/test/test_run_tests.py scripts/test/test_continuum_runtime.py scripts/test/test_network.py scripts/test/verify_network_profiles.py scripts/test/test_verify_network_profiles.py`
    - `env PYTHONPATH=. pytest -q scripts/test`
    - `PYTHONPATH=. python3 -m unittest scripts.test.test_yaml_io scripts.test.test_profile_composition scripts.test.test_experiment_lock_writer scripts.test.test_domain_validation scripts.test.test_schema_validation scripts.test.test_selector_resolution scripts.test.test_module_contract_validation scripts.test.test_benchmark_stage_contract scripts.test.test_legacy_projection scripts.test.test_yaml_parser scripts.test.test_example_configs scripts.test.test_run_tests scripts.test.test_continuum_runtime scripts.test.test_config_access scripts.test.test_kubernetes_runtime scripts.test.test_module_registry scripts.test.test_resource_manager_plans scripts.test.test_e2e_test_utils scripts.test.test_network scripts.test.test_verify_network_profiles`
-8. Focused validation from the current Phase-D prep slice is also green:
+9. Focused validation from the Phase-D prep slice is also green:
    - `python3 -m py_compile input/configuration/runtime_module_loader.py input/configuration/runtime_option_validation.py scripts/test/test_continuum_runtime.py application/runtime_helpers.py resource_manager/kubernetes/kubernetes.py scripts/test/test_application_runtime_helpers.py`
    - `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_kubernetes_runtime scripts.test.test_continuum_runtime` (`84 tests OK`)

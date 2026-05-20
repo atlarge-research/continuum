@@ -1,7 +1,7 @@
 # Phase D Handoff
 
-This document is the clean handoff note for the current Phase-D runtime state.
-This is the primary continuation point for the next agent.
+This document is the clean handoff note for the completed Phase-D runtime state.
+Phase-E resume/state integrity work now continues from this closure point.
 
 ## 0. Immediate Next-Session Priority
 
@@ -22,7 +22,7 @@ Current reality:
    base-image invalidation, Mosquitto worker prep, endpoint Docker reruns,
    publisher completion, and Kubernetes worker-log collection.
 
-The current consolidation slice continues from that contract:
+The completed consolidation slice leaves this contract in place:
 
 1. application launch playbooks are thin wrappers around application roles,
    not places for benchmark-specific task duplication,
@@ -32,7 +32,8 @@ The current consolidation slice continues from that contract:
    benchmark execution or teardown contract,
 4. retained smoke artifacts and generated reports stay uncommitted.
 
-For active implementation resume, the minimum read set is still:
+For work that touches application or retained benchmark behavior, the minimum
+read set is still:
 
 1. `docs/rework_kickoff.md`
 2. this file (`docs/phase_d_handoff.md`)
@@ -524,6 +525,13 @@ Observed host-run attempts:
    benchmark resume preparation via `run.prepare_for_resume`,
 9. the forever/canonical agent host setup path is now `scripts/test/setup_agent_host.sh`, with dedicated read-only repo execution as the default boundary,
 10. do not generalize retained-resume prep into unconditional orchestrator package installs for unrelated infra-only runs.
+11. Phase-E resume integrity now treats `state.json` as schema v2 and rejects
+    old retained state files; rerun the infrastructure leg to regenerate state
+    after this boundary changes.
+12. `experiment_lock.yaml` and `state.json` now carry matching
+    `resume_contract` metadata, so compatible retained phases must keep
+    topology/software/network intent stable while still allowing phase-local
+    target/delete/base-path differences.
 
 ## 5. Next Clean Start Point
 
@@ -532,7 +540,7 @@ Primary resume entry:
 1. read `docs/rework_kickoff.md`
 2. read this file (`docs/phase_d_handoff.md`)
 
-Then continue here:
+Then continue here for application or retained benchmark work:
 
 1. Reuse the explicit `run.prepare_for_resume` retained-resume contract instead
    of reintroducing implicit infra-only Kubernetes preparation.
@@ -552,10 +560,16 @@ Then continue here:
 5. Keep the design concern visible: if more fixes are needed in this area,
    prefer explicit retained-resume intent over broadening “infra-only” side
    effects.
+6. For Phase-E state/resume work, use the contract boundary documented in
+   `docs/runtime_execution_pipeline.md` and `docs/ansible_restructuring_design.md`;
+   do not make the resume contract depend on benchmark pipeline content or
+   cleanup/delete intent.
 
 ## 6. Things Not To Reconstruct Again
 
 1. Do not re-add a runtime target gate for `application`; the explicit ungate slice is now landed.
 2. Do not redo the earlier helper extraction from `resource_manager/kubernetes/kubernetes.py`; that prep work is already in the tree.
-3. Do not treat Phase D as a parser/bootstrap-enablement task anymore; the active remaining work is runtime validation, cleanup, and host-backed benchmark smoke execution.
+3. Do not treat Phase D as a parser/bootstrap-enablement task anymore; the active follow-up work is Phase-E resume/state validation and later cleanup.
 4. Do not move generated runtime assets back under repo-local `.tmp`; the active temp workspace is `base_path/.continuum/tmp`.
+5. Do not try to salvage pre-Phase-E retained state; schema-v2 state is the
+   compatibility boundary.

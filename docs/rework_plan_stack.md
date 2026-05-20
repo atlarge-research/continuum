@@ -132,14 +132,14 @@ Before merge:
 2. Canonical selector normalization and `selector_id` strategy locked.
 3. Canonical structured scope identity format locked for `vm`, `cluster`, and `selector`.
 
-## 11. Current Snapshot (Updated April 11, 2026)
+## 11. Current Snapshot (Updated May 20, 2026)
 
 1. PR-1 implementation landed with strict modules-only parser/runtime access (no orchestrator/addons projection path).
 2. Config examples and parser/runtime test fixtures are migrated to canonical `clusters[]` + `modules[]` schema.
 3. PR-2 implementation is complete with registry-backed dependency/capability validation in parser/runtime and dedicated unit tests.
 4. PR-2 incremental hardening includes parser/runtime parity for exclusive-capability/conflict validation with targeted regression tests.
 5. PR-3 selector/scope, PR-3A image-prefetch, and PR-4 runtime/planner integration baselines are closed; active work moves to PR-5 examples/smokes/documentation closure.
-6. The explicit application-runtime gate was removed in Phase D: `run.targets: application` now executes benchmark/application runtime paths, while benchmark smoke/teardown remains the next operational closure step.
+6. The explicit application-runtime gate was removed in Phase D: `run.targets: application` now executes benchmark/application runtime paths, and the resumed benchmark smoke/teardown path has since reached runner-visible closure.
 7. Current PR-3A baseline includes deterministic control-plane image requirement resolution for `kubecontrol`/`kube_kata` and internal benchmark-stage mappings for `empty`, `empty_kata`, `mem_usage`, `stress`, `image_classification`, and `text_translation`, with stack-aware `image_classification` selection and fail-fast unknown-stage handling.
 8. PR-4 prep baseline has progressed: core gated runtime/planner surfaces (including `application/*`) now use generic `benchmark_param*` config accessors instead of removed `workload_*`/legacy sizing helpers, and legacy benchmark/workload helper API stubs are removed from `config_access`.
 9. Runtime endpoint env wiring now reads canonical benchmark keys directly (`duration`), with no runtime fallback aliasing from legacy `duration_s`.
@@ -221,8 +221,13 @@ Before merge:
 85. PR-5 real host-backed smoke closure is now complete for the currently runnable Phase-C boundaries: `infra_one_vm`, `software_k8s_two_vm`, and `network_netperf_two_vm` all pass through the dedicated `continuum-smoke` wrapper path.
 86. The host-backed smoke loop hardened several real runtime seams: parser-backed base-path override success detection, deterministic bounded guest login names, controller-side repo asset paths after the YAML handoff move, flannel manifest sourcing, and YAML-era network-emulation/TC shell-command handling.
 87. `.continuum` QEMU base-image reuse is now integrity-gated by companion success metadata, so interrupted or partial base-image builds are invalidated and rebuilt rather than being silently trusted on the next run.
-88. PR-5 is complete for its intended scope; the next active implementation slice is Phase D application-role consolidation plus resumed K8s benchmark smoke/teardown validation now that application runtime ungating is explicit.
+88. PR-5 is complete for its intended scope; the next slice after PR-5 was Phase D application-role consolidation plus resumed K8s benchmark smoke/teardown validation, and that slice is now closed.
 89. Early Phase-D prep plus the explicit runtime ungate are now landed in the working tree: application bootstrap/module wiring is enabled again for YAML runs, application-specific launch/timing and Mist/Baremetal worker-runtime helpers began moving from `resource_manager/kubernetes/kubernetes.py` into `application/runtime_helpers.py`, `run.targets: application` now resolves into executable phase-3 runtime flow, and focused runtime tests cover application-only and software-plus-application control flow.
+90. Phase-D application-role consolidation and retained K8s benchmark smoke closure are landed: application launch playbooks are thin application-role wrappers, application-owned runtime helpers handle benchmark launch/completion/output, and the dedicated host-backed `benchmark_k8s_resume` path has passed through infrastructure, software, application, and teardown evidence.
+91. Phase-E resume integrity now adds a canonical `resume_contract` shared by `experiment_lock.yaml` and `state.json`; the contract covers provider identity/config excluding base/delete intent, normalized topology/resources/network, software modules, software placement, and software execution plan metadata.
+92. Lock writing now happens during bootstrap before infrastructure or resume execution, and `state.json` is schema v2 with `kind: ContinuumState`, timestamp, atomic writes, machine data, phase, and persisted resume-contract hash/details.
+93. Resume-state loading rejects legacy state, malformed machine data, invalid phase values, incompatible topology/software, and stale resume-contract hashes before resumed software/application work starts.
+94. E2E runner success detection now validates lock/state schema and matching resume-contract hashes, adding `state_schema_mismatch` and `resume_contract_mismatch` failure buckets while preserving teardown verification.
 
 ## 12. End-of-Rework Test Closure Commitments
 
