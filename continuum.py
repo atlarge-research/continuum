@@ -140,6 +140,14 @@ def main(args):
         logging.error("%s", exc)
         sys.exit(1)
 
+    try:
+        lock_path = yaml_parser.write_experiment_lock(args.config)
+    except ValueError as exc:
+        logging.error("Failed to write experiment lock: %s", exc)
+        sys.exit(1)
+    if lock_path:
+        logging.info("Wrote resolved experiment lock to %s", lock_path)
+
     machines = []
     if run_infrastructure:
         machines = infrastructure.start(args.config)
@@ -170,14 +178,6 @@ def main(args):
         sys.exit(1)
 
     runner = ansible.AnsibleRunner(args.config, machines)
-
-    try:
-        lock_path = yaml_parser.write_experiment_lock(args.config)
-    except ValueError as exc:
-        logging.error("Failed to write experiment lock: %s", exc)
-        sys.exit(1)
-    if lock_path:
-        logging.info("Wrote resolved experiment lock to %s", lock_path)
 
     if run_software:
         resource_manager.start(runner)

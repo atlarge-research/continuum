@@ -296,7 +296,7 @@ rm -rf %s/.continuum/cloud && \
 rm -rf %s/.continuum/edge && \
 rm -rf %s/.continuum/endpoint && \
 rm -rf %s/.continuum/infrastructure && \
-find %s/.continuum -maxdepth 1 -type f -delete""" % (
+find %s/.continuum -maxdepth 1 -type f ! -name experiment_lock.yaml -delete""" % (
                 (config["infrastructure"]["base_path"],) * 8
             )
         else:
@@ -306,7 +306,7 @@ rm -rf %s/.continuum/cloud && \
 rm -rf %s/.continuum/edge && \
 rm -rf %s/.continuum/endpoint && \
 rm -rf %s/.continuum/infrastructure && \
-find %s/.continuum -maxdepth 1 -type f -delete\"""" % (
+find %s/.continuum -maxdepth 1 -type f ! -name experiment_lock.yaml -delete\"""" % (
                 (machine.name,) + (config["infrastructure"]["base_path"],) * 5
             )
 

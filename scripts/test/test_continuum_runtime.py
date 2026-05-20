@@ -2482,6 +2482,144 @@ class ImagePrefetchFlowTests(unittest.TestCase):
 
 
 class ResumeStateTests(unittest.TestCase):
+    def _resume_config(self, base_path):
+        module = {
+            "id": "none-main",
+            "type": "none",
+            "assign_to": {"match": {"cluster": "cloud-1"}},
+            "config": {},
+            "selector_id": "sel_none_main",
+            "resolved_vm_ids": [1],
+            "scope_identities": [{"kind": "selector", "selector_id": "sel_none_main"}],
+        }
+        resource = {
+            "vm_id": 1,
+            "cluster_id": "cloud-1",
+            "tier": "cloud",
+            "index_in_cluster": 0,
+            "tags": {"tier": "cloud", "cluster": "cloud-1"},
+        }
+        cluster = {
+            "id": "cloud-1",
+            "tier": "cloud",
+            "resources": {"vms": {"count": 1, "spec": {"cores": 1}}},
+        }
+        run = {
+            "targets": ["infrastructure", "software"],
+            "dry_run": False,
+            "clean": False,
+            "image_prefetch": "off",
+            "prepare_for_resume": False,
+        }
+        provider = {
+            "name": "qemu",
+            "config": {
+                "base_path": base_path,
+                "cpu_pin": False,
+                "external_physical_machines": [],
+                "ip": {"prefix": "192.168", "middle": 100, "middle_base": 90},
+                "netperf": False,
+                "delete_on_exit": False,
+            },
+        }
+        network = {"emulation": False, "wireless_preset": "4g", "overrides": {}}
+        return {
+            "config_format": "yaml",
+            "ssh_key": "/tmp/id_rsa",
+            "infrastructure": {
+                "provider": "qemu",
+                "base_path": base_path,
+                "cloud_nodes": 1,
+                "edge_nodes": 0,
+                "endpoint_nodes": 0,
+            },
+            "domains": {
+                "run": run,
+                "provider": provider,
+                "software": {"modules": [module]},
+                "infrastructure": {
+                    "clusters": [cluster],
+                    "network": network,
+                    "resources": [resource],
+                },
+                "benchmark": {},
+            },
+            "normalized": {
+                "schema_version": 1,
+                "kind": "ContinuumNormalizedConfig",
+                "run": run,
+                "provider": provider,
+                "software": {"modules": [module]},
+                "infrastructure": {
+                    "clusters": [cluster],
+                    "network": network,
+                    "resources": [resource],
+                },
+            },
+            "planner_snapshot": {
+                "software_execution_order": [],
+                "software_plan_entries": [],
+                "software_module_assignments": [
+                    {
+                        "id": "none-main",
+                        "type": "none",
+                        "selector_id": "sel_none_main",
+                        "resolved_vm_ids": [1],
+                        "resolved_resources": [resource],
+                        "scope_identities": [
+                            {"kind": "selector", "selector_id": "sel_none_main"}
+                        ],
+                    }
+                ],
+                "benchmark_stage_assignments": [],
+            },
+        }
+
+    def test_save_state_writes_schema_v2_atomically(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._resume_config(tempdir)
+            machine = Machine("local", True)
+
+            state_path = infra_state.save_state(config, "infrastructure", [machine])
+
+            self.assertEqual(state_path, str(pathlib.Path(tempdir) / ".continuum" / "state.json"))
+            with open(state_path, "r", encoding="utf-8") as filep:
+                payload = json.load(filep)
+
+            self.assertEqual(payload["schema_version"], 2)
+            self.assertEqual(payload["kind"], "ContinuumState")
+            self.assertEqual(payload["phase_completed"], "infrastructure")
+            self.assertTrue(payload["resume_contract"]["hash"].startswith("sha256:"))
+            self.assertFalse(list((pathlib.Path(tempdir) / ".continuum").glob(".state.*.tmp")))
+
+    def test_load_resume_state_rejects_legacy_state_without_schema(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._resume_config(tempdir)
+            state_dir = pathlib.Path(tempdir) / ".continuum"
+            state_dir.mkdir(parents=True)
+            (state_dir / "state.json").write_text(
+                json.dumps({"phase_completed": "infrastructure"}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError) as exc:
+                infra_state.load_resume_state(config, "infrastructure")
+
+            self.assertIn("State schema mismatch", str(exc.exception))
+
+    def test_load_resume_state_rejects_contract_mismatch(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._resume_config(tempdir)
+            machine = Machine("local", True)
+            infra_state.save_state(config, "infrastructure", [machine])
+
+            config["normalized"]["provider"]["config"]["ip"]["middle"] = 101
+
+            with self.assertRaises(ValueError) as exc:
+                infra_state.load_resume_state(config, "infrastructure")
+
+            self.assertIn("Resume contract mismatch", str(exc.exception))
+
     @mock.patch("infrastructure.state.machine_utils.gather_ips")
     @mock.patch("infrastructure.state.machine_utils.gather_ssh")
     @mock.patch("infrastructure.state.validate_state_compatibility")
@@ -3137,6 +3275,17 @@ class InfrastructureWorkspacePermissionTests(unittest.TestCase):
             )
             self.assertTrue(pathlib.Path(config["tmp_dir"]).is_dir())
             self.assertTrue((legacy_tmp / "stale.txt").exists())
+
+    def test_delete_old_content_preserves_phase_zero_lock(self):
+        machine = mock.Mock()
+        machine.is_local = True
+        machine.process.return_value = [([], [])]
+        config = {"infrastructure": {"base_path": "/tmp/continuum_smoke"}}
+
+        infrastructure_module.delete_old_content(config, [machine])
+
+        command = machine.process.call_args.args[1][0]
+        self.assertIn("! -name experiment_lock.yaml -delete", command)
 
     def test_create_continuum_dir_normalizes_local_directory_modes(self):
         machine = mock.Mock()

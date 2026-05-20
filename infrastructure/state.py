@@ -3,10 +3,12 @@
 import json
 import logging
 import os
+import tempfile
+from datetime import datetime, timezone
 
 from infrastructure import machine as machine_utils
 from infrastructure.machine import Machine
-from input.configuration import config_access
+from input.configuration import config_access, resume_contract
 
 _MACHINE_FIELDS = [
     "name",
@@ -34,6 +36,8 @@ _MACHINE_FIELDS = [
 
 _MACHINE_DERIVED_FIELDS = {"name_sanitized", "user", "ip"}
 _MACHINE_SCHEMA_VALIDATED = False
+_STATE_SCHEMA_VERSION = 2
+_STATE_KIND = "ContinuumState"
 _PHASE_ORDER = {
     "infrastructure": 1,
     "software": 2,
@@ -56,6 +60,16 @@ def state_file_path(config):
 def phase_rank(phase):
     """Return numeric rank of phase for ordering checks."""
     return _PHASE_ORDER.get(str(phase), -1)
+
+
+def _validate_phase(phase):
+    """Return a valid phase string or raise ValueError."""
+    if phase not in _PHASE_ORDER:
+        raise ValueError(
+            "Invalid state phase_completed %r (allowed: %s)"
+            % (phase, ", ".join(sorted(_PHASE_ORDER.keys())))
+        )
+    return phase
 
 
 def _validate_machine_schema():
@@ -131,6 +145,29 @@ def _reconstruct_machine(machine_data):
         Machine: Reconstructed machine object.
     """
     _validate_machine_schema()
+    if not isinstance(machine_data, dict):
+        raise ValueError("Invalid state machine_data entry: expected mapping")
+
+    missing_fields = [field for field in _MACHINE_FIELDS if field not in machine_data]
+    if missing_fields:
+        raise ValueError(
+            "Invalid state machine_data entry: missing required field %s"
+            % (missing_fields[0],)
+        )
+    extra_fields = sorted(
+        field
+        for field in machine_data.keys()
+        if field not in set(_MACHINE_FIELDS) and field not in _MACHINE_DERIVED_FIELDS
+    )
+    if extra_fields:
+        raise ValueError(
+            "Invalid state machine_data entry: unexpected field %s" % (extra_fields[0],)
+        )
+    if not isinstance(machine_data["name"], str) or not machine_data["name"].strip():
+        raise ValueError("Invalid state machine_data entry: name must be a non-empty string")
+    if not isinstance(machine_data["is_local"], bool):
+        raise ValueError("Invalid state machine_data entry: is_local must be boolean")
+
     machine = Machine(machine_data["name"], machine_data["is_local"])
     for field in _MACHINE_FIELDS:
         if field in ("name", "is_local"):
@@ -149,7 +186,35 @@ def _reconstruct_machines(machine_data):
     Returns:
         list[Machine]: Reconstructed machine objects.
     """
+    if not isinstance(machine_data, list) or not machine_data:
+        raise ValueError("Invalid state machine_data: expected non-empty list")
     return [_reconstruct_machine(data) for data in machine_data]
+
+
+def _validate_state_schema(state):
+    """Validate the persisted state envelope and return it."""
+    if not isinstance(state, dict):
+        raise ValueError("Invalid state file: expected top-level mapping")
+    if state.get("schema_version") != _STATE_SCHEMA_VERSION:
+        raise ValueError(
+            "State schema mismatch: expected schema_version %s but found %r"
+            % (_STATE_SCHEMA_VERSION, state.get("schema_version"))
+        )
+    if state.get("kind") != _STATE_KIND:
+        raise ValueError(
+            "State schema mismatch: expected kind %r but found %r"
+            % (_STATE_KIND, state.get("kind"))
+        )
+    created_at = state.get("created_at")
+    if not isinstance(created_at, str) or not created_at.strip():
+        raise ValueError("Invalid state file: created_at must be a non-empty string")
+    _validate_phase(state.get("phase_completed"))
+    resume_contract.validate_persisted_resume_contract(
+        state.get("resume_contract"),
+        "state.resume_contract",
+    )
+    _reconstruct_machines(state.get("machine_data"))
+    return state
 
 
 def save_state(config, phase_completed, machines):
@@ -163,8 +228,14 @@ def save_state(config, phase_completed, machines):
     Returns:
         str: Path to the written state file.
     """
+    _validate_phase(phase_completed)
+    contract = resume_contract.build_persisted_resume_contract(config)
     payload = {
+        "schema_version": _STATE_SCHEMA_VERSION,
+        "kind": _STATE_KIND,
+        "created_at": datetime.now(tz=timezone.utc).isoformat(),
         "phase_completed": phase_completed,
+        "resume_contract": contract,
         "provider": config["infrastructure"]["provider"],
         "cloud_nodes": config["infrastructure"]["cloud_nodes"],
         "edge_nodes": config["infrastructure"]["edge_nodes"],
@@ -179,9 +250,25 @@ def save_state(config, phase_completed, machines):
 
     path = state_file_path(config)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as filep:
-        json.dump(payload, filep, indent=2, sort_keys=True)
-        filep.write("\n")
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=os.path.dirname(path),
+            prefix=".state.",
+            suffix=".tmp",
+            delete=False,
+        ) as filep:
+            temp_path = filep.name
+            json.dump(payload, filep, indent=2, sort_keys=True)
+            filep.write("\n")
+            filep.flush()
+            os.fsync(filep.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
     return path
 
@@ -211,6 +298,11 @@ def validate_state_compatibility(config, state):
         list[str]: Validation errors, empty when compatible.
     """
     errors = []
+    try:
+        _validate_state_schema(state)
+    except ValueError as exc:
+        return [str(exc)]
+
     expected = {
         "provider": config["infrastructure"]["provider"],
         "cloud_nodes": config["infrastructure"]["cloud_nodes"],
@@ -225,6 +317,15 @@ def validate_state_compatibility(config, state):
                 "State mismatch for %s: expected %r but found %r" % (key, value, state.get(key))
             )
 
+    try:
+        resume_contract.validate_current_resume_contract(
+            config,
+            state.get("resume_contract"),
+            "state.resume_contract",
+        )
+    except ValueError as exc:
+        errors.append("Resume contract mismatch: %s" % (exc,))
+
     return errors
 
 
@@ -237,7 +338,7 @@ def load_and_reconstruct(config):
     Returns:
         tuple[dict, list[Machine]]: Raw state payload and reconstructed machines.
     """
-    state = load_state(config)
+    state = _validate_state_schema(load_state(config))
     machines = _reconstruct_machines(state.get("machine_data", []))
     return state, machines
 
@@ -268,7 +369,7 @@ def load_resume_state(config, required_phase):
             % (path, "; ".join(errors))
         )
 
-    completed_phase = state_payload.get("phase_completed")
+    completed_phase = _validate_phase(state_payload.get("phase_completed"))
     if required_phase and phase_rank(completed_phase) < phase_rank(required_phase):
         raise ValueError(
             "State file phase is too early for requested targets (%s): need '%s', found '%s'"
