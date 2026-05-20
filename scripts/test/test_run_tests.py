@@ -380,12 +380,31 @@ class RunSingleTestTests(unittest.TestCase):
 
             continuum_dir = Path(tempdir) / ".continuum"
             continuum_dir.mkdir(parents=True)
+            contract = (
+                run_tests_module.test_utils.resume_contract
+                .persisted_resume_contract_from_details({"test": "contract"})
+            )
             (continuum_dir / "experiment_lock.yaml").write_text(
-                "kind: ContinuumExperimentLock\n",
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "kind": "ContinuumExperimentLock",
+                        "resume_contract": contract,
+                    }
+                ),
                 encoding="utf-8",
             )
             (continuum_dir / "state.json").write_text(
-                json.dumps({"phase_completed": "infrastructure"}),
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "kind": "ContinuumState",
+                        "created_at": "2026-05-20T00:00:00+00:00",
+                        "phase_completed": "infrastructure",
+                        "resume_contract": contract,
+                        "machine_data": [{"cloud_names": ["cloud0_test"]}],
+                    }
+                ),
                 encoding="utf-8",
             )
 

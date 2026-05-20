@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
 
-from input.configuration import yaml_parser
+from input.configuration import resume_contract, yaml_parser
 
 _ORCHESTRATOR_MODULE_TYPES = ("none", "kubernetes", "kubeedge", "kubecontrol", "kube_kata", "mist")
 
@@ -460,6 +460,7 @@ def detect_success(
     require_experiment_lock = criteria.get("require_experiment_lock", True)
     require_state_file = criteria.get("require_state_file", True)
     require_state_phase = criteria.get("require_state_phase", True)
+    require_resume_contract = criteria.get("require_resume_contract", True)
     require_teardown = criteria.get("require_teardown", False)
     check_logs = criteria.get("check_log_files", False)
 
@@ -489,6 +490,24 @@ def detect_success(
             return False, "Experiment lock file missing: %s" % (experiment_lock_path)
         reasons.append("experiment_lock_written")
 
+    lock_payload = None
+    if require_resume_contract:
+        if not os.path.exists(experiment_lock_path):
+            return False, "Experiment lock file missing: %s" % (experiment_lock_path)
+        try:
+            with open(experiment_lock_path, "r", encoding="utf-8") as filep:
+                lock_payload = yaml.safe_load(filep) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            return False, "Experiment lock file unreadable: %s" % (exc)
+        if not isinstance(lock_payload, dict):
+            return False, "Experiment lock schema mismatch: expected top-level mapping"
+        if lock_payload.get("kind") != "ContinuumExperimentLock":
+            return False, "Experiment lock schema mismatch: unexpected kind %r" % (
+                lock_payload.get("kind"),
+            )
+        if lock_payload.get("schema_version") != 1:
+            return False, "Experiment lock schema mismatch: expected schema_version 1"
+
     state_payload = None
     if require_state_file or require_state_phase:
         if not os.path.exists(state_path):
@@ -501,12 +520,50 @@ def detect_success(
         except (OSError, json.JSONDecodeError) as exc:
             return False, "State file unreadable: %s" % (exc)
 
+        state_schema_ok, state_schema_reason = _validate_state_artifact_schema(state_payload)
+        if not state_schema_ok:
+            return False, state_schema_reason
+
     if require_state_phase:
         expected_phase = _expected_phase_completed(config)
         actual_phase = state_payload.get("phase_completed")
         if actual_phase != expected_phase:
             return False, "State phase %r (expected %r)" % (actual_phase, expected_phase)
         reasons.append("state_phase=%s" % (expected_phase))
+
+    if require_resume_contract:
+        if state_payload is None:
+            if not os.path.exists(state_path):
+                return False, "State file missing: %s" % (state_path)
+            try:
+                with open(state_path, "r", encoding="utf-8") as filep:
+                    state_payload = json.load(filep)
+            except (OSError, json.JSONDecodeError) as exc:
+                return False, "State file unreadable: %s" % (exc)
+            state_schema_ok, state_schema_reason = _validate_state_artifact_schema(state_payload)
+            if not state_schema_ok:
+                return False, state_schema_reason
+
+        try:
+            lock_hash, _lock_details = resume_contract.validate_persisted_resume_contract(
+                lock_payload.get("resume_contract"),
+                "experiment_lock.resume_contract",
+            )
+        except ValueError as exc:
+            return False, "Resume contract mismatch: %s" % (exc)
+        try:
+            state_hash, _state_details = resume_contract.validate_persisted_resume_contract(
+                state_payload.get("resume_contract"),
+                "state.resume_contract",
+            )
+        except ValueError as exc:
+            return False, "Resume contract mismatch: %s" % (exc)
+        if lock_hash != state_hash:
+            return False, "Resume contract mismatch: lock %s != state %s" % (
+                lock_hash,
+                state_hash,
+            )
+        reasons.append("resume_contract_match")
 
     if require_teardown and config.get("infrastructure", {}).get("delete_on_exit", False):
         teardown_ok, teardown_reason = verify_qemu_teardown(config, state_payload or {})
@@ -525,6 +582,36 @@ def detect_success(
 
     reason_str = "Success: " + ", ".join(reasons) if reasons else "Success"
     return True, reason_str
+
+
+def _validate_state_artifact_schema(state_payload: Dict) -> Tuple[bool, str]:
+    """Validate the e2e-visible state artifact schema."""
+    if not isinstance(state_payload, dict):
+        return False, "State schema mismatch: expected top-level mapping"
+    if state_payload.get("schema_version") != 2:
+        return False, "State schema mismatch: expected schema_version 2 but found %r" % (
+            state_payload.get("schema_version"),
+        )
+    if state_payload.get("kind") != "ContinuumState":
+        return False, "State schema mismatch: expected kind 'ContinuumState' but found %r" % (
+            state_payload.get("kind"),
+        )
+    if not isinstance(state_payload.get("created_at"), str) or not state_payload.get(
+        "created_at"
+    ).strip():
+        return False, "State schema mismatch: missing created_at"
+    if state_payload.get("phase_completed") not in (
+        "infrastructure",
+        "software",
+        "application",
+    ):
+        return False, "State schema mismatch: invalid phase_completed %r" % (
+            state_payload.get("phase_completed"),
+        )
+    machine_data = state_payload.get("machine_data")
+    if not isinstance(machine_data, list) or not machine_data:
+        return False, "State schema mismatch: machine_data must be a non-empty list"
+    return True, "state_schema_valid"
 
 
 def verify_qemu_teardown(config: Dict, state_payload: Dict) -> Tuple[bool, str]:
@@ -619,8 +706,16 @@ def classify_test_failure(result: Dict) -> Optional[str]:
         return "missing_state"
     if detail.startswith("State file unreadable:"):
         return "unreadable_state"
+    if detail.startswith("State schema mismatch:"):
+        return "state_schema_mismatch"
     if detail.startswith("State phase "):
         return "wrong_state_phase"
+    if detail.startswith("Experiment lock schema mismatch:"):
+        return "state_schema_mismatch"
+    if detail.startswith("Experiment lock file unreadable:"):
+        return "unreadable_lock"
+    if detail.startswith("Resume contract mismatch:"):
+        return "resume_contract_mismatch"
     if detail.startswith("Teardown verification failed:"):
         return "teardown_failure"
     if detail.startswith("No SSH output found"):

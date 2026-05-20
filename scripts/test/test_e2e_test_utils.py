@@ -10,7 +10,7 @@ from unittest import mock
 
 import yaml
 
-from input.configuration import yaml_parser
+from input.configuration import resume_contract, yaml_parser
 
 
 def _load_test_utils_module():
@@ -22,6 +22,48 @@ def _load_test_utils_module():
 
 
 test_utils = _load_test_utils_module()
+
+
+def _contract_section(details=None):
+    return resume_contract.persisted_resume_contract_from_details(details or {"test": "contract"})
+
+
+def _state_payload(phase_completed, contract=None, machine_data=None):
+    return {
+        "schema_version": 2,
+        "kind": "ContinuumState",
+        "created_at": "2026-05-20T00:00:00+00:00",
+        "phase_completed": phase_completed,
+        "resume_contract": contract or _contract_section(),
+        "machine_data": machine_data or [{"cloud_names": ["cloud0_test"]}],
+    }
+
+
+def _write_success_artifacts(root: Path, phase_completed, contract=None, machine_data=None):
+    continuum_dir = root / ".continuum"
+    continuum_dir.mkdir(parents=True)
+    contract = contract or _contract_section()
+    (continuum_dir / "experiment_lock.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "kind": "ContinuumExperimentLock",
+                "resume_contract": contract,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (continuum_dir / "state.json").write_text(
+        json.dumps(
+            _state_payload(
+                phase_completed,
+                contract=contract,
+                machine_data=machine_data,
+            )
+        ),
+        encoding="utf-8",
+    )
 
 
 class E2ETestUtilsYamlTests(unittest.TestCase):
@@ -324,13 +366,7 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
     def test_detect_success_requires_experiment_lock_and_state_phase(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            continuum_dir = Path(tempdir) / ".continuum"
-            continuum_dir.mkdir(parents=True)
-            (continuum_dir / "experiment_lock.yaml").write_text("kind: ContinuumExperimentLock\n", encoding="utf-8")
-            (continuum_dir / "state.json").write_text(
-                json.dumps({"phase_completed": "software"}),
-                encoding="utf-8",
-            )
+            _write_success_artifacts(Path(tempdir), "software")
 
             config = {
                 "infrastructure": {
@@ -352,19 +388,11 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertTrue(success)
             self.assertIn("experiment_lock_written", reason)
             self.assertIn("state_phase=software", reason)
+            self.assertIn("resume_contract_match", reason)
 
     def test_detect_success_accepts_application_phase(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            continuum_dir = Path(tempdir) / ".continuum"
-            continuum_dir.mkdir(parents=True)
-            (continuum_dir / "experiment_lock.yaml").write_text(
-                "kind: ContinuumExperimentLock\n",
-                encoding="utf-8",
-            )
-            (continuum_dir / "state.json").write_text(
-                json.dumps({"phase_completed": "application"}),
-                encoding="utf-8",
-            )
+            _write_success_artifacts(Path(tempdir), "application")
 
             config = {
                 "infrastructure": {
@@ -391,7 +419,7 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             continuum_dir = Path(tempdir) / ".continuum"
             continuum_dir.mkdir(parents=True)
             (continuum_dir / "state.json").write_text(
-                json.dumps({"phase_completed": "infrastructure"}),
+                json.dumps(_state_payload("infrastructure")),
                 encoding="utf-8",
             )
 
@@ -419,16 +447,7 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
     def test_detect_success_rejects_wrong_state_phase(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            continuum_dir = Path(tempdir) / ".continuum"
-            continuum_dir.mkdir(parents=True)
-            (continuum_dir / "experiment_lock.yaml").write_text(
-                "kind: ContinuumExperimentLock\n",
-                encoding="utf-8",
-            )
-            (continuum_dir / "state.json").write_text(
-                json.dumps({"phase_completed": "infrastructure"}),
-                encoding="utf-8",
-            )
+            _write_success_artifacts(Path(tempdir), "infrastructure")
 
             config = {
                 "infrastructure": {
@@ -450,22 +469,95 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertIn("expected 'software'", reason)
 
-    def test_detect_success_verifies_qemu_teardown_when_requested(self):
+    def test_detect_success_rejects_legacy_state_schema(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            continuum_dir = Path(tempdir) / ".continuum"
+            root = Path(tempdir)
+            continuum_dir = root / ".continuum"
             continuum_dir.mkdir(parents=True)
+            contract = _contract_section()
             (continuum_dir / "experiment_lock.yaml").write_text(
-                "kind: ContinuumExperimentLock\n",
-                encoding="utf-8",
-            )
-            (continuum_dir / "state.json").write_text(
-                json.dumps(
+                yaml.safe_dump(
                     {
-                        "phase_completed": "application",
-                        "machine_data": [{"cloud_names": ["cloud0_test"]}],
+                        "schema_version": 1,
+                        "kind": "ContinuumExperimentLock",
+                        "resume_contract": contract,
                     }
                 ),
                 encoding="utf-8",
+            )
+            (continuum_dir / "state.json").write_text(
+                json.dumps({"phase_completed": "infrastructure"}),
+                encoding="utf-8",
+            )
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": True,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={"require_ssh_output": False},
+            )
+
+            self.assertFalse(success)
+            self.assertIn("State schema mismatch", reason)
+
+    def test_detect_success_rejects_resume_contract_mismatch(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_contract = _contract_section({"test": "lock"})
+            state_contract = _contract_section({"test": "state"})
+            root = Path(tempdir)
+            continuum_dir = root / ".continuum"
+            continuum_dir.mkdir(parents=True)
+            (continuum_dir / "experiment_lock.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "schema_version": 1,
+                        "kind": "ContinuumExperimentLock",
+                        "resume_contract": lock_contract,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (continuum_dir / "state.json").write_text(
+                json.dumps(_state_payload("infrastructure", contract=state_contract)),
+                encoding="utf-8",
+            )
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": True,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={"require_ssh_output": False},
+            )
+
+            self.assertFalse(success)
+            self.assertIn("Resume contract mismatch", reason)
+
+    def test_detect_success_verifies_qemu_teardown_when_requested(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(
+                Path(tempdir),
+                "application",
+                machine_data=[{"cloud_names": ["cloud0_test"]}],
             )
 
             config = {
@@ -504,20 +596,10 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
     def test_detect_success_rejects_remaining_qemu_domain(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            continuum_dir = Path(tempdir) / ".continuum"
-            continuum_dir.mkdir(parents=True)
-            (continuum_dir / "experiment_lock.yaml").write_text(
-                "kind: ContinuumExperimentLock\n",
-                encoding="utf-8",
-            )
-            (continuum_dir / "state.json").write_text(
-                json.dumps(
-                    {
-                        "phase_completed": "application",
-                        "machine_data": [{"cloud_names": ["cloud0_test"]}],
-                    }
-                ),
-                encoding="utf-8",
+            _write_success_artifacts(
+                Path(tempdir),
+                "application",
+                machine_data=[{"cloud_names": ["cloud0_test"]}],
             )
 
             config = {
@@ -581,6 +663,24 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 }
             ),
             "teardown_failure",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "State schema mismatch: expected schema_version 2",
+                }
+            ),
+            "state_schema_mismatch",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "Resume contract mismatch: lock a != state b",
+                }
+            ),
+            "resume_contract_mismatch",
         )
         self.assertIsNone(test_utils.classify_test_failure({"success": True}))
 
