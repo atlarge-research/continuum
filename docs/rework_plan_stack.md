@@ -283,3 +283,21 @@ Closed May 21, 2026:
      metric files,
    - evaluate durable metric retention and optional time-series database support
      without making the current Phase-E CSV/manifest artifacts the final design.
+
+## 14. Deferred Outside Active Closure
+
+The May 21, 2026 closure sweep classifies the remaining inline code-debt notes
+as outside the active PR-23 documentation/runtime rework:
+
+1. QEMU-specific base-IP ownership in `infrastructure/qemu/qemu.py` should be
+   handled as a provider-interface cleanup, not folded into the smoke/docs
+   closure.
+2. Endpoint runtime environment configurability in
+   `resource_manager/endpoint/endpoint.py` should be handled with an explicit
+   benchmark/runtime option design before changing user-facing behavior.
+3. Splitting KubeEdge and Mist in `resource_manager/kubeedge/kubeedge.py`
+   remains a provider/module boundary refactor and requires a separate
+   compatibility plan.
+
+The active rework closure therefore treats these as tracked follow-up debt, not
+unimplemented docs-requested overhaul items.
