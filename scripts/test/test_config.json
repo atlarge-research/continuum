@@ -91,6 +91,18 @@
                         ],
                         "min_rows": 1
                     }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "numeric_columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
                 ]
             },
             "prerequisites": {

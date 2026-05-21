@@ -4,10 +4,12 @@ Provides functions for config discovery, base image management, success detectio
 """
 
 import argparse
+import csv
 import fnmatch
 import getpass
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -472,6 +474,191 @@ def verify_network_validation_results(config: Dict) -> Tuple[bool, str]:
     return True, "network_validation_results=%s" % (results_file,)
 
 
+def _benchmark_metrics_dir(base_path: str) -> str:
+    return os.path.join(base_path, ".continuum", "logs", "benchmark")
+
+
+def _latest_benchmark_metrics_manifest(base_path: str) -> str:
+    metrics_dir = _benchmark_metrics_dir(base_path)
+    if not os.path.isdir(metrics_dir):
+        raise FileNotFoundError("benchmark metrics directory not found: %s" % (metrics_dir,))
+
+    manifests = [
+        os.path.join(metrics_dir, name)
+        for name in os.listdir(metrics_dir)
+        if name.endswith("_metrics_manifest.json")
+    ]
+    if not manifests:
+        raise FileNotFoundError("no benchmark metrics manifest found under %s" % (metrics_dir,))
+    return max(manifests, key=lambda path: (os.path.getmtime(path), path))
+
+
+def _validate_benchmark_metric_rows(rows, table_config):
+    label = table_config["label"]
+    required_columns = table_config["columns"]
+    min_rows = table_config["min_rows"]
+    numeric_columns = table_config.get("numeric_columns", required_columns)
+
+    if len(rows) < min_rows:
+        return False, "Benchmark metric artifact invalid: %s has %s row(s), expected %s" % (
+            label,
+            len(rows),
+            min_rows,
+        )
+
+    for column in numeric_columns:
+        for row_index, row in enumerate(rows[:min_rows], 1):
+            value = row.get(column)
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return False, (
+                    "Benchmark metric artifact invalid: %s row %s column %s is not numeric"
+                    % (label, row_index, column)
+                )
+            if not math.isfinite(number):
+                return False, (
+                    "Benchmark metric artifact invalid: %s row %s column %s is not finite"
+                    % (label, row_index, column)
+                )
+
+    return True, "benchmark_metric_rows_valid"
+
+
+def _extract_run_timestamp(stdout: str) -> Optional[str]:
+    """Extract Continuum's run timestamp from the log-file announcement."""
+    match = re.search(r"(\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2})_[^\s/]*\.log", stdout)
+    if match:
+        return match.group(1)
+    return None
+
+
+def verify_benchmark_metric_artifacts(
+    config: Dict,
+    table_configs: List[Dict],
+    expected_timestamp: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Validate structured benchmark metric artifacts for one application run."""
+    if not isinstance(table_configs, list):
+        return False, "Benchmark metric artifact config invalid: expected list"
+
+    base_path = config.get("infrastructure", {}).get("base_path")
+    if not isinstance(base_path, str) or not base_path.strip():
+        return False, "Benchmark metric artifact missing: infrastructure.base_path is not set"
+
+    try:
+        manifest_path = _latest_benchmark_metrics_manifest(base_path)
+    except FileNotFoundError as exc:
+        return False, "Benchmark metric artifact missing: %s" % (exc,)
+
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as filep:
+            manifest = json.load(filep)
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, "Benchmark metric artifact unreadable: %s" % (exc,)
+
+    if not isinstance(manifest, dict):
+        return False, "Benchmark metric artifact invalid: manifest must be a mapping"
+    if manifest.get("schema_version") != 1:
+        return False, "Benchmark metric artifact invalid: unsupported schema_version %r" % (
+            manifest.get("schema_version"),
+        )
+    if manifest.get("kind") != "ContinuumBenchmarkMetrics":
+        return False, "Benchmark metric artifact invalid: unexpected kind %r" % (
+            manifest.get("kind"),
+        )
+    if expected_timestamp and manifest.get("timestamp") != expected_timestamp:
+        return False, (
+            "Benchmark metric artifact missing: latest manifest timestamp %r does not match "
+            "current run timestamp %r"
+            % (manifest.get("timestamp"), expected_timestamp)
+        )
+
+    tables = manifest.get("tables")
+    if not isinstance(tables, list) or not tables:
+        return False, "Benchmark metric artifact invalid: manifest has no tables"
+
+    tables_by_label = {}
+    for table in tables:
+        if not isinstance(table, dict):
+            return False, "Benchmark metric artifact invalid: table entry must be mapping"
+        label = table.get("label")
+        if isinstance(label, str) and label:
+            tables_by_label[label] = table
+
+    for table_config in table_configs:
+        if not isinstance(table_config, dict):
+            return False, "Benchmark metric artifact config invalid: table entry must be mapping"
+
+        label = table_config.get("label")
+        columns = table_config.get("columns", [])
+        min_rows = table_config.get("min_rows", 1)
+        numeric_columns = table_config.get("numeric_columns", columns)
+        if not isinstance(label, str) or not label:
+            return False, "Benchmark metric artifact config invalid: label"
+        if not isinstance(columns, list) or not all(
+            isinstance(column, str) and column for column in columns
+        ):
+            return False, "Benchmark metric artifact config invalid: columns"
+        if not isinstance(numeric_columns, list) or not all(
+            isinstance(column, str) and column for column in numeric_columns
+        ):
+            return False, "Benchmark metric artifact config invalid: numeric_columns"
+        if not isinstance(min_rows, int) or min_rows < 1:
+            return False, "Benchmark metric artifact config invalid: min_rows"
+
+        table = tables_by_label.get(label)
+        if table is None:
+            return False, "Benchmark metric artifact missing table: %s" % (label,)
+
+        table_columns = table.get("columns")
+        missing_columns = [
+            column for column in columns if not isinstance(table_columns, list) or column not in table_columns
+        ]
+        if missing_columns:
+            return False, "Benchmark metric artifact missing columns for %s: %s" % (
+                label,
+                ", ".join(missing_columns),
+            )
+
+        path = table.get("path")
+        if not isinstance(path, str) or not path:
+            return False, "Benchmark metric artifact invalid: %s path is missing" % (label,)
+        if not os.path.isabs(path):
+            path = os.path.join(os.path.dirname(manifest_path), path)
+        if not os.path.isfile(path):
+            return False, "Benchmark metric artifact missing table file: %s" % (path,)
+
+        try:
+            with open(path, "r", encoding="utf-8", newline="") as filep:
+                reader = csv.DictReader(filep)
+                rows = list(reader)
+                fieldnames = reader.fieldnames or []
+        except OSError as exc:
+            return False, "Benchmark metric artifact unreadable: %s" % (exc,)
+
+        missing_file_columns = [column for column in columns if column not in fieldnames]
+        if missing_file_columns:
+            return False, "Benchmark metric artifact missing columns for %s: %s" % (
+                label,
+                ", ".join(missing_file_columns),
+            )
+
+        row_ok, row_reason = _validate_benchmark_metric_rows(
+            rows,
+            {
+                "label": label,
+                "columns": columns,
+                "min_rows": min_rows,
+                "numeric_columns": numeric_columns,
+            },
+        )
+        if not row_ok:
+            return False, row_reason
+
+    return True, "benchmark_metric_artifacts=%s" % (manifest_path,)
+
+
 def _strip_log_prefix(line: str) -> str:
     """Return a log message line without Continuum's logging prefix when present."""
     if "] " in line:
@@ -585,6 +772,7 @@ def detect_success(
     require_network_validation_results = criteria.get("require_network_validation_results", False)
     required_stdout_markers = criteria.get("required_stdout_markers", [])
     required_stdout_metric_tables = criteria.get("required_stdout_metric_tables", [])
+    required_benchmark_metric_artifacts = criteria.get("required_benchmark_metric_artifacts", [])
     check_logs = criteria.get("check_log_files", False)
 
     reasons = []
@@ -725,6 +913,21 @@ def detect_success(
         if not metric_ok:
             return False, metric_reason
         reasons.append(metric_reason)
+
+    if required_benchmark_metric_artifacts:
+        expected_phase = expected_phase or _expected_phase_completed(config)
+    if required_benchmark_metric_artifacts and expected_phase == "application":
+        expected_artifact_timestamp = config.get("timestamp")
+        if not expected_artifact_timestamp:
+            expected_artifact_timestamp = _extract_run_timestamp(stdout)
+        artifact_ok, artifact_reason = verify_benchmark_metric_artifacts(
+            config,
+            required_benchmark_metric_artifacts,
+            expected_timestamp=expected_artifact_timestamp,
+        )
+        if not artifact_ok:
+            return False, artifact_reason
+        reasons.append(artifact_reason)
 
     # Optional: Check log files or stdout/stderr for explicit failure markers
     if check_logs:
@@ -879,6 +1082,14 @@ def classify_test_failure(result: Dict) -> Optional[str]:
         return "missing_benchmark_metric_evidence"
     if detail.startswith("Benchmark metric evidence config invalid:"):
         return "benchmark_metric_evidence_config"
+    if detail.startswith("Benchmark metric artifact missing:"):
+        return "missing_benchmark_metric_artifact"
+    if detail.startswith("Benchmark metric artifact unreadable:"):
+        return "unreadable_benchmark_metric_artifact"
+    if detail.startswith("Benchmark metric artifact invalid:"):
+        return "invalid_benchmark_metric_artifact"
+    if detail.startswith("Benchmark metric artifact config invalid:"):
+        return "benchmark_metric_artifact_config"
     if detail.startswith("Network validation artifact missing:"):
         return "missing_network_artifact"
     if detail.startswith("Network validation artifact unreadable:"):

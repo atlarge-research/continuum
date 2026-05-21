@@ -94,6 +94,38 @@ def _write_network_results(root: Path, entries=None):
     return results_path
 
 
+def _write_benchmark_metrics(root: Path, latency_value="12.5"):
+    results_dir = root / ".continuum" / "logs" / "benchmark"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    table_path = results_dir / "2026-05-21_15-30-42_classify_01_ENDPOINT_OUTPUT.csv"
+    table_path.write_text(
+        "endpoint_id,latency_avg (ms)\n0,%s\n" % (latency_value,),
+        encoding="utf-8",
+    )
+    manifest_path = results_dir / "2026-05-21_15-30-42_classify_metrics_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "kind": "ContinuumBenchmarkMetrics",
+                "timestamp": "2026-05-21_15:30:42",
+                "stage_id": "classify",
+                "stage_type": "image_classification",
+                "tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "path": str(table_path),
+                        "columns": ["endpoint_id", "latency_avg (ms)"],
+                        "rows": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest_path
+
+
 class E2ETestUtilsYamlTests(unittest.TestCase):
     class _FakeHostIpSocket:
         def __enter__(self):
@@ -406,7 +438,11 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 },
             }
             success, reason = test_utils.detect_success(
-                stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                stdout=(
+                    "Logging has been enabled. Writing to stdout and file "
+                    "/tmp/run/.continuum/logs/2026-05-21_15:30:42_cloud_kubernetes_classify.log\n"
+                    "ssh cloud0@192.168.0.10 -i /tmp/test_key\n"
+                ),
                 stderr="",
                 exit_code=0,
                 config=config,
@@ -423,6 +459,7 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             _write_success_artifacts(Path(tempdir), "application")
 
             config = {
+                "timestamp": "2026-05-21_15:30:42",
                 "infrastructure": {
                     "base_path": tempdir,
                     "infra_only": False,
@@ -594,6 +631,76 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
             self.assertFalse(success)
             self.assertIn("Benchmark metric evidence missing rows for ENDPOINT OUTPUT", reason)
+
+    def test_detect_success_requires_benchmark_metric_artifacts(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(root, "application")
+            manifest_path = _write_benchmark_metrics(root)
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": False,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "required_benchmark_metric_artifacts": [
+                        {
+                            "label": "ENDPOINT OUTPUT",
+                            "columns": ["latency_avg (ms)"],
+                            "numeric_columns": ["latency_avg (ms)"],
+                            "min_rows": 1,
+                        }
+                    ],
+                },
+            )
+
+            self.assertTrue(success)
+            self.assertIn("benchmark_metric_artifacts=%s" % (manifest_path,), reason)
+
+    def test_detect_success_rejects_invalid_benchmark_metric_artifact_value(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(root, "application")
+            _write_benchmark_metrics(root, latency_value="not-a-number")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": False,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "required_benchmark_metric_artifacts": [
+                        {
+                            "label": "ENDPOINT OUTPUT",
+                            "columns": ["latency_avg (ms)"],
+                            "numeric_columns": ["latency_avg (ms)"],
+                            "min_rows": 1,
+                        }
+                    ],
+                },
+            )
+
+            self.assertFalse(success)
+            self.assertIn("Benchmark metric artifact invalid", reason)
 
     def test_detect_success_skips_benchmark_evidence_for_non_application_leg(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -971,6 +1078,24 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 }
             ),
             "missing_benchmark_metric_evidence",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "Benchmark metric artifact missing: no manifest",
+                }
+            ),
+            "missing_benchmark_metric_artifact",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "Benchmark metric artifact invalid: not numeric",
+                }
+            ),
+            "invalid_benchmark_metric_artifact",
         )
         self.assertEqual(
             test_utils.classify_test_failure(
