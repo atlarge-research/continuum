@@ -119,7 +119,8 @@ real machines, IPs, registry state, and optional network emulation.
 1. live machine inventory,
 2. SSH/IP materialized in runtime config,
 3. optional local registry content,
-4. optional network-validation NDJSON results,
+4. optional network-validation NDJSON results under
+   `<base_path>/.continuum/logs/network_validation/`,
 5. schema-v2 state file at `<base_path>/.continuum/state.json` with
    `phase_completed=infrastructure` and matching `resume_contract`.
 
@@ -261,10 +262,13 @@ pass/fail output.
 Minimum assertions per phase:
 
 1. Phase 0: parser succeeds or fails with the expected invariant error.
-2. Phase 1: state file, SSH/IP materialization, and optional network artifacts exist.
+2. Phase 1: state file, SSH/IP materialization, and optional network artifacts
+   exist and pass the structured netperf verifier when network validation is
+   enabled.
 3. Phase 2: centralized software plan executes and state advances to `software`.
-4. Phase 3: benchmark artifacts and metrics are emitted, with runner-visible functional result
-   evidence on the resumed K8s benchmark smoke path.
+4. Phase 3: benchmark artifacts and metrics are emitted, with runner-visible
+   functional markers and metric-table evidence on the resumed K8s benchmark
+   smoke path.
 5. Phase 4: lock/state resume contracts match and teardown artifacts behave consistently.
 
 Use `docs/operational_testing_strategy.md` for the test strategy that sits on

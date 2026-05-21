@@ -532,6 +532,11 @@ Observed host-run attempts:
     `resume_contract` metadata, so compatible retained phases must keep
     topology/software/network intent stable while still allowing phase-local
     target/delete/base-path differences.
+13. Network-validation NDJSON is a base-path runtime artifact under
+    `<base_path>/.continuum/logs/network_validation/`, and the runner validates
+    it as part of the `network_validation` suite success contract.
+14. Benchmark-smoke success detection now checks both lightweight stdout markers
+    and at least one numeric endpoint metric row for the resumed application leg.
 
 ## 5. Next Clean Start Point
 
@@ -551,6 +556,7 @@ Then continue here for application or retained benchmark work:
    - interpreter-local `ansible-playbook` resolution
    - `scripts/test/setup_agent_host.sh install` as the canonical host bootstrap path
    - runtime/test outputs under `base_path/.continuum/...` rather than repo-local `./logs`
+   - network-validation output under `<base_path>/.continuum/logs/network_validation/`
 3. For follow-up prep or runtime slices, prioritize cloud-safe validation first:
    - config/runtime unit tests covering schema validation, config access,
      legacy projection, runtime loading, and example configs

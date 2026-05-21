@@ -170,6 +170,9 @@ Current implementation snapshot (updated May 20, 2026):
 6. The e2e runner validates lock/state schema and matching resume-contract
    hashes, with `state_schema_mismatch` and `resume_contract_mismatch` failure
    buckets for smoke triage.
+7. The e2e runner now also validates structured network-validation NDJSON under
+   `<base_path>/.continuum/logs/network_validation/` and lightweight
+   benchmark-smoke metric-table evidence for the resumed application leg.
 
 ## Phase F: Cleanup and CI Hardening
 

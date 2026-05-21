@@ -25,11 +25,12 @@ Do not use this as the primary success path for tests. It is a debugging path.
 
 Start with artifacts that Continuum already writes:
 
-1. main log under `logs/`
+1. main log under `<base_path>/.continuum/logs/`
 2. resolved lock file under `<base_path>/.continuum/experiment_lock.yaml`
 3. resume state under `<base_path>/.continuum/state.json`
-4. test summary JSON under `logs/test_results/`
-5. network-validation NDJSON under `logs/network_validation/` when netperf is enabled
+4. test summary JSON under `<base_path>/.continuum/test_results/` when the
+   suite is run with a base-path override
+5. network-validation NDJSON under `<base_path>/.continuum/logs/network_validation/` when netperf is enabled
 
 ## 3. SSH Hints In Runtime Logs
 
@@ -148,8 +149,8 @@ Software failure:
 
 Network-validation failure:
 
-1. check `logs/network_validation/netperf_results_*.ndjson`,
-2. run `python3 scripts/test/verify_network_profiles.py --results-file <file>`,
+1. check `<base_path>/.continuum/logs/network_validation/netperf_results_*.ndjson`,
+2. run `python3 scripts/test/verify_network_profiles.py --base-path <base_path>`,
 3. inspect `tc` state inside the involved VMs,
 4. verify that `netserver` is running.
 

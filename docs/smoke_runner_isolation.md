@@ -137,20 +137,20 @@ separate command from the runner wrapper on purpose:
 3. the helper never shells out to the mutable repo setup script, so root does
    not execute arbitrary checkout code.
 
-## 4a. Current Blocker
+## 4a. Current Access Shape
 
 At the repo level, this model is now in place.
 
-The remaining reason a human is still typing host commands is external to the
-repo:
+The intended agent boundary is narrow host-command access, not a broad root
+shell. When the surrounding harness has approved the exact prefixes below, an
+agent can verify/sync the dedicated repo and run the smoke wrapper without a
+human copy/paste step:
 
-1. this coding harness still cannot execute any `sudo` command itself,
-2. that includes both the narrow maintenance helper and the narrow runner
-   wrapper,
-3. so the agent cannot yet use the new safe boundary directly even though the
-   boundary now exists.
+1. `sudo -n /usr/local/bin/continuum-hostctl`
+2. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke`
 
-The next environment-side fix should therefore be:
+If those exact prefixes are not available in a future harness, the
+environment-side fix should still be:
 
 1. allow the harness to execute only:
    - `sudo -n /usr/local/bin/continuum-hostctl`
@@ -272,11 +272,12 @@ For first real host runs:
 
 For the next agent handoff specifically:
 
-1. start with fixing the harness-side allowlisting problem above,
-2. then rerun only `benchmark_k8s_resume_application`,
-3. the benchmark launch playbooks no longer use `kubernetes.core.k8s`; they now
+1. run `sudo -n /usr/local/bin/continuum-hostctl verify` before reruns,
+2. resync/install the wrapper only if `verify` reports drift,
+3. rerun only the narrow scenario affected by the current patch,
+4. the benchmark launch playbooks no longer use `kubernetes.core.k8s`; they now
    use `kubectl apply -f`, so future retained application failures should be
    benchmark/runtime failures rather than remote Python dependency failures,
-4. `infrastructure/ansible.py` now logs the failing stdout/stderr tail on
+5. `infrastructure/ansible.py` now logs the failing stdout/stderr tail on
    nonzero Ansible exits, so the main run should usually be enough to diagnose
    the next issue.

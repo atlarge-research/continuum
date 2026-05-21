@@ -28,7 +28,7 @@ When `provider.config.netperf: true`, `infrastructure.network.benchmark()`:
 - Runs a small set of `netperf` latency and throughput tests.
 - Logs human–readable output to the main Continuum log as before.
 - Additionally writes **NDJSON** entries to:
-  - `logs/network_validation/netperf_results_<timestamp>.ndjson`
+  - `<base_path>/.continuum/logs/network_validation/netperf_results_<timestamp>.ndjson`
 
 Each NDJSON line contains:
 
@@ -55,17 +55,19 @@ Each NDJSON line contains:
    - Provision the minimal VMs described above.
    - Apply TC (and Mahimahi, where configured).
    - Execute the netperf micro–benchmarks.
-   - Save both the normal Continuum log and the NDJSON netperf results.
+   - Save both the normal Continuum log and the NDJSON netperf results under
+     the selected `base_path`.
 
 2. After the suite completes, run the profile validator:
 
    ```bash
-   python3 scripts/test/verify_network_profiles.py
+   python3 scripts/test/verify_network_profiles.py --base-path /mnt/sdc/matthijs
    ```
 
    This script:
 
-   - Finds the latest `logs/network_validation/netperf_results_*.ndjson`.
+   - Finds the latest
+     `<base_path>/.continuum/logs/network_validation/netperf_results_*.ndjson`.
    - Groups entries by scenario (e.g. `cloud->endpoint`).
    - Compares observed latency and throughput against the expected profile values
      carried in the structured result records.
@@ -79,7 +81,7 @@ Each NDJSON line contains:
 
    ```bash
    python3 scripts/test/verify_network_profiles.py \
-     --results-file logs/network_validation/netperf_results_YYYY-MM-DD_HH:MM:SS.ndjson
+     --results-file /mnt/sdc/matthijs/.continuum/logs/network_validation/netperf_results_YYYY-MM-DD_HHMMSS.ndjson
    ```
 
 ### What this validates

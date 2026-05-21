@@ -228,6 +228,14 @@ Before merge:
 92. Lock writing now happens during bootstrap before infrastructure or resume execution, and `state.json` is schema v2 with `kind: ContinuumState`, timestamp, atomic writes, machine data, phase, and persisted resume-contract hash/details.
 93. Resume-state loading rejects legacy state, malformed machine data, invalid phase values, incompatible topology/software, and stale resume-contract hashes before resumed software/application work starts.
 94. E2E runner success detection now validates lock/state schema and matching resume-contract hashes, adding `state_schema_mismatch` and `resume_contract_mismatch` failure buckets while preserving teardown verification.
+95. Network-validation artifacts now follow the base-path runtime artifact
+    contract: structured netperf NDJSON is written under
+    `<base_path>/.continuum/logs/network_validation/`, and the
+    `network_validation` suite validates those results against expected
+    latency/throughput profile tolerances.
+96. Benchmark-smoke application-leg success detection now requires both
+    functional stdout markers and lightweight metric-table evidence, including
+    at least one numeric endpoint metric row.
 
 ## 12. End-of-Rework Test Closure Commitments
 

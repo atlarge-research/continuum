@@ -138,13 +138,16 @@ The active suites are declared in `scripts/test/test_config.json`.
 
 - **Smoke Tests**: Dedicated lightweight YAML scenarios in `configs/experiments/smoke/`.
 - **Full Regression**: All YAML experiments in `configs/experiments/` with periodic base image rebuilds.
-- **Network Validation**: Only `configs/experiments/network_validation/` scenarios for TC/netperf profile validation.
+- **Network Validation**: Only `configs/experiments/network_validation/`
+  scenarios for TC/netperf profile validation, including structured NDJSON
+  result checks.
 
 The runner now performs suite preflight checks from `scripts/test/test_config.json`
 before discovery/execution starts.
 
 - **Smoke** requires host `virsh` and `ssh`.
-- **Network Validation** requires host `virsh`, `ssh`, and `tc`.
+- **Network Validation** requires host `virsh`, `ssh`, and `tc`, and validates
+  netperf results under `<base_path>/.continuum/logs/network_validation/`.
 - **Full** currently has no additional suite-level preflight.
 
 The new CLI helpers are intended to make those expectations inspectable before
