@@ -192,7 +192,8 @@ Current closure status:
 3. `image_classification` image mapping is now stack-aware (`openfaas` serverless pair vs container trio).
 4. Runtime/bootstrap fail-fast branches for registry endpoint selection and migration are test-covered.
 5. Earlier focused regression baseline was green:
-   - `python3 -m unittest scripts.test.test_yaml_io scripts.test.test_profile_composition scripts.test.test_experiment_lock_writer scripts.test.test_domain_validation scripts.test.test_schema_validation scripts.test.test_selector_resolution scripts.test.test_module_contract_validation scripts.test.test_benchmark_stage_contract scripts.test.test_legacy_projection scripts.test.test_yaml_parser scripts.test.test_continuum_runtime scripts.test.test_config_access scripts.test.test_module_registry scripts.test.test_resource_manager_plans scripts.test.test_e2e_test_utils`
+   - `python3 -m unittest discover scripts/test/unit`
+   - `python3 -m unittest discover scripts/test/e2e`
 6. PR-4 prep progressed: core then-gated runtime surfaces (`application/application.py`, `resource_manager/kubernetes/kubernetes.py`, `resource_manager/endpoint/endpoint.py`) now consume `domains.benchmark.pipeline` via generic `config_access.benchmark_param*` helpers instead of removed `workload_*` and legacy benchmark sizing helpers.
 7. Runtime fallback aliasing in endpoint env generation is removed (`duration_s` -> `duration`); runtime access is now direct canonical-key lookup and no longer patches missing config with fallback defaults.
 8. Orchestrator comparison helper `config_access.orchestrator_is(...)` is removed; callsites now use direct comparisons on `config_access.orchestrator_name(config)` to keep the accessor interface minimal.
@@ -210,13 +211,13 @@ Current closure status:
 20. Image requirement tier-target derivation now requires canonical `resolved_vm_ids` metadata and matching normalized resource records; missing/invalid VM mappings fail fast instead of applying fallback selector heuristics.
 21. Lockfile re-validation now enforces derived selector-metadata integrity (`selector`, `selector_id`, `resolved_vm_ids`, `scope_identities`) by requiring field presence and equality with recomputed selector resolution outputs.
 22. Lockfile writing now applies the same fail-fast invariant policy for YAML runs: canonical `normalized` and `infrastructure.base_path` are required, and malformed `normalized.sources` is rejected.
-23. Parser decomposition-first cleanup has begun: legacy runtime projection logic was extracted from `input/configuration/yaml_parser.py` into `input/configuration/legacy_projection.py`, and regression coverage now includes focused helper tests (`scripts/test/test_legacy_projection.py`).
-24. Benchmark stage config-contract validation is now decomposed into `input/configuration/benchmark_stage_contract.py` with focused unit coverage (`scripts/test/test_benchmark_stage_contract.py`), preserving parser fail-fast diagnostics while reducing monolithic parser logic.
-25. Shared module capability/exclusive/conflict contract evaluation is now decomposed into `input/configuration/module_contract_validation.py` and reused by both parser and runtime, with focused unit coverage (`scripts/test/test_module_contract_validation.py`) to keep behavior aligned across both surfaces.
-26. Selector-resolution decomposition is expanded in `input/configuration/selector_resolution.py`: it now covers `assign_to.match` normalization/canonical selector-id derivation, derived metadata reconciliation (`resolved_vm_ids`, `scope_identities`), and selector-derived field validation/formatting helpers, with focused unit coverage (`scripts/test/test_selector_resolution.py`), reducing duplication across parser selector passes.
-27. Run/infrastructure/provider schema validation is partially decomposed into dedicated modules (`run_schema_validation`, `infrastructure_schema_validation`, `provider_schema_validation`) with focused unit coverage in `scripts/test/test_schema_validation.py`.
+23. Parser decomposition-first cleanup has begun: legacy runtime projection logic was extracted from `input/configuration/yaml_parser.py` into `input/configuration/legacy_projection.py`, and regression coverage now includes focused helper tests (`scripts/test/unit/test_legacy_projection.py`).
+24. Benchmark stage config-contract validation is now decomposed into `input/configuration/benchmark_stage_contract.py` with focused unit coverage (`scripts/test/unit/test_benchmark_stage_contract.py`), preserving parser fail-fast diagnostics while reducing monolithic parser logic.
+25. Shared module capability/exclusive/conflict contract evaluation is now decomposed into `input/configuration/module_contract_validation.py` and reused by both parser and runtime, with focused unit coverage (`scripts/test/unit/test_module_contract_validation.py`) to keep behavior aligned across both surfaces.
+26. Selector-resolution decomposition is expanded in `input/configuration/selector_resolution.py`: it now covers `assign_to.match` normalization/canonical selector-id derivation, derived metadata reconciliation (`resolved_vm_ids`, `scope_identities`), and selector-derived field validation/formatting helpers, with focused unit coverage (`scripts/test/unit/test_selector_resolution.py`), reducing duplication across parser selector passes.
+27. Run/infrastructure/provider schema validation is partially decomposed into dedicated modules (`run_schema_validation`, `infrastructure_schema_validation`, `provider_schema_validation`) with focused unit coverage in `scripts/test/unit/test_schema_validation.py`.
 28. Parser orchestration decomposition progressed further: software/benchmark/selector-resolution validation logic moved from `input/configuration/yaml_parser.py` to dedicated modules (`software_domain_validation`, `benchmark_domain_validation`, `selector_assignment_validation`), shared validation primitives moved to `input/configuration/validation_utils.py`, and parser behavior remained regression-stable.
-29. Focused parser decomposition coverage now includes `scripts/test/test_domain_validation.py` for phase-domain benchmark gating and module-type schema-contract failure paths.
+29. Focused parser decomposition coverage now includes `scripts/test/unit/test_domain_validation.py` for phase-domain benchmark gating and module-type schema-contract failure paths.
 30. Domain-validation internals are further decomposed by concern into `software_domain_validation`, `benchmark_domain_validation`, and `selector_assignment_validation`, and parser/tests now consume those modules directly.
 31. Runtime configuration wiring is now decomposed into focused modules (`runtime_phase_targets`, `runtime_module_loader`, `runtime_option_validation`) and active callsites now import these directly (no compatibility facade layer); existing runtime regression suite remains green.
 32. Documentation-closure is explicitly locked as an end-of-rework gate in `docs/rework_plan_stack.md` (schema docs, migration notes, architecture docs, synchronized examples, and final doc-audit pass).
@@ -247,7 +248,7 @@ Current closure status:
 57. Lock parsing now validates persisted `planner_snapshot` against a recomputed deterministic planner snapshot when present, catching tampered software-plan or benchmark-assignment handoff metadata before runtime use.
 58. Planner snapshot assignment records now include resolved resource handoff metadata (`resolved_resources` with `vm_id`, `cluster_id`, `tier`, `index_in_cluster`, and tags) for software modules and benchmark stages, with fail-fast validation against `normalized.infrastructure.resources`.
 59. Earlier handoff validation baseline was green:
-   - `python3 -m py_compile input/configuration/module_contract_validation.py input/configuration/software_domain_validation.py input/configuration/selector_assignment_validation.py input/configuration/runtime_option_validation.py resource_manager/plans.py scripts/test/test_module_contract_validation.py scripts/test/test_resource_manager_plans.py scripts/test/test_continuum_runtime.py scripts/test/test_yaml_parser.py`
+   - `python3 -m py_compile input/configuration/module_contract_validation.py input/configuration/software_domain_validation.py input/configuration/selector_assignment_validation.py input/configuration/runtime_option_validation.py resource_manager/plans.py scripts/test/unit/test_module_contract_validation.py scripts/test/unit/test_resource_manager_plans.py scripts/test/unit/test_continuum_runtime.py scripts/test/unit/test_yaml_parser.py`
    - `python3 -m unittest discover scripts/test` (`217 tests OK`)
    - `env PYTHONPATH=. pytest -q scripts/test` (`217 passed`)
 60. Benchmark handoff helper wiring now exposes planner-stage assignments and resolved resources through `config_access`, and the former gated Kubernetes helper paths pass planner-derived stage handoff metadata forward without inferring application role topology from a single selector.
@@ -271,16 +272,16 @@ Current closure status:
 78. Resource-manager module and endpoint helper `start()` hooks now delegate to the centralized `resource_manager.start()` entrypoint, so direct module calls no longer bypass planner owner metadata, endpoint-runtime placement gating, or post-phase hook mediation.
 79. PR-4 is complete for the Phase-C runtime/planner integration slice: software execution is planner-mediated, endpoint-runtime install/base-image gating uses planner placement, benchmark/software handoff bundles are available for Phase-D preparation, and legacy benchmark/workload helper paths are removed from active runtime code. Phase D has since removed the explicit `run.targets: application` runtime gate.
 80. Earlier PR-4 baseline validation was green:
-   - `python3 -m py_compile scripts/test/test_example_configs.py`
-   - `env PYTHONPATH=. python3 -m unittest scripts.test.test_example_configs scripts.test.test_yaml_parser` (`37 tests OK`)
-   - `python3 -m py_compile scripts/test/test_utils.py scripts/test/test_e2e_test_utils.py scripts/test/run_tests.py scripts/test/test_run_tests.py`
-   - `env PYTHONPATH=. python3 -m unittest scripts.test.test_run_tests scripts.test.test_e2e_test_utils` (`16 tests OK`)
-   - `python3 -m py_compile continuum.py scripts/test/test_continuum_runtime.py scripts/test/verify_network_profiles.py infrastructure/network.py`
-   - `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime scripts.test.test_verify_network_profiles` (`68 tests OK`)
+   - `python3 -m py_compile scripts/test/e2e/test_example_configs.py`
+   - `env PYTHONPATH=. python3 -m unittest scripts.test.e2e.test_example_configs scripts.test.unit.test_yaml_parser` (`37 tests OK`)
+   - `python3 -m py_compile scripts/test/support/e2e_utils.py scripts/test/e2e/test_e2e_test_utils.py scripts/test/run_tests.py scripts/test/e2e/test_run_tests.py`
+   - `env PYTHONPATH=. python3 -m unittest scripts.test.e2e.test_run_tests scripts.test.e2e.test_e2e_test_utils` (`16 tests OK`)
+   - `python3 -m py_compile continuum.py scripts/test/unit/test_continuum_runtime.py scripts/test/verify_network_profiles.py infrastructure/network.py`
+   - `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime scripts.test.e2e.test_verify_network_profiles` (`68 tests OK`)
    - `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`253 tests OK`)
    - `env PYTHONPATH=. pytest -q scripts/test` (`253 passed`)
 81. PR-5 user-facing documentation is now published in `docs/configuration_reference.md` and `docs/migration_notes.md`, with `docs/cheatsheet.md`, `README.md`, and `configuration/README.md` updated to point operators at the canonical YAML and migration references instead of legacy runtime entrypoints.
-82. PR-5 regression coverage now validates shipped experiment examples plus shipped environment/software profiles directly from the repository tree via `scripts/test/test_example_configs.py`, keeping examples, templates, and profile fixtures synchronized with parser validators.
+82. PR-5 regression coverage now validates shipped experiment examples plus shipped environment/software profiles directly from the repository tree via `scripts/test/e2e/test_example_configs.py`, keeping examples, templates, and profile fixtures synchronized with parser validators.
 83. PR-5 example/doc cleanup also fixed the YAML boolean pitfall around `run.image_prefetch` by quoting `"off"`/`"on"` in shipped experiment examples and user-facing docs.
 84. PR-5 e2e-runner cleanup now validates `scripts/test/run_tests.py --suite <name>` against suite names declared in `scripts/test/test_config.json` rather than a hard-coded CLI list, restoring config-declared suites such as `network_validation`.
 85. PR-5 test metadata/docs are now YAML-aligned end-to-end: `scripts/test/test_config.json` scopes `network_validation` to `configs/experiments/network_validation/`, `scripts/test/test_manifest.json.example` uses YAML include patterns, and the `configuration/tests/` and `configuration/network_validation/` READMEs no longer point new users at removed `.cfg` runtime entrypoints.
@@ -296,8 +297,8 @@ Current closure status:
 95. The host-backed smoke closure surfaced and fixed real runtime issues across the QEMU path, including parser-backed override success detection, deterministic bounded guest login names, controller-side repo asset paths after the Phase-C handoff move, flannel manifest sourcing, and YAML-era network-emulation compatibility in `infrastructure/network.py`.
 96. QEMU base-image cache reuse is now integrity-gated: a base image is reused only when companion success metadata exists and matches the expected guest-user contract, so interrupted `.continuum` image builds are invalidated and rebuilt instead of being silently trusted on the next run.
 97. Latest validation is green:
-   - `python3 -m py_compile infrastructure/network.py scripts/test/test_network.py`
-   - `env PYTHONPATH=. python3 -m unittest scripts.test.test_network scripts.test.test_verify_network_profiles` (`6 tests OK`)
+   - `python3 -m py_compile infrastructure/network.py scripts/test/unit/test_network.py`
+   - `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_network scripts.test.e2e.test_verify_network_profiles` (`6 tests OK`)
    - `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`273 tests OK`)
    - `env PYTHONPATH=. pytest -q scripts/test` (`273 passed`)
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke infra_one_vm` (`passed`)

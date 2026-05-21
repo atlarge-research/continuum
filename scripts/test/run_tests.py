@@ -18,10 +18,11 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(script_dir))
 sys.path.insert(0, project_root)
 
-# Import test_utils from scripts.test
+# Import e2e utilities from scripts.test.support.  The runner itself stays at
+# scripts/test/run_tests.py as the stable operator entrypoint.
 import importlib.util
 
-test_utils_path = os.path.join(os.path.dirname(__file__), "test_utils.py")
+test_utils_path = os.path.join(os.path.dirname(__file__), "support", "e2e_utils.py")
 spec = importlib.util.spec_from_file_location("test_utils", test_utils_path)
 test_utils = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(test_utils)

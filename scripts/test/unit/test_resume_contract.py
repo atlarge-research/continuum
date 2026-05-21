@@ -34,7 +34,7 @@ class ResumeContractTests(unittest.TestCase):
         self._socket_patcher.stop()
 
     def _repo_root(self):
-        return Path(__file__).resolve().parents[2]
+        return Path(__file__).resolve().parents[3]
 
     def _parse_config(self, relative_path):
         parser = argparse.ArgumentParser(prog="resume-contract-test")

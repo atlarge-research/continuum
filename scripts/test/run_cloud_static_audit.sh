@@ -103,18 +103,30 @@ compile_files=(
     application/runtime_helpers.py
     scripts/test/run_tests.py
     scripts/test/check_docs_paths.py
+    scripts/test/verify_network_profiles.py
+    scripts/test/support/*.py
+    scripts/test/unit/*.py
+    scripts/test/e2e/*.py
 )
 
 run_capture compile "compile sweep" required \
     "$PYTHON" -m py_compile "${compile_files[@]}"
-run_capture unittest "unittest discovery" required \
+run_capture unit_unittest "unit unittest discovery" required \
+    env PYTHONPATH=. "$PYTHON" -m unittest discover scripts/test/unit
+run_capture e2e_unittest "e2e unittest discovery" required \
+    env PYTHONPATH=. "$PYTHON" -m unittest discover scripts/test/e2e
+run_capture unittest "combined unittest discovery" required \
     env PYTHONPATH=. "$PYTHON" -m unittest discover scripts/test
 run_capture docs "docs path reference check" required \
     "$PYTHON" scripts/test/check_docs_paths.py
 run_capture suites "configured suite catalog" required \
     "$PYTHON" scripts/test/run_tests.py --list-suites
 
-run_capture pytest "pytest suite" optional \
+run_capture unit_pytest "unit pytest suite" optional \
+    env PYTHONPATH=. pytest -q scripts/test/unit
+run_capture e2e_pytest "e2e pytest suite" optional \
+    env PYTHONPATH=. pytest -q scripts/test/e2e
+run_capture pytest "combined pytest suite" optional \
     env PYTHONPATH=. pytest -q scripts/test
 run_capture todo "TODO/FIXME debt scan" optional \
     rg -n "TODO|FIXME|TBD|XXX" \

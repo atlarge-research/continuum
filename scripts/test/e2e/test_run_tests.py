@@ -9,7 +9,7 @@ from unittest import mock
 
 
 def _load_run_tests_module():
-    module_path = Path(__file__).with_name("run_tests.py")
+    module_path = Path(__file__).resolve().parents[1] / "run_tests.py"
     spec = importlib.util.spec_from_file_location("continuum_run_tests", module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -21,7 +21,9 @@ run_tests_module = _load_run_tests_module()
 
 class RunTestsCliTests(unittest.TestCase):
     def setUp(self):
-        self.test_config_path = str(Path(__file__).with_name("test_config.json").resolve())
+        self.test_config_path = str(
+            (Path(__file__).resolve().parents[1] / "test_config.json").resolve()
+        )
 
     def test_main_accepts_dynamic_suite_from_loaded_config(self):
         fake_test_config = {

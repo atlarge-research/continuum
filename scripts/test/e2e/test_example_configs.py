@@ -34,7 +34,7 @@ class ExampleConfigTests(unittest.TestCase):
         self._socket_patcher.stop()
 
     def _repo_root(self):
-        return Path(__file__).resolve().parents[2]
+        return Path(__file__).resolve().parents[3]
 
     def test_shipped_experiment_examples_parse(self):
         root = self._repo_root()

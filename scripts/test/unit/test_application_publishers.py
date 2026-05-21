@@ -45,7 +45,7 @@ class PublisherCompletionLoopTests(unittest.TestCase):
         self.assertEqual(exact_waits, [])
 
     def test_image_classification_publisher_accepts_extra_responses(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         source_path = (
             repo_root
             / "application/image_classification/src/publisher/src/publisher.py"
@@ -54,7 +54,7 @@ class PublisherCompletionLoopTests(unittest.TestCase):
         self.assert_waits_until_at_least_target(source_path, "RECEIVED", "MAX_IMGS")
 
     def test_text_translation_publisher_accepts_extra_responses(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         source_path = repo_root / "application/text_translation/src/publisher/src/publisher.py"
 
         self.assert_waits_until_at_least_target(source_path, "RECEIVED", "MAX_TXTS")

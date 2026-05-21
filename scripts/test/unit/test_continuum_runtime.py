@@ -3336,7 +3336,7 @@ class InfrastructureWorkspacePermissionTests(unittest.TestCase):
 
 
 class MahimahiRoleTests(unittest.TestCase):
-    repo_root = pathlib.Path(__file__).resolve().parents[2]
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
 
     def test_role_defaults_use_runtime_cache(self):
         defaults = (

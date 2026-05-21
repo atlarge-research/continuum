@@ -30,7 +30,7 @@ def _load_verify_network_profiles():
     """Load the structured network-profile verifier from this test directory."""
     global _VERIFY_NETWORK_PROFILES
     if _VERIFY_NETWORK_PROFILES is None:
-        module_path = Path(__file__).with_name("verify_network_profiles.py")
+        module_path = Path(__file__).resolve().parents[1] / "verify_network_profiles.py"
         spec = importlib.util.spec_from_file_location(
             "continuum_verify_network_profiles_runtime",
             module_path,
@@ -239,7 +239,7 @@ def parse_yaml_config_simple(config_path: str) -> Dict:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 
 def _load_yaml(path: Path) -> Dict:

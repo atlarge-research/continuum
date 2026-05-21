@@ -111,10 +111,10 @@ Start with these surfaces for module-registry and dependency-validator work:
 7. `resource_manager/plans.py`
 8. `resource_manager/resource_manager.py`
 9. `resource_manager/orchestrator_options.py`
-10. `scripts/test/test_yaml_parser.py`
-11. `scripts/test/test_config_access.py`
-12. `scripts/test/test_continuum_runtime.py`
-13. `scripts/test/test_module_registry.py`
+10. `scripts/test/unit/test_yaml_parser.py`
+11. `scripts/test/unit/test_config_access.py`
+12. `scripts/test/unit/test_continuum_runtime.py`
+13. `scripts/test/unit/test_module_registry.py`
 
 ## 8. Planning Closure Status
 
@@ -146,7 +146,7 @@ Start with these surfaces for module-registry and dependency-validator work:
 26. Resource-manager module and endpoint helper `start()` hooks now delegate to the centralized `resource_manager.start()` entrypoint, closing the remaining direct-start software execution and endpoint-install bypasses.
 27. Historical PR-4 handoff point: next work at that time was PR-5 examples/smokes/documentation closure while the Phase-D application execution gate was still closed; PR-5 and Phase D have both since landed.
 28. PR-5 now publishes `docs/configuration_reference.md` and `docs/migration_notes.md` as the user-facing YAML-schema and hard-cut migration references, and `docs/cheatsheet.md`, `README.md`, and `configuration/README.md` now point readers at those YAML docs instead of legacy runtime entrypoints.
-29. PR-5 regression coverage now validates shipped experiment examples plus shipped environment/software profiles directly from disk via `scripts/test/test_example_configs.py`, and the shipped/doc examples now quote `run.image_prefetch` values to avoid YAML boolean coercion.
+29. PR-5 regression coverage now validates shipped experiment examples plus shipped environment/software profiles directly from disk via `scripts/test/e2e/test_example_configs.py`, and the shipped/doc examples now quote `run.image_prefetch` values to avoid YAML boolean coercion.
 30. PR-5 e2e-runner cleanup now validates `--suite` names against `scripts/test/test_config.json` instead of a hard-coded CLI list, and the `network_validation` suite is correctly scoped to `configs/experiments/network_validation/` with YAML-only runner docs/manifests refreshed.
 31. PR-5 now documents the runtime phase model and operational test strategy in `docs/runtime_execution_pipeline.md` and `docs/operational_testing_strategy.md`, explicitly separating bootstrap/planning and artifact/resume validation from the user-visible infrastructure/software/application targets.
 32. PR-5 now defines dedicated lightweight smoke configs under `configs/experiments/smoke/` for infrastructure-only, infrastructure-plus-software, and network/netperf validation, and the smoke suite points there instead of sweeping all experiments.
@@ -192,11 +192,11 @@ If resuming after May 20, 2026:
    - benchmark-smoke success detection validates lightweight metric-table
      evidence in addition to stdout markers.
 7. Latest validation baseline is green:
-   - `python3 -m py_compile infrastructure/qemu/qemu.py infrastructure/ansible.py input/configuration/runtime_module_loader.py application/runtime_helpers.py application/image_classification/image_classification.py application/text_translation/text_translation.py scripts/test/test_application_runtime_helpers.py scripts/test/test_continuum_runtime.py`
-   - `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_continuum_runtime` (`102 tests OK`)
-   - `env PYTHONPATH=. pytest -q scripts/test/test_application_runtime_helpers.py scripts/test/test_continuum_runtime.py` (`102 passed`)
-   - `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime` (`94 tests OK`)
-   - `env PYTHONPATH=. pytest -q scripts/test/test_continuum_runtime.py` (`94 passed`)
+   - `python3 -m py_compile infrastructure/qemu/qemu.py infrastructure/ansible.py input/configuration/runtime_module_loader.py application/runtime_helpers.py application/image_classification/image_classification.py application/text_translation/text_translation.py scripts/test/unit/test_application_runtime_helpers.py scripts/test/unit/test_continuum_runtime.py`
+   - `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_application_runtime_helpers scripts.test.unit.test_continuum_runtime` (`102 tests OK`)
+   - `env PYTHONPATH=. pytest -q scripts/test/unit/test_application_runtime_helpers.py scripts/test/unit/test_continuum_runtime.py` (`102 passed`)
+   - `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime` (`94 tests OK`)
+   - `env PYTHONPATH=. pytest -q scripts/test/unit/test_continuum_runtime.py` (`94 passed`)
    - `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`307 tests OK`)
    - `env PYTHONPATH=. pytest -q scripts/test` (`307 passed`)
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke infra_one_vm` (`passed`)
@@ -204,9 +204,10 @@ If resuming after May 20, 2026:
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_netperf_two_vm` (`passed`)
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume` (`passed` in the Phase-D closure baseline; rerun after Phase-E state changes when host access is available)
 8. Use this quick validation set before handing off again:
-   - `python3 -m py_compile input/configuration/config_access.py resource_manager/kubernetes/kubernetes.py resource_manager/plans.py continuum.py infrastructure/network.py scripts/test/test_config_access.py scripts/test/test_kubernetes_runtime.py scripts/test/test_resource_manager_plans.py scripts/test/test_experiment_lock_writer.py scripts/test/test_example_configs.py scripts/test/run_tests.py scripts/test/test_run_tests.py scripts/test/test_continuum_runtime.py scripts/test/test_network.py scripts/test/verify_network_profiles.py scripts/test/test_verify_network_profiles.py`
+   - `python3 -m py_compile input/configuration/config_access.py resource_manager/kubernetes/kubernetes.py resource_manager/plans.py continuum.py infrastructure/network.py scripts/test/unit/test_config_access.py scripts/test/unit/test_resource_manager_plans.py scripts/test/unit/test_experiment_lock_writer.py scripts/test/e2e/test_example_configs.py scripts/test/run_tests.py scripts/test/e2e/test_run_tests.py scripts/test/unit/test_continuum_runtime.py scripts/test/unit/test_network.py scripts/test/verify_network_profiles.py scripts/test/e2e/test_verify_network_profiles.py`
    - `env PYTHONPATH=. pytest -q scripts/test`
-   - `PYTHONPATH=. python3 -m unittest scripts.test.test_yaml_io scripts.test.test_profile_composition scripts.test.test_experiment_lock_writer scripts.test.test_domain_validation scripts.test.test_schema_validation scripts.test.test_selector_resolution scripts.test.test_module_contract_validation scripts.test.test_benchmark_stage_contract scripts.test.test_legacy_projection scripts.test.test_yaml_parser scripts.test.test_example_configs scripts.test.test_run_tests scripts.test.test_continuum_runtime scripts.test.test_config_access scripts.test.test_kubernetes_runtime scripts.test.test_module_registry scripts.test.test_resource_manager_plans scripts.test.test_e2e_test_utils scripts.test.test_network scripts.test.test_verify_network_profiles`
+   - `PYTHONPATH=. python3 -m unittest discover scripts/test/unit`
+   - `PYTHONPATH=. python3 -m unittest discover scripts/test/e2e`
 9. Focused validation from the Phase-D prep slice is also green:
-   - `python3 -m py_compile input/configuration/runtime_module_loader.py input/configuration/runtime_option_validation.py scripts/test/test_continuum_runtime.py application/runtime_helpers.py resource_manager/kubernetes/kubernetes.py scripts/test/test_application_runtime_helpers.py`
-   - `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_kubernetes_runtime scripts.test.test_continuum_runtime` (`84 tests OK`)
+   - `python3 -m py_compile input/configuration/runtime_module_loader.py input/configuration/runtime_option_validation.py scripts/test/unit/test_continuum_runtime.py application/runtime_helpers.py resource_manager/kubernetes/kubernetes.py scripts/test/unit/test_application_runtime_helpers.py`
+   - `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_application_runtime_helpers scripts.test.unit.test_continuum_runtime` (`84 tests OK`)

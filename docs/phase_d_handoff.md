@@ -51,7 +51,7 @@ Read after:
    - `input/configuration/runtime_phase_targets.py` now resolves `run.targets: application` normally.
    - `continuum.py` can reach the application phase and persist `phase_completed=application` again.
 2. Direct runtime coverage now exists for application-phase control flow.
-   - `scripts/test/test_continuum_runtime.py` covers application-only resume from `phase_completed=software`.
+   - `scripts/test/unit/test_continuum_runtime.py` covers application-only resume from `phase_completed=software`.
    - It also covers resumed `software + application` execution from `phase_completed=infrastructure`.
 3. Earlier Phase-D prep remains active and should be treated as already landed.
    - `application/runtime_helpers.py` owns extracted Kubernetes launch timing, worker-output collection, plus Mist/Baremetal worker runtime helpers.
@@ -143,8 +143,8 @@ Read after:
 ## 2. Files Touched In This Session
 
 1. `input/configuration/runtime_phase_targets.py`
-2. `scripts/test/test_continuum_runtime.py`
-3. `scripts/test/test_e2e_test_utils.py`
+2. `scripts/test/unit/test_continuum_runtime.py`
+3. `scripts/test/e2e/test_e2e_test_utils.py`
 4. `scripts/test/test_config.json`
 5. `scripts/test/run_smoke_host.sh`
 6. `scripts/test/setup_agent_host.sh`
@@ -178,9 +178,9 @@ Read after:
 34. `application/runtime_helpers.py`
 35. `application/image_classification/image_classification.py`
 36. `application/text_translation/text_translation.py`
-37. `scripts/test/test_application_runtime_helpers.py`
-38. `scripts/test/test_config_access.py`
-39. `scripts/test/test_yaml_parser.py`
+37. `scripts/test/unit/test_application_runtime_helpers.py`
+38. `scripts/test/unit/test_config_access.py`
+39. `scripts/test/unit/test_yaml_parser.py`
 40. `playbooks/debug/run_command.yml`
 41. `roles/resource_manager/docker_setup/tasks/main.yml`
 42. `roles/resource_manager/docker_setup/defaults/main.yml`
@@ -189,14 +189,14 @@ Read after:
 45. `playbooks/resource_manager/endpoint_install.yml`
 46. `application/image_classification/launch_benchmark_kubernetes.yml`
 47. `application/text_translation/launch_benchmark_kubernetes.yml`
-48. `scripts/test/test_role_contracts.py`
-49. `scripts/test/test_host_runner_scripts.py`
+48. `scripts/test/unit/test_role_contracts.py`
+49. `scripts/test/e2e/test_host_runner_scripts.py`
 
 ## 3. Validation Run
 
 Latest Phase-D consolidation validation (May 20, 2026):
 
-1. `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_role_contracts scripts.test.test_continuum_runtime scripts.test.test_e2e_test_utils scripts.test.test_run_tests`
+1. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_application_runtime_helpers scripts.test.unit.test_role_contracts scripts.test.unit.test_continuum_runtime scripts.test.e2e.test_e2e_test_utils scripts.test.e2e.test_run_tests`
    - `183 tests OK`
 2. `env PYTHONPATH=. python3 -m unittest discover scripts/test`
    - `387 tests OK`
@@ -215,55 +215,55 @@ Latest Phase-D consolidation validation (May 20, 2026):
 
 Passed:
 
-1. `python3 -m py_compile input/configuration/runtime_phase_targets.py scripts/test/test_continuum_runtime.py`
-2. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime scripts.test.test_application_runtime_helpers scripts.test.test_kubernetes_runtime`
-3. `python3 -m py_compile infrastructure/infrastructure.py infrastructure/ansible.py infrastructure/qemu/generate.py infrastructure/qemu/qemu.py infrastructure/aws/generate.py infrastructure/aws/aws.py infrastructure/gcp/generate.py infrastructure/gcp/gcp.py scripts/test/test_continuum_runtime.py scripts/test/test_e2e_test_utils.py scripts/test/run_tests.py`
-4. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime scripts.test.test_example_configs scripts.test.test_e2e_test_utils scripts.test.test_run_tests`
-5. `env PYTHONPATH=. pytest -q scripts/test/test_continuum_runtime.py scripts/test/test_example_configs.py scripts/test/test_e2e_test_utils.py scripts/test/test_run_tests.py`
+1. `python3 -m py_compile input/configuration/runtime_phase_targets.py scripts/test/unit/test_continuum_runtime.py`
+2. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime scripts.test.unit.test_application_runtime_helpers`
+3. `python3 -m py_compile infrastructure/infrastructure.py infrastructure/ansible.py infrastructure/qemu/generate.py infrastructure/qemu/qemu.py infrastructure/aws/generate.py infrastructure/aws/aws.py infrastructure/gcp/generate.py infrastructure/gcp/gcp.py scripts/test/unit/test_continuum_runtime.py scripts/test/e2e/test_e2e_test_utils.py scripts/test/run_tests.py`
+4. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime scripts.test.e2e.test_example_configs scripts.test.e2e.test_e2e_test_utils scripts.test.e2e.test_run_tests`
+5. `env PYTHONPATH=. pytest -q scripts/test/unit/test_continuum_runtime.py scripts/test/e2e/test_example_configs.py scripts/test/e2e/test_e2e_test_utils.py scripts/test/e2e/test_run_tests.py`
 6. `env PYTHONPATH=. python3 scripts/test/run_tests.py --suite benchmark_smoke --check-prereqs`
 7. `env HOME=/home/continuum-smoke sh scripts/test/run_smoke_host.sh list-suites`
-8. `env PYTHONPATH=. python3 -m unittest scripts.test.test_yaml_parser scripts.test.test_config_access scripts.test.test_continuum_runtime`
-9. `env PYTHONPATH=. pytest -q scripts/test/test_yaml_parser.py scripts/test/test_config_access.py scripts/test/test_continuum_runtime.py`
+8. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_yaml_parser scripts.test.unit.test_config_access scripts.test.unit.test_continuum_runtime`
+9. `env PYTHONPATH=. pytest -q scripts/test/unit/test_yaml_parser.py scripts/test/unit/test_config_access.py scripts/test/unit/test_continuum_runtime.py`
 10. `env PYTHONPATH=. python3 -m unittest discover scripts/test`
 11. `env PYTHONPATH=. pytest -q scripts/test`
-12. `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_kubernetes_runtime scripts.test.test_continuum_runtime`
-13. `env PYTHONPATH=. pytest -q scripts/test/test_application_runtime_helpers.py scripts/test/test_kubernetes_runtime.py scripts/test/test_continuum_runtime.py`
+12. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_application_runtime_helpers scripts.test.unit.test_continuum_runtime`
+13. `env PYTHONPATH=. pytest -q scripts/test/unit/test_application_runtime_helpers.py scripts/test/unit/test_continuum_runtime.py`
 14. `sh -n scripts/test/setup_agent_host.sh scripts/test/run_smoke_host.sh`
-15. `python3 -m py_compile continuum.py input/configuration/config_access.py application/empty/empty.py application/empty/plot.py application/empty_kata/empty_kata.py application/empty_kata/plot.py scripts/test/run_tests.py scripts/test/test_run_tests.py scripts/test/test_config_access.py scripts/test/test_continuum_runtime.py`
-16. `env PYTHONPATH=. python3 -m unittest scripts.test.test_run_tests scripts.test.test_config_access scripts.test.test_continuum_runtime`
-17. `env PYTHONPATH=. pytest -q scripts/test/test_run_tests.py scripts/test/test_config_access.py scripts/test/test_continuum_runtime.py`
+15. `python3 -m py_compile continuum.py input/configuration/config_access.py application/empty/empty.py application/empty/plot.py application/empty_kata/empty_kata.py application/empty_kata/plot.py scripts/test/run_tests.py scripts/test/e2e/test_run_tests.py scripts/test/unit/test_config_access.py scripts/test/unit/test_continuum_runtime.py`
+16. `env PYTHONPATH=. python3 -m unittest scripts.test.e2e.test_run_tests scripts.test.unit.test_config_access scripts.test.unit.test_continuum_runtime`
+17. `env PYTHONPATH=. pytest -q scripts/test/e2e/test_run_tests.py scripts/test/unit/test_config_access.py scripts/test/unit/test_continuum_runtime.py`
 18. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`299 tests OK`)
 19. `env PYTHONPATH=. pytest -q scripts/test` (`299 passed`)
 20. `sh scripts/test/setup_agent_host.sh show-config`
-21. `python3 -m py_compile application/runtime_helpers.py application/image_classification/image_classification.py application/text_translation/text_translation.py scripts/test/test_application_runtime_helpers.py`
-22. `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_continuum_runtime` (`102 tests OK`)
-23. `env PYTHONPATH=. pytest -q scripts/test/test_application_runtime_helpers.py scripts/test/test_continuum_runtime.py` (`102 passed`)
+21. `python3 -m py_compile application/runtime_helpers.py application/image_classification/image_classification.py application/text_translation/text_translation.py scripts/test/unit/test_application_runtime_helpers.py`
+22. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_application_runtime_helpers scripts.test.unit.test_continuum_runtime` (`102 tests OK`)
+23. `env PYTHONPATH=. pytest -q scripts/test/unit/test_application_runtime_helpers.py scripts/test/unit/test_continuum_runtime.py` (`102 passed`)
 24. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`303 tests OK`)
 25. `env PYTHONPATH=. pytest -q scripts/test` (`303 passed`)
-26. `python3 -m py_compile infrastructure/qemu/qemu.py scripts/test/test_continuum_runtime.py`
-27. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime` (`94 tests OK`)
-28. `env PYTHONPATH=. pytest -q scripts/test/test_continuum_runtime.py` (`94 passed`)
+26. `python3 -m py_compile infrastructure/qemu/qemu.py scripts/test/unit/test_continuum_runtime.py`
+27. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime` (`94 tests OK`)
+28. `env PYTHONPATH=. pytest -q scripts/test/unit/test_continuum_runtime.py` (`94 passed`)
 29. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`305 tests OK`)
 30. `env PYTHONPATH=. pytest -q scripts/test` (`305 passed`)
-31. `python3 -m py_compile infrastructure/ansible.py scripts/test/test_continuum_runtime.py`
-32. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime` (`94 tests OK`)
-33. `env PYTHONPATH=. pytest -q scripts/test/test_continuum_runtime.py` (`94 passed`)
+31. `python3 -m py_compile infrastructure/ansible.py scripts/test/unit/test_continuum_runtime.py`
+32. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime` (`94 tests OK`)
+33. `env PYTHONPATH=. pytest -q scripts/test/unit/test_continuum_runtime.py` (`94 passed`)
 34. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`305 tests OK`)
 35. `env PYTHONPATH=. pytest -q scripts/test` (`305 passed`)
-36. `python3 -m py_compile input/configuration/runtime_module_loader.py scripts/test/test_continuum_runtime.py`
-37. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime` (`96 tests OK`)
-38. `env PYTHONPATH=. pytest -q scripts/test/test_continuum_runtime.py` (`96 passed`)
+36. `python3 -m py_compile input/configuration/runtime_module_loader.py scripts/test/unit/test_continuum_runtime.py`
+37. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime` (`96 tests OK`)
+38. `env PYTHONPATH=. pytest -q scripts/test/unit/test_continuum_runtime.py` (`96 passed`)
 39. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`307 tests OK`)
 40. `env PYTHONPATH=. pytest -q scripts/test` (`307 passed`)
-41. `python3 -m py_compile infrastructure/infrastructure.py infrastructure/ansible.py scripts/test/test_continuum_runtime.py`
-42. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime.QemuMachinePlaybookEnvTests scripts.test.test_continuum_runtime.InfrastructureWorkspacePermissionTests scripts.test.test_continuum_runtime.MachineProcessDiagnosticsTests`
-43. `python3 -m py_compile application/runtime_helpers.py application/application.py application/mem_usage/mem_usage.py resource_manager/kubernetes/kubernetes.py scripts/test/test_application_runtime_helpers.py`
-44. `env PYTHONPATH=. python3 -m unittest scripts.test.test_application_runtime_helpers scripts.test.test_continuum_runtime`
-45. `env PYTHONPATH=. python3 -m unittest scripts.test.test_example_configs`
-46. `python3 -m py_compile scripts/test/test_host_runner_scripts.py scripts/test/test_role_contracts.py`
-47. `env PYTHONPATH=. python3 -m unittest scripts.test.test_host_runner_scripts scripts.test.test_role_contracts`
-48. `python3 -m py_compile infrastructure/ansible.py scripts/test/test_continuum_runtime.py scripts/test/test_role_contracts.py`
-49. `env PYTHONPATH=. python3 -m unittest scripts.test.test_continuum_runtime.AnsibleCheckOutputDiagnosticsTests scripts.test.test_continuum_runtime.MachineProcessDiagnosticsTests scripts.test.test_role_contracts`
+41. `python3 -m py_compile infrastructure/infrastructure.py infrastructure/ansible.py scripts/test/unit/test_continuum_runtime.py`
+42. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime.QemuMachinePlaybookEnvTests scripts.test.unit.test_continuum_runtime.InfrastructureWorkspacePermissionTests scripts.test.unit.test_continuum_runtime.MachineProcessDiagnosticsTests`
+43. `python3 -m py_compile application/runtime_helpers.py application/application.py application/mem_usage/mem_usage.py resource_manager/kubernetes/kubernetes.py scripts/test/unit/test_application_runtime_helpers.py`
+44. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_application_runtime_helpers scripts.test.unit.test_continuum_runtime`
+45. `env PYTHONPATH=. python3 -m unittest scripts.test.e2e.test_example_configs`
+46. `python3 -m py_compile scripts/test/e2e/test_host_runner_scripts.py scripts/test/unit/test_role_contracts.py`
+47. `env PYTHONPATH=. python3 -m unittest scripts.test.e2e.test_host_runner_scripts scripts.test.unit.test_role_contracts`
+48. `python3 -m py_compile infrastructure/ansible.py scripts/test/unit/test_continuum_runtime.py scripts/test/unit/test_role_contracts.py`
+49. `env PYTHONPATH=. python3 -m unittest scripts.test.unit.test_continuum_runtime.AnsibleCheckOutputDiagnosticsTests scripts.test.unit.test_continuum_runtime.MachineProcessDiagnosticsTests scripts.test.unit.test_role_contracts`
 50. `yamllint -c sysconfig/yamllint.yml application/image_classification/launch_benchmark_kubernetes.yml application/text_translation/launch_benchmark_kubernetes.yml roles/resource_manager/k8s_prereqs/tasks/main.yml roles/resource_manager/k8s_control_plane/tasks/main.yml`
 51. `env PYTHONPATH=. python3 -m unittest discover scripts/test` (`342 tests OK`)
 52. `env PYTHONPATH=. pytest -q scripts/test` (`342 passed`)
@@ -380,7 +380,7 @@ Observed host-run attempts:
      copy task was trying to read it as a controller-local `src`
    - both Kubernetes benchmark launch playbooks now set `remote_src: true` for
      that copy task, with regression coverage in
-     `scripts/test/test_role_contracts.py`
+     `scripts/test/unit/test_role_contracts.py`
    - the live image-classification replay then completed the launch playbook and
      created `job.batch/image-classification-1`
 28. the direct replay is not a full retained application closure
@@ -410,7 +410,7 @@ Observed host-run attempts:
      output before indexing it
    - non-cache Kubernetes benchmark worker launches now use
      `pull_policy=IfNotPresent`; cached-worker launches still use `Never`
-   - focused tests were added in `scripts/test/test_application_runtime_helpers.py`
+   - focused tests were added in `scripts/test/unit/test_application_runtime_helpers.py`
 31. latest retained application status before wrapping
    - after the first two fixes, the retained application progressed to a real
      image availability failure
@@ -473,8 +473,8 @@ Observed host-run attempts:
    - `playbooks/resource_manager/k8s_base_install.yml` now includes Mosquitto,
      matching the benchmark worker broker dependency from the legacy K8s base
      install path
-   - focused coverage exists in `scripts/test/test_continuum_runtime.py` and
-     `scripts/test/test_role_contracts.py`
+   - focused coverage exists in `scripts/test/unit/test_continuum_runtime.py` and
+     `scripts/test/unit/test_role_contracts.py`
 37. refreshed retained infrastructure/software passed after those fixes
    - `sudo -n /usr/local/bin/continuum-hostctl sync-repo` succeeded
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_infra`
@@ -502,7 +502,7 @@ Observed host-run attempts:
 40. retained application result collection exposed one more SSH shell quoting bug
    - Kubernetes worker log collection no longer wraps the whole batched
      `kubectl logs ...; echo DELIMITER01234` command in literal quotes
-   - focused coverage exists in `scripts/test/test_application_runtime_helpers.py`
+   - focused coverage exists in `scripts/test/unit/test_application_runtime_helpers.py`
 41. final retained application closure passed
    - before the final run, the stale Job was deleted with:
      `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook benchmark_k8s_resume_application playbooks/debug/run_command.yml -e '{"debug_hosts":"cloud_controller_continuum-smoke","debug_command":"kubectl delete job image-classification-1 --ignore-not-found"}'`

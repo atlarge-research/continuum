@@ -256,7 +256,7 @@ Unknown config keys for known stage types fail fast.
 ## Shipped Examples and Profiles
 
 These shipped examples and profiles are regression-validated from disk by
-`scripts/test/test_example_configs.py`.
+`scripts/test/e2e/test_example_configs.py`.
 
 Runnable experiment examples:
 

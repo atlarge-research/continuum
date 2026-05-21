@@ -14,7 +14,7 @@ from input.configuration import resume_contract, yaml_parser
 
 
 def _load_test_utils_module():
-    module_path = Path(__file__).with_name("test_utils.py")
+    module_path = Path(__file__).resolve().parents[1] / "support" / "e2e_utils.py"
     spec = importlib.util.spec_from_file_location("continuum_test_utils", module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

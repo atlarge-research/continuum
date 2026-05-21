@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def _load_verify_module():
-    module_path = Path(__file__).with_name("verify_network_profiles.py")
+    module_path = Path(__file__).resolve().parents[1] / "verify_network_profiles.py"
     spec = importlib.util.spec_from_file_location("continuum_verify_network_profiles", module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

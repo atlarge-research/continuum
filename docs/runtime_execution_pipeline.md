@@ -229,7 +229,7 @@ This is a cross-cutting runtime concern rather than a separately requested
 2. `infrastructure/state.py`
 3. `continuum.py`
 4. provider `delete_vms(...)` implementations
-5. `scripts/test/run_tests.py` and `scripts/test/test_utils.py` for operational evidence checks
+5. `scripts/test/run_tests.py` and `scripts/test/support/e2e_utils.py` for operational evidence checks
 
 ### Operational success evidence
 

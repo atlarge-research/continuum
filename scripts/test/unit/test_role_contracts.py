@@ -8,7 +8,7 @@ import yaml
 
 class DockerSetupRoleTests(unittest.TestCase):
     def test_docker_setup_selects_engine_family_from_package_state(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         task_path = repo_root / "roles/resource_manager/docker_setup/tasks/main.yml"
         tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
 
@@ -35,7 +35,7 @@ class DockerSetupRoleTests(unittest.TestCase):
         )
 
     def test_docker_setup_defaults_define_both_engine_package_sets(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         defaults_path = repo_root / "roles/resource_manager/docker_setup/defaults/main.yml"
         defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
 
@@ -48,7 +48,7 @@ class DockerSetupRoleTests(unittest.TestCase):
 
 class ContainerdSetupRoleTests(unittest.TestCase):
     def test_containerd_setup_fails_on_unreplaced_registry_placeholder(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         task_path = repo_root / "roles/resource_manager/containerd_setup/tasks/main.yml"
         tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
 
@@ -77,7 +77,7 @@ class ContainerdSetupRoleTests(unittest.TestCase):
 
 class EndpointInstallPlaybookTests(unittest.TestCase):
     def test_endpoint_install_includes_mosquitto_before_endpoint_runtime(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         playbook_path = repo_root / "playbooks/resource_manager/endpoint_install.yml"
         playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
 
@@ -91,7 +91,7 @@ class EndpointInstallPlaybookTests(unittest.TestCase):
 
 class KubernetesBaseInstallPlaybookTests(unittest.TestCase):
     def test_k8s_base_install_includes_mosquitto_for_benchmark_workers(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         playbook_path = repo_root / "playbooks/resource_manager/k8s_base_install.yml"
         playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
 
@@ -106,7 +106,7 @@ class KubernetesBaseInstallPlaybookTests(unittest.TestCase):
 
 class KubernetesPrereqsRoleTests(unittest.TestCase):
     def test_k8s_prereqs_installs_python_client_for_ansible_modules(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         task_path = repo_root / "roles/resource_manager/k8s_prereqs/tasks/main.yml"
         tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
 
@@ -125,7 +125,7 @@ class KubernetesPrereqsRoleTests(unittest.TestCase):
 
 class KubernetesControlPlaneRoleTests(unittest.TestCase):
     def test_k8s_control_plane_installs_python_client_for_runtime_k8s_tasks(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         task_path = repo_root / "roles/resource_manager/k8s_control_plane/tasks/main.yml"
         tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
 
@@ -145,7 +145,7 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
 
 class BenchmarkLaunchPlaybookTests(unittest.TestCase):
     def _role_entry(self, relative_path):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         playbook_path = repo_root / relative_path
         playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
         roles = playbook[0]["roles"]
@@ -153,7 +153,7 @@ class BenchmarkLaunchPlaybookTests(unittest.TestCase):
         return roles[0]
 
     def test_k8s_job_deploy_role_materializes_templates_and_kubectl_apply(self):
-        repo_root = Path(__file__).resolve().parents[2]
+        repo_root = Path(__file__).resolve().parents[3]
         task_path = repo_root / "roles/application/k8s_job_deploy/tasks/main.yml"
         tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
 

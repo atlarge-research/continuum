@@ -9,7 +9,7 @@ from pathlib import Path
 
 class HostRunnerScriptTests(unittest.TestCase):
     def setUp(self):
-        self.repo_root = Path(__file__).resolve().parents[2]
+        self.repo_root = Path(__file__).resolve().parents[3]
         self.setup_script = self.repo_root / "scripts/test/setup_agent_host.sh"
         self.run_smoke_script = self.repo_root / "scripts/test/run_smoke_host.sh"
 

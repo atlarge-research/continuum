@@ -17,12 +17,14 @@ The main entry point is `continuum.py`. Core Python modules live in `infrastruct
 
 ## Testing Instructions
 
-- `PYTHONPATH=. python3 -m unittest discover scripts/test`: run the Python test suite.
+- `PYTHONPATH=. python3 -m unittest discover scripts/test/unit`: run the unit suite.
+- `PYTHONPATH=. python3 -m unittest discover scripts/test/e2e`: run local e2e-runner regression tests.
+- `PYTHONPATH=. python3 -m unittest discover scripts/test`: run the combined Python test suite.
 - `python3 scripts/test/run_tests.py --suite smoke`: run the configured smoke suite from `configs/experiments/`.
 - `python3 scripts/test/run_tests.py --config configuration/tests/qemu/01_infraonly-cloud.cfg`: run one end-to-end config.
 - `pylint --rcfile=sysconfig/pylintrc <path>` and `yamllint -c sysconfig/yamllint.yml <path>`: run lint checks.
 
-Tests use `unittest` with files named `scripts/test/test_*.py` and classes ending in `Tests`. Add focused tests near the changed code path, especially for configuration parsing, schema validation, selector resolution, and runtime planning. End-to-end tests can create VMs or use cached base images; prefer `--suite smoke` or one `--config`.
+Tests use `unittest` with unit tests under `scripts/test/unit/test_*.py`, local e2e-runner regression tests under `scripts/test/e2e/test_*.py`, and shared helpers under `scripts/test/support/`. Classes should end in `Tests`. Add focused tests near the changed code path, especially for configuration parsing, schema validation, selector resolution, and runtime planning. End-to-end tests can create VMs or use cached base images; prefer `--suite smoke` or one `--config`.
 
 ## Coding Style & Naming Conventions
 

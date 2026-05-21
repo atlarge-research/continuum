@@ -336,7 +336,7 @@ Optional tooling: one-shot converters outside runtime path.
 25. Resource-manager module and endpoint helper `start()` hooks now delegate to the centralized `resource_manager.start()` entrypoint, preserving the PR-4 planner boundary even if a module hook is invoked directly.
 26. Historical PR-4 handoff point: PR-5 owned examples/smokes/documentation closure before Phase D application-role consolidation; both slices have since landed.
 27. PR-5 now publishes `docs/configuration_reference.md` and `docs/migration_notes.md` as the user-facing canonical-schema and hard-cut migration references, with `docs/cheatsheet.md` linking to them for first-line operator guidance.
-28. Shipped experiment examples and shipped environment/software profiles are now regression-validated from disk by `scripts/test/test_example_configs.py`, and the example/doc baseline quotes `run.image_prefetch` values to avoid YAML boolean coercion.
+28. Shipped experiment examples and shipped environment/software profiles are now regression-validated from disk by `scripts/test/e2e/test_example_configs.py`, and the example/doc baseline quotes `run.image_prefetch` values to avoid YAML boolean coercion.
 29. The YAML e2e runner (`scripts/test/run_tests.py`) now validates `--suite` names against the loaded `scripts/test/test_config.json` content instead of a hard-coded CLI list, so config-declared suites such as `network_validation` are reachable without code changes.
 30. The `network_validation` test suite is now correctly scoped to `configs/experiments/network_validation/`, and the test-runner/manifests/docs are updated to describe YAML-only suite discovery instead of legacy `.cfg` inputs.
 
