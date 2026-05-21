@@ -309,7 +309,7 @@ Next clean start point:
 
 1. Treat PR-4 as closed and green.
 2. Treat PR-5 as closed and green for its intended scope: examples/profiles/docs are synchronized, the least-privilege host runner is documented and scripted, and all currently runnable host-backed smoke slices pass.
-3. Phase D application-role consolidation plus resumed K8s smoke pipeline/teardown verification have since closed; next implementation focus is Phase E resume/state integrity and operational hardening.
+3. Phase D application-role consolidation plus resumed K8s smoke pipeline/teardown verification, Phase E resume/state integrity, and Phase F test architecture closure have since closed.
 4. Preserve Phase-D cleanup ownership for application-specific Kubernetes launch/timing/runtime code (`launch_with_starttime`, MQTT env injection, and Mist/Baremetal worker-output handling); do not move or ungate it outside an explicit Phase-D slice.
 5. Current Phase-D state:
    - application bootstrap/module wiring is enabled again,

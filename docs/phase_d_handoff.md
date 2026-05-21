@@ -287,7 +287,7 @@ Observed host-run attempts:
    - exposed and fixed two additional local-run seams:
      - Ansible local tmp defaulting to a read-only home path
      - `ansible-playbook` resolving to an incompatible user-local install instead of the active interpreter-local executable
-   - current remaining blocker in this harness is now the expected libvirt permission boundary:
+   - the remaining blocker in that ad hoc harness was the expected libvirt permission boundary:
      - `Failed to connect socket to '/var/run/libvirt/libvirt-sock': Operation not permitted`
 6. Canonical host setup is now `scripts/test/setup_agent_host.sh install`.
    - default mode is `dedicated`
@@ -299,18 +299,18 @@ Observed host-run attempts:
    - that is expected with the stricter workspace ownership model; the wrapper now correctly requires the actual `continuum-smoke` user for its default base root
 8. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke list-suites`
    - now works again in this environment, confirming that the dedicated-user wrapper entrypoint itself is available
-   - however, the installed wrapper is still the older host copy and does not yet expose `benchmark_k8s_resume`
+   - at that point, the installed wrapper was still the older host copy and did not yet expose `benchmark_k8s_resume`
 9. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume`
-   - currently fails with `Unsupported smoke scenario: benchmark_k8s_resume`
-   - this is now an operational host-install drift issue, not a repo implementation issue
-10. refreshing the installed wrapper from `scripts/test/setup_agent_host.sh` is blocked in this sandbox because the script's root-owned install/sync steps still require host-side `sudo` outside the current sandbox boundary
+   - failed at that point with `Unsupported smoke scenario: benchmark_k8s_resume`
+   - this was an operational host-install drift issue, not a repo implementation issue
+10. refreshing the installed wrapper from `scripts/test/setup_agent_host.sh` was blocked in that sandbox because the script's root-owned install/sync steps required host-side `sudo` outside the then-current sandbox boundary
 11. after the host install was refreshed and the dedicated repo was synced, `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume`
    - now completes the infrastructure leg on the prepared dedicated runner path
    - launches `cloud0_continuum-smoke`, `cloud1_continuum-smoke`, and `endpoint0_continuum-smoke`
    - successfully adds SSH host keys for `192.168.100.2`, `192.168.100.3`, and `192.168.100.4`
    - persists `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume/.continuum/state.json` with `phase_completed=infrastructure`
    - this clears the earlier guest-networking stall caused by hardcoded `ens2` netplan config
-12. direct follow-up resume commands from this coding harness are still blocked by the sandboxed `sudo` binary itself
+12. direct follow-up resume commands from that coding harness were still blocked by the sandboxed `sudo` binary itself
    - current harness error: `sudo: /usr/bin/sudo must be owned by uid 0 and have the setuid bit set`
    - treat this as a harness limitation, not as a Continuum runtime failure
 13. once the dedicated wrapper exposed phase-specific benchmark commands, the resumed software failure became reproducible from retained state
@@ -345,10 +345,11 @@ Observed host-run attempts:
 22. follow-up design concern to carry forward
    - pure infrastructure-only runs and “prepare retained infra for later software/application resume” are now distinguished by config intent
    - future cleanup should preserve that separation rather than reintroducing software-shaped base-image preparation implied only by the presence of a software profile
-23. the main operational annoyance is now outside Continuum itself
-   - the human copy/paste loop is only still happening because this coding
-     harness cannot execute `sudo`, even for the two narrow commands above
-   - this is now the primary thing to fix next session
+23. the main operational annoyance was outside Continuum itself
+   - the human copy/paste loop was only still happening because that coding
+     harness could not execute `sudo`, even for the two narrow commands above
+   - the dedicated host wrapper and allowlisted prefixes later closed this
+     operational gap
 24. retained application debugging reached the point where the benchmark launch playbook itself was the only failing surface
    - the direct `debug-playbook` replay confirmed `python3-kubernetes` first
      missing, then present
@@ -356,7 +357,7 @@ Observed host-run attempts:
      playbooks were switched from `kubernetes.core.k8s` to `kubectl apply -f`
 25. after that playbook change landed, the retained application path was **not**
    rerun yet in this session
-   - the next actual retained benchmark step is therefore to rerun
+   - the then-next actual retained benchmark step was to rerun
      `benchmark_k8s_resume_application` from the installed wrapper after syncing
      the dedicated repo copy
    - because `infrastructure/ansible.py` now logs the stdout/stderr tail on
@@ -445,7 +446,7 @@ Observed host-run attempts:
    - result: `failure_class=nonzero_exit`
    - Kubernetes rejected `image-classification-1` because the existing Job has
      an immutable pod template from the earlier retained replay
-   - next action is to delete that Job through the retained debug-playbook path,
+   - the next action at that point was to delete that Job through the retained debug-playbook path,
      then rerun `benchmark_k8s_resume_application`
 35. 2026-05-13 follow-up: stale Job cleanup worked, exposing the next retained
     infrastructure issue
@@ -575,7 +576,7 @@ Then continue here for application or retained benchmark work:
 
 1. Do not re-add a runtime target gate for `application`; the explicit ungate slice is now landed.
 2. Do not redo the earlier helper extraction from `resource_manager/kubernetes/kubernetes.py`; that prep work is already in the tree.
-3. Do not treat Phase D as a parser/bootstrap-enablement task anymore; the active follow-up work is Phase-E resume/state validation and later cleanup.
+3. Do not treat Phase D as a parser/bootstrap-enablement task anymore; Phase-E resume/state validation and Phase-F test closure have since landed.
 4. Do not move generated runtime assets back under repo-local `.tmp`; the active temp workspace is `base_path/.continuum/tmp`.
 5. Do not try to salvage pre-Phase-E retained state; schema-v2 state is the
    compatibility boundary.

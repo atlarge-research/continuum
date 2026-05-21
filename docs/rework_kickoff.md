@@ -161,7 +161,7 @@ Start with these surfaces for module-registry and dependency-validator work:
 40. PR-5 real host-backed smoke closure is now complete for the currently active Phase-C runtime boundaries: `infra_one_vm`, `software_k8s_two_vm`, and `network_netperf_two_vm` all pass through the dedicated `continuum-smoke` wrapper path.
 41. The host-backed smoke work fixed several real runtime defects rather than only test harness issues, including bounded guest login names for QEMU guests/base images, controller-side repo asset path assumptions after the YAML handoff move, flannel manifest sourcing, and YAML-era network-emulation compatibility plus TC shell-command assembly in `infrastructure/network.py`.
 42. `.continuum` image-cache reuse is now safer: QEMU base images are reused only when companion success metadata marks them complete, so interrupted or partial base-image builds are invalidated and rebuilt instead of being silently trusted on later runs.
-43. PR-5 is now complete for its scoped objective; Phase-D benchmark/application smoke plus resumed K8s pipeline/teardown verification has since landed, and Phase-E resume/state integrity is the active follow-up.
+43. PR-5 is now complete for its scoped objective; Phase-D benchmark/application smoke plus resumed K8s pipeline/teardown verification, Phase-E resume/state integrity, and Phase-F test architecture closure have since landed.
 
 ## 9. Resume Point
 

@@ -132,13 +132,13 @@ Before merge:
 2. Canonical selector normalization and `selector_id` strategy locked.
 3. Canonical structured scope identity format locked for `vm`, `cluster`, and `selector`.
 
-## 11. Current Snapshot (Updated May 20, 2026)
+## 11. Current Snapshot (Updated May 21, 2026)
 
 1. PR-1 implementation landed with strict modules-only parser/runtime access (no orchestrator/addons projection path).
 2. Config examples and parser/runtime test fixtures are migrated to canonical `clusters[]` + `modules[]` schema.
 3. PR-2 implementation is complete with registry-backed dependency/capability validation in parser/runtime and dedicated unit tests.
 4. PR-2 incremental hardening includes parser/runtime parity for exclusive-capability/conflict validation with targeted regression tests.
-5. PR-3 selector/scope, PR-3A image-prefetch, PR-4 runtime/planner integration, PR-5 docs/smokes, and Phase D application-role consolidation baselines are closed; active follow-up is Phase E resume/state integrity plus operational hardening.
+5. PR-3 selector/scope, PR-3A image-prefetch, PR-4 runtime/planner integration, PR-5 docs/smokes, Phase D application-role consolidation, Phase E resume/state integrity, and Phase F test architecture baselines are closed.
 6. The explicit application-runtime gate was removed in Phase D: `run.targets: application` now executes benchmark/application runtime paths, and the resumed benchmark smoke/teardown path has since reached runner-visible closure.
 7. Current PR-3A baseline includes deterministic control-plane image requirement resolution for `kubecontrol`/`kube_kata` and internal benchmark-stage mappings for `empty`, `empty_kata`, `mem_usage`, `stress`, `image_classification`, and `text_translation`, with stack-aware `image_classification` selection and fail-fast unknown-stage handling.
 8. PR-4 prep baseline progressed: core then-gated runtime/planner surfaces (including `application/*`) now use generic `benchmark_param*` config accessors instead of removed `workload_*`/legacy sizing helpers, and legacy benchmark/workload helper API stubs are removed from `config_access`.
@@ -212,7 +212,7 @@ Before merge:
 76. The dedicated `network_validation` suite is now scoped to `configs/experiments/network_validation/`, and the runner docs/manifests/examples are YAML-only rather than split across stale `.cfg` references.
 77. PR-5 now publishes dedicated developer-facing docs for the actual runtime execution pipeline and for operational testing strategy, giving the rework a reusable phase model for smoke design, handoff, and later paper/report writing.
 78. PR-5 now introduces a dedicated lightweight smoke scenario set under `configs/experiments/smoke/`, making the smoke suite intentionally small and phase-oriented rather than a broad sample of all shipped experiments.
-79. PR-5 operational policy now prefers fast-fail smoke execution, retained artifacts, Kubernetes as the canonical software smoke target, and a future resumed benchmark smoke pipeline that reuses VMs across phases instead of reprovisioning for each check.
+79. PR-5 operational policy now prefers fast-fail smoke execution, retained artifacts, Kubernetes as the canonical software smoke target, and the resumed benchmark smoke pipeline that reuses VMs across phases instead of reprovisioning for each check.
 80. PR-5 now includes a VM debugging runbook and early runtime SSH-hint logging so failed smoke runs can be debugged through retained VMs and host-level QEMU inspection instead of blind reruns.
 81. PR-5 now makes VM-backed suite prerequisites executable in the runner itself: `scripts/test/test_config.json` declares required host commands per suite, and `scripts/test/run_tests.py` rejects unsupported local environments before discovery or provisioning starts.
 82. PR-5 now exposes that suite contract through the runner CLI as well, so operators can list suite expectations or validate prerequisite readiness before starting a long smoke run.
