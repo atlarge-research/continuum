@@ -206,8 +206,9 @@ application module is missing.
 2. worker and endpoint outputs are collected,
 3. benchmark metrics are formatted without runtime fallback aliases,
 4. state file advances to `phase_completed=application`,
-5. host-backed benchmark smoke completes on the intended resume path with lightweight application-leg
-   result evidence visible in stdout.
+5. host-backed benchmark smoke completes on the intended resume path with lightweight
+   application-leg result evidence visible in stdout and in structured benchmark metric
+   artifacts under `<base_path>/.continuum/logs/benchmark/`.
 
 ## 7. Phase 4: Artifact Capture, Resume, And Teardown
 
@@ -267,8 +268,8 @@ Minimum assertions per phase:
    enabled.
 3. Phase 2: centralized software plan executes and state advances to `software`.
 4. Phase 3: benchmark artifacts and metrics are emitted, with runner-visible
-   functional markers and metric-table evidence on the resumed K8s benchmark
-   smoke path.
+   functional markers, stdout metric-table evidence, and structured metric-artifact
+   sanity checks on the resumed K8s benchmark smoke path.
 5. Phase 4: lock/state resume contracts match and teardown artifacts behave consistently.
 
 Use `docs/operational_testing_strategy.md` for the test strategy that sits on

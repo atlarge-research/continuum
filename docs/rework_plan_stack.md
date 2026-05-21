@@ -236,6 +236,10 @@ Before merge:
 96. Benchmark-smoke application-leg success detection now requires both
     functional stdout markers and lightweight metric-table evidence, including
     at least one numeric endpoint metric row.
+97. Benchmark metric evidence is now persisted as structured Phase-E runtime
+    artifacts under `<base_path>/.continuum/logs/benchmark/`, and the
+    `benchmark_smoke` suite validates the metric manifest plus CSV table
+    sanity before accepting the resumed application leg as successful.
 
 ## 12. End-of-Rework Test Closure Commitments
 
@@ -253,3 +257,9 @@ Before merge:
    - every major runtime/parser surface has a matching doc reference,
    - no contradictory semantics across planning/design docs,
    - no stale references to removed legacy interfaces.
+6. After the active rework stabilizes, revisit observability/reproducibility
+   packaging as a dedicated design topic:
+   - decide whether structured run packages should replace scattered per-feature
+     metric files,
+   - evaluate durable metric retention and optional time-series database support
+     without making the current Phase-E CSV/manifest artifacts the final design.

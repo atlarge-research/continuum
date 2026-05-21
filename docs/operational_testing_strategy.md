@@ -110,13 +110,21 @@ Assert:
 
 1. benchmark deployment launches on the intended platform,
 2. worker and endpoint outputs are collected,
-3. formatted benchmark metrics are emitted,
+3. formatted benchmark metrics are emitted in stdout and structured artifacts,
 4. state file advances to `phase_completed=application`.
+
+Artifacts:
+
+1. benchmark stdout/stderr captured by the runner,
+2. `<base_path>/.continuum/logs/benchmark/*_metrics_manifest.json`,
+3. benchmark metric CSV tables referenced by the manifest.
 
 Current note:
 
 1. runtime application execution is now ungated,
-2. benchmark smoke and teardown evidence are runner-visible on the resumed K8s path.
+2. benchmark smoke and teardown evidence are runner-visible on the resumed K8s path,
+3. benchmark metric artifacts are a transitional structured evidence format, not the final
+   reproducibility-package design.
 
 ### Phase 4: Artifact Validation And Teardown
 
@@ -212,6 +220,8 @@ Concrete smoke success criteria currently agreed:
    - benchmark output/logs show a successful execution path and results are emitted
    - benchmark-smoke application-leg success detection checks stdout evidence for completion,
      endpoint output, a formatted latency column, and at least one numeric metric row
+   - benchmark-smoke application-leg success detection also validates the structured benchmark
+     metric manifest and CSV table under `<base_path>/.continuum/logs/benchmark/`
    - benchmark-smoke design should prioritize functional success plus lightweight metric evidence
      before broader statistical assertions
 5. teardown/resume:
@@ -302,12 +312,12 @@ What is already covered:
     `configs/experiments/benchmark_smoke/`.
 11. lock/state resume-contract validation in runner success detection.
 12. structured network-validation NDJSON checks in runner success detection.
-13. lightweight benchmark-result marker and metric-row evidence in runner success detection
-    for the application leg of the resumed K8s benchmark smoke path.
+13. lightweight benchmark-result marker, metric-row, and structured metric-artifact evidence
+    in runner success detection for the application leg of the resumed K8s benchmark smoke path.
 
 What remains open:
 
-1. richer benchmark artifact/statistical assertions beyond lightweight metric-row evidence,
+1. richer benchmark statistical assertions beyond structured artifact sanity checks,
 2. broader scenario regressions beyond the canonical resumed Kubernetes benchmark smoke path.
 
 ## 9. Suggested Next Operational Work
@@ -315,8 +325,16 @@ What remains open:
 Recommended order:
 
 1. keep network-validation artifact checks aligned with the existing host-backed smoke runner output,
-2. add richer benchmark artifact/statistical assertions after the lightweight metric evidence stays green,
+2. add richer benchmark statistical assertions after structured metric artifacts stay green,
 3. expand scenario regressions only after the canonical smoke path remains stable.
+
+Longer-term observability/reproducibility note:
+
+1. the current benchmark metric manifest and CSV files are a pragmatic Phase-E evidence format,
+2. they should not settle the final reproducibility-package architecture,
+3. after the active rework stabilizes, revisit observability as a first-class design topic:
+   structured run packages, durable metric retention, and optional time-series database support
+   should be evaluated together instead of accumulating ad hoc per-feature files.
 
 Cache-integrity note:
 

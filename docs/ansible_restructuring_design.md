@@ -173,6 +173,10 @@ Current implementation snapshot (updated May 20, 2026):
 7. The e2e runner now also validates structured network-validation NDJSON under
    `<base_path>/.continuum/logs/network_validation/` and lightweight
    benchmark-smoke metric-table evidence for the resumed application leg.
+8. Benchmark-smoke metric evidence is now persisted as a structured runtime
+   manifest plus CSV tables under `<base_path>/.continuum/logs/benchmark/`, and
+   runner success detection validates the expected endpoint metric table before
+   accepting the resumed application leg.
 
 ## Phase F: Cleanup and CI Hardening
 
@@ -189,6 +193,10 @@ Phase-F test architecture closure tasks:
 Objective: additional image/build lifecycle robustness after core stabilization.
 Forward-looking scope: consolidate module/core extension-point contracts (including image requirement exposure) to avoid interface drift as new internal capabilities are added.
 Deferred library track: evaluate optional configuration-library adoption (Pydantic for schema validation and Hydra/OmegaConf for composition) only after Phase C/Phase D/Phase F stabilization, and only via explicit RFC/ADR design review before implementation.
+Deferred observability track: revisit reproducibility packages and metric
+retention after the active rework stabilizes, including whether Continuum should
+offer a first-class structured run package and optional time-series database
+support instead of accumulating separate metric files.
 
 ## 5. Program Deliverables
 
