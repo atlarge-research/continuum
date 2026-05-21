@@ -175,6 +175,7 @@ class RunTestsCliTests(unittest.TestCase):
                     "directories": ["configs/experiments/benchmark_smoke/"],
                     "success_detection": {
                         "require_teardown": True,
+                        "required_stdout_markers": ["ENDPOINT OUTPUT"],
                     },
                 },
             },
@@ -223,6 +224,10 @@ class RunTestsCliTests(unittest.TestCase):
         run_config = run_tests_mock.call_args.args[1]
         self.assertTrue(run_config["success_detection"]["require_exit_code_zero"])
         self.assertTrue(run_config["success_detection"]["require_teardown"])
+        self.assertEqual(
+            run_config["success_detection"]["required_stdout_markers"],
+            ["ENDPOINT OUTPUT"],
+        )
 
     def test_main_rejects_suite_when_prerequisite_commands_are_missing(self):
         fake_test_config = {

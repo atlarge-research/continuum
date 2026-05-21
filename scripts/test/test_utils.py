@@ -462,6 +462,7 @@ def detect_success(
     require_state_phase = criteria.get("require_state_phase", True)
     require_resume_contract = criteria.get("require_resume_contract", True)
     require_teardown = criteria.get("require_teardown", False)
+    required_stdout_markers = criteria.get("required_stdout_markers", [])
     check_logs = criteria.get("check_log_files", False)
 
     reasons = []
@@ -509,6 +510,7 @@ def detect_success(
             return False, "Experiment lock schema mismatch: expected schema_version 1"
 
     state_payload = None
+    expected_phase = None
     if require_state_file or require_state_phase:
         if not os.path.exists(state_path):
             return False, "State file missing: %s" % (state_path)
@@ -570,6 +572,20 @@ def detect_success(
         if not teardown_ok:
             return False, teardown_reason
         reasons.append(teardown_reason)
+
+    if required_stdout_markers:
+        expected_phase = expected_phase or _expected_phase_completed(config)
+    if required_stdout_markers and expected_phase == "application":
+        if not isinstance(required_stdout_markers, list) or not all(
+            isinstance(marker, str) and marker for marker in required_stdout_markers
+        ):
+            return False, "Benchmark evidence config invalid: required_stdout_markers"
+        missing_markers = [
+            marker for marker in required_stdout_markers if marker not in stdout
+        ]
+        if missing_markers:
+            return False, "Benchmark evidence missing: %s" % (", ".join(missing_markers),)
+        reasons.append("benchmark_evidence_found")
 
     # Optional: Check log files or stdout/stderr for explicit failure markers
     if check_logs:
@@ -718,6 +734,8 @@ def classify_test_failure(result: Dict) -> Optional[str]:
         return "resume_contract_mismatch"
     if detail.startswith("Teardown verification failed:"):
         return "teardown_failure"
+    if detail.startswith("Benchmark evidence missing:"):
+        return "missing_benchmark_evidence"
     if detail.startswith("No SSH output found"):
         return "missing_ssh"
     if detail.startswith("Exit code "):

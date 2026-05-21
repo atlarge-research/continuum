@@ -414,6 +414,109 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertTrue(success)
             self.assertIn("state_phase=application", reason)
 
+    def test_detect_success_requires_configured_benchmark_evidence(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "application")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": False,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            stdout = "\n".join(
+                [
+                    "ssh cloud0@192.168.0.10 -i /tmp/test_key",
+                    "Benchmark has been finished, prepare results",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)",
+                ]
+            )
+            success, reason = test_utils.detect_success(
+                stdout=stdout,
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "required_stdout_markers": [
+                        "Benchmark has been finished, prepare results",
+                        "ENDPOINT OUTPUT",
+                        "latency_avg (ms)",
+                    ],
+                },
+            )
+
+            self.assertTrue(success)
+            self.assertIn("benchmark_evidence_found", reason)
+
+    def test_detect_success_rejects_missing_benchmark_evidence(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "application")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": False,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout=(
+                    "ssh cloud0@192.168.0.10 -i /tmp/test_key\n"
+                    "Benchmark has been finished, prepare results\n"
+                ),
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "required_stdout_markers": [
+                        "Benchmark has been finished, prepare results",
+                        "ENDPOINT OUTPUT",
+                        "latency_avg (ms)",
+                    ],
+                },
+            )
+
+            self.assertFalse(success)
+            self.assertIn(
+                "Benchmark evidence missing: ENDPOINT OUTPUT, latency_avg (ms)",
+                reason,
+            )
+
+    def test_detect_success_skips_benchmark_evidence_for_non_application_leg(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "infrastructure")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": True,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "require_ssh_output": False,
+                    "required_stdout_markers": [
+                        "Benchmark has been finished, prepare results",
+                    ],
+                },
+            )
+
+            self.assertTrue(success)
+            self.assertNotIn("benchmark_evidence_found", reason)
+
     def test_detect_success_rejects_missing_lock_file(self):
         with tempfile.TemporaryDirectory() as tempdir:
             continuum_dir = Path(tempdir) / ".continuum"
@@ -681,6 +784,15 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 }
             ),
             "resume_contract_mismatch",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "Benchmark evidence missing: ENDPOINT OUTPUT",
+                }
+            ),
+            "missing_benchmark_evidence",
         )
         self.assertIsNone(test_utils.classify_test_failure({"success": True}))
 

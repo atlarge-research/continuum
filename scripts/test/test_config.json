@@ -70,7 +70,12 @@
             "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
-                "require_teardown": true
+                "require_teardown": true,
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)"
+                ]
             },
             "prerequisites": {
                 "summary": "Requires a local QEMU/libvirt host with SSH access for resumed benchmark smoke execution",
