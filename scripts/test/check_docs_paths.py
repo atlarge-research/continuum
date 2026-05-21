@@ -33,14 +33,6 @@ KNOWN_ROOT_PATHS = (
     "continuum.py",
     "requirements.txt",
 )
-PLANNED_PATHS = (
-    "scripts/test/e2e/",
-    "scripts/test/e2e",
-    "scripts/test/unit/",
-    "scripts/test/unit",
-)
-
-
 @dataclass(frozen=True)
 class MissingReference:
     """A missing repo-local path reference found in a docs file."""
@@ -114,8 +106,6 @@ def find_missing_references(root: Path = ROOT) -> List[MissingReference]:
     for doc_path in sorted((root / "docs").glob("*.md")):
         rel_doc = doc_path.relative_to(root).as_posix()
         for reference in sorted(set(iter_doc_references(doc_path))):
-            if reference in PLANNED_PATHS:
-                continue
             if not (root / reference).exists():
                 missing.append(MissingReference(rel_doc, reference))
     return missing

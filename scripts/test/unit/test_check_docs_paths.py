@@ -43,13 +43,15 @@ class CheckDocsPathsTests(unittest.TestCase):
 
             self.assertEqual(check_docs_paths.find_missing_references(root), [])
 
-    def test_planned_test_layout_paths_are_allowed(self):
+    def test_existing_test_layout_paths_are_allowed(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
+            (root / "scripts" / "test" / "unit").mkdir(parents=True)
+            (root / "scripts" / "test" / "e2e").mkdir(parents=True)
             self._write_doc(
                 root,
                 "guide.md",
-                "Future layout: `scripts/test/unit/` and `scripts/test/e2e/`.",
+                "Test layout: `scripts/test/unit/` and `scripts/test/e2e/`.",
             )
 
             self.assertEqual(check_docs_paths.find_missing_references(root), [])

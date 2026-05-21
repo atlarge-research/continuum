@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "kind": "ContinuumMajorFunctionCoverageAudit",
+  "updated": "2026-05-21",
+  "entries": [
+    {
+      "surface": "input/configuration/yaml_io.py",
+      "functions": ["load_yaml", "resolve_profile_path", "sha256"],
+      "test_paths": ["scripts/test/unit/test_yaml_io.py"],
+      "success": "valid YAML/profile path loading and deterministic hashing",
+      "failure": "missing profile references and invalid YAML payloads"
+    },
+    {
+      "surface": "input/configuration/profile_composition.py",
+      "functions": ["compose_from_experiment"],
+      "test_paths": ["scripts/test/unit/test_profile_composition.py"],
+      "success": "experiment/profile composition merges expected domains",
+      "failure": "conflicting inline/profile sections fail fast"
+    },
+    {
+      "surface": "input/configuration/experiment_lock_writer.py",
+      "functions": ["write_experiment_lock"],
+      "test_paths": ["scripts/test/unit/test_experiment_lock_writer.py"],
+      "success": "lock writer persists canonical lock and planner metadata",
+      "failure": "missing canonical normalized/base-path state is rejected"
+    },
+    {
+      "surface": "input/configuration/run_schema_validation.py",
+      "functions": ["normalize_targets", "validate_run"],
+      "test_paths": ["scripts/test/unit/test_schema_validation.py"],
+      "success": "canonical run defaults and target normalization",
+      "failure": "invalid/null run fields and target combinations"
+    },
+    {
+      "surface": "input/configuration/infrastructure_schema_validation.py",
+      "functions": ["validate_network", "validate_cluster", "validate_infrastructure"],
+      "test_paths": ["scripts/test/unit/test_schema_validation.py"],
+      "success": "cluster-first topology and normalized network defaults",
+      "failure": "invalid clusters, network mappings, and VM specs"
+    },
+    {
+      "surface": "input/configuration/provider_schema_validation.py",
+      "functions": ["validate_provider"],
+      "test_paths": ["scripts/test/unit/test_schema_validation.py"],
+      "success": "provider defaults and allowed provider keys",
+      "failure": "unknown/null provider and provider.config.ip keys"
+    },
+    {
+      "surface": "input/configuration/benchmark_stage_contract.py",
+      "functions": ["validate_stage_config_contract"],
+      "test_paths": ["scripts/test/unit/test_benchmark_stage_contract.py"],
+      "success": "known stage config contracts accept valid sizing values",
+      "failure": "required-key, type/range, and unknown-key violations"
+    },
+    {
+      "surface": "input/configuration/module_contract_validation.py",
+      "functions": ["module_identity", "evaluate_module_contracts"],
+      "test_paths": ["scripts/test/unit/test_module_contract_validation.py"],
+      "success": "capability/provider checks across overlapping assignment scopes",
+      "failure": "missing requirements, conflicts, exclusivity, and non-overlap"
+    },
+    {
+      "surface": "input/configuration/selector_scope.py",
+      "functions": [
+        "canonical_selector",
+        "resolve_selector_vm_ids",
+        "build_scope_identities",
+        "first_overlap_scope_identity"
+      ],
+      "test_paths": ["scripts/test/unit/test_selector_scope.py"],
+      "success": "canonical selector ids, VM resolution, and overlap detection",
+      "failure": "selectors with no resolved VM overlap"
+    },
+    {
+      "surface": "input/configuration/selector_resolution.py",
+      "functions": ["reconcile_assignment", "validate_assign_to", "validate_selector_derivatives"],
+      "test_paths": ["scripts/test/unit/test_selector_resolution.py"],
+      "success": "assignment metadata reconciliation and derived selector validation",
+      "failure": "malformed assign_to, scope identities, and derived metadata drift"
+    },
+    {
+      "surface": "input/configuration/software_domain_validation.py",
+      "functions": [
+        "runtime_software_projection",
+        "validate_module_registry_contract",
+        "validate_software"
+      ],
+      "test_paths": ["scripts/test/unit/test_domain_validation.py"],
+      "success": "software modules validate against registry and runtime projection",
+      "failure": "unknown modules, malformed configs, and contract violations"
+    },
+    {
+      "surface": "input/configuration/benchmark_domain_validation.py",
+      "functions": ["validate_phase_domains"],
+      "test_paths": ["scripts/test/unit/test_domain_validation.py"],
+      "success": "benchmark domain presence matches application target intent",
+      "failure": "benchmark/application target mismatches and malformed stage tags/config"
+    },
+    {
+      "surface": "input/configuration/runtime_phase_targets.py",
+      "functions": ["resolve_runtime_targets", "required_state_phase_for_targets"],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "runtime target resolution for infra/software/application paths",
+      "failure": "invalid resume prerequisites and target combinations"
+    },
+    {
+      "surface": "input/configuration/runtime_module_loader.py",
+      "functions": ["dynamic_import", "add_constants"],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "runtime modules and constants load for canonical YAML runs",
+      "failure": "host-IP socket discovery and missing runnable modules fail deterministically"
+    },
+    {
+      "surface": "input/configuration/runtime_option_validation.py",
+      "functions": ["apply_module_options", "verify_addon_compatibility", "verify_options"],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "module/addon/provider runtime options validate from canonical scopes",
+      "failure": "unknown options, incompatible addons, and invalid option values"
+    },
+    {
+      "surface": "input/configuration/config_access.py",
+      "functions": [
+        "benchmark_stage_handoff",
+        "software_module_assignment_handoff",
+        "planner_runtime_handoff",
+        "orchestrator_bool"
+      ],
+      "test_paths": ["scripts/test/unit/test_config_access.py"],
+      "success": "canonical benchmark/software handoff and typed accessor reads",
+      "failure": "missing canonical paths, malformed assignments, and invalid booleans"
+    },
+    {
+      "surface": "input/configuration/image_requirements.py",
+      "functions": ["discover_required_images"],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "image prefetch requirements resolve from software/stage placement",
+      "failure": "unknown modules/stages, malformed resources, and unsupported versions"
+    },
+    {
+      "surface": "input/configuration/resume_contract.py",
+      "functions": [
+        "build_resume_contract",
+        "build_persisted_resume_contract",
+        "validate_current_resume_contract"
+      ],
+      "test_paths": ["scripts/test/unit/test_resume_contract.py"],
+      "success": "compatible retained phases share the same resume-contract hash",
+      "failure": "real topology/software drift changes contract identity"
+    },
+    {
+      "surface": "infrastructure/state.py",
+      "functions": ["save_state", "load_state", "validate_state_compatibility", "load_resume_state"],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "schema-v2 state persists, loads, and reconstructs machine data",
+      "failure": "legacy/malformed state, invalid phases, and stale contracts"
+    },
+    {
+      "surface": "infrastructure/orchestration_schema.py",
+      "functions": [
+        "inventory_host_name",
+        "guest_login_name",
+        "base_images_by_host",
+        "tier_vm_nodes_by_host"
+      ],
+      "test_paths": ["scripts/test/unit/test_orchestration_schema.py"],
+      "success": "deterministic inventory names, bounded guest users, and host groupings",
+      "failure": "invalid base names and missing tier mappings"
+    },
+    {
+      "surface": "infrastructure/network.py",
+      "functions": [
+        "generate_tc_commands",
+        "expected_profile_values",
+        "benchmark_output",
+        "netperf_commands"
+      ],
+      "test_paths": [
+        "scripts/test/unit/test_network.py",
+        "scripts/test/e2e/test_verify_network_profiles.py"
+      ],
+      "success": "network emulation commands and structured netperf evidence",
+      "failure": "malformed network profiles and out-of-tolerance artifacts"
+    },
+    {
+      "surface": "infrastructure/qemu/generate.py",
+      "functions": [
+        "find_bridge",
+        "_extract_gateway_from_lines",
+        "_extract_gateway_from_proc_net_route"
+      ],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "bridge/gateway discovery honors host overrides and proc route fallback",
+      "failure": "missing bridge gateway fails before provisioning"
+    },
+    {
+      "surface": "infrastructure/qemu/qemu.py",
+      "functions": [
+        "_base_image_cache_invalid_reason",
+        "_expected_base_image_metadata",
+        "_machine_playbook_env",
+        "base_image"
+      ],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "base image reuse uses success metadata and pinned Ansible env",
+      "failure": "partial or mismatched base-image metadata invalidates cache"
+    },
+    {
+      "surface": "infrastructure/ansible.py",
+      "functions": ["check_output", "create_inventory_vm", "generate_group_vars"],
+      "test_paths": [
+        "scripts/test/unit/test_continuum_runtime.py",
+        "scripts/test/unit/test_role_contracts.py"
+      ],
+      "success": "inventory/group-vars generation uses canonical runtime data",
+      "failure": "playbook diagnostics include actionable stdout/stderr tails"
+    },
+    {
+      "surface": "resource_manager/plans.py",
+      "functions": [
+        "build_base_image_playbooks",
+        "build_software_phase_entries",
+        "build_planner_snapshot",
+        "validate_planner_snapshot"
+      ],
+      "test_paths": ["scripts/test/unit/test_resource_manager_plans.py"],
+      "success": "software/base-image plans and planner snapshots are deterministic",
+      "failure": "unsupported entries, malformed resources, and stale snapshots"
+    },
+    {
+      "surface": "resource_manager/resource_manager.py",
+      "functions": ["start", "add_options", "verify_options"],
+      "test_paths": ["scripts/test/unit/test_resource_manager_plans.py"],
+      "success": "centralized resource-manager entrypoint executes planner entries",
+      "failure": "direct module hooks without planning support fail loudly"
+    },
+    {
+      "surface": "application/runtime_helpers.py",
+      "functions": [
+        "write_benchmark_metric_artifacts",
+        "kubernetes_worker_global_vars",
+        "resolve_benchmark_launch_playbook",
+        "wait_kubernetes_worker_completion"
+      ],
+      "test_paths": ["scripts/test/unit/test_application_runtime_helpers.py"],
+      "success": "application-owned K8s launch metadata and metric artifacts",
+      "failure": "missing runner metadata and failed worker completion diagnostics"
+    },
+    {
+      "surface": "scripts/test/run_tests.py",
+      "functions": [
+        "validate_suite_prerequisites",
+        "merge_success_detection_config",
+        "run_single_test",
+        "main"
+      ],
+      "test_paths": ["scripts/test/e2e/test_run_tests.py"],
+      "success": "configured suite selection and success detection handoff",
+      "failure": "unknown suites, bad prereq declarations, and runner failure classes"
+    },
+    {
+      "surface": "scripts/test/support/e2e_utils.py",
+      "functions": [
+        "discover_config_files",
+        "detect_success",
+        "verify_benchmark_metric_artifacts",
+        "classify_test_failure"
+      ],
+      "test_paths": ["scripts/test/e2e/test_e2e_test_utils.py"],
+      "success": "YAML discovery, artifact validation, and result persistence",
+      "failure": "missing lock/state/network/benchmark artifacts and teardown drift"
+    }
+  ]
+}

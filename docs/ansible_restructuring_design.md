@@ -16,10 +16,10 @@ todos:
     status: completed
   - id: phase-e-phase-resume
     content: "Phase E: phase-resume and state integrity hardening"
-    status: in_progress
+    status: completed
   - id: phase-f-cleanup
     content: "Phase F: legacy removal and CI hardening"
-    status: pending
+    status: completed
   - id: phase-g-hardening
     content: "Phase G: optional image/build lifecycle hardening"
     status: pending
@@ -119,7 +119,7 @@ and completion concerns under application-owned Python helpers and application
 Ansible roles. Resource-manager modules should own platform installation and
 generic readiness checks, not benchmark-specific job/runtime behavior.
 
-Current implementation snapshot (updated May 20, 2026):
+Current implementation snapshot (updated May 21, 2026):
 
 1. application bootstrap/module wiring is no longer fully gated:
    - the application module now imports during YAML bootstrap for `run.targets: application`,
@@ -177,16 +177,26 @@ Current implementation snapshot (updated May 20, 2026):
    manifest plus CSV tables under `<base_path>/.continuum/logs/benchmark/`, and
    runner success detection validates the expected endpoint metric table before
    accepting the resumed application leg.
+9. Phase-E implementation is closed for the active rework scope; broader
+   benchmark statistics and reproducibility-package design remain follow-up
+   topics, not blockers for the resume/state integrity slice.
 
 ## Phase F: Cleanup and CI Hardening
 
 Objective: remove dead legacy paths and enforce quality gates consistently.
 
-Phase-F test architecture closure tasks:
+Phase-F test architecture closure status (updated May 21, 2026):
 
-1. run a unit-test coverage audit for major runtime/planner/parser/infrastructure functions and ensure each major function has one or more unit scenarios (at minimum one success path and one key fail-fast/error path where applicable),
-2. separate unit and end-to-end suites into distinct folders for clarity (target structure: `scripts/test/unit/` and `scripts/test/e2e/`),
-3. keep shared fixtures/helpers in a common test-support module and wire CI jobs so unit suite is first-class and fast, with e2e as explicit/gated execution.
+1. Major-function coverage is tracked in `scripts/test/coverage_manifest.json`
+   and documented in `docs/major_function_test_coverage.md`.
+2. `scripts/test/unit/test_coverage_manifest.py` validates audited source
+   paths, major function names, test references, and success/fail-fast coverage
+   notes.
+3. Unit tests now live under `scripts/test/unit/`, local e2e-runner tests live
+   under `scripts/test/e2e/`, and shared helpers live under
+   `scripts/test/support/`.
+4. `scripts/test/run_cloud_static_audit.sh` runs unit and e2e discovery as
+   first-class required gates before the combined discovery gate.
 
 ## Phase G: Optional Lifecycle Hardening
 

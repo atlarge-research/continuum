@@ -243,8 +243,21 @@ Before merge:
 
 ## 12. End-of-Rework Test Closure Commitments
 
-1. Execute a major-function unit-test coverage audit and close gaps so every major function has one or more unit scenarios.
-2. Separate test suites into dedicated unit and end-to-end directories for clarity and maintenance (`scripts/test/unit/` and `scripts/test/e2e/` target layout).
+Closed May 21, 2026:
+
+1. Major-function coverage is audited and tracked by
+   `scripts/test/coverage_manifest.json`, with the maintenance contract
+   documented in `docs/major_function_test_coverage.md`.
+2. `scripts/test/unit/test_coverage_manifest.py` keeps the audit live by
+   validating audited source paths, major function names, referenced tests, and
+   success/fail-fast coverage notes.
+3. Test suites are split into dedicated unit and local e2e-regression
+   directories:
+   - `scripts/test/unit/`
+   - `scripts/test/e2e/`
+   - shared helpers under `scripts/test/support/`
+4. `scripts/test/run_cloud_static_audit.sh` now runs unit and e2e discovery as
+   separate required gates before the combined suite.
 
 ## 13. End-of-Rework Documentation Closure Commitments
 
@@ -257,6 +270,8 @@ Before merge:
    - every major runtime/parser surface has a matching doc reference,
    - no contradictory semantics across planning/design docs,
    - no stale references to removed legacy interfaces.
+   - current path-reference enforcement is covered by
+     `scripts/test/check_docs_paths.py` and the cloud static audit.
 6. After the active rework stabilizes, revisit observability/reproducibility
    packaging as a dedicated design topic:
    - decide whether structured run packages should replace scattered per-feature
