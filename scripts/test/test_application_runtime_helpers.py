@@ -1,5 +1,6 @@
 """Unit tests for application runtime helper extraction."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -9,6 +10,46 @@ from application import runtime_helpers
 
 
 class ApplicationRuntimeHelpersTests(unittest.TestCase):
+    def test_write_benchmark_metric_artifacts_persists_manifest_and_csv(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = {
+                "timestamp": "2026-05-21_15:30:42",
+                "infrastructure": {"base_path": tempdir},
+                "domains": {
+                    "benchmark": {
+                        "pipeline": [
+                            {
+                                "id": "classify",
+                                "type": "image_classification",
+                                "config": {},
+                            }
+                        ]
+                    }
+                },
+            }
+            dataframe = runtime_helpers.pd.DataFrame(
+                [{"endpoint_id": 0, "latency_avg (ms)": 12.5}]
+            )
+
+            manifest_path = runtime_helpers.write_benchmark_metric_artifacts(
+                config,
+                [{"label": "ENDPOINT OUTPUT", "dataframe": dataframe}],
+            )
+
+            self.assertIsNotNone(manifest_path)
+            self.assertTrue(os.path.isfile(manifest_path))
+            with open(manifest_path, "r", encoding="utf-8") as filep:
+                manifest = json.load(filep)
+
+            self.assertEqual(manifest["kind"], "ContinuumBenchmarkMetrics")
+            self.assertEqual(manifest["schema_version"], 1)
+            self.assertEqual(manifest["stage_id"], "classify")
+            self.assertEqual(manifest["stage_type"], "image_classification")
+            self.assertEqual(manifest["tables"][0]["label"], "ENDPOINT OUTPUT")
+            self.assertEqual(manifest["tables"][0]["rows"], 1)
+            self.assertIn("latency_avg (ms)", manifest["tables"][0]["columns"])
+            self.assertTrue(os.path.isfile(manifest["tables"][0]["path"]))
+
     def test_batched_kubernetes_command_leaves_semicolons_for_remote_shell(self):
         command = runtime_helpers._batched_kubernetes_command(
             [

@@ -5,14 +5,89 @@ resource-manager modules can stay focused on platform installation and generic
 execution plumbing.
 """
 
+import json
 import logging
 import os
+import re
 import sys
 import time
 
 import pandas as pd
 
 from input.configuration import config_access
+
+
+BENCHMARK_METRICS_KIND = "ContinuumBenchmarkMetrics"
+BENCHMARK_METRICS_SCHEMA_VERSION = 1
+
+
+def _safe_artifact_token(value):
+    """Return a filesystem-safe token for benchmark artifact names."""
+    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value)).strip("._")
+    return token or "benchmark"
+
+
+def write_benchmark_metric_artifacts(config, metric_tables):
+    """Persist benchmark metric tables as structured runtime artifacts.
+
+    Args:
+        config (dict): Parsed Continuum configuration.
+        metric_tables (list[dict]): Table descriptors with ``label`` and
+            ``dataframe`` keys.
+
+    Returns:
+        str | None: Manifest path when one or more tables were written.
+    """
+    if not metric_tables:
+        return None
+
+    stage = config_access.benchmark_primary_stage(config)
+    timestamp = config.get("timestamp")
+    if not isinstance(timestamp, str) or not timestamp.strip():
+        raise ValueError("Missing required config path timestamp for benchmark artifacts")
+
+    log_dir = config_access.benchmark_logs_dir(config)
+    os.makedirs(log_dir, exist_ok=True)
+
+    stage_id = stage["id"]
+    stage_type = stage["type"]
+    stem = "%s_%s" % (_safe_artifact_token(timestamp), _safe_artifact_token(stage_id))
+    manifest = {
+        "schema_version": BENCHMARK_METRICS_SCHEMA_VERSION,
+        "kind": BENCHMARK_METRICS_KIND,
+        "timestamp": timestamp,
+        "stage_id": stage_id,
+        "stage_type": stage_type,
+        "tables": [],
+    }
+
+    for index, table in enumerate(metric_tables, 1):
+        label = table.get("label")
+        dataframe = table.get("dataframe")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("Benchmark metric artifact table label must be a non-empty string")
+        if not isinstance(dataframe, pd.DataFrame):
+            raise ValueError("Benchmark metric artifact table dataframe must be a DataFrame")
+
+        filename = "%s_%02d_%s.csv" % (stem, index, _safe_artifact_token(label))
+        path = os.path.join(log_dir, filename)
+        dataframe.to_csv(path, index=False, encoding="utf-8")
+        manifest["tables"].append(
+            {
+                "label": label,
+                "path": path,
+                "columns": [str(column) for column in dataframe.columns],
+                "rows": int(len(dataframe)),
+            }
+        )
+
+    manifest_path = os.path.join(log_dir, "%s_metrics_manifest.json" % (stem,))
+    with open(manifest_path, "w", encoding="utf-8") as filep:
+        json.dump(manifest, filep, indent=2, sort_keys=True)
+        filep.write("\n")
+
+    logging.info("Wrote benchmark metric artifact manifest to %s", manifest_path)
+    return manifest_path
 
 
 def kubernetes_deployment_mode(config):

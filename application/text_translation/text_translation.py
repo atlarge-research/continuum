@@ -342,6 +342,7 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
         logging.error("This application does not support status reporting")
         sys.exit(1)
 
+    metric_tables = []
     df1 = None
     if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:
         logging.info("------------------------------------")
@@ -359,6 +360,7 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
         )
         df1_no_indices = df1.to_string(index=False)
         logging.info("\n%s", df1_no_indices)
+        metric_tables.append({"label": "%s OUTPUT" % (config["mode"].upper(),), "dataframe": df1})
 
     if config["infrastructure"]["endpoint_nodes"]:
         logging.info("------------------------------------")
@@ -401,6 +403,9 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
 
         df2_no_indices = df2.to_string(index=False)
         logging.info("\n%s", df2_no_indices)
+        metric_tables.append({"label": "ENDPOINT OUTPUT", "dataframe": df2})
+
+    runtime_helpers.write_benchmark_metric_artifacts(config, metric_tables)
 
     # Print ouput in csv format
     if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:

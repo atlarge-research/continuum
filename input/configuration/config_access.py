@@ -130,6 +130,10 @@ def network_validation_logs_dir(config):
     return os.path.join(runtime_logs_dir(config), "network_validation")
 
 
+def benchmark_logs_dir(config):
+    return os.path.join(runtime_logs_dir(config), "benchmark")
+
+
 def benchmark_pipeline(config):
     pipeline = _nested_value(config, "domains", "benchmark", "pipeline", default=None)
     if not isinstance(pipeline, list):
