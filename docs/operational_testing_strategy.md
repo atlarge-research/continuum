@@ -210,6 +210,8 @@ Concrete smoke success criteria currently agreed:
      operationally complex software setup supported by Continuum
 4. benchmark:
    - benchmark output/logs show a successful execution path and results are emitted
+   - benchmark-smoke application-leg success detection checks lightweight stdout evidence for
+     completion, endpoint output, and a formatted latency column
    - benchmark-smoke design should prioritize functional success over rich metrics for now
 5. teardown/resume:
    - intermediate phases should reuse saved state rather than reprovisioning from scratch
@@ -296,10 +298,12 @@ What is already covered:
 10. real host-backed resumed K8s benchmark smoke with teardown verification via
     `configs/experiments/benchmark_smoke/`.
 11. lock/state resume-contract validation in runner success detection.
+12. lightweight benchmark-result evidence markers in runner success detection for the
+    application leg of the resumed K8s benchmark smoke path.
 
 What remains open:
 
-1. richer benchmark metrics/artifact assertions beyond functional completion,
+1. richer structured benchmark metrics/artifact assertions beyond functional marker evidence,
 2. broader scenario regressions beyond the canonical resumed Kubernetes benchmark smoke path.
 
 ## 9. Suggested Next Operational Work
@@ -307,7 +311,7 @@ What remains open:
 Recommended order:
 
 1. keep network-validation artifact checks aligned with the existing host-backed smoke runner output,
-2. add richer benchmark-result assertions after the functional K8s smoke path stays green,
+2. add richer benchmark-result assertions after the marker-based K8s smoke evidence stays green,
 3. expand scenario regressions only after the canonical smoke path remains stable.
 
 Cache-integrity note:
