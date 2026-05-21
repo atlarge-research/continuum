@@ -21,8 +21,8 @@ todos:
     content: "Phase F: legacy removal and CI hardening"
     status: completed
   - id: phase-g-hardening
-    content: "Phase G: optional image/build lifecycle hardening"
-    status: pending
+    content: "Phase G: deferred image/build lifecycle and reproducibility hardening"
+    status: deferred
 isProject: false
 ---
 
@@ -177,9 +177,9 @@ Current implementation snapshot (updated May 20, 2026):
    manifest plus CSV tables under `<base_path>/.continuum/logs/benchmark/`, and
    runner success detection validates the expected endpoint metric table before
    accepting the resumed application leg.
-9. Phase-E implementation is closed for the active rework scope; broader
-   benchmark statistics and reproducibility-package design remain follow-up
-   topics, not blockers for the resume/state integrity slice.
+9. Phase-E implementation is closed for the active rework scope; runner-level
+   benchmark statistical assertions are implemented, while final
+   reproducibility-package design remains a deferred follow-up topic.
 
 ## Phase F: Cleanup and CI Hardening
 
@@ -198,11 +198,16 @@ Phase-F test architecture closure status (updated May 21, 2026):
 4. `scripts/test/run_cloud_static_audit.sh` runs unit and e2e discovery as
    first-class required gates before the combined discovery gate.
 
-## Phase G: Optional Lifecycle Hardening
+## Phase G: Deferred Lifecycle Hardening
 
 Objective: additional image/build lifecycle robustness after core stabilization.
-Forward-looking scope: consolidate module/core extension-point contracts (including image requirement exposure) to avoid interface drift as new internal capabilities are added.
-Deferred library track: evaluate optional configuration-library adoption (Pydantic for schema validation and Hydra/OmegaConf for composition) only after Phase C/Phase D/Phase F stabilization, and only via explicit RFC/ADR design review before implementation.
+This is not part of the active PR-23 closure criteria.
+Forward-looking scope: consolidate module/core extension-point contracts
+(including image requirement exposure) to avoid interface drift as new internal
+capabilities are added.
+Deferred library track: evaluate optional configuration-library adoption
+(Pydantic for schema validation and Hydra/OmegaConf for composition) only via
+explicit RFC/ADR design review before implementation.
 Deferred observability track: revisit reproducibility packages and metric
 retention after the active rework stabilizes, including whether Continuum should
 offer a first-class structured run package and optional time-series database

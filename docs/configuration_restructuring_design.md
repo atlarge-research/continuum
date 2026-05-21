@@ -313,7 +313,7 @@ Optional tooling: one-shot converters outside runtime path.
 2. Active runtime now uses modules-only software config access (no compatibility projection for `software.orchestrator` / `software.addons`).
 3. Repository software profiles and experiment fixtures are migrated to canonical schema and covered by parser/runtime tests.
 4. PR-2 is completed with registry-backed dependency/capability checks in parser/runtime (including explicit dependency-edge rejection, endpoint-runtime capability enforcement, and exclusive-capability/conflict validation parity across parser/runtime).
-5. PR-3 selector/scope hard cutover, PR-4 runtime/planner integration, PR-5 documentation/smoke closure, and Phase D application-role consolidation are complete; current focus is Phase E resume/state integrity and operational hardening.
+5. PR-3 selector/scope hard cutover, PR-4 runtime/planner integration, PR-5 documentation/smoke closure, Phase D application-role consolidation, Phase E resume/state integrity, and Phase F test architecture closure are complete for the active rework scope.
 6. PR-3A introduces `run.image_prefetch` (`off|on`) as the only user knob for registry prefetch intent; registry lifecycle remains internal and infra-executed.
 7. PR-3A implementation includes deterministic control-plane image requirement resolution for `kubecontrol` and `kube_kata` with fail-fast unsupported-version validation.
 8. PR-3A baseline now includes internal benchmark-stage catalog mappings for `empty`, `empty_kata`, `mem_usage`, `stress`, `image_classification`, and `text_translation`, including stack-aware `image_classification` selection and fail-fast unknown-stage validation.

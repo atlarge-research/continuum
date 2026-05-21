@@ -51,7 +51,22 @@ if [ "$RUN_MODE" = "debug_playbook" ] && [ ! -x "$ANSIBLE_PLAYBOOK_BIN" ]; then
   exit 2
 fi
 
+run_child_scenarios() {
+  for child_scenario in "$@"; do
+    printf '\n=== Running smoke scenario: %s ===\n' "$child_scenario"
+    sh "$0" "$child_scenario"
+  done
+}
+
 case "$SCENARIO" in
+  phase_smoke_matrix)
+    run_child_scenarios infra_one_vm software_k8s_two_vm network_netperf_two_vm
+    exit 0
+    ;;
+  operational_regression)
+    run_child_scenarios phase_smoke_matrix benchmark_k8s_resume
+    exit 0
+    ;;
   infra_one_vm)
     CONFIG="configs/experiments/smoke/infra_one_vm.yaml"
     BASE_PATH="$BASE_ROOT/infra_one_vm"
@@ -125,7 +140,7 @@ case "$SCENARIO" in
     ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, debug-playbook" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, debug-playbook" >&2
     exit 2
     ;;
 esac

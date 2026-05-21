@@ -267,7 +267,7 @@
       ],
       "test_paths": ["scripts/test/e2e/test_e2e_test_utils.py"],
       "success": "YAML discovery, artifact validation, and result persistence",
-      "failure": "missing lock/state/network/benchmark artifacts and teardown drift"
+      "failure": "missing lock/state/network/benchmark artifacts, statistic drift, and teardown drift"
     }
   ]
 }

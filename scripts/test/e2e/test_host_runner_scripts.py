@@ -172,3 +172,55 @@ class HostRunnerScriptTests(unittest.TestCase):
                 ),
                 result.stdout,
             )
+
+    def test_run_smoke_operational_regression_chains_smoke_matrix_and_benchmark(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            runner_home = temp_root / "runner-home"
+            runner_home.mkdir()
+            venv_bin = temp_root / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            fake_python = venv_bin / "python3"
+            fake_python.write_text(
+                "#!/bin/sh\n"
+                "printf 'PYARGS:%s\\n' \"$*\"\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            smoke_base_root = temp_root / "smoke-base"
+
+            result = self._run_smoke_script(
+                "operational_regression",
+                extra_env={
+                    "HOME": str(runner_home),
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(fake_python),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                },
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("=== Running smoke scenario: phase_smoke_matrix ===", result.stdout)
+            self.assertIn("=== Running smoke scenario: infra_one_vm ===", result.stdout)
+            self.assertIn("=== Running smoke scenario: software_k8s_two_vm ===", result.stdout)
+            self.assertIn("=== Running smoke scenario: network_netperf_two_vm ===", result.stdout)
+            self.assertIn("=== Running smoke scenario: benchmark_k8s_resume ===", result.stdout)
+            self.assertIn(
+                "PYARGS:scripts/test/run_tests.py --config "
+                "configs/experiments/smoke/infra_one_vm.yaml --base-path",
+                result.stdout,
+            )
+            self.assertIn(
+                "PYARGS:scripts/test/run_tests.py --config "
+                "configs/experiments/smoke/software_k8s_two_vm.yaml --base-path",
+                result.stdout,
+            )
+            self.assertIn(
+                "PYARGS:scripts/test/run_tests.py --config "
+                "configs/experiments/smoke/network_netperf_two_vm.yaml --base-path",
+                result.stdout,
+            )
+            self.assertIn(
+                "PYARGS:scripts/test/run_tests.py --suite benchmark_smoke --base-path",
+                result.stdout,
+            )

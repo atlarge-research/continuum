@@ -522,7 +522,118 @@ def _validate_benchmark_metric_rows(rows, table_config):
                     % (label, row_index, column)
                 )
 
+    stat_ok, stat_reason = _validate_benchmark_metric_stat_assertions(rows, table_config)
+    if not stat_ok:
+        return False, stat_reason
+
     return True, "benchmark_metric_rows_valid"
+
+
+def _validate_benchmark_metric_stat_assertions(rows, table_config):
+    label = table_config["label"]
+    assertions = table_config.get("stat_assertions", [])
+    if assertions is None:
+        return True, "benchmark_metric_stats_valid"
+    if not isinstance(assertions, list):
+        return False, "Benchmark metric artifact config invalid: stat_assertions"
+
+    allowed_bounds = {
+        "min": "minimum",
+        "max": "maximum",
+        "mean_min": "mean minimum",
+        "mean_max": "mean maximum",
+    }
+    for assertion in assertions:
+        if not isinstance(assertion, dict):
+            return False, "Benchmark metric artifact config invalid: stat_assertions entry"
+
+        column = assertion.get("column")
+        if not isinstance(column, str) or not column:
+            return False, "Benchmark metric artifact config invalid: stat_assertions column"
+
+        values = []
+        for row_index, row in enumerate(rows, 1):
+            value = row.get(column)
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return False, (
+                    "Benchmark metric artifact invalid: %s row %s column %s is not numeric"
+                    % (label, row_index, column)
+                )
+            if not math.isfinite(number):
+                return False, (
+                    "Benchmark metric artifact invalid: %s row %s column %s is not finite"
+                    % (label, row_index, column)
+                )
+            values.append(number)
+
+        if not values:
+            return False, (
+                "Benchmark metric artifact invalid: %s column %s has no numeric rows"
+                % (label, column)
+            )
+
+        observed = {
+            "min": min(values),
+            "max": max(values),
+            "mean": sum(values) / len(values),
+        }
+
+        for bound in allowed_bounds:
+            if bound not in assertion:
+                continue
+            threshold = _benchmark_stat_threshold(assertion, bound)
+            if threshold is None:
+                return False, (
+                    "Benchmark metric artifact config invalid: stat_assertions %s for %s"
+                    % (bound, column)
+                )
+            passed = _benchmark_stat_bound_passed(observed, bound, threshold)
+            if not passed:
+                return False, (
+                    "Benchmark metric artifact statistic failed: %s column %s %s %s "
+                    "outside bound %s"
+                    % (
+                        label,
+                        column,
+                        allowed_bounds[bound],
+                        _benchmark_stat_observed_value(observed, bound),
+                        threshold,
+                    )
+                )
+
+    return True, "benchmark_metric_stats_valid"
+
+
+def _benchmark_stat_threshold(assertion, bound):
+    if bound not in assertion:
+        return None
+    try:
+        threshold = float(assertion[bound])
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(threshold):
+        return None
+    return threshold
+
+
+def _benchmark_stat_observed_value(observed, bound):
+    if bound in ("min", "max"):
+        return observed[bound]
+    return observed["mean"]
+
+
+def _benchmark_stat_bound_passed(observed, bound, threshold):
+    if bound == "min":
+        return observed["min"] >= threshold
+    if bound == "max":
+        return observed["max"] <= threshold
+    if bound == "mean_min":
+        return observed["mean"] >= threshold
+    if bound == "mean_max":
+        return observed["mean"] <= threshold
+    return False
 
 
 def _extract_run_timestamp(stdout: str) -> Optional[str]:
@@ -651,6 +762,7 @@ def verify_benchmark_metric_artifacts(
                 "columns": columns,
                 "min_rows": min_rows,
                 "numeric_columns": numeric_columns,
+                "stat_assertions": table_config.get("stat_assertions", []),
             },
         )
         if not row_ok:
@@ -1087,6 +1199,8 @@ def classify_test_failure(result: Dict) -> Optional[str]:
     if detail.startswith("Benchmark metric artifact unreadable:"):
         return "unreadable_benchmark_metric_artifact"
     if detail.startswith("Benchmark metric artifact invalid:"):
+        return "invalid_benchmark_metric_artifact"
+    if detail.startswith("Benchmark metric artifact statistic failed:"):
         return "invalid_benchmark_metric_artifact"
     if detail.startswith("Benchmark metric artifact config invalid:"):
         return "benchmark_metric_artifact_config"

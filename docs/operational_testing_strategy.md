@@ -222,8 +222,8 @@ Concrete smoke success criteria currently agreed:
      endpoint output, a formatted latency column, and at least one numeric metric row
    - benchmark-smoke application-leg success detection also validates the structured benchmark
      metric manifest and CSV table under `<base_path>/.continuum/logs/benchmark/`
-   - benchmark-smoke design should prioritize functional success plus lightweight metric evidence
-     before broader statistical assertions
+   - benchmark-smoke application-leg success detection also applies bounded statistical
+     assertions over the structured endpoint latency metric column
 5. teardown/resume:
    - intermediate phases should reuse saved state rather than reprovisioning from scratch
    - all VMs should be cleaned up only at the end of the smoke run
@@ -314,19 +314,26 @@ What is already covered:
 12. structured network-validation NDJSON checks in runner success detection.
 13. lightweight benchmark-result marker, metric-row, and structured metric-artifact evidence
     in runner success detection for the application leg of the resumed K8s benchmark smoke path.
+14. bounded benchmark statistical assertions over structured metric CSV artifacts.
+15. host-wrapper aggregate scenarios for phase-smoke matrix and full operational regression:
+    `phase_smoke_matrix` and `operational_regression`.
 
-What remains open:
+Deferred after the active rework:
 
-1. richer benchmark statistical assertions beyond structured artifact sanity checks,
-2. broader scenario regressions beyond the canonical resumed Kubernetes benchmark smoke path.
+1. final reproducibility-package architecture for durable run packages and optional external
+   metric retention,
+2. policy decisions for which slow scenario regressions are mandatory in local development,
+   CI, and release certification.
 
-## 9. Suggested Next Operational Work
+## 9. Operational Follow-Up Policy
 
-Recommended order:
+The current active runner contract is implemented and validated through:
 
-1. keep network-validation artifact checks aligned with the existing host-backed smoke runner output,
-2. add richer benchmark statistical assertions after structured metric artifacts stay green,
-3. expand scenario regressions only after the canonical smoke path remains stable.
+1. cloud-safe static audit and unit/e2e discovery,
+2. dedicated host-backed smoke slices,
+3. the retained resumed benchmark smoke path,
+4. the aggregate `operational_regression` wrapper scenario when a single host command should cover
+   all currently supported local QEMU smoke paths.
 
 Longer-term observability/reproducibility note:
 

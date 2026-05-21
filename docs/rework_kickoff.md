@@ -190,8 +190,10 @@ If resuming after May 20, 2026:
    - e2e success detection validates lock/state schema and matching contract hashes,
    - network-validation success detection validates structured netperf NDJSON
      under `<base_path>/.continuum/logs/network_validation/`,
-   - benchmark-smoke success detection validates lightweight metric-table
-     evidence in addition to stdout markers.
+   - benchmark-smoke success detection validates structured metric-table
+     artifacts, bounded latency statistics, and stdout markers.
+   - `phase_smoke_matrix` and `operational_regression` provide aggregate
+     wrapper scenarios for the currently supported local QEMU smoke baseline.
 7. Treat Phase F test architecture closure as landed:
    - major-function coverage is tracked by `scripts/test/coverage_manifest.json`,
    - the audit contract is documented in `docs/major_function_test_coverage.md`,

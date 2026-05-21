@@ -233,13 +233,18 @@ Before merge:
     `<base_path>/.continuum/logs/network_validation/`, and the
     `network_validation` suite validates those results against expected
     latency/throughput profile tolerances.
-96. Benchmark-smoke application-leg success detection now requires both
-    functional stdout markers and lightweight metric-table evidence, including
-    at least one numeric endpoint metric row.
+96. Benchmark-smoke application-leg success detection now requires functional
+    stdout markers, structured metric-table artifacts, bounded latency
+    statistics, and at least one numeric endpoint metric row.
 97. Benchmark metric evidence is now persisted as structured Phase-E runtime
     artifacts under `<base_path>/.continuum/logs/benchmark/`, and the
     `benchmark_smoke` suite validates the metric manifest plus CSV table
     sanity before accepting the resumed application leg as successful.
+98. The dedicated smoke wrapper now exposes `phase_smoke_matrix` for the three
+    phase-boundary smoke scenarios and `operational_regression` for that matrix
+    plus the retained resumed benchmark smoke path.
+99. Phase-G lifecycle/reproducibility hardening is explicitly deferred outside
+    PR-23 active closure and remains gated by a future RFC/ADR.
 
 ## 12. End-of-Rework Test Closure Commitments
 

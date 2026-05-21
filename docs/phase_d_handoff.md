@@ -3,7 +3,7 @@
 This document is the clean handoff note for the completed Phase-D runtime state.
 Phase-E resume/state integrity work now continues from this closure point.
 
-## 0. Immediate Next-Session Priority
+## 0. Phase-D Closure Snapshot
 
 The retained benchmark application leg is closed, and the explicit
 retained-resume prep API is now the intended contract for benchmark-smoke
@@ -311,7 +311,7 @@ Observed host-run attempts:
    - persists `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume/.continuum/state.json` with `phase_completed=infrastructure`
    - this clears the earlier guest-networking stall caused by hardcoded `ens2` netplan config
 12. direct follow-up resume commands from that coding harness were still blocked by the sandboxed `sudo` binary itself
-   - current harness error: `sudo: /usr/bin/sudo must be owned by uid 0 and have the setuid bit set`
+   - historical harness error: `sudo: /usr/bin/sudo must be owned by uid 0 and have the setuid bit set`
    - treat this as a harness limitation, not as a Continuum runtime failure
 13. once the dedicated wrapper exposed phase-specific benchmark commands, the resumed software failure became reproducible from retained state
    - `playbooks/resource_manager/k8s_cluster.yml` skipped the `cloudcontroller` play with `skipping: no hosts matched`
@@ -384,13 +384,13 @@ Observed host-run attempts:
      `scripts/test/unit/test_role_contracts.py`
    - the live image-classification replay then completed the launch playbook and
      created `job.batch/image-classification-1`
-28. the direct replay is not a full retained application closure
+28. the direct replay was not a full retained application closure
    - a bounded status check showed the created pod at `ErrImageNeverPull` for
      `192.168.1.104:5000/image_classification_subscriber` with
      `pull_policy=Never`
    - treat that as a direct-replay/image-availability boundary until the synced
      installed wrapper can rerun the full application leg
-   - next real closure remains:
+   - the then-open closure command sequence was:
      `sudo -n /usr/local/bin/continuum-hostctl sync-repo`, then
      `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume_application`
 29. because `hostctl` remained blocked, the working runner prefix was used as a
@@ -446,7 +446,7 @@ Observed host-run attempts:
    - result: `failure_class=nonzero_exit`
    - Kubernetes rejected `image-classification-1` because the existing Job has
      an immutable pod template from the earlier retained replay
-   - the next action at that point was to delete that Job through the retained debug-playbook path,
+   - the follow-up at that point was to delete that Job through the retained debug-playbook path,
      then rerun `benchmark_k8s_resume_application`
 35. 2026-05-13 follow-up: stale Job cleanup worked, exposing the next retained
     infrastructure issue
@@ -536,8 +536,10 @@ Observed host-run attempts:
 13. Network-validation NDJSON is a base-path runtime artifact under
     `<base_path>/.continuum/logs/network_validation/`, and the runner validates
     it as part of the `network_validation` suite success contract.
-14. Benchmark-smoke success detection now checks both lightweight stdout markers
-    and at least one numeric endpoint metric row for the resumed application leg.
+14. Benchmark-smoke success detection now checks lightweight stdout markers,
+    structured benchmark metric artifacts, bounded statistical assertions over
+    endpoint latency, and at least one numeric endpoint metric row for the
+    resumed application leg.
 
 ## 5. Next Clean Start Point
 

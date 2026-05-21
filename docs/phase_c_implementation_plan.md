@@ -315,5 +315,5 @@ Next clean start point:
    - application bootstrap/module wiring is enabled again,
    - helper extraction started in `application/runtime_helpers.py`,
    - runtime execution is ungated in `input/configuration/runtime_phase_targets.py`,
-   - benchmark smoke/teardown validation is the next operational closure item.
+   - benchmark smoke/teardown validation has closed on the dedicated host-backed runner.
    - See `docs/phase_d_handoff.md`.

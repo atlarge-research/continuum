@@ -108,6 +108,12 @@ The exact command the agent should use after installation is:
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume
 ```
 
+To run the full local operational regression baseline in one wrapper call, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression
+```
+
 To advance the retained benchmark state one phase at a time, use:
 
 ```bash
@@ -178,16 +184,18 @@ weaker code-integrity boundary.
 
 The installed wrapper supports only these values:
 
-1. `infra_one_vm`
-2. `software_k8s_two_vm`
-3. `network_netperf_two_vm`
-4. `benchmark_k8s_resume_infra`
-5. `benchmark_k8s_resume_software`
-6. `benchmark_k8s_resume_application`
-7. `benchmark_k8s_resume`
-8. `check-prereqs`
-9. `list-suites`
-10. `debug-playbook <scenario> <playbook> [ansible args...]`
+1. `phase_smoke_matrix`
+2. `operational_regression`
+3. `infra_one_vm`
+4. `software_k8s_two_vm`
+5. `network_netperf_two_vm`
+6. `benchmark_k8s_resume_infra`
+7. `benchmark_k8s_resume_software`
+8. `benchmark_k8s_resume_application`
+9. `benchmark_k8s_resume`
+10. `check-prereqs`
+11. `list-suites`
+12. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 
@@ -270,14 +278,15 @@ For first real host runs:
    live workspace changed,
 9. resync the dedicated repo before reruns if `verify` reports drift.
 
-For the next agent handoff specifically:
+For operational reruns:
 
 1. run `sudo -n /usr/local/bin/continuum-hostctl verify` before reruns,
 2. resync/install the wrapper only if `verify` reports drift,
-3. rerun only the narrow scenario affected by the current patch,
+3. rerun the narrow scenario affected by the current patch, or
+   `operational_regression` when a change affects shared runner behavior,
 4. the benchmark launch playbooks no longer use `kubernetes.core.k8s`; they now
    use `kubectl apply -f`, so future retained application failures should be
    benchmark/runtime failures rather than remote Python dependency failures,
 5. `infrastructure/ansible.py` now logs the failing stdout/stderr tail on
    nonzero Ansible exits, so the main run should usually be enough to diagnose
-   the next issue.
+   a retained-run failure.

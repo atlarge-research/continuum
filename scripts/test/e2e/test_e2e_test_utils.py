@@ -659,6 +659,15 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                             "columns": ["latency_avg (ms)"],
                             "numeric_columns": ["latency_avg (ms)"],
                             "min_rows": 1,
+                            "stat_assertions": [
+                                {
+                                    "column": "latency_avg (ms)",
+                                    "min": 0.0,
+                                    "max": 100.0,
+                                    "mean_min": 0.0,
+                                    "mean_max": 100.0,
+                                }
+                            ],
                         }
                     ],
                 },
@@ -701,6 +710,47 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
             self.assertFalse(success)
             self.assertIn("Benchmark metric artifact invalid", reason)
+
+    def test_detect_success_rejects_benchmark_metric_artifact_stat_bounds(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(root, "application")
+            _write_benchmark_metrics(root, latency_value="12.5")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": False,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "required_benchmark_metric_artifacts": [
+                        {
+                            "label": "ENDPOINT OUTPUT",
+                            "columns": ["latency_avg (ms)"],
+                            "numeric_columns": ["latency_avg (ms)"],
+                            "min_rows": 1,
+                            "stat_assertions": [
+                                {
+                                    "column": "latency_avg (ms)",
+                                    "max": 10.0,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            )
+
+            self.assertFalse(success)
+            self.assertIn("Benchmark metric artifact statistic failed", reason)
 
     def test_detect_success_skips_benchmark_evidence_for_non_application_leg(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1093,6 +1143,15 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 {
                     "success": False,
                     "success_reason": "Benchmark metric artifact invalid: not numeric",
+                }
+            ),
+            "invalid_benchmark_metric_artifact",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "Benchmark metric artifact statistic failed: latency",
                 }
             ),
             "invalid_benchmark_metric_artifact",
