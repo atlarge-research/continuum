@@ -313,7 +313,7 @@ Optional tooling: one-shot converters outside runtime path.
 2. Active runtime now uses modules-only software config access (no compatibility projection for `software.orchestrator` / `software.addons`).
 3. Repository software profiles and experiment fixtures are migrated to canonical schema and covered by parser/runtime tests.
 4. PR-2 is completed with registry-backed dependency/capability checks in parser/runtime (including explicit dependency-edge rejection, endpoint-runtime capability enforcement, and exclusive-capability/conflict validation parity across parser/runtime).
-5. PR-3 selector/scope hard cutover and PR-4 runtime/planner integration are complete; current focus moves beyond PR-5 closure into Phase D application-role consolidation and benchmark smoke/teardown validation now that runtime application execution is ungated.
+5. PR-3 selector/scope hard cutover, PR-4 runtime/planner integration, PR-5 documentation/smoke closure, and Phase D application-role consolidation are complete; current focus is Phase E resume/state integrity and operational hardening.
 6. PR-3A introduces `run.image_prefetch` (`off|on`) as the only user knob for registry prefetch intent; registry lifecycle remains internal and infra-executed.
 7. PR-3A implementation includes deterministic control-plane image requirement resolution for `kubecontrol` and `kube_kata` with fail-fast unsupported-version validation.
 8. PR-3A baseline now includes internal benchmark-stage catalog mappings for `empty`, `empty_kata`, `mem_usage`, `stress`, `image_classification`, and `text_translation`, including stack-aware `image_classification` selection and fail-fast unknown-stage validation.
@@ -334,7 +334,7 @@ Optional tooling: one-shot converters outside runtime path.
 23. Kubernetes launch-variable preparation now forwards both benchmark and software handoff bundles through a combined `planner_runtime_handoff` payload, preserving one planner-derived config/placement object for Phase-D role/template consolidation.
 24. Runtime accessors now mirror parser/domain duplicate-id invariants for `domains.benchmark.pipeline[].id` and `domains.software.modules[].id`, so exact-id handoff reads fail fast on malformed normalized/locked config.
 25. Resource-manager module and endpoint helper `start()` hooks now delegate to the centralized `resource_manager.start()` entrypoint, preserving the PR-4 planner boundary even if a module hook is invoked directly.
-26. PR-4 is complete; PR-5 owns examples/smokes/documentation closure before Phase D application-role consolidation.
+26. Historical PR-4 handoff point: PR-5 owned examples/smokes/documentation closure before Phase D application-role consolidation; both slices have since landed.
 27. PR-5 now publishes `docs/configuration_reference.md` and `docs/migration_notes.md` as the user-facing canonical-schema and hard-cut migration references, with `docs/cheatsheet.md` linking to them for first-line operator guidance.
 28. Shipped experiment examples and shipped environment/software profiles are now regression-validated from disk by `scripts/test/test_example_configs.py`, and the example/doc baseline quotes `run.image_prefetch` values to avoid YAML boolean coercion.
 29. The YAML e2e runner (`scripts/test/run_tests.py`) now validates `--suite` names against the loaded `scripts/test/test_config.json` content instead of a hard-coded CLI list, so config-declared suites such as `network_validation` are reachable without code changes.

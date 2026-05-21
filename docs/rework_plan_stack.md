@@ -89,7 +89,7 @@ Fast onboarding brief: `docs/rework_kickoff.md`.
 1. PR-1 (completed): Parser schema pivot to canonical `infrastructure.clusters[]` + `software.modules[]` validation.
 2. PR-2 (completed): Module registry + explicit-only dependency/capability validation baseline is landed; parser/runtime conflict and exclusivity validation coverage is landed with targeted tests.
 3. PR-3 (completed): Selector resolution + tag governance + scoped constraint engine baseline.
-4. PR-4 (completed): Runtime/planner integration for software placement plus benchmark assignment plumbing; application execution remains Phase-D gated.
+4. PR-4 (completed): Runtime/planner integration for software placement plus benchmark assignment plumbing that Phase D later consumed when application execution was ungated.
 5. PR-5 (completed): Example/profile finalization + tests/smokes + documentation closure, with user-facing schema/migration docs, host-runner isolation, and real host-backed smoke closure landed.
 
 ## 7. Decision Traceability Matrix
@@ -138,10 +138,10 @@ Before merge:
 2. Config examples and parser/runtime test fixtures are migrated to canonical `clusters[]` + `modules[]` schema.
 3. PR-2 implementation is complete with registry-backed dependency/capability validation in parser/runtime and dedicated unit tests.
 4. PR-2 incremental hardening includes parser/runtime parity for exclusive-capability/conflict validation with targeted regression tests.
-5. PR-3 selector/scope, PR-3A image-prefetch, and PR-4 runtime/planner integration baselines are closed; active work moves to PR-5 examples/smokes/documentation closure.
+5. PR-3 selector/scope, PR-3A image-prefetch, PR-4 runtime/planner integration, PR-5 docs/smokes, and Phase D application-role consolidation baselines are closed; active follow-up is Phase E resume/state integrity plus operational hardening.
 6. The explicit application-runtime gate was removed in Phase D: `run.targets: application` now executes benchmark/application runtime paths, and the resumed benchmark smoke/teardown path has since reached runner-visible closure.
 7. Current PR-3A baseline includes deterministic control-plane image requirement resolution for `kubecontrol`/`kube_kata` and internal benchmark-stage mappings for `empty`, `empty_kata`, `mem_usage`, `stress`, `image_classification`, and `text_translation`, with stack-aware `image_classification` selection and fail-fast unknown-stage handling.
-8. PR-4 prep baseline has progressed: core gated runtime/planner surfaces (including `application/*`) now use generic `benchmark_param*` config accessors instead of removed `workload_*`/legacy sizing helpers, and legacy benchmark/workload helper API stubs are removed from `config_access`.
+8. PR-4 prep baseline progressed: core then-gated runtime/planner surfaces (including `application/*`) now use generic `benchmark_param*` config accessors instead of removed `workload_*`/legacy sizing helpers, and legacy benchmark/workload helper API stubs are removed from `config_access`.
 9. Runtime endpoint env wiring now reads canonical benchmark keys directly (`duration`), with no runtime fallback aliasing from legacy `duration_s`.
 10. Parser hardening now includes strict stage-type benchmark config contracts for known stage types, with fail-fast required-key, value-type/range, and unknown-key validation.
 11. Config-access strictness is tightened for canonical run/software paths: runtime access now requires `domains.run.image_prefetch` and `domains.software.modules` (no silent fallback defaults), with invariants enforced via fail-fast errors.
@@ -190,7 +190,7 @@ Before merge:
 54. Experiment lock/planner snapshots now persist deterministic software execution order, owner-tagged software plan entries, software module assignments, and application-gated benchmark stage assignments.
 55. Assignment snapshots now include `resolved_resources` handoff records derived from `normalized.infrastructure.resources`, with each record carrying `vm_id`, `cluster_id`, `tier`, `index_in_cluster`, and tags.
 56. Planner snapshot validation is fail-fast for malformed or missing normalized resource records and for assignments that reference unknown `resolved_vm_ids`.
-57. PR-4 runtime helper wiring now exposes benchmark-stage planner assignments through `config_access` and passes planner-derived stage handoff metadata through gated Kubernetes helper paths without inferring application role topology from a single selector.
+57. PR-4 runtime helper wiring now exposes benchmark-stage planner assignments through `config_access` and passes planner-derived stage handoff metadata through the former gated Kubernetes helper paths without inferring application role topology from a single selector.
 58. Software phase endpoint-runtime install gating now uses canonical `endpoint_runtime` module placement (`resolved_vm_ids` mapped through `normalized.infrastructure.resources`) instead of aggregate endpoint node counts.
 59. Endpoint-runtime placement is now contract-validated: endpoint resources require an `endpoint_runtime` provider whose assignment resolves to endpoint VM resources, and base-image endpoint install planning uses the same placement predicate as the software phase.
 60. Module `requires` checks are now scope-aware in normalized planner validation: a required capability must be provided by a module whose resolved scope overlaps the consumer module, not merely exist elsewhere in the config.
@@ -199,12 +199,12 @@ Before merge:
 63. Host-IP discovery failure handling is deterministic for OS-level socket denial as well as DNS/socket lookup errors.
 64. Planner handoff accessor strictness is tightened: runtime reads reject mismatched `resolved_vm_ids`/`resolved_resources` and malformed scope identity records in planner snapshot assignments.
 65. Resolved resource handoff records now enforce base-tag consistency for `tier` and `cluster` tags against the serialized `tier`/`cluster_id` fields.
-66. Benchmark handoff consumption now uses canonical primary and pipeline-ordered runtime bundles (`benchmark_stage_handoff` / `benchmark_stage_handoffs`) and passes ids, pipeline indexes, deep-copied stage config, resolved resources, scope identities, tags, and tier counts through gated Kubernetes launch variables without activating application execution.
+66. Benchmark handoff consumption now uses canonical primary and pipeline-ordered runtime bundles (`benchmark_stage_handoff` / `benchmark_stage_handoffs`) and passes ids, pipeline indexes, deep-copied stage config, resolved resources, scope identities, tags, and tier counts through the Kubernetes launch-variable path first prepared before Phase D activated application execution.
 67. Software-module handoff consumption now uses canonical single-module and module-ordered runtime bundles (`software_module_assignment_handoff` / `software_module_assignment_handoffs`) for planner snapshot reads, and endpoint-runtime install gating consumes tier counts from the single-module bundle instead of raw resource-list counts; software handoffs also carry module indexes and deep-copied module config for Phase-D template preparation, with module-ordered construction keyed by module instance id rather than module type relookup and id-based accessors available for exact module-instance consumers.
 68. Runtime structural accessors now reject duplicate benchmark stage ids and duplicate software module ids, so exact-id handoff reads cannot silently select the first duplicate entry when consuming normalized/locked config.
 69. Resource-manager module and endpoint helper `start()` hooks now delegate to the centralized `resource_manager.start()` entrypoint, closing the remaining direct-start software execution and endpoint-install bypasses.
-70. Gated Kubernetes launch variables now carry a combined `planner_runtime_handoff` payload for ordered software-module and benchmark-stage config/placement metadata, and Phase-D role consolidation explicitly owns moving application-specific launch/timing/runtime concerns out of `resource_manager/kubernetes/kubernetes.py`.
-71. PR-4 is complete; PR-5 is the closure slice for examples/smokes/documentation alignment.
+70. The former gated Kubernetes launch-variable path now carries a combined `planner_runtime_handoff` payload for ordered software-module and benchmark-stage config/placement metadata, and Phase-D role consolidation consumed that handoff while moving application-specific launch/timing/runtime concerns out of `resource_manager/kubernetes/kubernetes.py`.
+71. Historical PR-4 handoff point: PR-5 was the closure slice for examples/smokes/documentation alignment and has since landed.
 72. PR-5 now publishes `docs/configuration_reference.md` and `docs/migration_notes.md` as the user-facing canonical-schema and hard-cut migration references, and `docs/cheatsheet.md`, `README.md`, and `configuration/README.md` point to them as the first documentation stops for YAML users.
 73. Shipped experiment examples and shipped environment/software profiles are now regression-validated from disk by `scripts/test/test_example_configs.py`, tightening the example/profile synchronization commitment in this plan stack.
 74. PR-5 doc/example cleanup normalized quoted `run.image_prefetch` values in shipped YAML examples and docs, avoiding YAML boolean coercion in the canonical reference baseline.
