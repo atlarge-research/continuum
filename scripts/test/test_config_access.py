@@ -267,6 +267,10 @@ class ConfigAccessTests(unittest.TestCase):
             config_access.runtime_logs_dir(cfg),
             "/tmp/continuum-run/.continuum/logs",
         )
+        self.assertEqual(
+            config_access.network_validation_logs_dir(cfg),
+            "/tmp/continuum-run/.continuum/logs/network_validation",
+        )
 
     def test_orchestrator_and_addon_helpers(self):
         cfg = self._config_with_modules()

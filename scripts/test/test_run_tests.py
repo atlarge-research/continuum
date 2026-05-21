@@ -229,6 +229,32 @@ class RunTestsCliTests(unittest.TestCase):
             ["ENDPOINT OUTPUT"],
         )
 
+    def test_merge_success_detection_allows_network_infra_override(self):
+        merged = run_tests_module.merge_success_detection_config(
+            {
+                "success_detection": {
+                    "require_exit_code_zero": True,
+                    "infra_only_override": {
+                        "require_ssh_output": False,
+                    },
+                }
+            },
+            {
+                "success_detection": {
+                    "infra_only_override": {
+                        "require_ssh_output": False,
+                        "require_network_validation_results": True,
+                    }
+                }
+            },
+        )
+
+        self.assertTrue(
+            merged["success_detection"]["infra_only_override"][
+                "require_network_validation_results"
+            ]
+        )
+
     def test_main_rejects_suite_when_prerequisite_commands_are_missing(self):
         fake_test_config = {
             "test_suites": {

@@ -48,6 +48,13 @@
             "use_cache": true,
             "rebuild_base_images": false,
             "stop_on_failure": true,
+            "success_detection": {
+                "infra_only_override": {
+                    "require_ssh_output": false,
+                    "require_exit_code_zero": true,
+                    "require_network_validation_results": true
+                }
+            },
             "prerequisites": {
                 "summary": "Requires a local QEMU/libvirt host with SSH access and tc-based network emulation support",
                 "commands": [
@@ -75,6 +82,15 @@
                     "Benchmark has been finished, prepare results",
                     "ENDPOINT OUTPUT",
                     "latency_avg (ms)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
                 ]
             },
             "prerequisites": {

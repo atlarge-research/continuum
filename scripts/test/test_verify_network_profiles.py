@@ -1,6 +1,8 @@
 """Unit tests for structured network-profile verification."""
 
 import importlib.util
+import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -17,6 +19,28 @@ verify_module = _load_verify_module()
 
 
 class VerifyNetworkProfilesTests(unittest.TestCase):
+    def test_latest_results_file_uses_base_path_runtime_log_dir(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            results_dir = (
+                Path(tempdir) / ".continuum" / "logs" / "network_validation"
+            )
+            results_dir.mkdir(parents=True)
+            older = results_dir / "netperf_results_2026-05-20T000000.ndjson"
+            newer = results_dir / "netperf_results_2026-05-21T000000.ndjson"
+            older.write_text("{}\n", encoding="utf-8")
+            newer.write_text("{}\n", encoding="utf-8")
+            os.utime(older, (1, 1))
+            os.utime(newer, (2, 2))
+
+            self.assertEqual(
+                verify_module.results_dir_for_base_path(tempdir),
+                str(results_dir),
+            )
+            self.assertEqual(
+                verify_module.latest_results_file(base_path=tempdir),
+                str(newer),
+            )
+
     def test_validate_results_accepts_values_within_combined_tolerance(self):
         results = [
             {

@@ -9,26 +9,46 @@ from collections import defaultdict
 from typing import Dict, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LOG_DIR = os.path.join(PROJECT_ROOT, "logs", "network_validation")
+LEGACY_LOG_DIR = os.path.join(PROJECT_ROOT, "logs", "network_validation")
+NETWORK_VALIDATION_LOG_SUFFIX = os.path.join(".continuum", "logs", "network_validation")
 RELATIVE_TOLERANCE = 0.25
 LATENCY_ABSOLUTE_TOLERANCE_MS = 10.0
 THROUGHPUT_ABSOLUTE_TOLERANCE_MBPS = 10.0
 
 
-def _latest_results_file() -> str:
+def results_dir_for_base_path(base_path: str) -> str:
+    """Return the network-validation log directory for one Continuum base path."""
+    return os.path.join(os.path.expanduser(base_path), NETWORK_VALIDATION_LOG_SUFFIX)
+
+
+def _latest_results_file(results_dir: str) -> str:
     """Return the newest netperf_results_*.ndjson file, or raise if none exist."""
-    if not os.path.isdir(LOG_DIR):
-        raise FileNotFoundError(f"Network validation log directory not found: {LOG_DIR}")
+    if not os.path.isdir(results_dir):
+        raise FileNotFoundError(f"Network validation log directory not found: {results_dir}")
 
     candidates = [
-        os.path.join(LOG_DIR, f)
-        for f in os.listdir(LOG_DIR)
+        os.path.join(results_dir, f)
+        for f in os.listdir(results_dir)
         if f.startswith("netperf_results_") and f.endswith(".ndjson")
     ]
     if not candidates:
-        raise FileNotFoundError(f"No netperf results files found in {LOG_DIR}")
+        raise FileNotFoundError(f"No netperf results files found in {results_dir}")
 
     return max(candidates, key=os.path.getmtime)
+
+
+def latest_results_file(base_path: str = None, results_dir: str = None) -> str:
+    """Return the newest structured netperf result file for a base path or directory."""
+    if results_dir:
+        return _latest_results_file(results_dir)
+    if base_path:
+        return _latest_results_file(results_dir_for_base_path(base_path))
+
+    env_base_path = os.environ.get("CONTINUUM_BASE_PATH")
+    if env_base_path:
+        return _latest_results_file(results_dir_for_base_path(env_base_path))
+
+    return _latest_results_file(LEGACY_LOG_DIR)
 
 
 def _parse_throughput(output: str) -> float:
@@ -176,11 +196,26 @@ def main() -> int:
     parser.add_argument(
         "--results-file",
         help="Optional explicit path to a netperf_results_*.ndjson file "
-        "(defaults to latest in logs/network_validation/).",
+        "(defaults to latest under --base-path/.continuum/logs/network_validation, "
+        "CONTINUUM_BASE_PATH, or legacy repo-local logs/network_validation).",
+    )
+    parser.add_argument(
+        "--base-path",
+        help=(
+            "Continuum base_path whose .continuum/logs/network_validation "
+            "directory should be used."
+        ),
+    )
+    parser.add_argument(
+        "--results-dir",
+        help="Optional explicit directory containing netperf_results_*.ndjson files.",
     )
     args = parser.parse_args()
 
-    results_file = args.results_file or _latest_results_file()
+    results_file = args.results_file or latest_results_file(
+        base_path=args.base_path,
+        results_dir=args.results_dir,
+    )
     print(f"Using netperf results file: {results_file}")
     results = load_results(results_file)
     if not results:

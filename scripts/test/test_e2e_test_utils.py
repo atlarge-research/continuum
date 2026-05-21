@@ -66,6 +66,34 @@ def _write_success_artifacts(root: Path, phase_completed, contract=None, machine
     )
 
 
+def _write_network_results(root: Path, entries=None):
+    results_dir = root / ".continuum" / "logs" / "network_validation"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    results_path = results_dir / "netperf_results_2026-05-21T000000.ndjson"
+    entries = entries or [
+        {
+            "source": "cloud",
+            "target": "endpoint",
+            "direction": "latency",
+            "output": "1000,40000,50000,1000,25,30000,45000,50000",
+            "expected_latency_ms": 45.0,
+            "expected_throughput_mbps": 7.21,
+        },
+        {
+            "source": "cloud",
+            "target": "endpoint",
+            "direction": "throughput",
+            "output": "7.50",
+            "expected_latency_ms": 45.0,
+            "expected_throughput_mbps": 7.21,
+        },
+    ]
+    with results_path.open("w", encoding="utf-8") as filep:
+        for entry in entries:
+            filep.write(json.dumps(entry) + "\n")
+    return results_path
+
+
 class E2ETestUtilsYamlTests(unittest.TestCase):
     class _FakeHostIpSocket:
         def __enter__(self):
@@ -488,6 +516,85 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 reason,
             )
 
+    def test_detect_success_requires_benchmark_metric_table_rows(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "application")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": False,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            stdout = "\n".join(
+                [
+                    "ssh cloud0@192.168.0.10 -i /tmp/test_key",
+                    "[2026-05-21 path:1 - f() ] ENDPOINT OUTPUT",
+                    "[2026-05-21 path:1 - f() ] endpoint_id  latency_avg (ms)",
+                    "[2026-05-21 path:1 - f() ]           0             12.5",
+                ]
+            )
+            success, reason = test_utils.detect_success(
+                stdout=stdout,
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "required_stdout_metric_tables": [
+                        {
+                            "label": "ENDPOINT OUTPUT",
+                            "columns": ["latency_avg (ms)"],
+                            "min_rows": 1,
+                        }
+                    ],
+                },
+            )
+
+            self.assertTrue(success)
+            self.assertIn("benchmark_metric_tables_found", reason)
+
+    def test_detect_success_rejects_benchmark_metric_table_without_rows(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "application")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": False,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            stdout = "\n".join(
+                [
+                    "ssh cloud0@192.168.0.10 -i /tmp/test_key",
+                    "ENDPOINT OUTPUT",
+                    "endpoint_id  latency_avg (ms)",
+                ]
+            )
+            success, reason = test_utils.detect_success(
+                stdout=stdout,
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "required_stdout_metric_tables": [
+                        {
+                            "label": "ENDPOINT OUTPUT",
+                            "columns": ["latency_avg (ms)"],
+                            "min_rows": 1,
+                        }
+                    ],
+                },
+            )
+
+            self.assertFalse(success)
+            self.assertIn("Benchmark metric evidence missing rows for ENDPOINT OUTPUT", reason)
+
     def test_detect_success_skips_benchmark_evidence_for_non_application_leg(self):
         with tempfile.TemporaryDirectory() as tempdir:
             _write_success_artifacts(Path(tempdir), "infrastructure")
@@ -516,6 +623,66 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
             self.assertTrue(success)
             self.assertNotIn("benchmark_evidence_found", reason)
+
+    def test_detect_success_validates_network_results_for_network_suite(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(root, "infrastructure")
+            results_path = _write_network_results(root)
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": True,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "infra_only_override": {
+                        "require_ssh_output": False,
+                        "require_network_validation_results": True,
+                    }
+                },
+            )
+
+            self.assertTrue(success)
+            self.assertIn("network_validation_results=%s" % (results_path,), reason)
+
+    def test_detect_success_rejects_missing_network_results(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "infrastructure")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": True,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={
+                    "infra_only_override": {
+                        "require_ssh_output": False,
+                        "require_network_validation_results": True,
+                    }
+                },
+            )
+
+            self.assertFalse(success)
+            self.assertIn("Network validation artifact missing", reason)
 
     def test_detect_success_rejects_missing_lock_file(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -793,6 +960,35 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 }
             ),
             "missing_benchmark_evidence",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": (
+                        "Benchmark metric evidence missing rows for ENDPOINT OUTPUT"
+                    ),
+                }
+            ),
+            "missing_benchmark_metric_evidence",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "Network validation artifact missing: no results",
+                }
+            ),
+            "missing_network_artifact",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
+                    "success_reason": "Network validation profile mismatch: latency",
+                }
+            ),
+            "network_profile_mismatch",
         )
         self.assertIsNone(test_utils.classify_test_failure({"success": True}))
 

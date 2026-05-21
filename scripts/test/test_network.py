@@ -1,6 +1,9 @@
 """Unit tests for network emulation helpers."""
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from infrastructure import network
@@ -67,6 +70,45 @@ class NetworkHelpersTests(unittest.TestCase):
         self.assertTrue(all(not command.startswith('"') for command in commands))
         self.assertTrue(all(not command.endswith('"') for command in commands))
         self.assertTrue(any(";" in command for command in commands))
+
+    def test_benchmark_output_writes_results_under_base_path(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            machine = mock.Mock()
+            machine.process.return_value = [(["1000,40000,50000"], [])]
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "wireless_network_preset": "4g",
+                },
+                "timestamp": "2026-05-21T000000",
+            }
+
+            network.benchmark_output(
+                config,
+                machine,
+                ["192.168.100.3"],
+                [["netperf", "-t", "TCP_RR"]],
+                [["netperf", "-t", "TCP_STREAM"]],
+                "cloud0@192.168.100.2",
+                "cloud",
+                "endpoint",
+            )
+
+            results_path = (
+                Path(tempdir)
+                / ".continuum"
+                / "logs"
+                / "network_validation"
+                / "netperf_results_2026-05-21T000000.ndjson"
+            )
+            entries = [
+                json.loads(line)
+                for line in results_path.read_text(encoding="utf-8").splitlines()
+            ]
+
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[0]["direction"], "latency")
+            self.assertEqual(entries[1]["direction"], "throughput")
 
 
 if __name__ == "__main__":

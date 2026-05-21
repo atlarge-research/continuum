@@ -8,6 +8,8 @@ import os
 import sys
 import time
 
+from input.configuration import config_access
+
 
 def _is_transient_tc_error(lines):
     """Return true when TC error looks transient (e.g., temporary SSH issues).
@@ -571,9 +573,8 @@ def benchmark_output(
         source_name (str): Type of VM running netperf
         target_name (str): Type of VMs on the receiving side of netperf
     """
-    # Prepare path for optional structured netperf results (NDJSON)
-    base_dir = config["base"]
-    results_dir = os.path.join(base_dir, "logs", "network_validation")
+    # Prepare path for optional structured netperf results (NDJSON).
+    results_dir = config_access.network_validation_logs_dir(config)
     os.makedirs(results_dir, exist_ok=True)
     ts = config["timestamp"]
     results_path = os.path.join(results_dir, f"netperf_results_{ts}.ndjson")

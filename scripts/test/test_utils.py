@@ -6,6 +6,7 @@ Provides functions for config discovery, base image management, success detectio
 import argparse
 import fnmatch
 import getpass
+import importlib.util
 import json
 import os
 import re
@@ -20,6 +21,22 @@ import yaml
 from input.configuration import resume_contract, yaml_parser
 
 _ORCHESTRATOR_MODULE_TYPES = ("none", "kubernetes", "kubeedge", "kubecontrol", "kube_kata", "mist")
+_VERIFY_NETWORK_PROFILES = None
+
+
+def _load_verify_network_profiles():
+    """Load the structured network-profile verifier from this test directory."""
+    global _VERIFY_NETWORK_PROFILES
+    if _VERIFY_NETWORK_PROFILES is None:
+        module_path = Path(__file__).with_name("verify_network_profiles.py")
+        spec = importlib.util.spec_from_file_location(
+            "continuum_verify_network_profiles_runtime",
+            module_path,
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _VERIFY_NETWORK_PROFILES = module
+    return _VERIFY_NETWORK_PROFILES
 
 
 def discover_config_files(
@@ -428,6 +445,109 @@ def should_rebuild_base_images(
     return False
 
 
+def verify_network_validation_results(config: Dict) -> Tuple[bool, str]:
+    """Validate structured network-validation netperf results for one run."""
+    base_path = config.get("infrastructure", {}).get("base_path")
+    if not isinstance(base_path, str) or not base_path.strip():
+        return False, "Network validation artifact missing: infrastructure.base_path is not set"
+
+    verifier = _load_verify_network_profiles()
+    try:
+        results_file = verifier.latest_results_file(base_path=base_path)
+    except FileNotFoundError as exc:
+        return False, "Network validation artifact missing: %s" % (exc,)
+
+    try:
+        results = verifier.load_results(results_file)
+    except OSError as exc:
+        return False, "Network validation artifact unreadable: %s" % (exc,)
+
+    if not results:
+        return False, "Network validation artifact invalid: no netperf entries found"
+
+    failures = verifier.validate_results(results)
+    if failures:
+        return False, "Network validation profile mismatch: %s" % ("; ".join(failures),)
+
+    return True, "network_validation_results=%s" % (results_file,)
+
+
+def _strip_log_prefix(line: str) -> str:
+    """Return a log message line without Continuum's logging prefix when present."""
+    if "] " in line:
+        return line.split("] ", 1)[1]
+    return line
+
+
+def _line_contains_all(line: str, markers: List[str]) -> bool:
+    return all(marker in line for marker in markers)
+
+
+def _numeric_metric_row_count(lines: List[str], start_index: int) -> int:
+    rows = 0
+    for line in lines[start_index:]:
+        message = _strip_log_prefix(line).strip()
+        if not message:
+            continue
+        if set(message) <= {"-"}:
+            if rows:
+                break
+            continue
+        if message.endswith("OUTPUT"):
+            break
+        if re.search(r"[-+]?(?:\d+\.\d+|\d+)", message):
+            rows += 1
+    return rows
+
+
+def verify_benchmark_metric_tables(stdout: str, table_configs: List[Dict]) -> Tuple[bool, str]:
+    """Validate configured benchmark metric tables in captured stdout."""
+    if not isinstance(table_configs, list):
+        return False, "Benchmark metric evidence config invalid: expected list"
+
+    lines = stdout.splitlines()
+    for table_config in table_configs:
+        if not isinstance(table_config, dict):
+            return False, "Benchmark metric evidence config invalid: table entry must be mapping"
+
+        label = table_config.get("label")
+        columns = table_config.get("columns", [])
+        min_rows = table_config.get("min_rows", 1)
+        if not isinstance(label, str) or not label:
+            return False, "Benchmark metric evidence config invalid: label"
+        if not isinstance(columns, list) or not all(
+            isinstance(column, str) and column for column in columns
+        ):
+            return False, "Benchmark metric evidence config invalid: columns"
+        if not isinstance(min_rows, int) or min_rows < 1:
+            return False, "Benchmark metric evidence config invalid: min_rows"
+
+        label_index = None
+        for index, line in enumerate(lines):
+            if label in _strip_log_prefix(line):
+                label_index = index
+                break
+        if label_index is None:
+            return False, "Benchmark metric evidence missing table: %s" % (label,)
+
+        header_index = None
+        for index in range(label_index + 1, len(lines)):
+            if _line_contains_all(_strip_log_prefix(lines[index]), columns):
+                header_index = index
+                break
+        if header_index is None:
+            return False, "Benchmark metric evidence missing columns for %s: %s" % (
+                label,
+                ", ".join(columns),
+            )
+
+        rows = _numeric_metric_row_count(lines, header_index + 1)
+        if rows < min_rows:
+            return False, "Benchmark metric evidence missing rows for %s" % (label,)
+
+    return True, "benchmark_metric_tables_found"
+
+
 def detect_success(
     stdout: str,
     stderr: str,
@@ -462,7 +582,9 @@ def detect_success(
     require_state_phase = criteria.get("require_state_phase", True)
     require_resume_contract = criteria.get("require_resume_contract", True)
     require_teardown = criteria.get("require_teardown", False)
+    require_network_validation_results = criteria.get("require_network_validation_results", False)
     required_stdout_markers = criteria.get("required_stdout_markers", [])
+    required_stdout_metric_tables = criteria.get("required_stdout_metric_tables", [])
     check_logs = criteria.get("check_log_files", False)
 
     reasons = []
@@ -573,6 +695,12 @@ def detect_success(
             return False, teardown_reason
         reasons.append(teardown_reason)
 
+    if require_network_validation_results:
+        network_ok, network_reason = verify_network_validation_results(config)
+        if not network_ok:
+            return False, network_reason
+        reasons.append(network_reason)
+
     if required_stdout_markers:
         expected_phase = expected_phase or _expected_phase_completed(config)
     if required_stdout_markers and expected_phase == "application":
@@ -586,6 +714,17 @@ def detect_success(
         if missing_markers:
             return False, "Benchmark evidence missing: %s" % (", ".join(missing_markers),)
         reasons.append("benchmark_evidence_found")
+
+    if required_stdout_metric_tables:
+        expected_phase = expected_phase or _expected_phase_completed(config)
+    if required_stdout_metric_tables and expected_phase == "application":
+        metric_ok, metric_reason = verify_benchmark_metric_tables(
+            stdout,
+            required_stdout_metric_tables,
+        )
+        if not metric_ok:
+            return False, metric_reason
+        reasons.append(metric_reason)
 
     # Optional: Check log files or stdout/stderr for explicit failure markers
     if check_logs:
@@ -736,6 +875,18 @@ def classify_test_failure(result: Dict) -> Optional[str]:
         return "teardown_failure"
     if detail.startswith("Benchmark evidence missing:"):
         return "missing_benchmark_evidence"
+    if detail.startswith("Benchmark metric evidence missing"):
+        return "missing_benchmark_metric_evidence"
+    if detail.startswith("Benchmark metric evidence config invalid:"):
+        return "benchmark_metric_evidence_config"
+    if detail.startswith("Network validation artifact missing:"):
+        return "missing_network_artifact"
+    if detail.startswith("Network validation artifact unreadable:"):
+        return "unreadable_network_artifact"
+    if detail.startswith("Network validation artifact invalid:"):
+        return "invalid_network_artifact"
+    if detail.startswith("Network validation profile mismatch:"):
+        return "network_profile_mismatch"
     if detail.startswith("No SSH output found"):
         return "missing_ssh"
     if detail.startswith("Exit code "):
