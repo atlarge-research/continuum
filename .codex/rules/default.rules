@@ -255,3 +255,13 @@ prefix_rule(
     decision = "allow",
     justification = "Setup agent host for smoke tests",
 )
+
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "allow",
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "allow",
+)
