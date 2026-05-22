@@ -1,31 +1,48 @@
 # Disk IO Verification
-Continuum includes the option to set the disk read/write throughput speed for the virtual machines it creates.
-The following configuration file parameters are available, in MB/s, with default values of 0 for unlimited:
-* cloud_read_speed
-* edge_read_speed
-* endpoint_read_speed 
-* cloud_write_speed
-* edge_write_speed
-* endpoint_write_speed
 
-The following code is an example of how to benchmark read/write throughput speed inside the VMs.
+Continuum YAML VM specs can constrain virtual disk throughput per cluster. The
+active keys live under `infrastructure.clusters[].resources.vms.spec`:
+
+- `storage_read_mbps`
+- `storage_write_mbps`
+
+Both values are in MB/s. A value of `0.0` means unlimited, which is also the
+parser default when the key is omitted.
+
+Example:
+
+```yaml
+infrastructure:
+  clusters:
+    - id: cloud-1
+      tier: cloud
+      resources:
+        vms:
+          count: 1
+          spec:
+            cores: 2
+            memory_gb: 4
+            storage_read_mbps: 100.0
+            storage_write_mbps: 50.0
+```
+
+To verify behavior inside a retained VM, first find the SSH hint in
+`<base_path>/.continuum/logs/` or inspect `<base_path>/.continuum/state.json`.
+Then run a simple guest-side check:
+
 ```bash
-# Pick the drive you want to benchmark
-# The default disk in the VMs is /dev/vda1, which we use for this example
 sudo lsblk
-
-# Benchmark read speed using hdparm
 sudo hdparm -Ttv /dev/vda1
 
-# Benchmark write speed using dd
-sudo su
-cd /tmp
-mkdir mnt
-mount /dev/vda1 ./mnt
+sudo mkdir -p /tmp/continuum-disk-check
+sudo mount /dev/vda1 /tmp/continuum-disk-check
 sync
-echo 3 > /proc/sys/vm/drop_caches
-dd if=/dev/zero of=/tmp/mnt/temp oflag=direct bs=128k count=16k
-rm -f /tmp/mnt/temp
-umount ./mnt
-rm -f ./mnt
+sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
+sudo dd if=/dev/zero of=/tmp/continuum-disk-check/temp oflag=direct bs=128k count=16k
+sudo rm -f /tmp/continuum-disk-check/temp
+sudo umount /tmp/continuum-disk-check
+sudo rmdir /tmp/continuum-disk-check
 ```
+
+Use this as a manual diagnostic only. It is not part of the cloud-safe static
+audit or the default smoke success contract.

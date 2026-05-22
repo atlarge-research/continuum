@@ -31,6 +31,7 @@ Start with artifacts that Continuum already writes:
 4. test summary JSON under `<base_path>/.continuum/test_results/` when the
    suite is run with a base-path override
 5. network-validation NDJSON under `<base_path>/.continuum/logs/network_validation/` when netperf is enabled
+6. benchmark metric manifests and CSV tables under `<base_path>/.continuum/logs/benchmark/` when the application leg runs
 
 ## 3. SSH Hints In Runtime Logs
 
@@ -158,8 +159,16 @@ Resume failure:
 
 1. inspect `<base_path>/.continuum/state.json`,
 2. confirm `phase_completed`,
-3. compare provider/resource-manager identity in the state file with the current config,
-4. only then inspect VMs directly.
+3. compare the `resume_contract` hash/details with `<base_path>/.continuum/experiment_lock.yaml`,
+4. compare provider/resource-manager identity in the state file with the current config,
+5. only then inspect VMs directly.
+
+Retained benchmark smoke failure:
+
+1. keep the retained base path intact,
+2. inspect benchmark stdout/stderr and `<base_path>/.continuum/logs/benchmark/`,
+3. use the installed wrapper's bounded `debug-playbook` scenario from `docs/smoke_runner_isolation.md` when Ansible replay is needed,
+4. rerun only the smallest relevant wrapper scenario after applying a fix.
 
 ## 8. Suggested Debugging Discipline
 

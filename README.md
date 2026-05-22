@@ -3,7 +3,7 @@ Continuum is a deployment and benchmarking framework for the edge-cloud compute 
 Continuum offers the following features:
 
 1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
-2. Users can freely configure the specifications of the virtual machines and the network connecting them through a single configuration file.
+2. Users configure experiments with YAML experiment files plus reusable environment and software profiles.
 3. Continuum automatically installs operating services, resource managers, and applications inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
 4. Continuum can automatically benchmark the resource managers and applications installed in the emulated cluster, and report metrics and logs back to the user.
 5. Continuum is easily extendable, allowing users to add support for more infrastructure providers, operating services, resource managers, and applications.
@@ -24,7 +24,7 @@ Continuum has the following architecture:
 </div>
 <br>
 
-The execution flow consists of three phases, each having a configuration and execution step. These phases are **infrastructure deployment**, **software installation**, and **benchmarking**. Each phase is optional, i.e., the framework can be used for infrastructure deployment without any pre-installed software if so desired.
+The user-visible execution flow consists of **infrastructure deployment**, **software installation**, and **benchmark/application execution**. The active runtime also has bootstrap/planning and artifact/resume/teardown boundaries, documented in `docs/runtime_execution_pipeline.md`.
 
 1. **Infrastructure configuration:** Libvirt configuration files for QEMU/KVM are created based on the user's preferences.
 2. **Infrastructure execution:** The configuration files are executed, creating QEMU/KVM virtual machines connected through network bridges.

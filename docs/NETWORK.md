@@ -1,30 +1,48 @@
 # Network
-This file describes how to setup and configure bridged network interfaces if you want to use Continuum with Libvirt on multiple physical machines. This allows for large scale infrastructure deployments. The network bridge is required for VMs on different physical machines to directly communicate with each other.
 
-## Creating a network bridge
-We assume the operating system is Ubuntu 20.04 with Netcat for network configuration, and that a default, bridgeless Netcat configuration file already exists. Simimlar network bridge configuration can be done on other operating systems.
+This file describes the host-side network setup used by Continuum's local
+QEMU/libvirt provider. It is operational guidance, not part of the YAML schema.
+For YAML network keys, see `docs/configuration_reference.md`.
 
+## When A Bridge Is Needed
+
+A bridge is needed when QEMU VMs must communicate directly across host or
+physical-machine boundaries. Single-host smoke paths can often use the host's
+existing libvirt/QEMU setup, but the operational smoke baseline still expects
+working `virsh`, SSH, and bridge/route discovery.
+
+The dedicated smoke wrapper can preserve explicit overrides when the host setup
+forwards them:
+
+```bash
+CONTINUUM_QEMU_BRIDGE_NAME=br0
+CONTINUUM_QEMU_BRIDGE_GATEWAY=192.168.100.1
 ```
-# Check if there already is a network bridge active on your machine. If so, you are done.
-# Ignore virtual bridges such as docker0 and virbr0. Most often a bridge is called 'br0'.
-brctl show
 
-# List current virtual networks still active
-virsh net-list
+Use overrides only to describe the real host network. They should not be used to
+hide broken libvirt or route setup.
 
-# Destroy all virtual network. Example name: default
-virsh net-destroy default
-virsh net-undefine default
+## Creating A Bridge On Ubuntu-like Hosts
 
-# Make a backup of the bridgeless config file, called '***.yaml.bak
-cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak
+The exact netplan file depends on the host. The outline is:
 
-# Edit the original file and add the bridge. 
-# Copy the settings from the original ethernet interface to the bridge interface, 
-# while adding a 'interfaces: ' option, refering to the ethernet interface.
-# The final file should look similar to this:
-'''
+```bash
+# Inspect current interfaces and routes
+ip addr
+ip route
+
+# Inspect existing libvirt networks
+virsh net-list --all
+
+# Back up the current netplan file before editing
+sudo cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak
+```
+
+A typical bridge shape is:
+
+```yaml
 network:
+  version: 2
   ethernets:
     eno1:
       dhcp4: false
@@ -32,37 +50,64 @@ network:
   bridges:
     br0:
       interfaces: [eno1]
-      addresses:
-      - xxx.xxx.x.x/xx
-      gateway4: xxx.xxx.x.x
+      addresses: [192.0.2.10/24]
+      routes:
+        - to: default
+          via: 192.0.2.1
       nameservers:
-        addresses: [x.x.x.x, x.x.x.x]
-        search: []
+        addresses: [1.1.1.1, 8.8.8.8]
       parameters:
         stp: true
       dhcp4: false
       dhcp6: false
-'''
+```
 
-# Apply this new configuration
-netplan generate
-netplan apply
+Apply and verify:
 
-# Possibly needed to reboot the system
-systemctl restart systemd=network
+```bash
+sudo netplan generate
+sudo netplan apply
+ip addr show br0
+ip route
+```
 
-# Finally, disable netfilter on the bridge
-# Not doing this may result in the VM not being able to communicate outside of the host machine
-cat >> /etc/sysctl.conf <<EOF
+## Bridge Netfilter
+
+If VMs cannot reach outside networks even though the bridge exists, check bridge
+netfilter settings:
+
+```bash
+sudo tee -a /etc/sysctl.conf <<EOF
 net.bridge.bridge-nf-call-ip6tables = 0
 net.bridge.bridge-nf-call-iptables = 0
 net.bridge.bridge-nf-call-arptables = 0
 EOF
-
-sysctl -p /etc/sysctl.conf
+sudo sysctl -p /etc/sysctl.conf
 ```
 
-## Updating network configuration
-Finally, use the correct configuration parameters to reflect your network settings using settings "prefixIP", "middleIP", and "middleIP_base". 
-Here, if your IP range is AAA.BBB.CCC.DDD, prefixIP=AAA.BBB, and middleIP(_base)=CCC. DDD is set between 2 and 252 for all subranges.
-We assume the network bridge is called `br0`, otherwise change all occurences of `br0` in the framework (e.g., using grep).
+## YAML Network Settings
+
+Active YAML configs set network intent under `infrastructure.network`:
+
+```yaml
+infrastructure:
+  network:
+    emulation: true
+    wireless_preset: 4g
+    overrides: {}
+```
+
+IP range defaults live in environment profiles under `provider.config.ip`:
+
+```yaml
+provider:
+  config:
+    ip:
+      prefix: "192.168"
+      middle: 100
+      middle_base: 90
+```
+
+Do not edit code to replace `br0` for normal runs. Prefer host setup,
+environment profiles, or the explicit wrapper bridge override variables when
+the host really uses a different bridge.
