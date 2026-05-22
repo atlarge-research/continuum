@@ -1,7 +1,9 @@
 # Phase D Handoff
 
 This document is the clean handoff note for the completed Phase-D runtime state.
-Phase-E resume/state integrity work now continues from this closure point.
+Phase-E resume/state integrity and Phase-F test architecture closure have since
+landed, so use this file as historical evidence for application and retained
+benchmark behavior rather than as the active implementation queue.
 
 ## 0. Phase-D Closure Snapshot
 
@@ -45,7 +47,7 @@ Read after:
 3. `docs/ansible_restructuring_design.md`
 4. `docs/runtime_execution_pipeline.md`
 
-## 1. What Landed In This Session
+## 1. What Landed In Phase D
 
 1. The explicit application runtime gate is removed.
    - `input/configuration/runtime_phase_targets.py` now resolves `run.targets: application` normally.
@@ -140,7 +142,7 @@ Read after:
      longer appear after teardown.
    - Remaining domains are classified as `teardown_failure`.
 
-## 2. Files Touched In This Session
+## 2. Historical Phase-D Change Surface
 
 1. `input/configuration/runtime_phase_targets.py`
 2. `scripts/test/unit/test_continuum_runtime.py`
@@ -192,7 +194,7 @@ Read after:
 48. `scripts/test/unit/test_role_contracts.py`
 49. `scripts/test/e2e/test_host_runner_scripts.py`
 
-## 3. Validation Run
+## 3. Historical Validation Run
 
 Latest Phase-D consolidation validation (May 20, 2026):
 

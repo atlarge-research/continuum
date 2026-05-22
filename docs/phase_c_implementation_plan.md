@@ -2,7 +2,7 @@
 
 ## 0. Authority and Scope
 
-This is the execution plan for Phase C.
+This is the historical execution plan for the completed Phase-C software/resource-manager refactor.
 Authority/precedence is defined in `docs/rework_plan_stack.md`.
 
 When conflicts occur, follow:
@@ -132,7 +132,7 @@ Exit criteria:
 2. scoped diagnostics use canonical scope identity records,
 3. software-to-benchmark handoff is test-covered at parser/planner level.
 
-## 5. PR Slice Sequence
+## 5. Historical PR Slice Sequence
 
 1. Slice 1: planner boundary consolidation + test stabilization.
 2. Slice 2: runtime/config contract hardening for `clusters[]` normalization, base tagging, and `run.image_prefetch` cutover.
@@ -173,7 +173,7 @@ Exit criteria:
    - `docs/software_module_architecture_plan.md`
 4. Cluster and benchmark assignment contracts are reflected in parser/runtime tests.
 
-## 9. Immediate Alignment with Global PR Plan
+## 9. Historical Alignment with Global PR Plan
 
 Track `docs/rework_plan_stack.md` Section 6:
 
@@ -183,7 +183,7 @@ Track `docs/rework_plan_stack.md` Section 6:
 4. historical Phase-C note after PR-2 closure: the next focus at that point was PR-3 selector/scope hard cutover (benchmark pipeline + scoped diagnostics) plus PR-3A run-scoped image-prefetch cutover, with application runtime deferred to a later Phase-D slice.
 5. PR-3A implementation baseline now includes deterministic image requirement resolution for `kubecontrol`/`kube_kata` control-plane images from `kube_version` and internal benchmark-stage mappings for `empty`, `empty_kata`, `mem_usage`, `stress`, `image_classification`, and `text_translation`, including stack-aware `image_classification` selection.
 
-## 10. Session Handoff (Updated April 11, 2026)
+## 10. Closure Handoff (Updated May 22, 2026)
 
 Current closure status:
 
@@ -307,13 +307,8 @@ Current closure status:
 
 Next clean start point:
 
-1. Treat PR-4 as closed and green.
-2. Treat PR-5 as closed and green for its intended scope: examples/profiles/docs are synchronized, the least-privilege host runner is documented and scripted, and all currently runnable host-backed smoke slices pass.
-3. Phase D application-role consolidation plus resumed K8s smoke pipeline/teardown verification, Phase E resume/state integrity, and Phase F test architecture closure have since closed.
-4. Preserve Phase-D cleanup ownership for application-specific Kubernetes launch/timing/runtime code (`launch_with_starttime`, MQTT env injection, and Mist/Baremetal worker-output handling); do not move or ungate it outside an explicit Phase-D slice.
-5. Current Phase-D state:
-   - application bootstrap/module wiring is enabled again,
-   - helper extraction started in `application/runtime_helpers.py`,
-   - runtime execution is ungated in `input/configuration/runtime_phase_targets.py`,
-   - benchmark smoke/teardown validation has closed on the dedicated host-backed runner.
-   - See `docs/phase_d_handoff.md`.
+1. Treat PR-4 and PR-5 as closed and green for their intended scope.
+2. Treat Phase D application-role consolidation, retained K8s benchmark smoke/teardown verification, Phase E resume/state integrity, and Phase F test architecture closure as closed.
+3. Preserve Phase-D ownership for application-specific Kubernetes launch/timing/runtime code (`launch_with_starttime`, MQTT env injection, and Mist/Baremetal worker-output handling) under `application/runtime_helpers.py` and application roles.
+4. Treat Phase G lifecycle/reproducibility hardening as deferred; do not fold it back into Phase-C cleanup work without a future RFC/ADR.
+5. See `docs/rework_kickoff.md`, `docs/rework_plan_stack.md`, and `docs/phase_d_handoff.md` for the current resume baseline.

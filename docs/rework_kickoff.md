@@ -11,19 +11,25 @@
 7. `docs/runtime_execution_pipeline.md`
 8. `docs/operational_testing_strategy.md`
 9. `docs/vm_debugging_runbook.md`
-10. `docs/phase_d_handoff.md` (current implementation handoff for the active Phase-D prep slice)
+10. `docs/phase_d_handoff.md` (completed Phase-D runtime handoff)
 
-If you are resuming active implementation rather than reconstructing the full stack, the minimum continuation set is:
+If you are resuming implementation rather than reconstructing the full stack,
+the minimum continuation set is:
 
 1. `docs/rework_kickoff.md`
-2. `docs/phase_d_handoff.md`
+2. `docs/rework_plan_stack.md`
 3. `docs/runtime_execution_pipeline.md`
+4. `docs/phase_d_handoff.md` when touching application or retained benchmark behavior
 
-## 2. Current Phase Focus
+## 2. Current Rework Status
 
-Primary execution focus has moved through Phase-E resume/state integrity and
-Phase-F test architecture closure. Any remaining implementation must stay
-aligned with:
+The active PR-1 through PR-5 slices are closed, Phase-D application execution is
+ungated and role-owned, Phase-E resume/state integrity is landed, and Phase-F
+test architecture closure is landed. Remaining active-rework work should be
+treated as stabilization and documentation/audit alignment. Phase-G
+lifecycle/reproducibility hardening is deferred behind a future RFC/ADR.
+
+Any future implementation must stay aligned with:
 
 1. cluster-first infrastructure model (`infrastructure.clusters[]`),
 2. final software model (`software.modules[]`, tag-based resource identity),
@@ -84,13 +90,17 @@ Software semantic details (including constraint-scope model) live in:
 
 - `docs/software_module_architecture_plan.md`
 
-## 5. Immediate Implementation Sequence
+## 5. Completed Implementation Sequence
 
 1. PR-1 (completed): parser schema pivot to canonical `infrastructure.clusters[]` + `software.modules[]`.
 2. PR-2 (completed): module registry + explicit-only dependency/capability validation baseline is landed; parser/runtime conflict and exclusivity validation coverage is landed with targeted tests.
 3. PR-3 (completed): selector resolution + scoped constraint engine baseline.
 4. PR-4 (completed): runtime/planner software-phase integration + benchmark assignment plumbing + legacy path removal, with deterministic handoff metadata prepared for Phase-D consumers.
 5. PR-5 (completed): example/profile migration finalization + tests/smokes + documentation closure; user-facing config/migration docs, host-runner isolation, and real host-backed smoke closure are now landed.
+6. Phase D (completed): application runtime execution, role consolidation, retained benchmark smoke, and teardown evidence are landed.
+7. Phase E (completed): lock/state resume contracts and artifact validation are landed.
+8. Phase F (completed): major-function coverage audit and unit/e2e test layout closure are landed.
+9. Phase G (deferred): lifecycle, reproducibility packaging, and optional configuration-library adoption require a separate RFC/ADR.
 
 ## 6. Quick Start Checklist for an Agent
 
@@ -99,9 +109,10 @@ Software semantic details (including constraint-scope model) live in:
 3. Update tests/examples in the same PR when semantics change.
 4. Synchronize sibling planning docs before finalizing the PR.
 
-## 7. PR-2 Code Touchpoints (Completed Baseline)
+## 7. Historical PR-2 Code Touchpoints
 
-Start with these surfaces for module-registry and dependency-validator work:
+These surfaces are useful when reading the completed module-registry and
+dependency-validator baseline. They are not the current implementation queue:
 
 1. `input/configuration/yaml_parser.py`
 2. `input/configuration/module_registry.py`
@@ -130,7 +141,7 @@ Start with these surfaces for module-registry and dependency-validator work:
 9. Active runtime orchestrator checks use direct `config_access.orchestrator_name(config)` comparisons; `orchestrator_is(...)` is removed to keep the accessor surface minimal.
 10. Runtime option normalization now treats canonical option scopes as required invariants (`domains.provider.config`, `domains.software.modules[*].config`) and no longer mutates missing paths via `setdefault`.
 11. PR-4 planner handoff now includes `planner_snapshot` assignment records for software modules and benchmark stages with deterministic `resolved_resources` metadata (`vm_id`, `cluster_id`, `tier`, `index_in_cluster`, and resource tags).
-12. Phase-D runtime ungating is now landed; current work shifts from prep-only handoff metadata to finishing role consolidation plus benchmark smoke/teardown validation.
+12. Phase-D runtime ungating, role consolidation, and benchmark smoke/teardown validation are landed.
 13. PR-4 runtime helper plumbing now includes `config_access` readers for benchmark-stage planner assignments, and the former gated Kubernetes helper paths pass planner-derived stage handoff metadata forward without inferring application role topology from a single selector.
 14. PR-4 software planner plumbing now uses canonical `endpoint_runtime` module placement on endpoint resources for endpoint install gating, replacing aggregate endpoint-node gating in the software phase.
 15. PR-4 endpoint-runtime validation now rejects endpoint topologies where the `endpoint_runtime` capability exists but its assignment resolves away from endpoint VM resources; base-image endpoint install planning uses the same placement check.
@@ -163,9 +174,9 @@ Start with these surfaces for module-registry and dependency-validator work:
 42. `.continuum` image-cache reuse is now safer: QEMU base images are reused only when companion success metadata marks them complete, so interrupted or partial base-image builds are invalidated and rebuilt instead of being silently trusted on later runs.
 43. PR-5 is now complete for its scoped objective; Phase-D benchmark/application smoke plus resumed K8s pipeline/teardown verification, Phase-E resume/state integrity, and Phase-F test architecture closure have since landed.
 
-## 9. Resume Point
+## 9. Current Resume Point
 
-If resuming after May 20, 2026:
+If resuming after May 22, 2026:
 
 1. Treat PR-3A registry/image-prefetch slice as closed and green.
 2. Treat PR-4 as closed and green: `resource_manager/plans.py` emits `software_execution_order`, owner-tagged `software_plan_entries`, `software_module_assignments`, and application-gated `benchmark_stage_assignments`; runtime handoff bundles add ordering indexes plus deep-copied stage/module config around those planner assignment records.

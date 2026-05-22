@@ -2,7 +2,8 @@
 
 ## 1. Purpose
 
-This is the single map for planning authority, sequencing, and synchronization across active refactor docs.
+This is the single map for planning authority, sequencing, and synchronization
+across the closed active rework baseline and deferred follow-up tracks.
 
 Fast onboarding brief: `docs/rework_kickoff.md`.
 
@@ -84,13 +85,17 @@ Fast onboarding brief: `docs/rework_kickoff.md`.
 3. Execute Phase C against those contracts (`docs/phase_c_implementation_plan.md`).
 4. Continue remaining phases (`docs/ansible_restructuring_design.md`).
 
-## 6. Execution Status and Next PRs
+## 6. Execution Status
 
 1. PR-1 (completed): Parser schema pivot to canonical `infrastructure.clusters[]` + `software.modules[]` validation.
 2. PR-2 (completed): Module registry + explicit-only dependency/capability validation baseline is landed; parser/runtime conflict and exclusivity validation coverage is landed with targeted tests.
 3. PR-3 (completed): Selector resolution + tag governance + scoped constraint engine baseline.
 4. PR-4 (completed): Runtime/planner integration for software placement plus benchmark assignment plumbing that Phase D later consumed when application execution was ungated.
 5. PR-5 (completed): Example/profile finalization + tests/smokes + documentation closure, with user-facing schema/migration docs, host-runner isolation, and real host-backed smoke closure landed.
+6. Phase D (completed): Application runtime execution, role consolidation, retained K8s benchmark smoke, and teardown evidence are landed.
+7. Phase E (completed): Resume contract integrity, schema-v2 state, and runner artifact validation are landed.
+8. Phase F (completed): Major-function coverage audit plus unit/e2e test layout closure are landed.
+9. Phase G (deferred): Lifecycle/reproducibility hardening is outside the active closure and remains gated by a future RFC/ADR.
 
 ## 7. Decision Traceability Matrix
 
@@ -132,7 +137,7 @@ Before merge:
 2. Canonical selector normalization and `selector_id` strategy locked.
 3. Canonical structured scope identity format locked for `vm`, `cluster`, and `selector`.
 
-## 11. Current Snapshot (Updated May 21, 2026)
+## 11. Current Snapshot (Updated May 22, 2026)
 
 1. PR-1 implementation landed with strict modules-only parser/runtime access (no orchestrator/addons projection path).
 2. Config examples and parser/runtime test fixtures are migrated to canonical `clusters[]` + `modules[]` schema.
@@ -266,17 +271,13 @@ Closed May 21, 2026:
 
 ## 13. End-of-Rework Documentation Closure Commitments
 
-1. Publish consolidated user-facing configuration docs for canonical YAML schema (`run`, `infrastructure`, `provider`, `software.modules`, `benchmark.pipeline`) with complete key/type/default/required semantics.
-2. Publish migration notes from removed legacy paths (`workload`, legacy benchmark keys, legacy config-access helpers) with fail-fast equivalents and examples.
-3. Publish developer-facing architecture docs for parser/runtime decomposition boundaries and module contracts (including selector/scope identity and image requirement interfaces).
-   - landed incrementally via `docs/runtime_execution_pipeline.md` and `docs/operational_testing_strategy.md` in addition to the parser/software design docs.
-4. Ensure runnable examples/templates are synchronized with final docs and pass parser validation.
-5. Add a final doc-audit pass before rework closure:
-   - every major runtime/parser surface has a matching doc reference,
-   - no contradictory semantics across planning/design docs,
-   - no stale references to removed legacy interfaces.
-   - current path-reference enforcement is covered by
-     `scripts/test/check_docs_paths.py` and the cloud static audit.
+Closed for the active rework baseline:
+
+1. Consolidated user-facing configuration docs for canonical YAML schema (`run`, `infrastructure`, `provider`, `software.modules`, `benchmark.pipeline`) are published in `docs/configuration_reference.md`.
+2. Migration notes from removed legacy paths (`workload`, legacy benchmark keys, legacy config-access helpers) are published in `docs/migration_notes.md`.
+3. Developer-facing architecture docs for parser/runtime decomposition boundaries, module contracts, runtime phases, and operational testing are published across the design docs.
+4. Runnable examples/templates are synchronized with parser validation and covered by repository regression tests.
+5. The final doc-audit gate is represented by `scripts/test/check_docs_paths.py` and `scripts/test/run_cloud_static_audit.sh`; generated reports stay under ignored `logs/cloud_static_audit/`.
 6. After the active rework stabilizes, revisit observability/reproducibility
    packaging as a dedicated design topic:
    - decide whether structured run packages should replace scattered per-feature

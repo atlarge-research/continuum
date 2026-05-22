@@ -92,7 +92,7 @@ Objectives:
 
 Execution detail: `docs/phase_c_implementation_plan.md`.
 
-Status snapshot (updated May 20, 2026):
+Status snapshot (updated May 22, 2026):
 
 1. PR-1 completed for canonical parser/runtime schema cutover (`infrastructure.clusters[]` + `software.modules[]`).
 2. Modules-only software config path is active (no runtime projection for legacy `orchestrator/addons` keys).
@@ -110,16 +110,15 @@ Status snapshot (updated May 20, 2026):
 14. PR-5 e2e-runner cleanup keeps suite selection configuration-driven (`scripts/test/test_config.json`) and scopes the dedicated network-validation suite to the YAML scenarios under `configs/experiments/network_validation/`.
 15. PR-5 now documents the actual runtime execution pipeline and operational testing model in `docs/runtime_execution_pipeline.md` and `docs/operational_testing_strategy.md`, so smoke design and later Phase-D benchmarking work can target explicit runtime boundaries instead of ad hoc end-to-end expectations.
 
-## Phase D: Application Role Consolidation
+## Phase D: Application Role Consolidation (Completed)
 
 Objective: standardize application deployment roles/templates and remove remaining duplication.
 
-Phase-D cleanup target: keep benchmark/application launch, timing, worker-output,
-and completion concerns under application-owned Python helpers and application
-Ansible roles. Resource-manager modules should own platform installation and
-generic readiness checks, not benchmark-specific job/runtime behavior.
+The Phase-D cleanup target is closed: benchmark/application launch, timing,
+worker-output, and completion concerns are application-owned, while
+resource-manager modules own platform installation and generic readiness checks.
 
-Current implementation snapshot (updated May 21, 2026):
+Closure snapshot (updated May 22, 2026):
 
 1. application bootstrap/module wiring is no longer fully gated:
    - the application module now imports during YAML bootstrap for `run.targets: application`,
@@ -143,9 +142,9 @@ Current implementation snapshot (updated May 21, 2026):
 5. benchmark-smoke teardown evidence is now runner-visible:
    - `benchmark_smoke` can opt into suite-level success detection with `require_teardown`,
    - when the final application config uses `delete_on_exit: true`, the runner verifies saved QEMU domain names are absent after teardown and reports `teardown_failure` on drift.
-6. continuation note:
-   - the active resume point is `docs/phase_d_handoff.md`,
-   - Phase-E work hardens broader resume/state integrity without reintroducing application behavior into resource-manager modules.
+6. closure note:
+   - detailed Phase-D evidence remains in `docs/phase_d_handoff.md`,
+   - Phase-E and Phase-F have since closed without reintroducing application behavior into resource-manager modules.
 
 ## Phase E: Resume and State Integrity Hardening
 
@@ -232,8 +231,11 @@ support instead of accumulating separate metric files.
 
 ## 7. Program Exit Criteria
 
+Closed for the active rework baseline:
+
 1. Active runtime paths use refactored role/planner boundaries.
 2. Legacy config/software assumptions are removed from active flow.
 3. Planning docs are mutually consistent and reflect implemented behavior.
 4. Unit-test coverage audit for major functions is complete and tracked.
 5. Unit and e2e tests are organized in separate suite folders.
+6. Phase-G lifecycle/reproducibility work is explicitly deferred behind a future RFC/ADR.
