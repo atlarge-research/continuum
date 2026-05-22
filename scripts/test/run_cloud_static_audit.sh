@@ -128,12 +128,25 @@ run_capture e2e_pytest "e2e pytest suite" optional \
     env PYTHONPATH=. pytest -q scripts/test/e2e
 run_capture pytest "combined pytest suite" optional \
     env PYTHONPATH=. pytest -q scripts/test
-run_capture todo "TODO/FIXME debt scan" optional \
-    rg -n "TODO|FIXME|TBD|XXX" \
-        docs input application infrastructure resource_manager continuum.py scripts/test \
-        -g "!logs/**" \
-        -g "!docs/cloud_audit_report_*.md" \
-        -g "!scripts/test/run_cloud_static_audit.sh"
+
+todo_scan() {
+    if command -v rg >/dev/null 2>&1; then
+        rg -n "TODO|FIXME|TBD|XXX" \
+            docs input application infrastructure resource_manager continuum.py scripts/test \
+            -g "!logs/**" \
+            -g "!docs/cloud_audit_report_*.md" \
+            -g "!scripts/test/run_cloud_static_audit.sh"
+        return
+    fi
+
+    grep -RInE \
+        --exclude="cloud_audit_report_*.md" \
+        --exclude="run_cloud_static_audit.sh" \
+        "TODO|FIXME|TBD|XXX" \
+        docs input application infrastructure resource_manager continuum.py scripts/test
+}
+
+run_capture todo "TODO/FIXME debt scan" optional todo_scan
 run_capture yamllint "YAML lint baseline" optional \
     yamllint -c sysconfig/yamllint.yml configs playbooks roles \
         application/image_classification/launch_benchmark_kubernetes.yml \
