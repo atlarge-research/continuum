@@ -285,14 +285,15 @@ Practical interpretation for the current smoke baseline:
 The runner should encode those prerequisites directly rather than rely only on
 human-readable docs. The active suite contract is now:
 
-1. `smoke` preflights host `virsh` and `ssh`,
-2. `network_validation` preflights host `virsh`, `ssh`, and `tc`,
-3. missing prerequisites fail before config discovery or VM provisioning starts.
-4. operators can inspect the configured suite contract with
-   `python3 scripts/test/run_tests.py --list-suites`.
-5. operators can validate a specific host before a long smoke run with
-   `python3 scripts/test/run_tests.py --suite <name> --check-prereqs`.
-6. for least-privilege host execution, prefer a dedicated smoke user plus the
+1. `smoke` preflights the local QEMU/libvirt, SSH, image, cloud-init, ACL, curl, and Ansible commands needed for VM-backed smoke execution,
+2. `benchmark_smoke` preflights the same local QEMU/libvirt runner commands for the retained benchmark path,
+3. `network_validation` preflights the same base commands plus `tc` for network emulation,
+4. missing prerequisites fail before config discovery or VM provisioning starts,
+5. operators can inspect the configured suite contract with
+   `python3 scripts/test/run_tests.py --list-suites`,
+6. operators can validate a specific host before a long smoke run with
+   `python3 scripts/test/run_tests.py --suite <name> --check-prereqs`,
+7. for least-privilege host execution, prefer a dedicated smoke user plus the
    wrapper documented in `docs/smoke_runner_isolation.md`.
 
 ## 8. Current Repository State

@@ -108,6 +108,12 @@ The exact command the agent should use after installation is:
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke benchmark_k8s_resume
 ```
 
+To run only the three phase-boundary smoke scenarios in one wrapper call, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke phase_smoke_matrix
+```
+
 To run the full local operational regression baseline in one wrapper call, use:
 
 ```bash

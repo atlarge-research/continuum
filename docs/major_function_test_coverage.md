@@ -6,7 +6,9 @@ This is the tracked Phase-F audit for major runtime, parser, planner, infrastruc
 application, and e2e-runner functions.
 
 The executable source of truth is `scripts/test/coverage_manifest.json`.
-`scripts/test/unit/test_coverage_manifest.py` validates that:
+The broad cloud-safe gate is `scripts/test/run_cloud_static_audit.sh`, and the
+manifest-specific guard is `scripts/test/unit/test_coverage_manifest.py`.
+That unit test validates that:
 
 1. every audited source file exists,
 2. every listed major function still exists in that source file,

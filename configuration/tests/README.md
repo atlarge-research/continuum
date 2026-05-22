@@ -22,6 +22,9 @@ python3 scripts/test/run_tests.py --suite full
 
 # Run the dedicated network-emulation validation suite
 python3 scripts/test/run_tests.py --suite network_validation
+
+# Run the retained benchmark smoke suite on a prepared host
+python3 scripts/test/run_tests.py --suite benchmark_smoke --check-prereqs
 ```
 
 ### Basic Usage
@@ -141,12 +144,16 @@ The active suites are declared in `scripts/test/test_config.json`.
 - **Network Validation**: Only `configs/experiments/network_validation/`
   scenarios for TC/netperf profile validation, including structured NDJSON
   result checks.
+- **Benchmark Smoke**: Retained infrastructure -> software -> application
+  scenarios in `configs/experiments/benchmark_smoke/`, including metric-artifact
+  and teardown evidence checks.
 
 The runner now performs suite preflight checks from `scripts/test/test_config.json`
 before discovery/execution starts.
 
-- **Smoke** requires host `virsh` and `ssh`.
-- **Network Validation** requires host `virsh`, `ssh`, and `tc`, and validates
+- **Smoke** requires the local QEMU/libvirt, SSH, image, cloud-init, ACL, curl, and Ansible commands declared in `scripts/test/test_config.json`.
+- **Benchmark Smoke** requires the same base host commands and validates structured benchmark artifacts under `<base_path>/.continuum/logs/benchmark/`.
+- **Network Validation** requires the same base host commands plus `tc`, and validates
   netperf results under `<base_path>/.continuum/logs/network_validation/`.
 - **Full** currently has no additional suite-level preflight.
 
