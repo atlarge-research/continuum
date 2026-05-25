@@ -184,7 +184,7 @@ class BaseInstallPlanTests(unittest.TestCase):
 
         with mock.patch(
             "resource_manager.plans.endpoint.base_install_playbook",
-            return_value="playbooks/resource_manager/endpoint_install.yml",
+            return_value="playbooks/resource_manager/endpoint_base_install.yml",
         ):
             playbooks = plans.build_base_image_playbooks(config, base_names)
 
@@ -193,7 +193,7 @@ class BaseInstallPlanTests(unittest.TestCase):
             [
                 "playbooks/cloud_base.yml",
                 "playbooks/edge_base.yml",
-                "playbooks/resource_manager/endpoint_install.yml",
+                "playbooks/resource_manager/endpoint_base_install.yml",
             ],
         )
 

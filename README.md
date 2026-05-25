@@ -4,17 +4,36 @@ Continuum offers the following features:
 
 1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.
 2. Users configure experiments with YAML experiment files plus reusable environment and software profiles.
-3. Continuum automatically installs operating services, resource managers, and applications inside the emulated cluster based on the user's preference. Supported operating services include MQTT, resource managers include Kubernetes, KubeEdge, and OpenFaaS, and applications include machine learning.
+3. Continuum automatically installs operating services, resource managers, and
+   applications inside the emulated cluster based on the user's preference.
+   Available modules include MQTT, Kubernetes, KubeEdge, OpenFaaS, and machine
+   learning application examples; current release-certified combinations are
+   listed in `docs/release_certification_matrix.md`.
 4. Continuum can automatically benchmark the resource managers and applications installed in the emulated cluster, and report metrics and logs back to the user.
 5. Continuum is easily extendable, allowing users to add support for more infrastructure providers, operating services, resource managers, and applications.
 
+This branch contains the structured YAML/planning-engine rework. Infrastructure
+providers such as QEMU, GCP, and AWS are modules that plug into the core rather
+than being part of the core itself. Current release-readiness and VM-backed
+certification status are tracked in `docs/rework_milestone_release_plan.md`;
+until old-main parity is closed, rework outputs should be treated as milestone
+or pre-release artifacts rather than a full replacement for `main`.
+
 ## Features
-Continuum supports the following software:
+Continuum's public feature surface includes the following software families.
+For the rework branch, treat these as module families and read public support
+claims together with `docs/release_certification_matrix.md`:
 
 1. **Infrastructure**: Virtual machine provisioning through QEMU/KVM on local bare-metal devices.
 2. **Operating Services**: Continuum can set up an MQTT broker on edge device for lightweight communication to endpoint users.
-3. **Resource Manager**: Continuum can deploy containerized applications via Docker and Containerd using the resource managers Kubernetes and KubeEdge. OpenFaaS is supported for deploying serverless functions.
-4. **Applications and application back-ends**: Continuum supports any application that can be deployed on VMs, containers, or serverless functions. As an example, a machine learning application is included.
+3. **Resource Manager**: Continuum contains module paths for Kubernetes,
+   KubeEdge, Mist, KubeControl, Kata, endpoint runtime, observability, and
+   OpenFaaS. Only the combinations marked `certified` in the release matrix
+   should be described as release-supported on this branch.
+4. **Applications and application back-ends**: Continuum can run benchmark
+   stages implemented as VM, container, or serverless workloads. The rework
+   branch currently certifies only the exact application rows named in the
+   release matrix.
 
 ## How it works
 Continuum has the following architecture:
@@ -106,9 +125,14 @@ For more information on these badges, see [here](https://ccgrid2023.iisc.ac.in/c
 The code and instructions for this artifact are available on GitHub [here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation). 
 
 ## Demo
-Continuum supports multiple virtual machine infrastructure deployment platforms, most notably QEMU for execution on local hardware or Google Cloud for execution in the cloud.
-In this demo, we present how to use Continuum using QEMU. 
-If you want to use Google Cloud instead, which requires much fewer installation steps, please see the extensive README [here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation).
+Historically, Continuum has supported multiple virtual machine infrastructure
+deployment platforms, most notably QEMU for execution on local hardware and
+Google Cloud for execution in the cloud. On the rework branch, this demo is
+limited to local QEMU/KVM. Exact provider certification status is tracked in
+`docs/release_certification_matrix.md`. Google Cloud instructions from the
+CCGRID 2023 artifact remain available in the historical README
+[here](https://github.com/atlarge-research/continuum/tree/CCGRID2023-Artifact-Evaluation),
+but they are not release-certified on this branch yet.
 
 This demo requires a single machine and a Linux operating system that supports QEMU/KVM and Libvirt.
 We recommend running the demo on an Ubuntu 20.04 machine but have also tested on Ubuntu 22.04. 
@@ -121,8 +145,9 @@ The demo contains two parts:
 2. Use the framework
 
 In part one, we install the Continuum framework and use the framework in part 2.
-The framework does support execution on multiple physical machines through a network bridge.
-We leave this multi-machine execution out of this tutorial; consult the documentation for more information.
+The historical framework has supported execution on multiple physical machines
+through a network bridge. On the rework branch, only the exact rows certified in
+`docs/release_certification_matrix.md` should be treated as release-supported.
 For more questions, open a GitHub Issue or mail m.s.jansen@vu.nl.
 
 Software versions tested:
@@ -264,14 +289,34 @@ sudo sysctl -p /etc/sysctl.conf
 ```
 
 ### Part 2: Use the framework
-Continuum comes with canonical YAML experiment and profile files that can be used to deploy infrastructure and benchmark with Continuum. The active runtime examples live under `configs/experiments/`, with reusable profiles under `configs/profiles/`. Legacy `.cfg` files remain under `configuration/` for historical reproduction and migration only.
+Continuum comes with canonical YAML experiment and profile files for the active
+parser/runtime model. The active examples live under `configs/experiments/`,
+with reusable profiles under `configs/profiles/`. Legacy `.cfg` files remain
+under `configuration/` for historical reproduction and migration only. Shipped
+YAML examples are parser-accepted examples; release support still depends on
+the certification matrix.
+
 For example:
 1. Go the the continuum framework: `cd continuum`
 2. Check how the framework can be used: `python3 continuum.py --help`
-3. We use an experiment that deploys 2 virtual machines, installs Kubernetes on them, and starts a third machine that emulates an IoT device that sends data periodically to the Kubernetes cluster for processing. The framework starts a processing application on the cluster, which processes the incoming data and sends the result back to the IoT device: `python3 continuum.py configs/experiments/bench_cloud.yaml`.
-4. If the program executes correctly, the results will be printed at the end, as well as the ssh commands needed to log into the created VMs.
+3. For the smallest certified local infrastructure path, use the smoke config
+   `configs/experiments/smoke/infra_one_vm.yaml`. It provisions one local QEMU
+   VM and writes lock/state artifacts under the selected `base_path`:
+   `python3 continuum.py configs/experiments/smoke/infra_one_vm.yaml`.
+4. For benchmark/application evidence, use the dedicated smoke-runner suites
+   documented in `docs/smoke_runner_isolation.md` and
+   `docs/release_certification_matrix.md`; do not infer benchmark support from
+   a shipped YAML example alone.
 
-For the active configuration model, see `docs/configuration_reference.md` for the canonical YAML schema and `docs/migration_notes.md` for legacy-to-YAML replacements. Template files are available at `configs/experiments/template.yaml`, `configs/profiles/environment/template.yaml`, and `configs/profiles/software/template.yaml`. These include deploying infrastructure on Google Cloud, installing Prometheus and Grafana on VMs, or running serverless benchmarks. All components can be easily extended - open a GitHub Issue or send us a mail at m.s.jansen@vu.nl if you have any questions.
+For the active configuration model, see `docs/configuration_reference.md` for
+the canonical YAML schema and `docs/migration_notes.md` for legacy-to-YAML
+replacements. Template files are available at
+`configs/experiments/template.yaml`, `configs/profiles/environment/template.yaml`,
+and `configs/profiles/software/template.yaml`. Additional module families and
+historical cloud/serverless paths are tracked in the certification matrix before
+they should be described as release-supported. All components can be extended as
+modules or profiles; open a GitHub Issue or send us a mail at
+m.s.jansen@vu.nl if you have any questions.
 
 ### Appendix
 The Continuum framework is supposed to be run from an Ubuntu-like operating system.

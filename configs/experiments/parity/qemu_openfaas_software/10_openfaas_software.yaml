@@ -1,0 +1,38 @@
+---
+schema_version: 1
+kind: ContinuumExperiment
+
+use:
+  environment: local-qemu-cpupin
+  software: k8s-openfaas
+
+run:
+  targets: [infrastructure, software]
+  image_prefetch: "off"
+  dry_run: false
+  clean: false
+
+infrastructure:
+  clusters:
+    - id: cloud-1
+      tier: cloud
+      resources:
+        vms:
+          count: 3
+          spec:
+            cores: 4
+            memory_gb: 4
+            cpu_quota: 1.0
+    - id: endpoint-1
+      tier: endpoint
+      resources:
+        vms:
+          count: 4
+          spec:
+            cores: 2
+            memory_gb: 2
+            cpu_quota: 0.5
+  network:
+    emulation: false
+    wireless_preset: 4g
+    overrides: {}

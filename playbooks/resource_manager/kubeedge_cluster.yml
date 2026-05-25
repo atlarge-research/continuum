@@ -10,3 +10,27 @@
   become: true
   roles:
     - role: kubeedge_edge_join
+
+- name: Verify KubeEdge edge readiness
+  hosts: cloudcontroller
+  become: true
+  tasks:
+    - name: Wait for KubeEdge edge nodes to report Ready
+      ansible.builtin.shell: |
+        set -euo pipefail
+        expected_edges={{ groups['edges'] | default([]) | length }}
+        for _ in $(seq 1 120); do
+          ready_edges=$(kubectl get nodes --no-headers 2>/dev/null \
+            | awk '$1 ~ /^edge/ && $2 ~ /^Ready/ { count++ } END { print count + 0 }')
+          if [ "$ready_edges" -eq "$expected_edges" ]; then
+            exit 0
+          fi
+          sleep 5
+        done
+        kubectl get nodes -o wide
+        exit 1
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false

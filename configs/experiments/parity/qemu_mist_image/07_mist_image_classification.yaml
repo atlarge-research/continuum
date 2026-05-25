@@ -1,0 +1,56 @@
+---
+schema_version: 1
+kind: ContinuumExperiment
+
+use:
+  environment: local-qemu-cpupin-delete-on-exit
+  software: mist-endpoint-runtime
+
+run:
+  targets: [infrastructure, software, application]
+  image_prefetch: "off"
+  dry_run: false
+  clean: false
+
+infrastructure:
+  clusters:
+    - id: edge-1
+      tier: edge
+      resources:
+        vms:
+          count: 2
+          spec:
+            cores: 2
+            memory_gb: 4
+            cpu_quota: 0.75
+    - id: endpoint-1
+      tier: endpoint
+      resources:
+        vms:
+          count: 4
+          spec:
+            cores: 1
+            memory_gb: 2
+            cpu_quota: 0.75
+  network:
+    emulation: false
+    wireless_preset: 4g
+    overrides: {}
+
+benchmark:
+  pipeline:
+    - id: classify-images
+      type: image_classification
+      assign_to:
+        match:
+          cluster: edge-1
+      tags:
+        benchmark.role: classify
+      config:
+        frequency: 5
+        duration: 300
+        applications_per_worker: 1
+        application_worker_cpu: 1.5
+        application_worker_memory: 3.5
+        application_endpoint_cpu: 1.0
+        application_endpoint_memory: 2.0

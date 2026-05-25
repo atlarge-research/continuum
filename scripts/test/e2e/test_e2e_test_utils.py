@@ -75,7 +75,7 @@ def _write_network_results(root: Path, entries=None):
             "source": "cloud",
             "target": "endpoint",
             "direction": "latency",
-            "output": "1000,40000,50000,1000,25,30000,45000,50000",
+            "output": "1000,90000,100000,1000,25,85000,95000,100000",
             "expected_latency_ms": 45.0,
             "expected_throughput_mbps": 7.21,
         },

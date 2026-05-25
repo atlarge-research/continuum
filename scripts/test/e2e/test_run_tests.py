@@ -302,6 +302,64 @@ class RunTestsCliTests(unittest.TestCase):
             )
         )
 
+    def test_main_rejects_suite_when_prerequisite_check_fails(self):
+        fake_test_config = {
+            "test_suites": {
+                "app_parity": {
+                    "directories": ["configs/experiments/parity/qemu_k8s_image/"],
+                    "prerequisites": {
+                        "summary": "Requires Docker daemon access",
+                        "commands": ["docker"],
+                        "checks": [
+                            {
+                                "name": "Docker daemon access",
+                                "command": ["docker", "info"],
+                            }
+                        ],
+                    },
+                },
+            },
+            "exclude_patterns": [],
+        }
+
+        failed_check = run_tests_module.subprocess.CompletedProcess(
+            args=["docker", "info"],
+            returncode=1,
+            stdout="",
+            stderr="permission denied while trying to connect to the Docker daemon socket\n",
+        )
+        with (
+            mock.patch.object(
+                run_tests_module.sys,
+                "argv",
+                [
+                    "run_tests.py",
+                    "--suite",
+                    "app_parity",
+                    "--test-config",
+                    self.test_config_path,
+                ],
+            ),
+            mock.patch.object(
+                run_tests_module, "load_test_config", return_value=fake_test_config
+            ),
+            mock.patch.object(run_tests_module.shutil, "which", return_value="/usr/bin/mock"),
+            mock.patch.object(run_tests_module.subprocess, "run", return_value=failed_check),
+            mock.patch.object(run_tests_module, "print_colored") as print_mock,
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                run_tests_module.main()
+
+        self.assertEqual(exc.exception.code, 1)
+        printed_messages = [call.args[0] for call in print_mock.call_args_list]
+        self.assertTrue(
+            any(
+                "Failed prerequisite check(s) for suite 'app_parity': Docker daemon access: permission denied"
+                in message
+                for message in printed_messages
+            )
+        )
+
     def test_main_lists_configured_suites(self):
         fake_test_config = {
             "test_suites": {

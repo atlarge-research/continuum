@@ -1,6 +1,9 @@
 # Configuration
 This directory contains legacy `.cfg` configurations kept for historical reproduction and migration reference.
 
+Release support for any migrated module combination is bounded by
+`docs/release_certification_matrix.md`.
+
 The active runtime input model is YAML-only:
 
 - experiments: `configs/experiments/`

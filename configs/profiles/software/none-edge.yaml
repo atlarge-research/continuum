@@ -1,0 +1,12 @@
+---
+schema_version: 1
+kind: ContinuumSoftware
+
+software:
+  modules:
+    - id: infra-only
+      type: none
+      assign_to:
+        match:
+          cluster: edge-1
+      config: {}

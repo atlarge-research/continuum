@@ -7,19 +7,21 @@
     executable: /bin/bash
     creates: /usr/local/bin/arkade
 
-- name: Check if OpenFaaS namespace exists
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Namespace
-    name: openfaas
-    kubeconfig: "{{ rm_openfaas_install_kubeconfig }}"
-  register: openfaas_ns
+- name: Check if OpenFaaS gateway deployment exists
+  ansible.builtin.command:
+    cmd: kubectl get deployment -n openfaas gateway
+  register: openfaas_gateway_state
   changed_when: false
+  failed_when: false
+  environment:
+    KUBECONFIG: "{{ rm_openfaas_install_kubeconfig }}"
 
 - name: Install OpenFaaS CE with arkade
   ansible.builtin.command: arkade install openfaas-ce
-  when: openfaas_ns.resources | length == 0
+  when: openfaas_gateway_state.rc != 0
   changed_when: true
+  environment:
+    KUBECONFIG: "{{ rm_openfaas_install_kubeconfig }}"
 
 - name: Install faas-cli
   ansible.builtin.command: arkade get faas-cli --path /usr/local/bin
@@ -27,29 +29,40 @@
     creates: /usr/local/bin/faas-cli
 
 - name: Wait for OpenFaaS gateway deployment
-  kubernetes.core.k8s_info:
-    api_version: apps/v1
-    kind: Deployment
-    namespace: openfaas
-    name: gateway
-    kubeconfig: "{{ rm_openfaas_install_kubeconfig }}"
-    wait: true
-    wait_timeout: 1800
-    wait_sleep: 5
-    wait_condition:
-      type: Available
-      status: "True"
-  changed_when: false
-
-- name: Ensure OpenFaaS port-forward is running
-  ansible.builtin.shell: |
-    pgrep -f "kubectl port-forward -n openfaas svc/gateway {{ rm_openfaas_install_gateway_port }}:8080" >/dev/null \
-      || nohup kubectl port-forward -n openfaas svc/gateway {{ rm_openfaas_install_gateway_port }}:8080 >/dev/null 2>&1 &
-  args:
-    executable: /bin/bash
+  ansible.builtin.command:
+    cmd: kubectl rollout status deployment/gateway -n openfaas --timeout=1800s
   changed_when: false
   environment:
     KUBECONFIG: "{{ rm_openfaas_install_kubeconfig }}"
+
+- name: Install OpenFaaS gateway port-forward service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/openfaas-gateway-port-forward.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=OpenFaaS gateway kubectl port-forward
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/bin/kubectl \
+        --kubeconfig={{ rm_openfaas_install_kubeconfig }} \
+        port-forward -n openfaas svc/gateway {{ rm_openfaas_install_gateway_port }}:8080 \
+        --address 127.0.0.1
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Ensure OpenFaaS gateway port-forward service is running
+  ansible.builtin.systemd:
+    name: openfaas-gateway-port-forward.service
+    daemon_reload: true
+    enabled: true
+    state: restarted
 
 - name: Wait for OpenFaaS gateway health endpoint
   ansible.builtin.shell: |
@@ -73,3 +86,8 @@
   changed_when: false
   environment:
     KUBECONFIG: "{{ rm_openfaas_install_kubeconfig }}"
+
+- name: Verify OpenFaaS CLI gateway access
+  ansible.builtin.command:
+    cmd: "faas-cli list --gateway http://127.0.0.1:{{ rm_openfaas_install_gateway_port }}"
+  changed_when: false

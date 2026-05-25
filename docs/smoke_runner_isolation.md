@@ -4,6 +4,10 @@ This document describes the canonical host setup for letting an agent run real
 VM-backed Continuum smoke and benchmark paths without granting broad shell
 access.
 
+This is an operator workflow document, not a release-support matrix. Exact
+supported module combinations and certification status are tracked in
+`docs/release_certification_matrix.md`.
+
 ## 1. Goal
 
 The desired operating model is:
@@ -91,7 +95,9 @@ marker path and contents when present, and `verify` now fails fast if:
 2. the dedicated sync marker is missing,
 3. the dedicated repo was synced from a different live checkout, or
 4. a curated set of critical files differs between the live checkout and the
-   dedicated repo copy.
+   dedicated repo copy,
+5. the installed maintenance helper interface is older than the live checkout
+   expects.
 
 If you update the live workspace later, refresh the dedicated execution copy
 with:
@@ -99,6 +105,25 @@ with:
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
 sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl verify
+sh scripts/test/setup_agent_host.sh verify
+```
+
+If `verify` reports that the maintenance helper itself is stale, refresh that
+root-owned helper from the live checkout before retrying the allowlisted
+commands. This is an operator/admin action because it updates
+`/usr/local/bin/continuum-hostctl`; agents should keep using the installed
+allowlisted helper until it is refreshed.
+
+For pre-tag release checks, run both verification commands in the order shown
+above. An older installed helper can pass its own `verify` command before it
+knows about a newer helper-interface contract; the live setup-script verifier
+is the check that catches that drift. The live verifier uses noninteractive
+`sudo -n` for root-owned read checks, so missing sudo privileges fail fast
+instead of prompting during release checks.
+
+```bash
+./scripts/test/setup_agent_host.sh install-hostctl
 sudo -n /usr/local/bin/continuum-hostctl verify
 ```
 
@@ -119,6 +144,113 @@ To run the full local operational regression baseline in one wrapper call, use:
 ```bash
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression
 ```
+
+To run the dedicated network-validation suite through the same allowlisted
+wrapper, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation
+```
+
+To run the QEMU infrastructure parity suite for the old infra-only QEMU rows,
+use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity
+```
+
+To run the QEMU Kubernetes no-benchmark parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity
+```
+
+To run the QEMU Kubernetes image-classification parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity
+```
+
+This suite models the legacy `docker_pull = True` row and therefore preflights
+Docker daemon access before starting VMs.
+
+To run the QEMU KubeEdge software-only parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity
+```
+
+To preflight the full QEMU KubeEdge image-classification parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity
+```
+
+This full application suite uses `image_prefetch: "off"`, so the dedicated
+smoke user only needs the required application images to exist in the local
+registry cache before VM provisioning starts. Prime that cache as a
+Docker-capable user:
+
+```bash
+python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity
+```
+
+After refreshing the installed host maintenance helper, operators can also use:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kubeedge_image_parity
+```
+
+To run the QEMU Mist software-only parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity
+```
+
+To preflight the full QEMU Mist image-classification parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity
+```
+
+This full application suite also uses `image_prefetch: "off"` and therefore
+expects a primed local registry cache rather than Docker daemon access for the
+dedicated smoke user:
+
+```bash
+python3 scripts/test/prime_local_registry_cache.py --suite qemu_mist_image_parity
+```
+
+To run the QEMU endpoint-runtime software-only parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity
+```
+
+To preflight the full QEMU endpoint image-classification parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity
+```
+
+This full application suite currently preflights Docker daemon access before
+starting VMs because the legacy endpoint row used forced image prefetch.
+
+To run the QEMU OpenFaaS software-only suite on the single-host CPU-capped
+variant, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
+```
+
+To preflight the full QEMU OpenFaaS image-classification parity suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity
+```
+
+This full application suite currently preflights Docker daemon access before
+starting VMs because the legacy OpenFaaS row used forced image prefetch.
 
 To advance the retained benchmark state one phase at a time, use:
 
@@ -195,13 +327,25 @@ The installed wrapper supports only these values:
 3. `infra_one_vm`
 4. `software_k8s_two_vm`
 5. `network_netperf_two_vm`
-6. `benchmark_k8s_resume_infra`
-7. `benchmark_k8s_resume_software`
-8. `benchmark_k8s_resume_application`
-9. `benchmark_k8s_resume`
-10. `check-prereqs`
-11. `list-suites`
-12. `debug-playbook <scenario> <playbook> [ansible args...]`
+6. `network_validation`
+7. `qemu_infra_parity`
+8. `qemu_k8s_nobench_parity`
+9. `qemu_k8s_image_parity`
+10. `qemu_kubeedge_software_parity`
+11. `qemu_kubeedge_image_parity`
+12. `qemu_mist_software_parity`
+13. `qemu_mist_image_parity`
+14. `qemu_endpoint_software_parity`
+15. `qemu_endpoint_image_parity`
+16. `qemu_openfaas_software_parity`
+17. `qemu_openfaas_image_parity`
+18. `benchmark_k8s_resume_infra`
+19. `benchmark_k8s_resume_software`
+20. `benchmark_k8s_resume_application`
+21. `benchmark_k8s_resume`
+22. `check-prereqs`
+23. `list-suites`
+24. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 

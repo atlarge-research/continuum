@@ -103,6 +103,10 @@ compile_files=(
     application/runtime_helpers.py
     scripts/test/run_tests.py
     scripts/test/check_docs_paths.py
+    scripts/test/check_release_claims.py
+    scripts/test/check_release_evidence_artifacts.py
+    scripts/test/check_release_matrix.py
+    scripts/test/check_release_pretag.py
     scripts/test/verify_network_profiles.py
     scripts/test/support/*.py
     scripts/test/unit/*.py
@@ -110,18 +114,34 @@ compile_files=(
 )
 
 run_capture compile "compile sweep" required \
-    "$PYTHON" -m py_compile "${compile_files[@]}"
+    "$PYTHON" -B -m py_compile "${compile_files[@]}"
+run_capture shell_syntax_audit "cloud audit shell syntax check" required \
+    bash -n scripts/test/run_cloud_static_audit.sh
+run_capture shell_syntax_smoke "smoke wrapper shell syntax check" required \
+    sh -n scripts/test/run_smoke_host.sh
+run_capture shell_syntax_host_setup "host setup shell syntax check" required \
+    sh -n scripts/test/setup_agent_host.sh
+run_capture diff_check "git diff whitespace check" required \
+    git diff --check
 run_capture unit_unittest "unit unittest discovery" required \
-    env PYTHONPATH=. "$PYTHON" -m unittest discover scripts/test/unit
+    env PYTHONPATH=. "$PYTHON" -B -m unittest discover scripts/test/unit
 run_capture e2e_unittest "e2e unittest discovery" required \
-    env PYTHONPATH=. "$PYTHON" -m unittest discover scripts/test/e2e
+    env PYTHONPATH=. "$PYTHON" -B -m unittest discover scripts/test/e2e
 run_capture unittest "combined unittest discovery" required \
-    env PYTHONPATH=. "$PYTHON" -m unittest discover scripts/test
+    env PYTHONPATH=. "$PYTHON" -B -m unittest discover scripts/test
 run_capture docs "docs path reference check" required \
-    "$PYTHON" scripts/test/check_docs_paths.py
+    "$PYTHON" -B scripts/test/check_docs_paths.py
+run_capture release_claims "public release-claims check" required \
+    "$PYTHON" -B scripts/test/check_release_claims.py
+run_capture release_matrix "release certification matrix check" required \
+    "$PYTHON" -B scripts/test/check_release_matrix.py
 run_capture suites "configured suite catalog" required \
-    "$PYTHON" scripts/test/run_tests.py --list-suites
+    "$PYTHON" -B scripts/test/run_tests.py --list-suites
 
+run_capture release_evidence_artifacts "release evidence artifact audit" optional \
+    "$PYTHON" -B scripts/test/check_release_evidence_artifacts.py
+run_capture release_pretag "M1 pre-tag readiness check" optional \
+    "$PYTHON" -B scripts/test/check_release_pretag.py
 run_capture unit_pytest "unit pytest suite" optional \
     env PYTHONPATH=. pytest -q scripts/test/unit
 run_capture e2e_pytest "e2e pytest suite" optional \
@@ -159,11 +179,46 @@ run_capture ansible_lint "Ansible lint baseline" optional \
         application/image_classification/launch_benchmark_kubernetes.yml \
         application/text_translation/launch_benchmark_kubernetes.yml
 run_capture prereq_smoke "smoke suite prerequisites" optional \
-    "$PYTHON" scripts/test/run_tests.py --check-prereqs --suite smoke
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite smoke
 run_capture prereq_benchmark "benchmark smoke suite prerequisites" optional \
-    "$PYTHON" scripts/test/run_tests.py --check-prereqs --suite benchmark_smoke
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite benchmark_smoke
 run_capture prereq_network "network validation suite prerequisites" optional \
-    "$PYTHON" scripts/test/run_tests.py --check-prereqs --suite network_validation
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite network_validation
+run_capture prereq_qemu_infra_parity "QEMU infra parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_infra_parity
+run_capture prereq_qemu_k8s_nobench_parity "QEMU Kubernetes no-benchmark parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_k8s_nobench_parity
+run_capture prereq_qemu_kubeedge_software_parity "QEMU KubeEdge software parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_kubeedge_software_parity
+run_capture prereq_qemu_mist_software_parity "QEMU Mist software parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_mist_software_parity
+run_capture prereq_qemu_endpoint_software_parity "QEMU endpoint-runtime software parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_endpoint_software_parity
+run_capture prereq_qemu_openfaas_software_parity "QEMU OpenFaaS software parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_openfaas_software_parity
+
+forced_prefetch_notice() {
+    cat <<'EOF'
+Forced-prefetch application parity rows P-QEMU-05, P-QEMU-08, and P-QEMU-10
+are not certified by this cloud-safe audit. Current-user Docker access is not a
+release-support signal for those rows; certification requires the dedicated
+smoke-user wrapper context plus retained VM/application evidence. See
+docs/release_certification_matrix.md for the active blockers.
+EOF
+}
+
+run_capture prereq_forced_prefetch_notice "forced-prefetch image parity certification notice" optional \
+    forced_prefetch_notice
+run_capture prereq_qemu_k8s_image_parity "QEMU Kubernetes image parity forced-prefetch prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_k8s_image_parity
+run_capture prereq_qemu_kubeedge_image_parity "QEMU KubeEdge image parity registry-cache prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_kubeedge_image_parity
+run_capture prereq_qemu_mist_image_parity "QEMU Mist image parity registry-cache prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_mist_image_parity
+run_capture prereq_qemu_endpoint_image_parity "QEMU endpoint image parity forced-prefetch prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_endpoint_image_parity
+run_capture prereq_qemu_openfaas_image_parity "QEMU OpenFaaS image parity forced-prefetch prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_openfaas_image_parity
 
 {
     echo "# Cloud Static Audit Report - $TIMESTAMP"

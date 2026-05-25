@@ -58,6 +58,16 @@ run_child_scenarios() {
   done
 }
 
+set_suite_scenario() {
+  suite_name=$1
+  scenario_path=$2
+  if [ "$RUN_MODE" != "debug_playbook" ]; then
+    RUN_MODE="suite"
+    SUITE="$suite_name"
+  fi
+  BASE_PATH="$BASE_ROOT/$scenario_path"
+}
+
 case "$SCENARIO" in
   phase_smoke_matrix)
     run_child_scenarios infra_one_vm software_k8s_two_vm network_netperf_two_vm
@@ -92,9 +102,43 @@ case "$SCENARIO" in
     BASE_PATH="$BASE_ROOT/benchmark_k8s_resume"
     ;;
   benchmark_k8s_resume)
-    RUN_MODE="suite"
-    SUITE="benchmark_smoke"
-    BASE_PATH="$BASE_ROOT/benchmark_k8s_resume"
+    set_suite_scenario benchmark_smoke benchmark_k8s_resume
+    ;;
+  network_validation)
+    set_suite_scenario network_validation network_validation
+    ;;
+  qemu_infra_parity)
+    set_suite_scenario qemu_infra_parity qemu_infra_parity
+    ;;
+  qemu_k8s_nobench_parity)
+    set_suite_scenario qemu_k8s_nobench_parity qemu_k8s_nobench_parity
+    ;;
+  qemu_k8s_image_parity)
+    set_suite_scenario qemu_k8s_image_parity qemu_k8s_image_parity
+    ;;
+  qemu_kubeedge_software_parity)
+    set_suite_scenario qemu_kubeedge_software_parity qemu_kubeedge_software_parity
+    ;;
+  qemu_kubeedge_image_parity)
+    set_suite_scenario qemu_kubeedge_image_parity qemu_kubeedge_image_parity
+    ;;
+  qemu_mist_software_parity)
+    set_suite_scenario qemu_mist_software_parity qemu_mist_software_parity
+    ;;
+  qemu_mist_image_parity)
+    set_suite_scenario qemu_mist_image_parity qemu_mist_image_parity
+    ;;
+  qemu_endpoint_software_parity)
+    set_suite_scenario qemu_endpoint_software_parity qemu_endpoint_software_parity
+    ;;
+  qemu_endpoint_image_parity)
+    set_suite_scenario qemu_endpoint_image_parity qemu_endpoint_image_parity
+    ;;
+  qemu_openfaas_software_parity)
+    set_suite_scenario qemu_openfaas_software_parity qemu_openfaas_software_parity
+    ;;
+  qemu_openfaas_image_parity)
+    set_suite_scenario qemu_openfaas_image_parity qemu_openfaas_image_parity
     ;;
   check-prereqs)
     BASE_PATH="$BASE_ROOT/prereqs"
@@ -140,7 +184,7 @@ case "$SCENARIO" in
     ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, debug-playbook" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, debug-playbook" >&2
     exit 2
     ;;
 esac

@@ -32,7 +32,7 @@ def verify_options(parser, config):
         parser (ArgumentParser): Argparse object
         config (ConfigParser): ConfigParser object
     """
-    # TODO Split KubeEdge and Mist into two providers
+    # Future cleanup: split KubeEdge and Mist into separate resource-manager modules.
     if config_access.orchestrator_name(config) == "kubeedge" and (
         config["infrastructure"]["cloud_nodes"] != 1
         or config["infrastructure"]["edge_nodes"] == 0

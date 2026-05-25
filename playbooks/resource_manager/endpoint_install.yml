@@ -1,6 +1,6 @@
 ---
-- name: Prepare endpoint hosts and endpoint base images
-  hosts: endpoints:base_endpoint
+- name: Prepare endpoint hosts
+  hosts: endpoints
   become: true
   roles:
     - role: endpoint_prereqs

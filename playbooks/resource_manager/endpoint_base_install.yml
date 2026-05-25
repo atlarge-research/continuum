@@ -1,0 +1,9 @@
+---
+- name: Prepare endpoint base images
+  hosts: base_endpoint
+  become: true
+  roles:
+    - role: endpoint_prereqs
+    - role: docker_setup
+    - role: mosquitto
+    - role: endpoint_runtime

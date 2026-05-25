@@ -316,8 +316,8 @@ def add_options(_config):
     Returns:
         list(list()): Options to add
     """
-    # TODO: Move base_ip and related logic to here - that's not generic
-    #       (that is, GCP doesnt use it)
+    # Future cleanup: move base_ip and related logic here; that path is not generic
+    # because GCP does not use it.
     return []
 
 

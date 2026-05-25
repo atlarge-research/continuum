@@ -20,7 +20,7 @@
 - name: Initialize Kubernetes control plane for KubeEdge
   ansible.builtin.command: >-
     kubeadm init
-    --kubernetes-version=v1.31.14
+    --kubernetes-version=v{{ rm_kubeedge_cloudcore_kubeversion }}
     --apiserver-advertise-address={{ rm_kubeedge_cloudcore_cloud_ip }}
     --apiserver-cert-extra-sans={{ rm_kubeedge_cloudcore_cloud_ip }}
     --node-name {{ ansible_hostname }}

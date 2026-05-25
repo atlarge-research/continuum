@@ -10,6 +10,10 @@ Continuum uses three YAML document kinds:
 
 The active examples live under `configs/experiments/`.
 
+This reference documents the schema and module identifiers accepted by the
+rework parser. It is not a release-support matrix. Runtime support claims are
+limited to the rows marked `certified` in `docs/release_certification_matrix.md`.
+
 ## File Model
 
 An experiment references one environment profile and one software profile:
@@ -172,7 +176,7 @@ Top-level keys for `ContinuumSoftware`:
 | Key | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `id` | string | yes | Unique module instance id |
-| `type` | string | yes | Supported module type |
+| `type` | string | yes | Accepted module type |
 | `assign_to` | mapping | yes | Exact-match selector |
 | `config` | mapping | yes | Module-local config |
 
@@ -184,7 +188,7 @@ assign_to:
     cluster: cloud-1
 ```
 
-Supported module types:
+Accepted module types:
 
 - Orchestrators: `none`, `kubernetes`, `kubeedge`, `kubecontrol`, `kube_kata`, `mist`
 - Addons: `endpoint_runtime`, `openfaas`, `observability`
@@ -256,38 +260,61 @@ Unknown config keys for known stage types fail fast.
 ## Shipped Examples and Profiles
 
 These shipped examples and profiles are regression-validated from disk by
-`scripts/test/e2e/test_example_configs.py`.
+`scripts/test/e2e/test_example_configs.py`. A listed example is parser/profile
+coverage; release-certified runtime support is tracked separately in
+`docs/release_certification_matrix.md`.
 
 Runnable experiment examples:
 
-- `configs/experiments/smoke/infra_one_vm.yaml`
-- `configs/experiments/smoke/software_k8s_two_vm.yaml`
-- `configs/experiments/smoke/network_netperf_two_vm.yaml`
-- `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml`
-- `configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml`
-- `configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml`
-- `configs/experiments/infra_only.yaml`
 - `configs/experiments/bench_cloud.yaml`
 - `configs/experiments/bench_cloud_openfaas.yaml`
 - `configs/experiments/bench_edge.yaml`
 - `configs/experiments/bench_endpoint.yaml`
+- `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml`
+- `configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml`
+- `configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml`
+- `configs/experiments/infra_only.yaml`
 - `configs/experiments/network_validation/bench_net_4g.yaml`
+- `configs/experiments/parity/qemu/01_infraonly_cloud.yaml`
+- `configs/experiments/parity/qemu/02_infraonly_edge.yaml`
+- `configs/experiments/parity/qemu/03_infraonly_endpoint.yaml`
+- `configs/experiments/parity/qemu/04_infraonly_all.yaml`
+- `configs/experiments/parity/qemu_endpoint_image/08_endpoint_image_classification.yaml`
+- `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml`
+- `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml`
+- `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml`
+- `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml`
+- `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml`
+- `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml`
+- `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml`
+- `configs/experiments/parity/qemu_openfaas_image/10_openfaas_image_classification.yaml`
+- `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml`
+- `configs/experiments/smoke/infra_one_vm.yaml`
+- `configs/experiments/smoke/network_netperf_two_vm.yaml`
+- `configs/experiments/smoke/software_k8s_two_vm.yaml`
 - `configs/experiments/template.yaml`
 
 Shipped environment and software profiles:
 
-- `configs/profiles/environment/local-qemu.yaml`
+- `configs/profiles/environment/local-qemu-cpupin-delete-on-exit.yaml`
+- `configs/profiles/environment/local-qemu-cpupin.yaml`
 - `configs/profiles/environment/local-qemu-delete-on-exit.yaml`
+- `configs/profiles/environment/local-qemu-netperf-ip101.yaml`
 - `configs/profiles/environment/local-qemu-netperf.yaml`
+- `configs/profiles/environment/local-qemu.yaml`
 - `configs/profiles/environment/template.yaml`
-- `configs/profiles/software/none.yaml`
-- `configs/profiles/software/k8s.yaml`
-- `configs/profiles/software/k8s-endpoint-runtime.yaml`
-- `configs/profiles/software/k8s-openfaas.yaml`
-- `configs/profiles/software/kubeedge.yaml`
-- `configs/profiles/software/kubeedge-endpoint-runtime.yaml`
-- `configs/profiles/software/template.yaml`
 - `configs/profiles/software/endpoint-runtime.yaml`
+- `configs/profiles/software/k8s-endpoint-runtime.yaml`
+- `configs/profiles/software/k8s-observability-endpoint-runtime.yaml`
+- `configs/profiles/software/k8s-openfaas.yaml`
+- `configs/profiles/software/k8s.yaml`
+- `configs/profiles/software/kubeedge-endpoint-runtime.yaml`
+- `configs/profiles/software/kubeedge.yaml`
+- `configs/profiles/software/mist-endpoint-runtime.yaml`
+- `configs/profiles/software/none-edge.yaml`
+- `configs/profiles/software/none-endpoint.yaml`
+- `configs/profiles/software/none.yaml`
+- `configs/profiles/software/template.yaml`
 
 ## Related Docs
 

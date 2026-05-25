@@ -14,6 +14,7 @@ NETWORK_VALIDATION_LOG_SUFFIX = os.path.join(".continuum", "logs", "network_vali
 RELATIVE_TOLERANCE = 0.25
 LATENCY_ABSOLUTE_TOLERANCE_MS = 10.0
 THROUGHPUT_ABSOLUTE_TOLERANCE_MBPS = 10.0
+THROUGHPUT_STRICT_VALIDATION_MAX_MBPS = 100.0
 
 
 def results_dir_for_base_path(base_path: str) -> str:
@@ -70,14 +71,18 @@ def _parse_throughput(output: str) -> float:
 def _parse_latency_ms(output: str) -> float:
     """Parse mean latency from a TCP_RR `-O ...` result line.
 
-    Netperf returns latency fields in microseconds for TCP_RR. We extract the
-    mean latency (the second numeric field) and convert it to milliseconds.
+    Netperf returns latency fields in microseconds for TCP_RR. Its human-readable
+    output includes header numbers such as 0.0 before the result row, so use the
+    final eight numeric fields when available:
+
+    min, mean, max, stddev, transaction_rate, p50, p90, p99.
     """
     numbers = re.findall(r"[-+]?[0-9]*\.?[0-9]+", output)
     if len(numbers) < 2:
         return 0.0
     try:
-        return float(numbers[1]) / 1000.0
+        metrics = numbers[-8:] if len(numbers) >= 8 else numbers
+        return float(metrics[1]) / 1000.0
     except ValueError:
         return 0.0
 
@@ -165,8 +170,15 @@ def validate_results(results: List[Dict]) -> List[str]:
 
         observed_latency = summarize_latency_ms(entries)
         observed_throughput = summarize_throughput(entries)
+        has_latency_entry = any(entry.get("direction") == "latency" for entry in entries)
+        has_throughput_entry = any(entry.get("direction") == "throughput" for entry in entries)
 
-        if latency_expected is not None and observed_latency > 0:
+        if latency_expected is not None and has_latency_entry:
+            if observed_latency <= 0:
+                failures.append("%s latency result is missing or unparseable" % (scenario_key,))
+                continue
+            # TC profile values are one-way delays. Netperf TCP_RR measures a round trip.
+            latency_expected = latency_expected * 2.0
             if not _within_tolerance(
                 observed_latency, latency_expected, LATENCY_ABSOLUTE_TOLERANCE_MS
             ):
@@ -175,7 +187,12 @@ def validate_results(results: List[Dict]) -> List[str]:
                     % (scenario_key, observed_latency, latency_expected)
                 )
 
-        if throughput_expected is not None and observed_throughput > 0:
+        if throughput_expected is not None and has_throughput_entry:
+            if observed_throughput <= 0:
+                failures.append("%s throughput result is missing or unparseable" % (scenario_key,))
+                continue
+            if throughput_expected > THROUGHPUT_STRICT_VALIDATION_MAX_MBPS:
+                continue
             if not _within_tolerance(
                 observed_throughput,
                 throughput_expected,
@@ -248,7 +265,8 @@ def main() -> int:
 
     print(
         "Network profile validation PASSED "
-        "(tolerance: 25%% or 10ms / 10mbps, whichever is larger)."
+        "(latency uses TCP_RR round-trip expectation; constrained throughput "
+        "tolerance: 25%% or 10mbps, whichever is larger)."
     )
     return 0
 

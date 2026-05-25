@@ -1,6 +1,16 @@
 ---
+- name: Ensure kube-prometheus checkout is present
+  ansible.builtin.git:
+    repo: "{{ rm_k8s_observability_repo }}"
+    dest: "{{ rm_k8s_observability_path }}"
+    version: "{{ rm_k8s_observability_version }}"
+    depth: 1
+    update: false
+
 - name: Apply kube-prometheus setup manifests
-  ansible.builtin.command: kubectl apply -f /kube-prometheus/manifests/setup
+  ansible.builtin.command: >-
+    kubectl apply --server-side
+    -f {{ rm_k8s_observability_path }}/manifests/setup
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false
@@ -12,7 +22,7 @@
   changed_when: false
 
 - name: Apply kube-prometheus manifests
-  ansible.builtin.command: kubectl apply -f /kube-prometheus/manifests/
+  ansible.builtin.command: kubectl apply -f {{ rm_k8s_observability_path }}/manifests/
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false

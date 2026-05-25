@@ -70,7 +70,10 @@
 
 - name: Download Kubernetes apt repo release key
   ansible.builtin.get_url:
-    url: "https://pkgs.k8s.io/core:/stable:/{{ rm_kubeedge_prereqs_repo_major_minor }}/deb/Release.key"
+    url: >-
+      https://pkgs.k8s.io/core:/stable:/{{ 'v1.29'
+      if rm_kubeedge_prereqs_repo_major_minor == 'v1.27'
+      else rm_kubeedge_prereqs_repo_major_minor }}/deb/Release.key
     dest: /tmp/kubernetes-release.key
     mode: "0644"
 
@@ -88,12 +91,12 @@
     state: present
     filename: kubernetes
 
-- name: Install pinned Kubernetes binaries for KubeEdge
+- name: Install Kubernetes binaries for KubeEdge
   ansible.builtin.apt:
     name:
-      - "kubelet={{ rm_kubeedge_prereqs_k8s_pkg_version }}"
-      - "kubeadm={{ rm_kubeedge_prereqs_k8s_pkg_version }}"
-      - "kubectl={{ rm_kubeedge_prereqs_k8s_pkg_version }}"
+      - kubelet
+      - kubeadm
+      - kubectl
     state: present
     update_cache: true
 

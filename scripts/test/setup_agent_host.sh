@@ -19,7 +19,8 @@ LIBVIRT_URI="${LIBVIRT_URI:-qemu:///system}"
 QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
-SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/test_config.json}"
+SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
+HOSTCTL_INTERFACE_VERSION="2026-05-24-prime-registry-cache"
 
 usage() {
   cat <<EOF
@@ -28,6 +29,7 @@ Usage:
   $0 install [dedicated|live]
   $0 sync-repo
   $0 verify
+  $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
   $0 install-hostctl
   $0 print-agent-command [scenario]
   $0 print-hostctl-command [subcommand...]
@@ -87,6 +89,14 @@ run_root() {
     "$@"
   else
     sudo "$@"
+  fi
+}
+
+run_root_noninteractive() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  else
+    sudo -n "$@"
   fi
 }
 
@@ -205,6 +215,7 @@ QEMU_BRIDGE_NAME=$QEMU_BRIDGE_NAME
 QEMU_BRIDGE_GATEWAY=$QEMU_BRIDGE_GATEWAY
 SYNC_MARKER_NAME=$SYNC_MARKER_NAME
 SYNC_PROBE_FILES="$SYNC_PROBE_FILES"
+HOSTCTL_INTERFACE_VERSION=$HOSTCTL_INTERFACE_VERSION
 
 usage() {
   cat <<EOF_HOSTCTL
@@ -213,6 +224,7 @@ Usage:
   \$0 sync-repo
   \$0 install-wrapper [dedicated|live]
   \$0 verify [dedicated|live]
+  \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
   \$0 print-agent-command [scenario]
 EOF_HOSTCTL
 }
@@ -420,11 +432,51 @@ verify_dedicated_repo_sync() {
   done
 }
 
+verify_hostctl_interface() {
+  setup_script="\$LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh"
+  if [ ! -r "\$setup_script" ]; then
+    log "Host setup script is unreadable: \$setup_script" >&2
+    exit 1
+  fi
+  if [ ! -r "\$HOSTCTL_PATH" ]; then
+    log "Installed maintenance helper is unreadable: \$HOSTCTL_PATH" >&2
+    exit 1
+  fi
+
+  source_version=\$(awk -F= '/^HOSTCTL_INTERFACE_VERSION=/{gsub(/"/, "", \$2); print \$2; exit}' "\$setup_script")
+  if [ -z "\$source_version" ]; then
+    log "Host setup script does not declare HOSTCTL_INTERFACE_VERSION: \$setup_script" >&2
+    exit 1
+  fi
+  installed_version=\$(awk -F= '/^HOSTCTL_INTERFACE_VERSION=/{gsub(/"/, "", \$2); print \$2; exit}' "\$HOSTCTL_PATH")
+  if [ -z "\$installed_version" ]; then
+    log "Installed maintenance helper does not declare HOSTCTL_INTERFACE_VERSION: \$HOSTCTL_PATH" >&2
+    exit 1
+  fi
+
+  if [ "\$installed_version" != "\$source_version" ]; then
+    log "Installed maintenance helper is stale: interface \$installed_version, expected \$source_version" >&2
+    log "Refresh the helper from the live checkout, then rerun verify:" >&2
+    log "  \$setup_script install-hostctl" >&2
+    log "  sudo -n \$HOSTCTL_PATH verify" >&2
+    exit 1
+  fi
+
+  if ! grep -q 'prime-registry-cache)' "\$HOSTCTL_PATH"; then
+    log "Installed maintenance helper does not expose prime-registry-cache" >&2
+    log "Refresh the helper from the live checkout with: \$setup_script install-hostctl" >&2
+    exit 1
+  fi
+}
+
 verify() {
   mode_arg="\${1:-dedicated}"
   repo_root=\$(repo_root_for_mode "\$mode_arg")
 
   require_cmd virsh
+
+  log "Verifying maintenance helper interface"
+  verify_hostctl_interface
 
   log "Verifying installed wrapper target"
   verify_wrapper_target "\$repo_root"
@@ -451,6 +503,29 @@ verify() {
 
   log "Verifying wrapper prereqs"
   runner_exec "\$INSTALL_PATH" check-prereqs
+}
+
+prime_registry_cache() {
+  if [ "\$#" -eq 0 ]; then
+    log "Usage: \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    exit 2
+  fi
+
+  require_cmd curl
+  require_cmd docker
+
+  repo_root="\$DEDICATED_REPO_ROOT"
+  if [ "\$READONLY_DEDICATED_REPO" = "1" ]; then
+    verify_dedicated_repo_sync
+  fi
+
+  if [ ! -x "\$VENV_ROOT/bin/python3" ]; then
+    log "Could not find Continuum smoke Python interpreter: \$VENV_ROOT/bin/python3" >&2
+    exit 2
+  fi
+
+  cd "\$repo_root"
+  PYTHONPATH=. "\$VENV_ROOT/bin/python3" scripts/test/prime_local_registry_cache.py "\$@"
 }
 
 print_agent_command() {
@@ -506,6 +581,10 @@ case "\$cmd" in
     ;;
   verify)
     verify "\${2:-dedicated}"
+    ;;
+  prime-registry-cache)
+    shift
+    prime_registry_cache "\$@"
     ;;
   print-agent-command)
     print_agent_command "\${2:-benchmark_k8s_resume}"
@@ -678,13 +757,15 @@ verify_wrapper_target() {
 
 verify_dedicated_repo_sync() {
   marker_path=$(sync_marker_path)
-  if ! run_root test -r "$marker_path"; then
+  if ! run_root_noninteractive test -r "$marker_path"; then
     log "Dedicated repo sync marker is missing: $marker_path" >&2
     log "Refresh the dedicated repo with: $0 sync-repo" >&2
     exit 1
   fi
 
-  marker_source=$(run_root awk -F= '/^SYNCED_FROM=/{print $2; exit}' "$marker_path")
+  marker_source=$(
+    run_root_noninteractive awk -F= '/^SYNCED_FROM=/{print $2; exit}' "$marker_path"
+  )
   if [ -n "$marker_source" ] && [ "$marker_source" != "$LIVE_REPO_ROOT" ]; then
     log "Dedicated repo was last synced from $marker_source, not $LIVE_REPO_ROOT" >&2
     log "Refresh the dedicated repo with: $0 sync-repo" >&2
@@ -699,13 +780,15 @@ verify_dedicated_repo_sync() {
       log "Live repo probe file is unreadable: $live_path" >&2
       exit 1
     fi
-    if ! run_root test -r "$dedicated_path"; then
+    if ! run_root_noninteractive test -r "$dedicated_path"; then
       log "Dedicated repo probe file is unreadable: $dedicated_path" >&2
       exit 1
     fi
 
     live_cksum=$(cksum "$live_path" | awk '{print $1 ":" $2}')
-    dedicated_cksum=$(run_root cksum "$dedicated_path" | awk '{print $1 ":" $2}')
+    dedicated_cksum=$(
+      run_root_noninteractive cksum "$dedicated_path" | awk '{print $1 ":" $2}'
+    )
     if [ "$live_cksum" != "$dedicated_cksum" ]; then
       log "Dedicated repo drift detected for $rel_path" >&2
       log "Live repo checksum: $live_cksum" >&2
@@ -716,12 +799,52 @@ verify_dedicated_repo_sync() {
   done
 }
 
+verify_hostctl_interface() {
+  setup_script="$LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh"
+  if [ ! -r "$setup_script" ]; then
+    log "Host setup script is unreadable: $setup_script" >&2
+    exit 1
+  fi
+  if [ ! -r "$HOSTCTL_PATH" ]; then
+    log "Installed maintenance helper is unreadable: $HOSTCTL_PATH" >&2
+    exit 1
+  fi
+
+  source_version=$(awk -F= '/^HOSTCTL_INTERFACE_VERSION=/{gsub(/"/, "", $2); print $2; exit}' "$setup_script")
+  if [ -z "$source_version" ]; then
+    log "Host setup script does not declare HOSTCTL_INTERFACE_VERSION: $setup_script" >&2
+    exit 1
+  fi
+  installed_version=$(awk -F= '/^HOSTCTL_INTERFACE_VERSION=/{gsub(/"/, "", $2); print $2; exit}' "$HOSTCTL_PATH")
+  if [ -z "$installed_version" ]; then
+    log "Installed maintenance helper does not declare HOSTCTL_INTERFACE_VERSION: $HOSTCTL_PATH" >&2
+    exit 1
+  fi
+
+  if [ "$installed_version" != "$source_version" ]; then
+    log "Installed maintenance helper is stale: interface $installed_version, expected $source_version" >&2
+    log "Refresh the helper from the live checkout, then rerun verify:" >&2
+    log "  $setup_script install-hostctl" >&2
+    log "  sudo -n $HOSTCTL_PATH verify" >&2
+    exit 1
+  fi
+
+  if ! grep -q 'prime-registry-cache)' "$HOSTCTL_PATH"; then
+    log "Installed maintenance helper does not expose prime-registry-cache" >&2
+    log "Refresh the helper from the live checkout with: $setup_script install-hostctl" >&2
+    exit 1
+  fi
+}
+
 verify() {
   mode_arg="${1:-$MODE}"
   repo_root=$(repo_root_for_mode "$mode_arg")
 
   require_cmd sudo
   require_cmd virsh
+
+  log "Verifying maintenance helper interface"
+  verify_hostctl_interface
 
   log "Verifying installed wrapper target"
   verify_wrapper_target "$repo_root"
@@ -748,6 +871,33 @@ verify() {
 
   log "Verifying wrapper prereqs"
   runner_exec "$INSTALL_PATH" check-prereqs
+}
+
+prime_registry_cache() {
+  if [ "$#" -eq 0 ]; then
+    log "Usage: $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    exit 2
+  fi
+  if [ "$(id -u)" -ne 0 ]; then
+    log "Run this helper via sudo, or run scripts/test/prime_local_registry_cache.py directly as a Docker-capable user." >&2
+    exit 2
+  fi
+
+  require_cmd curl
+  require_cmd docker
+
+  repo_root=$(repo_root_for_mode "$MODE")
+  if [ "$MODE" = "dedicated" ] && [ "$READONLY_DEDICATED_REPO" = "1" ]; then
+    verify_dedicated_repo_sync
+  fi
+
+  if [ ! -x "$VENV_ROOT/bin/python3" ]; then
+    log "Could not find Continuum smoke Python interpreter: $VENV_ROOT/bin/python3" >&2
+    exit 2
+  fi
+
+  cd "$repo_root"
+  PYTHONPATH=. "$VENV_ROOT/bin/python3" scripts/test/prime_local_registry_cache.py "$@"
 }
 
 install() {
@@ -780,10 +930,28 @@ print_agent_command() {
   printf 'sudo -n -u %s %s %s\n' "$RUNNER_USER" "$INSTALL_PATH" "$scenario"
 }
 
+is_installed_hostctl_command() {
+  case "$1" in
+    show-config|sync-repo|install-wrapper|verify|prime-registry-cache|print-agent-command)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 print_hostctl_command() {
   if [ "$#" -eq 0 ]; then
-    printf 'sudo -n %s sync-repo\n' "$HOSTCTL_PATH"
-    return
+    set -- sync-repo
+  fi
+
+  if ! is_installed_hostctl_command "$1"; then
+    log "Unsupported installed hostctl command for print-hostctl-command: $1" >&2
+    if [ "$1" = "install-hostctl" ]; then
+      log "Refresh the helper with: $LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh install-hostctl" >&2
+    fi
+    return 2
   fi
 
   printf 'sudo -n %s' "$HOSTCTL_PATH"
@@ -808,6 +976,7 @@ LIVE_REPO_ROOT=$LIVE_REPO_ROOT
 DEDICATED_REPO_ROOT=$DEDICATED_REPO_ROOT
 MODE=$MODE
 READONLY_DEDICATED_REPO=$READONLY_DEDICATED_REPO
+HOSTCTL_INTERFACE_VERSION=$HOSTCTL_INTERFACE_VERSION
 LIBVIRT_URI=$LIBVIRT_URI
 QEMU_BRIDGE_NAME=$QEMU_BRIDGE_NAME
 QEMU_BRIDGE_GATEWAY=$QEMU_BRIDGE_GATEWAY
@@ -838,6 +1007,10 @@ case "$cmd" in
     ;;
   verify)
     verify "${2:-$MODE}"
+    ;;
+  prime-registry-cache)
+    shift
+    prime_registry_cache "$@"
     ;;
   install-hostctl)
     install_hostctl

@@ -17,13 +17,26 @@ Fast onboarding brief: `docs/rework_kickoff.md`.
    - YAML composition, parsing, validation, normalization contracts.
 4. `docs/software_module_architecture_plan.md`
    - Software semantics (module graph, tags, registry constraints, planner behavior).
+5. `docs/rework_milestone_release_plan.md`
+   - Release certification, intermediate milestone sequencing, old-main parity gates.
+6. `docs/release_certification_matrix.md`
+   - Concrete certified/candidate/historical rows for milestone and parity claims.
+7. `docs/post_release_roadmap.md`
+   - Future-release roadmap after the final parity release.
+
+Current pause/resume checkpoint: `docs/rework_release_handoff.md`. It records
+the latest release-readiness execution state for future agents, but it is not a
+policy authority and must stay subordinate to the milestone release plan and
+certification matrix.
 
 ## 3. Conflict Rules
 
 1. Narrower scope overrides broader scope.
 2. Software semantic conflicts resolve to `docs/software_module_architecture_plan.md`.
 3. Parser/runtime semantic conflicts resolve to `docs/configuration_restructuring_design.md`.
-4. Parent docs must be synchronized after child-plan decision changes.
+4. Release/publishing conflicts resolve to `docs/rework_milestone_release_plan.md`
+   after the architecture docs settle implementation semantics.
+5. Parent docs must be synchronized after child-plan decision changes.
 
 ## 4. Locked Global Decisions
 
@@ -77,6 +90,22 @@ Fast onboarding brief: `docs/rework_kickoff.md`.
    - `input/configuration/yaml_parser.py` remains an orchestration facade,
    - domain validation logic belongs in dedicated modules,
    - avoid reintroducing monolithic parser growth when extending schema/runtime contracts.
+15. Core/module boundary:
+   - Continuum core owns planning, validation, selector/scope resolution,
+     module contracts, runtime handoff, state, and evidence contracts,
+   - infrastructure providers, resource managers, addons, execution helpers, and
+     applications are modules or module families,
+   - `qemu` is an infrastructure provider module and must not be described as
+     core.
+16. Release claims require runtime evidence:
+   - static, unit, parser, and runner tests are required but not sufficient for
+     public runtime support claims,
+   - each claimed provider/software/application combination needs fresh
+     VM-backed or cloud-backed evidence for the release that names it.
+17. Final replacement release requires old-main parity:
+   - intermediate rework milestones may certify smaller module sets,
+   - the final `main` replacement must either certify old public functionality or
+     explicitly deprecate unsupported rows with migration guidance.
 
 ## 5. Execution Dependency Chain
 
@@ -95,7 +124,8 @@ Fast onboarding brief: `docs/rework_kickoff.md`.
 6. Phase D (completed): Application runtime execution, role consolidation, retained K8s benchmark smoke, and teardown evidence are landed.
 7. Phase E (completed): Resume contract integrity, schema-v2 state, and runner artifact validation are landed.
 8. Phase F (completed): Major-function coverage audit plus unit/e2e test layout closure are landed.
-9. Phase G (deferred): Lifecycle/reproducibility hardening is outside the active closure and remains gated by a future RFC/ADR.
+9. Release certification planning (active): Intermediate subrelease policy and old-main parity gates are documented.
+10. Phase G (deferred): Lifecycle/reproducibility hardening is outside the active closure and remains gated by a future RFC/ADR.
 
 ## 7. Decision Traceability Matrix
 
@@ -116,6 +146,9 @@ Fast onboarding brief: `docs/rework_kickoff.md`.
 | D13 | Layered config access (semantic helpers + generic parameter readers) | `docs/configuration_restructuring_design.md` | `input/configuration/config_access.py`, runtime callers | config-access/runtime regression tests |
 | D14 | Hydra/Pydantic migration is post-rework only (deferred policy) | `docs/rework_plan_stack.md` | planning stack (`docs/rework_plan_stack.md`, `docs/ansible_restructuring_design.md`) | post-rework RFC/ADR gate |
 | D15 | Parser decomposition guardrail (`yaml_parser` orchestration-only) | `docs/rework_plan_stack.md` | `input/configuration/yaml_parser.py`, `input/configuration/software_domain_validation.py`, `input/configuration/benchmark_domain_validation.py`, `input/configuration/selector_assignment_validation.py`, `input/configuration/run_schema_validation.py`, `input/configuration/infrastructure_schema_validation.py`, `input/configuration/provider_schema_validation.py` | parser decomposition regression tests |
+| D16 | Provider/software/application stacks are modules, not core | `docs/rework_milestone_release_plan.md` | module registry, provider/resource-manager/application modules | docs review + module-set certification |
+| D17 | Public runtime claims require VM-backed or cloud-backed evidence | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `scripts/test/run_tests.py`, `scripts/test/test_config.json`, smoke host wrapper | release certification matrix + saved artifacts |
+| D18 | Final `main` replacement requires old-main parity or explicit deprecation | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `configuration/tests/`, `configs/experiments/`, migration docs | old-main parity checklist |
 
 ## 8. Synchronization Gate (Per PR)
 
@@ -248,7 +281,20 @@ Before merge:
 98. The dedicated smoke wrapper now exposes `phase_smoke_matrix` for the three
     phase-boundary smoke scenarios and `operational_regression` for that matrix
     plus the retained resumed benchmark smoke path.
-99. Phase-G lifecycle/reproducibility hardening is explicitly deferred outside
+99. Release planning now distinguishes core readiness from module-set
+    certification. QEMU/libvirt is the first local provider certification target,
+    not a core component.
+100. Intermediate rework releases should be treated as subreleases or
+    pre-releases until old-main provider/software/application parity is closed
+    or explicitly deprecated.
+101. The first old-main QEMU infrastructure parity rows now have dedicated YAML
+    configs, a `qemu_infra_parity` suite, and VM-backed evidence separate from
+    the M1 vertical smoke claim.
+102. The old-main QEMU Kubernetes no-benchmark row now has a dedicated
+    `qemu_k8s_nobench_parity` suite and VM-backed evidence. This row exposed and
+    fixed endpoint base/live install scoping plus kube-prometheus observability
+    setup drift.
+103. Phase-G lifecycle/reproducibility hardening is explicitly deferred outside
     PR-23 active closure and remains gated by a future RFC/ADR.
 
 ## 12. End-of-Rework Test Closure Commitments

@@ -1,5 +1,7 @@
 """Regression tests for shipped YAML experiment examples."""
 
+# pylint: disable=missing-class-docstring,missing-function-docstring,protected-access
+
 import argparse
 import unittest
 from pathlib import Path
@@ -36,6 +38,9 @@ class ExampleConfigTests(unittest.TestCase):
     def _repo_root(self):
         return Path(__file__).resolve().parents[3]
 
+    def _repo_relative_yaml_paths(self, root, directory):
+        return sorted(path.relative_to(root).as_posix() for path in directory.glob("**/*.yaml"))
+
     def test_shipped_experiment_examples_parse(self):
         root = self._repo_root()
         experiment_paths = sorted((root / "configs" / "experiments").glob("**/*.yaml"))
@@ -50,6 +55,21 @@ class ExampleConfigTests(unittest.TestCase):
                 self.assertIn("normalized", cfg)
                 self.assertIn("domains", cfg)
                 self.assertIn("sources", cfg["normalized"])
+
+    def test_configuration_reference_lists_shipped_yaml(self):
+        root = self._repo_root()
+        reference = (root / "docs" / "configuration_reference.md").read_text(encoding="utf-8")
+        expected_paths = []
+        expected_paths.extend(
+            self._repo_relative_yaml_paths(root, root / "configs" / "experiments")
+        )
+        expected_paths.extend(
+            self._repo_relative_yaml_paths(root, root / "configs" / "profiles")
+        )
+
+        missing = [path for path in expected_paths if "`%s`" % (path,) not in reference]
+
+        self.assertEqual(missing, [])
 
     def test_benchmark_smoke_infra_opts_into_resume_prep(self):
         root = self._repo_root()

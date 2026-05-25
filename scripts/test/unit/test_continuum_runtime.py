@@ -2077,7 +2077,8 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         image_registry_module.docker_registry(config, [machine])
 
         commands = [call.args[1] for call in machine.process.call_args_list]
-        self.assertIn(["curl", "127.0.0.1:5000/v2/_catalog"], commands)
+        self.assertIn(["curl", "-fsS", "127.0.0.1:5000/v2/_catalog"], commands)
+        self.assertIn(["curl", "-fsS", "127.0.0.1:5000/v2/cached-repo/tags/list"], commands)
         self.assertIn(["docker", "pull", "registry.example/missing-repo:latest"], commands)
         self.assertNotIn(["docker", "pull", "registry.example/cached-repo:latest"], commands)
 
@@ -2141,6 +2142,74 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         commands = [call.args[1] for call in machine.process.call_args_list]
         self.assertIn(["docker", "pull", "registry.example/cached-repo:latest"], commands)
         self.assertIn(["docker", "pull", "registry.example/missing-repo:latest"], commands)
+
+    def test_missing_cached_requirements_reports_unreachable_registry(self):
+        machine = mock.Mock()
+        machine.process.return_value = self._process_result(
+            [],
+            ["curl: (7) Failed to connect to 127.0.0.1 port 5000"],
+        )
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "prefetch_image_requirements": [
+                {
+                    "source_ref": "registry.example/missing-repo:latest",
+                    "local_name": "missing-repo:latest",
+                    "owners": ["software.module:a"],
+                    "tier_targets": ["cloud"],
+                },
+            ],
+        }
+
+        missing = image_registry_module.missing_cached_requirements(config, [machine])
+
+        self.assertEqual(
+            [requirement["source_ref"] for requirement in missing],
+            ["registry.example/missing-repo:latest"],
+        )
+
+    def test_missing_cached_requirements_reports_only_missing_tags(self):
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            self._process_result(['{"repositories":["cached-repo","missing-tag"]}']),
+            self._process_result(['{"name":"cached-repo","tags":["latest"]}']),
+            self._process_result(['{"name":"missing-tag","tags":["v1"]}']),
+        ]
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "prefetch_image_requirements": [
+                {
+                    "source_ref": "registry.example/cached-repo:latest",
+                    "local_name": "cached-repo:latest",
+                    "owners": ["software.module:a"],
+                    "tier_targets": ["cloud"],
+                },
+                {
+                    "source_ref": "registry.example/missing-repo:latest",
+                    "local_name": "missing-repo:latest",
+                    "owners": ["software.module:b"],
+                    "tier_targets": ["cloud"],
+                },
+                {
+                    "source_ref": "registry.example/missing-tag:latest",
+                    "local_name": "missing-tag:latest",
+                    "owners": ["software.module:c"],
+                    "tier_targets": ["cloud"],
+                },
+            ],
+        }
+
+        missing = image_registry_module.missing_cached_requirements(config, [machine])
+
+        self.assertEqual(
+            [requirement["source_ref"] for requirement in missing],
+            [
+                "registry.example/missing-repo:latest",
+                "registry.example/missing-tag:latest",
+            ],
+        )
 
     def test_set_remote_registry_endpoint_uses_cloud_internal_ip(self):
         machine = mock.Mock()

@@ -4,30 +4,41 @@
 
 1. `docs/rework_kickoff.md` (this file)
 2. `docs/rework_plan_stack.md`
-3. `docs/software_module_architecture_plan.md`
-4. `docs/configuration_restructuring_design.md`
-5. `docs/phase_c_implementation_plan.md`
-6. `docs/ansible_restructuring_design.md`
-7. `docs/runtime_execution_pipeline.md`
-8. `docs/operational_testing_strategy.md`
-9. `docs/vm_debugging_runbook.md`
-10. `docs/phase_d_handoff.md` (completed Phase-D runtime handoff)
+3. `docs/rework_milestone_release_plan.md`
+4. `docs/release_certification_matrix.md`
+5. `docs/software_module_architecture_plan.md`
+6. `docs/configuration_restructuring_design.md`
+7. `docs/phase_c_implementation_plan.md`
+8. `docs/ansible_restructuring_design.md`
+9. `docs/runtime_execution_pipeline.md`
+10. `docs/operational_testing_strategy.md`
+11. `docs/vm_debugging_runbook.md`
+12. `docs/phase_d_handoff.md` (completed Phase-D runtime handoff)
+13. `docs/post_release_roadmap.md` (future releases only)
 
 If you are resuming implementation rather than reconstructing the full stack,
 the minimum continuation set is:
 
 1. `docs/rework_kickoff.md`
 2. `docs/rework_plan_stack.md`
-3. `docs/runtime_execution_pipeline.md`
-4. `docs/phase_d_handoff.md` when touching application or retained benchmark behavior
+3. `docs/rework_milestone_release_plan.md`
+4. `docs/release_certification_matrix.md`
+5. `docs/runtime_execution_pipeline.md`
+6. `docs/operational_testing_strategy.md` when touching runner, smoke, or release claims
+7. `docs/phase_d_handoff.md` when touching application or retained benchmark behavior
 
 ## 2. Current Rework Status
 
 The active PR-1 through PR-5 slices are closed, Phase-D application execution is
 ungated and role-owned, Phase-E resume/state integrity is landed, and Phase-F
 test architecture closure is landed. Remaining active-rework work should be
-treated as stabilization and documentation/audit alignment. Phase-G
-lifecycle/reproducibility hardening is deferred behind a future RFC/ADR.
+treated as stabilization, certification, and documentation/audit alignment.
+These closures do not make the branch a final replacement for old `main` by
+themselves. The release path is milestone-based and gated by VM-backed evidence
+for each claimed module set, as defined in
+`docs/rework_milestone_release_plan.md` and tracked row by row in
+`docs/release_certification_matrix.md`. Phase-G lifecycle/reproducibility
+hardening is deferred behind a future RFC/ADR.
 
 Any future implementation must stay aligned with:
 
@@ -37,6 +48,8 @@ Any future implementation must stay aligned with:
 4. YAML parser/runtime configuration contracts,
 5. hard-cutover and fail-fast policy,
 6. explicit retained-resume intent via `run.prepare_for_resume`.
+7. release certification policy: provider/software/application stacks are
+   modules that need their own evidence; `qemu` is not part of the core.
 
 ## 3. Locked Decisions (Do Not Drift)
 
@@ -100,14 +113,17 @@ Software semantic details (including constraint-scope model) live in:
 6. Phase D (completed): application runtime execution, role consolidation, retained benchmark smoke, and teardown evidence are landed.
 7. Phase E (completed): lock/state resume contracts and artifact validation are landed.
 8. Phase F (completed): major-function coverage audit and unit/e2e test layout closure are landed.
-9. Phase G (deferred): lifecycle, reproducibility packaging, and optional configuration-library adoption require a separate RFC/ADR.
+9. Release certification planning (active): intermediate milestone releases and old-main parity gates are documented in `docs/rework_milestone_release_plan.md`.
+10. Phase G (deferred): lifecycle, reproducibility packaging, and optional configuration-library adoption require a separate RFC/ADR.
 
 ## 6. Quick Start Checklist for an Agent
 
 1. Confirm the change touches the correct authority document first.
 2. Implement against the locked decisions above.
 3. Update tests/examples in the same PR when semantics change.
-4. Synchronize sibling planning docs before finalizing the PR.
+4. If the change affects support claims, update release-certification wording
+   and VM evidence expectations before finalizing the PR.
+5. Synchronize sibling planning docs before finalizing the PR.
 
 ## 7. Historical PR-2 Code Touchpoints
 
@@ -131,7 +147,7 @@ dependency-validator baseline. They are not the current implementation queue:
 ## 8. Planning Closure Status
 
 1. Selector/scope decisions are locked and moved into authoritative software/config plans.
-2. No remaining open architecture TODOs are required before implementation PR-1 to PR-5.
+2. No remaining open architecture follow-up items are required before implementation PR-1 to PR-5.
 3. PR-1 parser/runtime cutover is complete, including modules-only config access and YAML fixture migration.
 4. PR-2 parser/runtime closure is complete with registry-backed capability/dependency checks and dedicated unit tests.
 5. PR-2 incremental hardening includes parser/runtime parity for exclusive-capability/conflict validation with targeted regression tests.

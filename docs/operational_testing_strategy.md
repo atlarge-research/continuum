@@ -36,6 +36,32 @@ Continuum should keep four testing layers:
    - broader provider/network/stack coverage,
    - slower and more environment-dependent.
 
+## 2.5 Release Certification Policy
+
+Operational tests are the boundary between "code exists" and "Continuum
+supports this module set."
+
+Release certification uses these rules:
+
+1. static checks, unit tests, parser tests, and local e2e-runner tests are
+   mandatory for every release candidate;
+2. those tests do not certify provider, resource-manager, addon, application, or
+   benchmark runtime claims by themselves;
+3. every runtime support claim needs a full VM-backed or cloud-backed run for
+   the exact provider, topology, software modules, benchmark/application stage,
+   and runtime targets being claimed;
+4. QEMU/libvirt is the first local provider certification target because it is
+   practical for host-backed smoke testing, but `qemu` remains an infrastructure
+   provider module rather than part of the Continuum core;
+5. intermediate rework milestones may certify only a small module set, but must
+   say so clearly;
+6. the final replacement release for old `main` must certify the old public
+   feature surface or explicitly deprecate unsupported rows.
+
+The release plan and certification labels are defined in
+`docs/rework_milestone_release_plan.md`. The row-by-row checklist is
+`docs/release_certification_matrix.md`.
+
 ## 3. Runtime Phases To Test
 
 Operational testing should follow this pipeline:
@@ -204,6 +230,14 @@ file as part of the baseline success contract instead of relying only on exit
 code and SSH output heuristics. It also requires schema-v2 state payloads and
 matching `resume_contract` hashes between `experiment_lock.yaml` and `state.json`.
 
+Release certification adds one more local audit step on the certification host:
+`python3 scripts/test/check_release_evidence_artifacts.py` checks the primary
+artifact paths named by release evidence docs. This confirms that retained
+runner summary JSON reports zero failures, cloud-static required gates passed,
+and benchmark/network evidence artifacts are still parseable. It is not a
+cloud-safe CI gate because it intentionally depends on local retained VM-backed
+artifacts.
+
 Concrete smoke success criteria currently agreed:
 
 1. bootstrap:
@@ -231,8 +265,12 @@ Concrete smoke success criteria currently agreed:
    - benchmark-smoke success requires teardown evidence when the final config requests deletion
    - resume state without schema-v2 metadata or with a stale resume contract is a failure
 6. network validation tolerance:
-   - observed latency and throughput should be within 25% of the expected profile values,
-     or within 10 ms / 10 mbit respectively, whichever tolerance is larger
+   - observed TCP_RR latency should be within 25% of the expected round-trip
+     profile value, or within 10 ms, whichever tolerance is larger
+   - constrained throughput links should be within 25% of the expected profile
+     value, or within 10 mbit, whichever tolerance is larger
+   - high-capacity wired defaults are treated as parseable-throughput evidence
+     rather than exact host-capacity assertions
    - network-validation suite success detection must validate the structured netperf NDJSON
      written under the run's `<base_path>`
 
@@ -288,12 +326,38 @@ human-readable docs. The active suite contract is now:
 1. `smoke` preflights the local QEMU/libvirt, SSH, image, cloud-init, ACL, curl, and Ansible commands needed for VM-backed smoke execution,
 2. `benchmark_smoke` preflights the same local QEMU/libvirt runner commands for the retained benchmark path,
 3. `network_validation` preflights the same base commands plus `tc` for network emulation,
-4. missing prerequisites fail before config discovery or VM provisioning starts,
-5. operators can inspect the configured suite contract with
+4. `qemu_infra_parity` preflights the local QEMU/libvirt commands plus `tc` for infra-only old-main parity rows,
+5. `qemu_k8s_nobench_parity` preflights the local QEMU/libvirt commands plus `tc` for the old-main Kubernetes no-benchmark row,
+6. `qemu_k8s_image_parity` preflights Docker daemon access in addition to the
+   QEMU/libvirt and network commands because it models a legacy forced
+   image-prefetch row,
+7. `qemu_kubeedge_software_parity` preflights the local QEMU/libvirt runner
+   commands for KubeEdge software-only certification,
+8. `qemu_kubeedge_image_parity` preflights local-registry cache readiness in
+   addition to the QEMU/libvirt commands because the full KubeEdge application
+   row uses `image_prefetch: "off"` with cached application images,
+9. `qemu_mist_software_parity` preflights the local QEMU/libvirt runner
+   commands for Mist software-only certification,
+10. `qemu_mist_image_parity` preflights local-registry cache readiness in
+   addition to the QEMU/libvirt commands because the ported full Mist
+   application row uses `image_prefetch: "off"` with cached application images,
+11. `qemu_endpoint_software_parity` preflights the local QEMU/libvirt runner
+   commands plus `tc` for endpoint-runtime software-only certification,
+12. `qemu_endpoint_image_parity` preflights Docker daemon access in addition to
+   the QEMU/libvirt and network commands because it models the legacy
+   endpoint-only forced image-prefetch row,
+13. `qemu_openfaas_software_parity` preflights the local QEMU/libvirt runner
+   commands for OpenFaaS software-only certification on a single-host CPU-capped
+   variant of the legacy node counts,
+14. `qemu_openfaas_image_parity` preflights Docker daemon access in addition to
+   the QEMU/libvirt commands because it models the legacy OpenFaaS forced
+   image-prefetch row,
+15. missing prerequisites fail before config discovery or VM provisioning starts,
+16. operators can inspect the configured suite contract with
    `python3 scripts/test/run_tests.py --list-suites`,
-6. operators can validate a specific host before a long smoke run with
+17. operators can validate a specific host before a long smoke run with
    `python3 scripts/test/run_tests.py --suite <name> --check-prereqs`,
-7. for least-privilege host execution, prefer a dedicated smoke user plus the
+18. for least-privilege host execution, prefer a dedicated smoke user plus the
    wrapper documented in `docs/smoke_runner_isolation.md`.
 
 ## 8. Current Repository State
@@ -318,6 +382,36 @@ What is already covered:
 14. bounded benchmark statistical assertions over structured metric CSV artifacts.
 15. host-wrapper aggregate scenarios for phase-smoke matrix and full operational regression:
     `phase_smoke_matrix` and `operational_regression`.
+16. dedicated host-wrapper scenario for the network-validation suite:
+    `network_validation`.
+17. dedicated host-wrapper scenario and suite for QEMU old-main infrastructure parity:
+    `qemu_infra_parity`.
+18. dedicated host-wrapper scenario and suite for the QEMU Kubernetes
+    no-benchmark parity row: `qemu_k8s_nobench_parity`.
+19. dedicated host-wrapper scenario and suite for the QEMU Kubernetes
+    image-classification row, with explicit Docker preflight:
+    `qemu_k8s_image_parity`.
+20. dedicated host-wrapper scenario and suite for QEMU KubeEdge software-only
+    parity: `qemu_kubeedge_software_parity`.
+21. dedicated host-wrapper scenario and suite for the full QEMU KubeEdge
+    image-classification row, with explicit local-registry cache preflight:
+    `qemu_kubeedge_image_parity`.
+22. dedicated host-wrapper scenario and suite for QEMU Mist software-only
+    parity: `qemu_mist_software_parity`.
+23. dedicated host-wrapper scenario and suite for the full QEMU Mist
+    image-classification row, with explicit local-registry cache preflight:
+    `qemu_mist_image_parity`.
+24. dedicated host-wrapper scenario and suite for QEMU endpoint-runtime
+    software-only parity: `qemu_endpoint_software_parity`.
+25. dedicated host-wrapper scenario and suite for the full QEMU endpoint-only
+    image-classification row, with explicit Docker preflight:
+    `qemu_endpoint_image_parity`.
+26. dedicated host-wrapper scenario and suite for QEMU OpenFaaS software-only
+    evidence on a single-host CPU-capped variant:
+    `qemu_openfaas_software_parity`.
+27. dedicated host-wrapper scenario and suite for the full QEMU OpenFaaS
+    image-classification row, with explicit Docker preflight:
+    `qemu_openfaas_image_parity`.
 
 Deferred after the active rework:
 
@@ -334,7 +428,31 @@ The current active runner contract is implemented and validated through:
 2. dedicated host-backed smoke slices,
 3. the retained resumed benchmark smoke path,
 4. the aggregate `operational_regression` wrapper scenario when a single host command should cover
-   all currently supported local QEMU smoke paths.
+   phase-boundary smoke plus retained benchmark smoke,
+5. the separate `network_validation` wrapper scenario when release certification
+   needs the dedicated network-validation suite,
+6. the separate `qemu_infra_parity` wrapper scenario when release certification
+   needs the old-main QEMU infrastructure parity rows,
+7. the separate `qemu_k8s_nobench_parity` wrapper scenario when release
+   certification needs the old-main QEMU Kubernetes no-benchmark row.
+8. the separate `qemu_kubeedge_software_parity` wrapper scenario when release
+   certification needs KubeEdge software evidence without the application
+   registry path.
+9. the separate `qemu_kubeedge_image_parity` wrapper scenario when release
+   certification needs full KubeEdge application evidence after the application
+   image cache is primed for the selected runner.
+10. the separate `qemu_mist_software_parity` wrapper scenario when release
+   certification needs Mist software evidence without the application registry
+   path.
+11. the separate `qemu_mist_image_parity` wrapper scenario when release
+   certification needs full Mist application evidence after the application
+   image cache is primed for the selected runner.
+12. the separate `qemu_endpoint_software_parity` wrapper scenario when release
+   certification needs endpoint-runtime software evidence without the
+   application registry path.
+13. the separate `qemu_openfaas_software_parity` wrapper scenario when release
+   certification needs OpenFaaS software evidence without the application
+   registry path on a single-host CPU-capped variant.
 
 Longer-term observability/reproducibility note:
 

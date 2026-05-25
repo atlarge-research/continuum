@@ -2,7 +2,8 @@
 
 This file lists quick operational references for the active Continuum runtime.
 For the canonical YAML model, start with `docs/configuration_reference.md` and
-`docs/migration_notes.md`.
+`docs/migration_notes.md`. For release support status, use
+`docs/release_certification_matrix.md`.
 
 ## Files
 
@@ -34,6 +35,13 @@ intent, then prefetches into the local registry using `run.image_prefetch`:
 All VMs get images from this registry when applicable. This avoids repeated
 pulls across many VMs and helps prevent remote registry rate limits.
 
+For `image_prefetch: "off"` suites, the dedicated smoke user does not need
+host-side Docker when all required images are already present in the local
+registry cache. Prime or verify the cache with
+`scripts/test/prime_local_registry_cache.py`; host-runner installations can
+expose the same operation through `continuum-hostctl prime-registry-cache`
+after the maintenance helper is refreshed.
+
 ## Useful Commands
 
 | Command | Description |
@@ -42,9 +50,24 @@ pulls across many VMs and helps prevent remote registry rate limits.
 | `python3 continuum.py configs/experiments/infra_only.yaml` | Run a minimal YAML experiment |
 | `python3 scripts/test/run_tests.py --list-suites` | Inspect configured suites and prerequisites |
 | `python3 scripts/test/run_tests.py --suite smoke --check-prereqs` | Check host readiness without provisioning |
+| `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity` | Prime the local registry cache for an `image_prefetch: "off"` image suite as a Docker-capable user |
+| `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity --check-only` | Verify that the local registry cache is ready without Docker access |
 | `scripts/test/run_cloud_static_audit.sh` | Run cloud-safe compile, tests, docs, lint, and suite metadata checks |
+| `python3 scripts/test/check_release_evidence_artifacts.py` | Validate retained release-evidence artifacts on the certification host |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke phase_smoke_matrix` | Run the three phase-boundary host-backed smoke scenarios through the installed wrapper |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression` | Run the phase matrix plus retained benchmark smoke |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation` | Run the dedicated network-validation suite through the installed wrapper |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity` | Run the QEMU infra-only old-main parity suite through the installed wrapper |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity` | Run the QEMU Kubernetes no-benchmark old-main parity suite through the installed wrapper |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` | Run the QEMU Kubernetes image-classification old-main parity suite; currently requires Docker daemon access for forced image prefetch |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` | Run the QEMU KubeEdge software-only parity suite through the installed wrapper |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity` | Run the full QEMU KubeEdge image-classification parity suite after the local registry cache is primed |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` | Run the QEMU Mist software-only parity suite through the installed wrapper |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` | Run the full QEMU Mist image-classification parity suite after the local registry cache is primed |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` | Run the QEMU endpoint-runtime software-only parity suite through the installed wrapper |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` | Preflight the full QEMU endpoint image-classification parity suite; currently requires Docker daemon access for forced image prefetch |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` | Run the QEMU OpenFaaS software-only suite on the single-host CPU-capped variant |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity` | Preflight the full QEMU OpenFaaS image-classification parity suite; currently requires Docker daemon access for forced image prefetch |
 
 ## VM Debugging
 

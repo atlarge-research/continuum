@@ -69,6 +69,504 @@
                 ]
             }
         },
+        "qemu_infra_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and tc support for infra-only parity rows",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "tc",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
+        "qemu_k8s_nobench_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_k8s_nobench/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access for Kubernetes no-benchmark parity",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "tc",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
+        "qemu_k8s_image_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_k8s_image/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "require_network_validation_results": true,
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "numeric_columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "latency_avg (ms)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access, tc/netperf support, and Docker daemon access for forced image prefetch",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "tc",
+                    "setfacl",
+                    "curl",
+                    "docker",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Docker socket access",
+                        "command": [
+                            "test",
+                            "-w",
+                            "/var/run/docker.sock"
+                        ]
+                    },
+                    {
+                        "name": "Docker daemon access",
+                        "command": [
+                            "docker",
+                            "info"
+                        ]
+                    }
+                ]
+            }
+        },
+        "qemu_kubeedge_software_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_kubeedge_software/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access for KubeEdge software parity",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
+        "qemu_kubeedge_image_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_kubeedge_image/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "numeric_columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "latency_avg (ms)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and a primed local registry cache for KubeEdge application images",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Local registry cache",
+                        "command": [
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_kubeedge_image_parity",
+                            "--check-only"
+                        ]
+                    }
+                ]
+            }
+        },
+        "qemu_mist_software_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_mist_software/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "require_teardown": true
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access for Mist software parity",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
+        "qemu_mist_image_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_mist_image/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "require_teardown": true,
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "EDGE OUTPUT",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "numeric_columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "latency_avg (ms)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and a primed local registry cache for Mist application images",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Local registry cache",
+                        "command": [
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_mist_image_parity",
+                            "--check-only"
+                        ]
+                    }
+                ]
+            }
+        },
+        "qemu_endpoint_software_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_endpoint_software/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "require_teardown": true
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and tc support for endpoint-runtime software parity",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "tc",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
+        "qemu_endpoint_image_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_endpoint_image/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "require_teardown": true,
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "numeric_columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "latency_avg (ms)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access, tc support, and Docker daemon access for forced endpoint image prefetch",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "tc",
+                    "setfacl",
+                    "curl",
+                    "docker",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Docker socket access",
+                        "command": [
+                            "test",
+                            "-w",
+                            "/var/run/docker.sock"
+                        ]
+                    },
+                    {
+                        "name": "Docker daemon access",
+                        "command": [
+                            "docker",
+                            "info"
+                        ]
+                    }
+                ]
+            }
+        },
+        "qemu_openfaas_software_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_openfaas_software/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access for OpenFaaS software parity on a single-host CPU-capped variant",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
+        "qemu_openfaas_image_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_openfaas_image/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "numeric_columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "latency_avg (ms)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and Docker daemon access for forced OpenFaaS image prefetch",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "docker",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Docker socket access",
+                        "command": [
+                            "test",
+                            "-w",
+                            "/var/run/docker.sock"
+                        ]
+                    },
+                    {
+                        "name": "Docker daemon access",
+                        "command": [
+                            "docker",
+                            "info"
+                        ]
+                    }
+                ]
+            }
+        },
         "benchmark_smoke": {
             "directories": [
                 "configs/experiments/benchmark_smoke/"

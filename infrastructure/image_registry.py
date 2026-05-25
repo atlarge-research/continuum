@@ -107,7 +107,7 @@ def resolve_prefetch_requirements(config):
 
 
 def _registry_catalog(config, machines):
-    command = ["curl", "%s/v2/_catalog" % (config["registry"])]
+    command = ["curl", "-fsS", "%s/v2/_catalog" % (config["registry"])]
     output, error = machines[0].process(config, command)[0]
     if error and any("Failed to connect to" in line for line in error):
         return None
@@ -198,7 +198,7 @@ def _registry_repo_tags(config, machines, repo_name):
     if not repo_name:
         return set()
     encoded_repo = quote(repo_name, safe="/")
-    command = ["curl", "%s/v2/%s/tags/list" % (config["registry"], encoded_repo)]
+    command = ["curl", "-fsS", "%s/v2/%s/tags/list" % (config["registry"], encoded_repo)]
     output, error = machines[0].process(config, command)[0]
     if error:
         logging.error("".join(error))
@@ -250,6 +250,24 @@ def _registry_has_required_image(config, machines, requirement, repos, tags_cach
 def _requirements_to_pull(config, machines, requirements, repos):
     if config_access.image_prefetch_enabled(config):
         return list(requirements)
+
+    tags_cache = {}
+    return [
+        requirement
+        for requirement in requirements
+        if not _registry_has_required_image(config, machines, requirement, repos, tags_cache)
+    ]
+
+
+def missing_cached_requirements(config, machines):
+    """Return required images missing from the active local registry cache."""
+    requirements = get_prefetch_requirements(config)
+    if not requirements:
+        return []
+
+    repos = _registry_catalog(config, machines)
+    if repos is None:
+        return requirements
 
     tags_cache = {}
     return [

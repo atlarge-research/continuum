@@ -4,6 +4,10 @@ This note covers the hard-cut migration from legacy config paths to the canonica
 
 ## Scope
 
+Runtime input-format support is separate from module-set release support. Exact
+release-supported combinations are tracked in
+`docs/release_certification_matrix.md`.
+
 Supported runtime input formats:
 
 - `.yaml`

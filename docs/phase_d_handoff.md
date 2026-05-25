@@ -5,6 +5,10 @@ Phase-E resume/state integrity and Phase-F test architecture closure have since
 landed, so use this file as historical evidence for application and retained
 benchmark behavior rather than as the active implementation queue.
 
+This historical handoff does not define release support status. Exact supported
+module combinations and certification status are tracked in
+`docs/release_certification_matrix.md`.
+
 ## 0. Phase-D Closure Snapshot
 
 The retained benchmark application leg is closed, and the explicit
@@ -189,10 +193,11 @@ Read after:
 43. `roles/resource_manager/k8s_prereqs/tasks/main.yml`
 44. `roles/resource_manager/k8s_control_plane/tasks/main.yml`
 45. `playbooks/resource_manager/endpoint_install.yml`
-46. `application/image_classification/launch_benchmark_kubernetes.yml`
-47. `application/text_translation/launch_benchmark_kubernetes.yml`
-48. `scripts/test/unit/test_role_contracts.py`
-49. `scripts/test/e2e/test_host_runner_scripts.py`
+46. `playbooks/resource_manager/endpoint_base_install.yml`
+47. `application/image_classification/launch_benchmark_kubernetes.yml`
+48. `application/text_translation/launch_benchmark_kubernetes.yml`
+49. `scripts/test/unit/test_role_contracts.py`
+50. `scripts/test/e2e/test_host_runner_scripts.py`
 
 ## 3. Historical Validation Run
 

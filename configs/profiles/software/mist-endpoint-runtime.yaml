@@ -1,0 +1,18 @@
+---
+schema_version: 1
+kind: ContinuumSoftware
+
+software:
+  modules:
+    - id: mist-main
+      type: mist
+      assign_to:
+        match:
+          cluster: edge-1
+      config: {}
+    - id: endpoint-runtime
+      type: endpoint_runtime
+      assign_to:
+        match:
+          cluster: endpoint-1
+      config: {}

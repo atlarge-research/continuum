@@ -87,6 +87,20 @@ class EndpointInstallPlaybookTests(unittest.TestCase):
         roles = [entry["role"] if isinstance(entry, dict) else entry for entry in playbook[0]["roles"]]
         self.assertIn("mosquitto", roles)
         self.assertLess(roles.index("mosquitto"), roles.index("endpoint_runtime"))
+        self.assertEqual(playbook[0]["hosts"], "endpoints")
+
+    def test_endpoint_base_install_targets_only_base_endpoint_hosts(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        playbook_path = repo_root / "playbooks/resource_manager/endpoint_base_install.yml"
+        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+
+        self.assertIsInstance(playbook, list)
+        self.assertEqual(len(playbook), 1)
+
+        roles = [entry["role"] if isinstance(entry, dict) else entry for entry in playbook[0]["roles"]]
+        self.assertIn("mosquitto", roles)
+        self.assertLess(roles.index("mosquitto"), roles.index("endpoint_runtime"))
+        self.assertEqual(playbook[0]["hosts"], "base_endpoint")
 
 
 class KubernetesBaseInstallPlaybookTests(unittest.TestCase):
@@ -102,6 +116,23 @@ class KubernetesBaseInstallPlaybookTests(unittest.TestCase):
         self.assertIn("containerd_setup", roles)
         self.assertIn("mosquitto", roles)
         self.assertLess(roles.index("containerd_setup"), roles.index("mosquitto"))
+
+
+class KubernetesObservabilityRoleTests(unittest.TestCase):
+    def test_observability_role_fetches_kube_prometheus_before_apply(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        tasks_path = repo_root / "roles/resource_manager/k8s_observability/tasks/main.yml"
+        defaults_path = repo_root / "roles/resource_manager/k8s_observability/defaults/main.yml"
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+
+        self.assertIsInstance(tasks, list)
+        self.assertGreaterEqual(len(tasks), 2)
+        self.assertIn("ansible.builtin.git", tasks[0])
+        self.assertIn("kube-prometheus", defaults["rm_k8s_observability_repo"])
+        self.assertEqual(defaults["rm_k8s_observability_version"], "release-0.13")
+        self.assertIn("manifests/setup", tasks[1]["ansible.builtin.command"])
+        self.assertIn("--server-side", tasks[1]["ansible.builtin.command"])
 
 
 class KubernetesPrereqsRoleTests(unittest.TestCase):
@@ -141,6 +172,36 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
             python_client_task["ansible.builtin.apt"]["name"],
             ["python3-kubernetes", "python3-jsonpatch"],
         )
+
+
+class KubeEdgeRoleTests(unittest.TestCase):
+    def test_kubeedge_prereqs_follow_profile_kubernetes_major_version(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        defaults_path = repo_root / "roles/resource_manager/kubeedge_prereqs/defaults/main.yml"
+        tasks_path = repo_root / "roles/resource_manager/kubeedge_prereqs/tasks/main.yml"
+        defaults_text = defaults_path.read_text(encoding="utf-8")
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+
+        self.assertIn("continuum_kubeversion_major", defaults_text)
+
+        install_task = next(
+            task for task in tasks if task.get("name") == "Install Kubernetes binaries for KubeEdge"
+        )
+        self.assertEqual(
+            install_task["ansible.builtin.apt"]["name"],
+            ["kubelet", "kubeadm", "kubectl"],
+        )
+
+    def test_kubeedge_cluster_playbook_verifies_edge_readiness(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        playbook_path = repo_root / "playbooks/resource_manager/kubeedge_cluster.yml"
+        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(playbook[-1]["name"], "Verify KubeEdge edge readiness")
+        readiness_task = playbook[-1]["tasks"][0]
+        self.assertIn("kubectl get nodes", readiness_task["ansible.builtin.shell"])
+        self.assertIn("expected_edges", readiness_task["ansible.builtin.shell"])
+        self.assertEqual(readiness_task["environment"]["KUBECONFIG"], "/etc/kubernetes/admin.conf")
 
 
 class BenchmarkLaunchPlaybookTests(unittest.TestCase):

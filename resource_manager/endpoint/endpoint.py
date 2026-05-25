@@ -103,7 +103,7 @@ def base_install_playbook(_config, tier):
         str | None: Endpoint install playbook for endpoint tier, else None.
     """
     if tier == "endpoint":
-        return "playbooks/resource_manager/endpoint_install.yml"
+        return "playbooks/resource_manager/endpoint_base_install.yml"
     return None
 
 
@@ -178,7 +178,7 @@ def start_endpoint_default(config, machines):
             # Docker container name and variables depends on deployment mode
             cont_name = "endpoint%i" % (worker_i * end_per_work + endpoint_i)
 
-            # TODO Move this to arguments to make it more flexible
+            # Future cleanup: move this into arguments to make it more flexible.
             env = _benchmark_env(config)
 
             if config["mode"] == "cloud" or config["mode"] == "edge":

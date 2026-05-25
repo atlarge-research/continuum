@@ -99,6 +99,58 @@ def validate_suite_prerequisites(suite_name: str, suite_config: Dict) -> List[st
     return missing
 
 
+def validate_suite_prerequisite_checks(suite_name: str, suite_config: Dict) -> List[str]:
+    """Run active suite prerequisite checks and return human-readable failures."""
+    prerequisites = suite_config.get("prerequisites", {})
+    if not prerequisites:
+        return []
+    if not isinstance(prerequisites, dict):
+        raise ValueError("Suite '%s' prerequisites must be a mapping" % (suite_name))
+
+    checks = prerequisites.get("checks", [])
+    if checks is None:
+        checks = []
+    if not isinstance(checks, list):
+        raise ValueError("Suite '%s' prerequisites.checks must be a list" % (suite_name))
+
+    failures = []
+    for index, check in enumerate(checks):
+        prefix = "Suite '%s' prerequisites.checks[%s]" % (suite_name, index)
+        if not isinstance(check, dict):
+            raise ValueError("%s must be a mapping" % (prefix,))
+
+        name = check.get("name")
+        command = check.get("command")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("%s.name must be a non-empty string" % (prefix,))
+        if (
+            not isinstance(command, list)
+            or not command
+            or any(not isinstance(part, str) or not part.strip() for part in command)
+        ):
+            raise ValueError("%s.command must be a non-empty list of strings" % (prefix,))
+
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            failures.append("%s: %s" % (name.strip(), exc))
+            continue
+
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip().splitlines()
+            reason = detail[0] if detail else "exit code %s" % (result.returncode,)
+            failures.append("%s: %s" % (name.strip(), reason))
+
+    return failures
+
+
 def suite_prerequisite_summary(suite_name: str, suite_config: Dict) -> Optional[str]:
     """Return a short human-facing suite prerequisite summary when configured."""
     prerequisites = suite_config.get("prerequisites", {})
@@ -141,6 +193,7 @@ def check_suite_prerequisites(selected_suites: Dict[str, Dict]) -> int:
             print_colored("Suite '%s': %s" % (suite_name, summary), Colors.BLUE)
         try:
             missing_commands = validate_suite_prerequisites(suite_name, suite_config)
+            failed_checks = validate_suite_prerequisite_checks(suite_name, suite_config)
         except ValueError as exc:
             print_colored("Error: %s" % (exc), Colors.RED)
             overall_ok = False
@@ -152,7 +205,13 @@ def check_suite_prerequisites(selected_suites: Dict[str, Dict]) -> int:
                 Colors.RED,
             )
             overall_ok = False
-        else:
+        if failed_checks:
+            print_colored(
+                "Failed prerequisite check(s): %s" % ("; ".join(failed_checks),),
+                Colors.RED,
+            )
+            overall_ok = False
+        if not missing_commands and not failed_checks:
             print_colored("Prerequisites satisfied", Colors.GREEN)
 
     return 0 if overall_ok else 1
@@ -648,21 +707,29 @@ def main():
         selected_suite_config = suite_config
         try:
             missing_commands = validate_suite_prerequisites(suite_name, suite_config)
+            failed_checks = validate_suite_prerequisite_checks(suite_name, suite_config)
         except ValueError as exc:
             print_colored("Error: %s" % (exc), Colors.RED)
             sys.exit(1)
-        if missing_commands:
+        if missing_commands or failed_checks:
             summary = suite_prerequisite_summary(suite_name, suite_config)
             if summary:
                 print_colored(
                     "Suite '%s' prerequisites: %s" % (suite_name, summary),
                     Colors.YELLOW,
                 )
-            print_colored(
-                "Error: Missing required host command(s) for suite '%s': %s"
-                % (suite_name, ", ".join(missing_commands)),
-                Colors.RED,
-            )
+            if missing_commands:
+                print_colored(
+                    "Error: Missing required host command(s) for suite '%s': %s"
+                    % (suite_name, ", ".join(missing_commands)),
+                    Colors.RED,
+                )
+            if failed_checks:
+                print_colored(
+                    "Error: Failed prerequisite check(s) for suite '%s': %s"
+                    % (suite_name, "; ".join(failed_checks)),
+                    Colors.RED,
+                )
             sys.exit(1)
 
         directories = suite_config["directories"]
