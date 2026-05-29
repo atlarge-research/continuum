@@ -7,6 +7,32 @@ sandbox.
 The default answer is still: do not give the agent blanket sudo access. Use a
 root-owned wrapper with an explicit sudoers entry for exactly one command.
 
+## Quick Response For Future Agents
+
+When an agent asks for new sudo access, resolve it in this order:
+
+1. Check whether the existing allowlisted commands already cover the task:
+
+   ```bash
+   sudo -n /usr/local/bin/continuum-hostctl ...
+   sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke ...
+   ```
+
+2. If the task is not covered, do not add direct sudo access to a repo script,
+   shell, Python, Ansible, package manager, service manager, or editor.
+3. Add one root-owned wrapper outside the repo, normally under
+   `/usr/local/sbin`, with strict internal argument validation.
+4. If the wrapper uses a repo file, pin and verify that file's SHA-256 before
+   using it.
+5. Add one sudoers entry for that exact root-owned wrapper path.
+6. Validate with `visudo -cf` and one `sudo -n <wrapper>` command.
+7. Update this document and the relevant Continuum skill or handoff document.
+
+The user does not need to call `skill-creator` for ordinary troubleshooting.
+Agents should use the repo-local sudo guidance in this document, and create or
+refresh `.codex/skills/continuum-safe-sudo/SKILL.md` only when `.codex/skills`
+is writable.
+
 ## 1. Why This Exists
 
 Some Continuum workflows need host privileges:
@@ -192,8 +218,10 @@ findmnt -T /home/matthijs/continuum/.git -o TARGET,SOURCE,FSTYPE,OPTIONS
 git add --dry-run <path>
 ```
 
-Git needs write access to `.git/index`, `.git/objects`, and refs for staging
-and committing. If the operator shell shows the filesystem as writable but the
+In this repository, `.git` is expected to be the `.git/` directory at the
+repository root, not a `.git` pointer file. Git needs write access inside that
+directory, especially to `.git/index`, `.git/objects`, and refs for staging and
+committing. If the operator shell shows the filesystem as writable but the
 agent sandbox reports a read-only mount, that is a sandbox mount issue, not a
 normal file-permission issue. If `git add` and `git commit` work, no `.git`
 permission fix is needed.
