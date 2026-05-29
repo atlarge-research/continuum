@@ -53,7 +53,7 @@ class CheckReleasePretagTests(unittest.TestCase):
             if command != omitted_command
         ]
         evidence_docs = [
-            "docs/release_evidence_m1_2026-05-23.md",
+            "docs/release_evidence_m1_2026-05-29.md",
             *(extra_evidence_docs or []),
         ]
         evidence_lines = "\n".join(
@@ -77,7 +77,7 @@ class CheckReleasePretagTests(unittest.TestCase):
     def _write_evidence(
         self,
         root: Path,
-        verify_command="sh scripts/test/setup_agent_host.sh verify",
+        verify_command="sudo -n /usr/local/bin/continuum-hostctl verify",
         verify_result="PASS",
         report_path=None,
         git_commit="abcdef0",
@@ -102,7 +102,7 @@ class CheckReleasePretagTests(unittest.TestCase):
             _valid_cloud_audit_report_text_for(report_timestamp),
             encoding="utf-8",
         )
-        evidence_path = root / "docs" / "release_evidence_m1_2026-05-23.md"
+        evidence_path = root / "docs" / "release_evidence_m1_2026-05-29.md"
         evidence_path.parent.mkdir(parents=True, exist_ok=True)
         finding_line = (
             "| Current finding | %s |\n" % (current_finding,)
@@ -175,7 +175,7 @@ class CheckReleasePretagTests(unittest.TestCase):
             root = Path(tempdir)
             self._write_release_notes(root)
             self._write_evidence(root)
-            evidence_path = root / "docs" / "release_evidence_m1_2026-05-23.md"
+            evidence_path = root / "docs" / "release_evidence_m1_2026-05-29.md"
             evidence_path.write_text(
                 "\n".join(
                     line
@@ -191,7 +191,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-evidence-field-missing",
-                        "docs/release_evidence_m1_2026-05-23.md missing Report",
+                        "docs/release_evidence_m1_2026-05-29.md missing Report",
                     )
                 ],
             )
@@ -313,19 +313,19 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-host-helper-not-ready",
-                        "docs/release_evidence_m1_2026-05-23.md Verify result="
+                        "docs/release_evidence_m1_2026-05-29.md Verify result="
                         "'FAIL before VM execution' expected 'PASS'",
                     )
                 ],
             )
 
-    def test_host_helper_evidence_must_use_live_setup_verifier(self):
+    def test_host_helper_evidence_must_use_installed_helper_verifier(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             self._write_release_notes(root)
             self._write_evidence(
                 root,
-                verify_command="sudo -n /usr/local/bin/continuum-hostctl verify",
+                verify_command="sh scripts/test/setup_agent_host.sh verify",
             )
 
             self.assertEqual(
@@ -333,9 +333,9 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-host-helper-command-mismatch",
-                        "docs/release_evidence_m1_2026-05-23.md Verify command="
-                        "'sudo -n /usr/local/bin/continuum-hostctl verify' expected "
-                        "'sh scripts/test/setup_agent_host.sh verify'",
+                        "docs/release_evidence_m1_2026-05-29.md Verify command="
+                        "'sh scripts/test/setup_agent_host.sh verify' expected "
+                        "'sudo -n /usr/local/bin/continuum-hostctl verify'",
                     )
                 ],
             )
@@ -355,12 +355,12 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-host-helper-not-ready",
-                        "docs/release_evidence_m1_2026-05-23.md Verify result="
+                        "docs/release_evidence_m1_2026-05-29.md Verify result="
                         "'FAIL before VM execution' expected 'PASS'",
                     ),
                     check_release_pretag.PretagIssue(
                         "pretag-host-helper-refresh-wording-stale",
-                        "docs/release_evidence_m1_2026-05-23.md says 'after the "
+                        "docs/release_evidence_m1_2026-05-29.md says 'after the "
                         "helper-contract refresh' but Verify result is "
                         "'FAIL before VM execution'",
                     ),
@@ -385,7 +385,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-host-helper-finding-not-cleared",
-                        "docs/release_evidence_m1_2026-05-23.md Current finding="
+                        "docs/release_evidence_m1_2026-05-29.md Current finding="
                         "'Installed /usr/local/bin/continuum-hostctl does not declare "
                         "HOSTCTL_INTERFACE_VERSION' must be cleared when Verify "
                         "result is PASS",
@@ -411,7 +411,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-evidence-artifact-missing",
-                        "docs/release_evidence_m1_2026-05-23.md references missing %s"
+                        "docs/release_evidence_m1_2026-05-29.md references missing %s"
                         % (missing_report,),
                     )
                 ],
@@ -422,7 +422,7 @@ class CheckReleasePretagTests(unittest.TestCase):
             root = Path(tempdir)
             self._write_release_notes(root)
             self._write_evidence(root)
-            evidence_path = root / "docs" / "release_evidence_m1_2026-05-23.md"
+            evidence_path = root / "docs" / "release_evidence_m1_2026-05-29.md"
             missing_report = (
                 root
                 / "logs"
@@ -445,7 +445,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-evidence-artifact-missing",
-                        "docs/release_evidence_m1_2026-05-23.md references missing %s"
+                        "docs/release_evidence_m1_2026-05-29.md references missing %s"
                         % (missing_report,),
                     )
                 ],
@@ -463,7 +463,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-cloud-audit-report-location",
-                        "docs/release_evidence_m1_2026-05-23.md Report=%r "
+                        "docs/release_evidence_m1_2026-05-29.md Report=%r "
                         "must be under %r"
                         % (
                             str(report_path),
@@ -485,7 +485,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-cloud-audit-report-name",
-                        "docs/release_evidence_m1_2026-05-23.md Report=%r "
+                        "docs/release_evidence_m1_2026-05-29.md Report=%r "
                         "must use cloud_static_audit_YYYY-MM-DDTHHMMSSZ.md"
                         % (str(report_path),),
                     )
@@ -604,7 +604,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-cloud-audit-report-not-latest",
-                        "docs/release_evidence_m1_2026-05-23.md Report=%r but "
+                        "docs/release_evidence_m1_2026-05-29.md Report=%r but "
                         "latest cloud audit report is %r"
                         % (str(old_report.resolve()), str(latest_report.resolve())),
                     )
@@ -622,11 +622,61 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-source-commit-mismatch",
-                        "docs/release_evidence_m1_2026-05-23.md Git commit='abcdef0' "
+                        "docs/release_evidence_m1_2026-05-29.md Git commit='abcdef0' "
                         "expected current HEAD '1234567'",
                     )
                 ],
             )
+
+    def test_evidence_commit_may_precede_release_doc_only_head(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self._write_release_notes(root)
+            self._write_evidence(root, git_commit="abcdef0")
+
+            with mock.patch.object(
+                check_release_pretag,
+                "_changed_paths_between_commits",
+                return_value=[
+                    "docs/release_evidence_m1_2026-05-29.md",
+                    "docs/release_notes_m1_draft.md",
+                    "scripts/test/check_release_pretag.py",
+                    "scripts/test/unit/test_check_release_pretag.py",
+                ],
+            ):
+                self.assertEqual(
+                    self._find_pretag_issues(root, current_commit="1234567"),
+                    [],
+                )
+
+    def test_evidence_commit_mismatch_reports_runtime_path_changes(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self._write_release_notes(root)
+            self._write_evidence(root, git_commit="abcdef0")
+
+            with mock.patch.object(
+                check_release_pretag,
+                "_changed_paths_between_commits",
+                return_value=[
+                    "docs/release_evidence_m1_2026-05-29.md",
+                    "infrastructure/qemu/qemu.py",
+                    "configs/experiments/smoke/infra_one_vm.yaml",
+                ],
+            ):
+                self.assertEqual(
+                    self._find_pretag_issues(root, current_commit="1234567"),
+                    [
+                        check_release_pretag.PretagIssue(
+                            "pretag-source-commit-mismatch",
+                            "docs/release_evidence_m1_2026-05-29.md Git commit="
+                            "'abcdef0' differs from current HEAD '1234567'; "
+                            "runtime-affecting paths changed since evidence commit: "
+                            "infrastructure/qemu/qemu.py, "
+                            "configs/experiments/smoke/infra_one_vm.yaml",
+                        )
+                    ],
+                )
 
     def test_release_notes_evidence_docs_must_match_current_head(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -661,7 +711,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 [
                     check_release_pretag.PretagIssue(
                         "pretag-evidence-tree-not-clean",
-                        "docs/release_evidence_m1_2026-05-23.md Tree state='Dirty "
+                        "docs/release_evidence_m1_2026-05-29.md Tree state='Dirty "
                         "working tree synced intentionally to the dedicated runner'; "
                         "release-tag evidence must come from a clean source tree",
                     )

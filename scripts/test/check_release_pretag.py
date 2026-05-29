@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - used when run as a script path
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE_NOTES_PATH = Path("docs/release_notes_m1_draft.md")
-M1_EVIDENCE_PATH = Path("docs/release_evidence_m1_2026-05-23.md")
+M1_EVIDENCE_PATH = Path("docs/release_evidence_m1_2026-05-29.md")
 RELEASE_EVIDENCE_DOC_RE = re.compile(r"`(docs/release_evidence_[^`]+\.md)`")
 CLOUD_AUDIT_REPORT_NAME_RE = re.compile(
     r"^cloud_static_audit_(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{6}Z)\.md$"
@@ -41,9 +41,14 @@ REQUIRED_PRETAG_COMMANDS = REQUIRED_M1_PRE_TAG_COMMANDS
 EXPECTED_M1_EVIDENCE_FIELDS = {
     "Required gates": "PASS",
     "Result": "TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0",
-    "Verify command": "sh scripts/test/setup_agent_host.sh verify",
+    "Verify command": "sudo -n /usr/local/bin/continuum-hostctl verify",
     "Verify result": "PASS",
 }
+POST_EVIDENCE_ALLOWED_PATH_PREFIXES = (
+    "docs/",
+    "scripts/test/check_release_",
+    "scripts/test/unit/test_check_release_",
+)
 STALE_HOST_HELPER_FINDING_RE = re.compile(
     r"\b("
     r"does not declare|does not expose|fail(?:ed|ure)?|missing|not ready|stale|"
@@ -169,6 +174,59 @@ def _git_diff_check(root: Path) -> tuple[int, str]:
     )
     output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
     return result.returncode, output
+
+
+def _changed_paths_between_commits(
+    root: Path, base_commit: str, current_commit: str
+) -> list[str] | None:
+    """Return paths changed between the VM-evidence source and current HEAD."""
+    result = subprocess.run(
+        ["git", "-C", str(root), "diff", "--name-only", base_commit, current_commit],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _is_allowed_post_evidence_path(path: str) -> bool:
+    """Return whether a path may change after VM evidence without rerunning VMs."""
+    normalized = path.replace("\\", "/")
+    return any(
+        normalized.startswith(prefix) for prefix in POST_EVIDENCE_ALLOWED_PATH_PREFIXES
+    )
+
+
+def _source_commit_mismatch_issue(
+    root: Path,
+    evidence_doc: str,
+    evidence_commit: str,
+    current_commit: str,
+) -> PretagIssue | None:
+    """Return a source-commit issue unless only release guardrails changed."""
+    changed_paths = _changed_paths_between_commits(root, evidence_commit, current_commit)
+    if changed_paths is None:
+        return PretagIssue(
+            "pretag-source-commit-mismatch",
+            "%s Git commit=%r expected current HEAD %r"
+            % (evidence_doc, evidence_commit, current_commit),
+        )
+
+    disallowed_paths = [
+        path for path in changed_paths if not _is_allowed_post_evidence_path(path)
+    ]
+    if not disallowed_paths:
+        return None
+
+    sample_paths = ", ".join(disallowed_paths[:5])
+    return PretagIssue(
+        "pretag-source-commit-mismatch",
+        "%s Git commit=%r differs from current HEAD %r; runtime-affecting "
+        "paths changed since evidence commit: %s"
+        % (evidence_doc, evidence_commit, current_commit, sample_paths),
+    )
 
 
 def _git_status_category(line: str) -> str:
@@ -505,13 +563,14 @@ def _evidence_source_issues(root: Path) -> list[PretagIssue]:
                 )
             )
         elif current_commit is not None and evidence_commit != current_commit:
-            issues.append(
-                PretagIssue(
-                    "pretag-source-commit-mismatch",
-                    "%s Git commit=%r expected current HEAD %r"
-                    % (evidence_doc, evidence_commit, current_commit),
-                )
+            issue = _source_commit_mismatch_issue(
+                root,
+                evidence_doc,
+                evidence_commit,
+                current_commit,
             )
+            if issue is not None:
+                issues.append(issue)
 
         tree_state = fields.get("Tree state")
         if not tree_state:

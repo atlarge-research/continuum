@@ -1,4 +1,4 @@
-# QEMU OpenFaaS Software Evidence - 2026-05-23
+# QEMU OpenFaaS Software Evidence - 2026-05-29
 
 ## Scope
 
@@ -20,9 +20,9 @@ image-classification application benchmark from
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-10-SW-LOCAL` |
-| Git commit | `653ae7b3c7481c46cb26ca8676ac8fbfa94f7d22` |
-| Tree state | Dirty working tree synced intentionally to the dedicated runner |
-| Date | 2026-05-23 |
+| Git commit | `67f49fa4f7af3b4f54912dabc8993ac923c8abdd` |
+| Tree state | Clean source tree synced to the dedicated runner |
+| Date | 2026-05-29 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo` and wrapper reinstall |
 | Config | `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` |
@@ -32,14 +32,14 @@ image-classification application benchmark from
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and enough local CPU capacity for the capped single-host OpenFaaS shape; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes node-ready and OpenFaaS software-phase evidence |
-| Result summary path | `/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-05-23_21-55-38.json` |
+| Result summary path | `/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-05-29_19-23-01.json` |
 | Artifact root | `/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 253.3s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
+| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 279.0s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
 The experiment lock records:
 

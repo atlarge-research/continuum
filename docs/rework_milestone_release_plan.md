@@ -90,19 +90,19 @@ engine and first local module sets:
 6. cloud-safe unit/e2e-runner discovery is broad enough to catch many regressions.
 
 The current M1 evidence snapshot certifies the first local QEMU/libvirt module
-set in `docs/release_evidence_m1_2026-05-23.md`. The first old-main QEMU
+set in `docs/release_evidence_m1_2026-05-29.md`. The first old-main QEMU
 infrastructure parity rows are recorded separately in
-`docs/release_evidence_qemu_infra_parity_2026-05-23.md`, and the first
+`docs/release_evidence_qemu_infra_parity_2026-05-29.md`, and the first
 old-main QEMU Kubernetes no-benchmark parity row is recorded in
-`docs/release_evidence_qemu_k8s_nobench_2026-05-23.md`. The KubeEdge
+`docs/release_evidence_qemu_k8s_nobench_2026-05-29.md`. The KubeEdge
 software-only subset row is recorded in
-`docs/release_evidence_qemu_kubeedge_software_2026-05-23.md`, and the Mist
+`docs/release_evidence_qemu_kubeedge_software_2026-05-29.md`, and the Mist
 software-only subset row is recorded in
-`docs/release_evidence_qemu_mist_software_2026-05-23.md`. The endpoint-runtime
+`docs/release_evidence_qemu_mist_software_2026-05-29.md`. The endpoint-runtime
 software-only subset row is recorded in
-`docs/release_evidence_qemu_endpoint_software_2026-05-23.md`. The OpenFaaS
+`docs/release_evidence_qemu_endpoint_software_2026-05-29.md`. The OpenFaaS
 software-only single-host variant is recorded in
-`docs/release_evidence_qemu_openfaas_software_2026-05-23.md`. If code, configs,
+`docs/release_evidence_qemu_openfaas_software_2026-05-29.md`. If code, configs,
 or runner semantics change before a tag is cut, the affected rows need fresh
 evidence.
 

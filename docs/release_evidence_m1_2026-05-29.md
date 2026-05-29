@@ -1,4 +1,4 @@
-# M1 Release Evidence Snapshot - 2026-05-23
+# M1 Release Evidence Snapshot - 2026-05-29
 
 ## 1. Scope
 
@@ -14,8 +14,8 @@ This is evidence for an intermediate milestone, not for final replacement of old
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `653ae7b3c7481c46cb26ca8676ac8fbfa94f7d22` |
-| Tree state | Dirty working tree synced intentionally to the dedicated runner |
+| Git commit | `67f49fa4f7af3b4f54912dabc8993ac923c8abdd` |
+| Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |
 | Runner base root | `/home/continuum-smoke/continuum_smoke` |
@@ -25,7 +25,7 @@ This is evidence for an intermediate milestone, not for final replacement of old
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup across the certified M1 rows |
 | Required artifacts checked | Cloud-static audit report, retained test-results summaries, experiment locks, state files, stdout/stderr/metadata artifacts, infrastructure phase evidence, software phase evidence, network NDJSON, benchmark metrics manifest, teardown evidence |
 | Profile IDs | Environment profiles: `local-qemu`, `local-qemu-netperf`, `local-qemu-delete-on-exit`; software profiles: `none`, `k8s`, `k8s-endpoint-runtime` |
-| Date | 2026-05-23 |
+| Date | 2026-05-29 |
 
 Before VM-backed execution, the dedicated repo was synced from the live checkout
 and verified:
@@ -148,30 +148,26 @@ Local release-evidence artifact audit on the certification host:
 | Primary artifacts checked | 15 |
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |
 
-Pre-tag status before the required helper-contract refresh:
+Pre-tag host-helper status after the required helper-contract refresh:
 
 | Field | Value |
 | --- | --- |
-| Verify command | `sh scripts/test/setup_agent_host.sh verify` |
-| Verify result | FAIL before VM execution |
-| Current finding | Installed `/usr/local/bin/continuum-hostctl` does not declare `HOSTCTL_INTERFACE_VERSION`; refresh the root-owned helper before cache-backed full application parity certification or an M1 tag. |
+| Verify command | `sudo -n /usr/local/bin/continuum-hostctl verify` |
+| Verify result | PASS |
+| Current finding | None |
 
 Post-checkpoint host-runner status on 2026-05-29: the dedicated repo and
 installed wrapper were refreshed with `sudo -n /usr/local/bin/continuum-hostctl
 sync-repo` and `sudo -n /usr/local/bin/continuum-hostctl install-wrapper
 dedicated`. `sudo -n /usr/local/bin/continuum-hostctl verify` and
 `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke check-prereqs`
-both passed after syncing the clean live checkout. The live setup-script
-verifier still fails because the installed root-owned maintenance helper lacks
-`HOSTCTL_INTERFACE_VERSION`. Repeat the sync and verification commands after
-any new commit before collecting VM-backed evidence.
+both passed after syncing the clean live checkout. Repeat the sync and
+verification commands after any new commit before collecting VM-backed evidence.
 
-The stricter pre-tag checker also intentionally fails while the release-evidence
-documents do not name the current checkpoint commit and still record
-dirty-source VM evidence. Before tagging, refresh the installed maintenance
-helper, rerun the claimed VM-backed wrapper scenarios from a clean source tree,
-refresh every release-evidence document to name that exact commit with clean
-tree state, and rerun `python3 scripts/test/check_release_pretag.py`.
+The stricter pre-tag checker allows release documentation and release checker
+updates after the VM evidence source commit, but any runtime, config, profile,
+playbook, wrapper, or runner change after that commit requires rerunning the
+affected VM-backed wrapper scenarios before tagging.
 
 Rerun the cloud-safe audit again before cutting an M1 tag if any source changes
 after this snapshot.
@@ -188,15 +184,15 @@ This wrapper scenario chains `phase_smoke_matrix` and `benchmark_k8s_resume`.
 
 | Matrix Row | Config(s) | Result | Evidence |
 | --- | --- | --- | --- |
-| `M1-QEMU-INFRA` | `configs/experiments/smoke/infra_one_vm.yaml` | PASS, 54.3s | `/home/continuum-smoke/continuum_smoke/infra_one_vm/.continuum/test_results/test_results_2026-05-23_17-48-46.json` |
-| `M1-QEMU-K8S` | `configs/experiments/smoke/software_k8s_two_vm.yaml` | PASS, 144.6s | `/home/continuum-smoke/continuum_smoke/software_k8s_two_vm/.continuum/test_results/test_results_2026-05-23_17-51-11.json` |
-| `M1-QEMU-NET-SMOKE` | `configs/experiments/smoke/network_netperf_two_vm.yaml` | PASS, 110.3s | `/home/continuum-smoke/continuum_smoke/network_netperf_two_vm/.continuum/test_results/test_results_2026-05-23_17-53-02.json` |
-| `M1-QEMU-BENCH` | `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml` | PASS, 393.8s total after endpoint base/live install split | `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume/.continuum/test_results/test_results_2026-05-23_19-25-11.json` |
+| `M1-QEMU-INFRA` | `configs/experiments/smoke/infra_one_vm.yaml` | PASS, 54.9s | `/home/continuum-smoke/continuum_smoke/infra_one_vm/.continuum/test_results/test_results_2026-05-29_18-42-23.json` |
+| `M1-QEMU-K8S` | `configs/experiments/smoke/software_k8s_two_vm.yaml` | PASS, 139.0s | `/home/continuum-smoke/continuum_smoke/software_k8s_two_vm/.continuum/test_results/test_results_2026-05-29_18-44-43.json` |
+| `M1-QEMU-NET-SMOKE` | `configs/experiments/smoke/network_netperf_two_vm.yaml` | PASS, 134.6s | `/home/continuum-smoke/continuum_smoke/network_netperf_two_vm/.continuum/test_results/test_results_2026-05-29_18-46-58.json` |
+| `M1-QEMU-BENCH` | `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml` | PASS, 406.3s total after endpoint base/live install split | `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume/.continuum/test_results/test_results_2026-05-29_18-53-45.json` |
 
 Structured netperf artifact for `M1-QEMU-NET-SMOKE`:
 
 ```text
-/home/continuum-smoke/continuum_smoke/network_netperf_two_vm/.continuum/logs/network_validation/netperf_results_2026-05-23_17:51:13.ndjson
+/home/continuum-smoke/continuum_smoke/network_netperf_two_vm/.continuum/logs/network_validation/netperf_results_2026-05-29_18:44:44.ndjson
 ```
 
 Runner success evidence included:
@@ -208,7 +204,7 @@ Runner success evidence included:
 5. SSH output where required,
 6. benchmark stdout/metric evidence for the application leg,
 7. latest benchmark metric artifact:
-   `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume/.continuum/logs/benchmark/2026-05-23_19_23_50_classify-images_metrics_manifest.json`,
+   `/home/continuum-smoke/continuum_smoke/benchmark_k8s_resume/.continuum/logs/benchmark/2026-05-29_18_52_22_classify-images_metrics_manifest.json`,
 8. teardown verified for the retained benchmark application leg.
 
 ## 5. Dedicated Network-Validation Evidence
@@ -239,12 +235,12 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation
 
 | Matrix Row | Config | Result | Evidence |
 | --- | --- | --- | --- |
-| `M1-QEMU-NET-SUITE` | `configs/experiments/network_validation/bench_net_4g.yaml` | PASS, 212.4s | `/home/continuum-smoke/continuum_smoke/network_validation/.continuum/test_results/test_results_2026-05-23_18-15-16.json` |
+| `M1-QEMU-NET-SUITE` | `configs/experiments/network_validation/bench_net_4g.yaml` | PASS, 201.7s | `/home/continuum-smoke/continuum_smoke/network_validation/.continuum/test_results/test_results_2026-05-29_18-57-16.json` |
 
 Structured netperf artifact:
 
 ```text
-/home/continuum-smoke/continuum_smoke/network_validation/.continuum/logs/network_validation/netperf_results_2026-05-23_18:11:44.ndjson
+/home/continuum-smoke/continuum_smoke/network_validation/.continuum/logs/network_validation/netperf_results_2026-05-29_18:53:55.ndjson
 ```
 
 The final success reason included `exit_code=0`, `experiment_lock_written`,

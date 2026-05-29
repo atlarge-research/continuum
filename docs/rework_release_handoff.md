@@ -54,13 +54,12 @@ That audit recorded:
 7. release matrix issues: 0,
 8. docs path missing references: 0,
 9. release evidence artifact issues: 0,
-10. pre-tag issues: 15 expected blockers.
+10. pre-tag issues: 15 expected blockers before the 2026-05-29 VM-backed
+    evidence refresh.
 
-No VM-backed tests were run during the final checkpoint-wrap work.
+Post-checkpoint host-runner and VM-evidence state:
 
-Post-checkpoint host-runner state:
-
-1. live worktree state after this handoff update: clean,
+1. VM evidence source commit: `67f49fa4f7af3b4f54912dabc8993ac923c8abdd`,
 2. dedicated runner repo: resynced from `/home/matthijs/continuum` with
    `sudo -n /usr/local/bin/continuum-hostctl sync-repo`,
 3. installed wrapper: refreshed with
@@ -72,12 +71,28 @@ Post-checkpoint host-runner state:
    `/usr/local/bin/continuum-hostctl` does not declare
    `HOSTCTL_INTERFACE_VERSION`.
 
-The dedicated runner is therefore no longer blocked by repo drift. M1 tagging
-is still blocked until the root-owned maintenance helper is refreshed and all
-claimed VM-backed evidence is regenerated from the exact clean commit being
-tagged. Re-run `sudo -n /usr/local/bin/continuum-hostctl show-config` after any
-new commit to confirm that `LIVE_HEAD` and the dedicated sync marker refer to
-the tree intended for VM-backed evidence.
+The dedicated runner is therefore no longer blocked by repo drift, and all
+currently claimed VM-backed wrapper scenarios listed in
+`docs/release_notes_m1_draft.md` passed on 2026-05-29 from the clean evidence
+source commit. M1 tagging is still blocked until the root-owned maintenance
+helper is refreshed and the live setup-script verifier records `PASS`. Re-run
+`sudo -n /usr/local/bin/continuum-hostctl show-config` after any new commit to
+confirm that `LIVE_HEAD` and the dedicated sync marker refer to the runtime tree
+intended for VM-backed evidence.
+
+Current environment blockers observed after the evidence refresh:
+
+1. `sh scripts/test/setup_agent_host.sh install-hostctl` fails before updating
+   the helper because `/usr/bin/sudo` is owned by `nobody:nogroup` and plain
+   sudo reports that it must be owned by uid 0 with the setuid bit set.
+2. Git writes are blocked because `/home/matthijs/continuum/.git` is mounted
+   read-only, so `git add`, `git mv`, and `git commit` cannot create or update
+   `.git/index.lock`.
+
+The working tree nevertheless contains the refreshed 2026-05-29 evidence docs
+and release-checker updates. Commit them once `.git` is writable, then rerun
+`python3 scripts/test/check_release_pretag.py`; the only remaining pre-tag
+finding should be `pretag-host-helper-not-ready`.
 
 ## Current Certified Scope
 
@@ -101,23 +116,19 @@ checkpoint.
 
 ## Known Blockers
 
-`python3 scripts/test/check_release_pretag.py` currently reports 15 expected
-blockers after the checkpoint commit:
+`python3 scripts/test/check_release_pretag.py` is expected to report only the
+host-helper blocker after the evidence docs are committed and the cloud-safe
+audit is refreshed:
 
 1. `pretag-host-helper-not-ready`: M1 evidence still records
    `Verify result='FAIL before VM execution'` where pre-tag readiness expects
    `PASS`.
-2. seven `pretag-source-commit-mismatch` findings because all listed release
-   evidence docs still name the previous evidence commit
-   `653ae7b3c7481c46cb26ca8676ac8fbfa94f7d22`, not the current checkpoint
-   commit.
-3. seven `pretag-evidence-tree-not-clean` findings because all listed release
-   evidence docs record dirty-tree evidence.
 
-These are not accidental regressions. Clearing them requires a clean source
-tree, refreshed host-helper verification, fresh VM-backed evidence from the
-exact source tree being tagged, and rerunning the pre-tag checker until it
-reports zero issues.
+This is not an accidental regression. Clearing it requires refreshing the
+root-owned helper so `sh scripts/test/setup_agent_host.sh verify` can validate
+the current `HOSTCTL_INTERFACE_VERSION` and `prime-registry-cache` surface.
+Runtime, config, profile, playbook, wrapper, or runner changes after the
+evidence source commit require rerunning affected VM-backed scenarios.
 
 ## Next Agent Checklist
 
@@ -130,7 +141,7 @@ reports zero issues.
    - `python3 scripts/test/check_release_evidence_artifacts.py`
    - `python3 scripts/test/check_release_pretag.py`
 3. If source changed, run `scripts/test/run_cloud_static_audit.sh` and update
-   `docs/release_evidence_m1_2026-05-23.md` with the new report path and
+   `docs/release_evidence_m1_2026-05-29.md` with the new report path and
    counts.
 4. Keep generated `logs/cloud_static_audit/*.md` files uncommitted unless a
    maintainer explicitly asks for a dated audit snapshot.

@@ -16,16 +16,19 @@ marked `certified` or `core-ready` in
 Use these documents as the release evidence set:
 
 1. `docs/release_certification_matrix.md`
-2. `docs/release_evidence_m1_2026-05-23.md`
-3. `docs/release_evidence_qemu_infra_parity_2026-05-23.md`
-4. `docs/release_evidence_qemu_k8s_nobench_2026-05-23.md`
-5. `docs/release_evidence_qemu_kubeedge_software_2026-05-23.md`
-6. `docs/release_evidence_qemu_mist_software_2026-05-23.md`
-7. `docs/release_evidence_qemu_endpoint_software_2026-05-23.md`
-8. `docs/release_evidence_qemu_openfaas_software_2026-05-23.md`
+2. `docs/release_evidence_m1_2026-05-29.md`
+3. `docs/release_evidence_qemu_infra_parity_2026-05-29.md`
+4. `docs/release_evidence_qemu_k8s_nobench_2026-05-29.md`
+5. `docs/release_evidence_qemu_kubeedge_software_2026-05-29.md`
+6. `docs/release_evidence_qemu_mist_software_2026-05-29.md`
+7. `docs/release_evidence_qemu_endpoint_software_2026-05-29.md`
+8. `docs/release_evidence_qemu_openfaas_software_2026-05-29.md`
 
-Before tagging, rerun the commands in section 7 on the exact source tree that
-will be published.
+Before tagging, rerun the commands in section 7. VM-backed evidence may name a
+clean runtime source commit that precedes final release-documentation commits,
+but no runtime, config, profile, playbook, wrapper, or runner path may change
+after that evidence source commit without rerunning the affected wrapper
+scenario.
 
 ## 3. What This Milestone Certifies
 
@@ -117,7 +120,7 @@ Avoid wording like:
 
 ## 7. Pre-Tag Gate
 
-Run these checks on the exact source tree to be tagged:
+Run these checks before tagging:
 
 ```bash
 scripts/test/run_cloud_static_audit.sh
@@ -152,7 +155,9 @@ in section 3. If runtime, runner, verifier, profile, or playbook code changed
 after the latest VM-backed evidence snapshot, rerun the affected scenario and
 refresh the evidence document before tagging. The pre-tag checker also requires
 the current worktree to be clean and every listed release-evidence document to
-name the current git commit with clean source-tree evidence.
+name a clean VM-evidence source commit. Final release-documentation and release
+checker commits may follow that source commit; runtime-affecting changes may
+not.
 
 ## 8. Suggested Next Milestones
 
