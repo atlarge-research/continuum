@@ -131,7 +131,7 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-25T181452Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-29T183813Z.md` |
 | Required gates | PASS |
 | Unit unittest discovery | 601 tests OK |
 | E2E unittest discovery | 76 tests OK |
@@ -156,11 +156,22 @@ Pre-tag status before the required helper-contract refresh:
 | Verify result | FAIL before VM execution |
 | Current finding | Installed `/usr/local/bin/continuum-hostctl` does not declare `HOSTCTL_INTERFACE_VERSION`; refresh the root-owned helper before cache-backed full application parity certification or an M1 tag. |
 
-The stricter pre-tag checker also intentionally fails while the current
-worktree is dirty and the release-evidence documents record dirty-source VM
-evidence. Before tagging, rerun the claimed VM-backed wrapper scenarios from a
-clean source tree, refresh every release-evidence document to name that exact
-commit with clean tree state, and rerun `python3 scripts/test/check_release_pretag.py`.
+Post-checkpoint host-runner status on 2026-05-29: the dedicated repo and
+installed wrapper were refreshed with `sudo -n /usr/local/bin/continuum-hostctl
+sync-repo` and `sudo -n /usr/local/bin/continuum-hostctl install-wrapper
+dedicated`. `sudo -n /usr/local/bin/continuum-hostctl verify` and
+`sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke check-prereqs`
+both passed after syncing the clean live checkout. The live setup-script
+verifier still fails because the installed root-owned maintenance helper lacks
+`HOSTCTL_INTERFACE_VERSION`. Repeat the sync and verification commands after
+any new commit before collecting VM-backed evidence.
+
+The stricter pre-tag checker also intentionally fails while the release-evidence
+documents do not name the current checkpoint commit and still record
+dirty-source VM evidence. Before tagging, refresh the installed maintenance
+helper, rerun the claimed VM-backed wrapper scenarios from a clean source tree,
+refresh every release-evidence document to name that exact commit with clean
+tree state, and rerun `python3 scripts/test/check_release_pretag.py`.
 
 Rerun the cloud-safe audit again before cutting an M1 tag if any source changes
 after this snapshot.
