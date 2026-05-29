@@ -41,21 +41,20 @@ checks, and M1 pre-tag checks.
 
 The current M1 cloud-safe evidence table points to:
 
-`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-29T183813Z.md`
+`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-29T202812Z.md`
 
 That audit recorded:
 
 1. required cloud-safe gates: PASS,
-2. unit unittest discovery: 601 tests OK,
+2. unit unittest discovery: 603 tests OK,
 3. e2e unittest discovery: 76 tests OK,
-4. combined unittest discovery: 677 tests OK,
-5. pytest mirror: 677 passed,
+4. combined unittest discovery: 679 tests OK,
+5. pytest mirror: 679 passed,
 6. release claim issues: 0,
 7. release matrix issues: 0,
 8. docs path missing references: 0,
 9. release evidence artifact issues: 0,
-10. pre-tag issues: 15 expected blockers before the 2026-05-29 VM-backed
-    evidence refresh.
+10. pre-tag issues: 0.
 
 Post-checkpoint host-runner and VM-evidence state:
 
@@ -66,33 +65,27 @@ Post-checkpoint host-runner and VM-evidence state:
    `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated`,
 4. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS,
 5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
-   check-prereqs`: PASS,
-6. `sh scripts/test/setup_agent_host.sh verify`: FAIL because the installed
-   `/usr/local/bin/continuum-hostctl` does not declare
-   `HOSTCTL_INTERFACE_VERSION`.
+   check-prereqs`: PASS.
 
-The dedicated runner is therefore no longer blocked by repo drift, and all
-currently claimed VM-backed wrapper scenarios listed in
+The dedicated runner is no longer blocked by repo drift or helper-interface
+drift, and all currently claimed VM-backed wrapper scenarios listed in
 `docs/release_notes_m1_draft.md` passed on 2026-05-29 from the clean evidence
-source commit. M1 tagging is still blocked until the root-owned maintenance
-helper is refreshed and the live setup-script verifier records `PASS`. Re-run
-`sudo -n /usr/local/bin/continuum-hostctl show-config` after any new commit to
-confirm that `LIVE_HEAD` and the dedicated sync marker refer to the runtime tree
-intended for VM-backed evidence.
+source commit. `python3 scripts/test/check_release_pretag.py` reports zero
+issues on the current docs/checker-only release head. Re-run
+`sudo -n /usr/local/bin/continuum-hostctl show-config` and
+`sudo -n /usr/local/bin/continuum-hostctl verify` after any new runtime commit
+to confirm that `LIVE_HEAD` and the dedicated sync marker refer to the runtime
+tree intended for VM-backed evidence.
 
-Current environment blockers observed after the evidence refresh:
+The previous sandbox problems are resolved for the current session:
 
-1. `sh scripts/test/setup_agent_host.sh install-hostctl` fails before updating
-   the helper because `/usr/bin/sudo` is owned by `nobody:nogroup` and plain
-   sudo reports that it must be owned by uid 0 with the setuid bit set.
-2. Git writes are blocked because `/home/matthijs/continuum/.git` is mounted
-   read-only, so `git add`, `git mv`, and `git commit` cannot create or update
-   `.git/index.lock`.
+1. Git staging and committing work.
+2. `sudo -n /usr/local/bin/continuum-hostctl verify` passes.
+3. Agent sudo policy is documented in `docs/agent_sudo_boundaries.md`.
 
-The working tree nevertheless contains the refreshed 2026-05-29 evidence docs
-and release-checker updates. Commit them once `.git` is writable, then rerun
-`python3 scripts/test/check_release_pretag.py`; the only remaining pre-tag
-finding should be `pretag-host-helper-not-ready`.
+Generic sudo may still differ between the operator shell and an agent sandbox.
+Do not broaden sudoers to compensate; use the root-owned wrapper pattern in
+`docs/agent_sudo_boundaries.md`.
 
 ## Current Certified Scope
 
@@ -116,19 +109,15 @@ checkpoint.
 
 ## Known Blockers
 
-`python3 scripts/test/check_release_pretag.py` is expected to report only the
-host-helper blocker after the evidence docs are committed and the cloud-safe
-audit is refreshed:
+There are no current M1 pre-tag checker blockers on the committed
+docs/checker-only release head. Runtime, config, profile, playbook, wrapper, or
+runner changes after the evidence source commit require rerunning affected
+VM-backed scenarios and refreshing the evidence documents.
 
-1. `pretag-host-helper-not-ready`: M1 evidence still records
-   `Verify result='FAIL before VM execution'` where pre-tag readiness expects
-   `PASS`.
-
-This is not an accidental regression. Clearing it requires refreshing the
-root-owned helper so `sh scripts/test/setup_agent_host.sh verify` can validate
-the current `HOSTCTL_INTERFACE_VERSION` and `prime-registry-cache` surface.
-Runtime, config, profile, playbook, wrapper, or runner changes after the
-evidence source commit require rerunning affected VM-backed scenarios.
+Remaining blockers for a final replacement release are the non-certified
+old-main parity rows in `docs/release_certification_matrix.md`, especially full
+QEMU application parity, cloud-provider rows, bare-metal scope, and unverified
+software/application modules.
 
 ## Next Agent Checklist
 
@@ -145,7 +134,7 @@ evidence source commit require rerunning affected VM-backed scenarios.
    counts.
 4. Keep generated `logs/cloud_static_audit/*.md` files uncommitted unless a
    maintainer explicitly asks for a dated audit snapshot.
-5. Before tagging M1 on the certification host, refresh the installed host
+5. Before tagging M1 on the certification host, verify the installed host
    helper and run the pre-tag command sequence in
    `docs/release_notes_m1_draft.md`.
 6. Rerun affected VM-backed rows after any runtime, runner, verifier, profile,
@@ -155,12 +144,7 @@ evidence source commit require rerunning affected VM-backed scenarios.
 
 ## Suggested Commit Grouping
 
-The current branch is suitable for one checkpoint commit if time is short. If
-splitting is practical, use these groups:
-
-1. release planning and certification guardrails,
-2. parity suites and host-runner support,
-3. QEMU parity module execution support.
-
-Each commit message should include the cloud-safe commands run, whether
-VM-backed tests were skipped, and the remaining pre-tag blockers.
+For future release-readiness commits, keep docs/checker-only changes separate
+from runtime/config/profile/playbook changes when practical. Runtime-affecting
+commits after the evidence source commit must name which VM-backed wrapper
+scenarios were rerun, or explicitly state that the row remains unclaimed.

@@ -190,9 +190,10 @@ that moves to `certified`.
    certification host before tagging any row as release-ready.
 4. Run `python3 scripts/test/check_release_pretag.py` and keep M1 untagged
    until it reports zero issues.
-5. Refresh the installed `/usr/local/bin/continuum-hostctl` helper until
-   `sh scripts/test/setup_agent_host.sh verify` confirms the current
-   `HOSTCTL_INTERFACE_VERSION` and `prime-registry-cache` surface.
+5. Verify the installed `/usr/local/bin/continuum-hostctl` helper on the
+   certification host before tagging. Refresh it through the root-owned wrapper
+   pattern in `docs/agent_sudo_boundaries.md` if the live setup script changes
+   its helper-interface contract.
 6. Keep `docs/release_notes_m1_draft.md` synchronized with this matrix before
    publishing an intermediate release.
 7. Prime and verify the local registry cache for `image_prefetch: "off"`

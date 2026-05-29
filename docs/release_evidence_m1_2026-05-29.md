@@ -131,12 +131,12 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-29T183813Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-29T202812Z.md` |
 | Required gates | PASS |
-| Unit unittest discovery | 601 tests OK |
+| Unit unittest discovery | 603 tests OK |
 | E2E unittest discovery | 76 tests OK |
-| Combined unittest discovery | 677 tests OK |
-| Pytest mirror | 677 passed |
+| Combined unittest discovery | 679 tests OK |
+| Pytest mirror | 679 passed |
 | Marker debt scan | NO MATCHES |
 | Informational prereq findings | Every configured parity suite now has cloud-safe prerequisite visibility. Full `qemu_kubeedge_image_parity` and `qemu_mist_image_parity` still report missing local-registry cache images and remain unclaimed. Forced-prefetch image-row prereqs pass in the current shell, but those rows still require dedicated smoke-user wrapper VM evidence before certification. |
 

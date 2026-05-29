@@ -94,10 +94,8 @@ milestones.
    resource-shape certification or a larger/external QEMU runner.
 5. Cloud-provider rows need YAML profiles, credential/cost documentation, and
    cloud-backed evidence before they can be release-supported.
-6. The installed host maintenance helper must declare the current
-   `HOSTCTL_INTERFACE_VERSION` and expose `prime-registry-cache` before
-   cache-backed full application parity rows can be certified through the
-   allowlisted host workflow.
+6. Cache-backed full application parity rows still require an explicitly primed
+   local registry cache and fresh full VM-backed evidence before certification.
 
 ## 6. User-Facing Wording
 
@@ -161,8 +159,7 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Refresh the installed host maintenance helper and prime the local registry
-   cache.
+1. Prime the local registry cache.
 2. Certify full `P-QEMU-06` and `P-QEMU-07` application rows after cache
    readiness.
 3. Resolve Docker-daemon or registry design for forced-prefetch application rows.
