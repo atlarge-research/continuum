@@ -115,6 +115,11 @@ commands. This is an operator/admin action because it updates
 `/usr/local/bin/continuum-hostctl`; agents should keep using the installed
 allowlisted helper until it is refreshed.
 
+When an agent needs a repeatable way to refresh that root-owned helper, use the
+checksum-pinned wrapper pattern in `docs/agent_sudo_boundaries.md`. Do not add
+sudoers access to `scripts/test/setup_agent_host.sh` directly, because that file
+lives in a mutable checkout.
+
 For pre-tag release checks, run both verification commands in the order shown
 above. An older installed helper can pass its own `verify` command before it
 knows about a newer helper-interface contract; the live setup-script verifier
