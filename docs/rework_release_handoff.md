@@ -87,6 +87,32 @@ Generic sudo may still differ between the operator shell and an agent sandbox.
 Do not broaden sudoers to compensate; use the root-owned wrapper pattern in
 `docs/agent_sudo_boundaries.md`.
 
+Post-M1 parity progress after this checkpoint:
+
+1. The host-side local registry cache was primed for
+   `qemu_kubeedge_image_parity` and `qemu_mist_image_parity` with
+   `sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite ...`.
+2. Direct registry probes from the agent sandbox cannot reach
+   `192.168.1.104:5000`, so use the host helper result as the authoritative
+   cache-readiness signal.
+3. A full `qemu_kubeedge_image_parity` wrapper run was attempted from clean VM
+   evidence source commit `67f49fa4f7af3b4f54912dabc8993ac923c8abdd`.
+4. The run reached infrastructure and software phases, skipped remote image
+   prefetch because the local registry cache was ready, then failed in the
+   application phase after 1655.1 seconds.
+5. Result summary:
+   `/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/test_results/test_results_2026-05-29_21-05-38.json`.
+6. Primary failure: `wait_kubernetes_workers_ready()` timed out. Diagnostic
+   pod status showed both image-classification pods stuck in `ContainerCreating`;
+   edge-node `kube-flannel` pods were in `CrashLoopBackOff`, while the
+   cloud-controller flannel pod was running.
+7. Flannel previous logs on both edge nodes reported:
+   `Failed to create SubnetManager: fail to create kubernetes config: invalid configuration: no configuration has been provided`.
+
+`P-QEMU-06` remains unclaimed. The next useful action is to diagnose why the
+edge flannel daemonset pods lack working in-cluster Kubernetes configuration in
+the KubeEdge full application topology.
+
 ## Current Certified Scope
 
 The certified or core-ready scope is exactly the set named in
@@ -118,6 +144,9 @@ Remaining blockers for a final replacement release are the non-certified
 old-main parity rows in `docs/release_certification_matrix.md`, especially full
 QEMU application parity, cloud-provider rows, bare-metal scope, and unverified
 software/application modules.
+
+For the next old-main parity step, start with the `P-QEMU-06` edge flannel
+failure recorded above before rerunning the full application suite.
 
 ## Next Agent Checklist
 

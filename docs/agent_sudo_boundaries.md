@@ -29,8 +29,10 @@ Use this model for any new agent sudo capability:
    or `/usr/local/bin`.
 2. The allowed command is owned by `root:root` and is not writable by the agent
    user.
-3. The sudoers rule grants `NOPASSWD` for that exact path only.
-4. The command takes either no arguments or a small allowlisted argument set.
+3. The sudoers rule grants `NOPASSWD` for that exact path only. If arguments
+   are needed, the target command must validate a small allowlisted argument
+   set internally.
+4. The command takes either no arguments or that small allowlisted argument set.
 5. If the command consumes a repo script, it verifies the script checksum before
    executing or generating anything from it.
 6. The command fails closed on checksum mismatch, unsupported arguments, missing
@@ -43,11 +45,58 @@ Do not grant sudoers access to:
 2. a mutable repo-local script,
 3. a command with arbitrary subcommands,
 4. `sudoedit`,
-5. wildcard paths or arguments,
+5. wildcard paths or arguments to commands that do not perform their own
+   strict allowlist checks,
 6. package managers or service managers unless a root-owned wrapper constrains
    the exact operation.
 
-## 3. Continuum Host Helper Refresh
+## 3. Current Continuum Agent Sudo Contract
+
+Continuum currently uses two installed host commands for agent-driven VM smoke
+and certification work:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl ...
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke ...
+```
+
+The sudoers rule may allow arguments after those two root-owned paths so the
+agent can pass a scenario name or a host-helper subcommand. The safety boundary
+is still narrow because the allowed path is fixed and the helper implements its
+own subcommand allowlist. Do not interpret this as permission to add a wildcard
+sudoers rule for a shell, interpreter, repo-local script, or arbitrary binary.
+
+The host-helper subcommands intended for agent use are the ones exposed by:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl show-config
+sudo -n /usr/local/bin/continuum-hostctl sync-repo
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl verify
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite <suite>
+```
+
+The runner command is intended for named suites and bounded diagnostics:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke <suite>
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook <suite> <playbook> ...
+```
+
+For `debug-playbook`, use only read-only diagnostics unless the user explicitly
+approves the exact mutating command.
+
+If the installed helper is stale, the operator can refresh it with:
+
+```bash
+sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh install-hostctl
+sudo -n /usr/local/bin/continuum-hostctl verify
+```
+
+Do not add extra mode arguments to `install-hostctl`; `install` takes an
+optional mode, but `install-hostctl` does not.
+
+## 4. Continuum Host Helper Refresh
 
 The host-helper refresh case uses this pattern:
 
@@ -86,7 +135,7 @@ and then installing the generated file with `/usr/bin/install` and
 If `setup_agent_host.sh` changes, the wrapper must fail until an operator
 reviews the change and updates the pinned hash. That is intentional.
 
-## 4. Template
+## 5. Template
 
 Use this as a starting point for similar one-command refresh wrappers:
 
@@ -131,7 +180,7 @@ Agent-side verification:
 sudo -n /usr/local/sbin/example-wrapper
 ```
 
-## 5. Diagnosing Sandbox Differences
+## 6. Diagnosing Sandbox Differences
 
 The operator shell and the agent sandbox can see different mount and executable
 metadata. Check both contexts before changing host permissions.
@@ -160,7 +209,7 @@ If generic sudo reports invalid ownership in the agent sandbox, do not broaden
 sudoers to compensate. Keep using the exact narrow helper commands that work,
 or have the operator run the root-owned setup step manually.
 
-## 6. Documentation Requirement
+## 7. Documentation Requirement
 
 Any new sudo capability for agents must be documented with:
 
@@ -171,10 +220,21 @@ Any new sudo capability for agents must be documented with:
 5. the verification command,
 6. the failure mode when the reviewed source changes.
 
-## 7. Suggested Agent Skill
+## 8. Suggested Agent Skill
 
-The `.codex/skills` directory may be read-only in some agent sessions. When it
-is writable, add this as `.codex/skills/continuum-safe-sudo/SKILL.md`:
+The `.codex/skills` directory may be read-only in some agent sessions. If this
+file does not exist yet, future agents do not need the user to call the
+system-level skill-creator explicitly; they can create the repo-local skill
+from the body below when `.codex/skills` is writable. Until then, agents should
+read this document and `.codex/skills/continuum-smoke-host-runner/SKILL.md`.
+
+Target path:
+
+```text
+.codex/skills/continuum-safe-sudo/SKILL.md
+```
+
+Skill body:
 
 ````markdown
 ---

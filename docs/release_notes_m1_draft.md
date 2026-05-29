@@ -86,8 +86,9 @@ milestones.
 ## 5. Known Limitations
 
 1. QEMU is a provider module, not Continuum core.
-2. Full KubeEdge and Mist application parity rows require a primed local
-   registry cache before VM-backed certification can proceed.
+2. Full KubeEdge and Mist application parity rows require fresh full VM-backed
+   evidence before certification; the latest KubeEdge full application attempt
+   still fails on edge-node flannel readiness.
 3. Forced image-prefetch rows still require Docker daemon access on the
    certification host.
 4. Full OpenFaaS application parity also needs a decision on exact legacy
@@ -96,6 +97,8 @@ milestones.
    cloud-backed evidence before they can be release-supported.
 6. Cache-backed full application parity rows still require an explicitly primed
    local registry cache and fresh full VM-backed evidence before certification.
+   Host-side cache priming is exposed through the allowlisted
+   `continuum-hostctl prime-registry-cache` helper.
 
 ## 6. User-Facing Wording
 
@@ -159,9 +162,10 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Prime the local registry cache.
-2. Certify full `P-QEMU-06` and `P-QEMU-07` application rows after cache
-   readiness.
+1. Fix the edge-node flannel readiness failure found by the latest full
+   `P-QEMU-06` application attempt.
+2. Certify full `P-QEMU-06` and `P-QEMU-07` application rows after VM-backed
+   application evidence passes.
 3. Resolve Docker-daemon or registry design for forced-prefetch application rows.
 4. Decide exact-resource versus practical-runner claims for full `P-QEMU-10`.
 5. Port or explicitly demote GCP/AWS historical rows.
