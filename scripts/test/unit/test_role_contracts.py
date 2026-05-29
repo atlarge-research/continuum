@@ -1,6 +1,5 @@
-"""Regression tests for Ansible role task contracts."""
-
 from pathlib import Path
+import re
 import unittest
 
 import yaml
@@ -202,6 +201,93 @@ class KubeEdgeRoleTests(unittest.TestCase):
         self.assertIn("kubectl get nodes", readiness_task["ansible.builtin.shell"])
         self.assertIn("expected_edges", readiness_task["ansible.builtin.shell"])
         self.assertEqual(readiness_task["environment"]["KUBECONFIG"], "/etc/kubernetes/admin.conf")
+
+    def test_kubeedge_cloudcore_enables_edge_incluster_config_support(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        defaults_path = repo_root / "roles/resource_manager/kubeedge_cloudcore/defaults/main.yml"
+        tasks_path = repo_root / "roles/resource_manager/kubeedge_cloudcore/tasks/main.yml"
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+
+        self.assertIs(defaults["rm_kubeedge_cloudcore_enable_incluster_config"], True)
+
+        init_task = next(
+            task for task in tasks if task.get("name") == "Initialize KubeEdge CloudCore"
+        )
+        init_command = init_task["ansible.builtin.command"]
+        self.assertIn("cloudCore.modules.dynamicController.enable=true", init_command)
+        self.assertIn("cloudCore.featureGates.requireAuthorization=true", init_command)
+
+        flannel_env_task = next(
+            task
+            for task in tasks
+            if task.get("name")
+            == "Configure flannel Kubernetes API endpoint for KubeEdge edge pods"
+        )
+        flannel_env_command = flannel_env_task["ansible.builtin.command"]
+        self.assertIn("kubectl -n kube-flannel set env daemonset/kube-flannel-ds", flannel_env_command)
+        self.assertIn("KUBERNETES_SERVICE_HOST={{ rm_kubeedge_cloudcore_cloud_ip }}", flannel_env_command)
+        self.assertIn("KUBERNETES_SERVICE_PORT=6443", flannel_env_command)
+        self.assertIn("KUBERNETES_MASTER=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443", flannel_env_command)
+        self.assertIn(
+            "SSL_CERT_FILE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+            flannel_env_command,
+        )
+
+        flannel_api_task = next(
+            task
+            for task in tasks
+            if task.get("name")
+            == "Configure flannel Kubernetes API URL for KubeEdge edge pods"
+        )
+        flannel_api_argv = flannel_api_task["ansible.builtin.command"]["argv"]
+        self.assertIn("patch", flannel_api_argv)
+        self.assertIn("--type=json", flannel_api_argv)
+        self.assertTrue(
+            any("--kube-api-url=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443" in arg for arg in flannel_api_argv)
+        )
+
+    def test_kubeedge_edge_join_enables_edge_incluster_config_support(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        defaults_path = repo_root / "roles/resource_manager/kubeedge_edge_join/defaults/main.yml"
+        tasks_path = repo_root / "roles/resource_manager/kubeedge_edge_join/tasks/main.yml"
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        task_names = {task.get("name") for task in tasks}
+
+        self.assertIs(defaults["rm_kubeedge_edge_join_enable_incluster_config"], True)
+        self.assertIn("Enable requireAuthorization feature gate in edgecore config", task_names)
+        self.assertIn("Enable metaServer in edgecore config", task_names)
+
+    def test_kubeedge_edge_join_incluster_config_regexes_patch_generated_config(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        tasks_path = repo_root / "roles/resource_manager/kubeedge_edge_join/tasks/main.yml"
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        tasks_by_name = {task.get("name"): task for task in tasks}
+        config = """
+apiVersion: edgecore.config.kubeedge.io/v1alpha2
+kind: EdgeCore
+featureGates:
+  requireAuthorization: false
+modules:
+  edgeStream:
+    enable: false
+  metaManager:
+    enable: true
+    metaServer:
+      enable: false
+      server: 127.0.0.1:10550
+"""
+
+        for task_name in (
+            "Enable requireAuthorization feature gate in edgecore config",
+            "Enable metaServer in edgecore config",
+        ):
+            replace_args = tasks_by_name[task_name]["ansible.builtin.replace"]
+            config = re.sub(replace_args["regexp"], replace_args["replace"], config)
+
+        self.assertIn("featureGates:\n  requireAuthorization: true", config)
+        self.assertIn("metaServer:\n      enable: true", config)
 
 
 class BenchmarkLaunchPlaybookTests(unittest.TestCase):

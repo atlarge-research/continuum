@@ -52,6 +52,37 @@
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false
 
+- name: Configure flannel Kubernetes API endpoint for KubeEdge edge pods
+  ansible.builtin.command: >-
+    kubectl -n kube-flannel set env daemonset/kube-flannel-ds
+    KUBERNETES_SERVICE_HOST={{ rm_kubeedge_cloudcore_cloud_ip }}
+    KUBERNETES_SERVICE_PORT=6443
+    KUBERNETES_MASTER=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443
+    SSL_CERT_FILE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    --overwrite
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Configure flannel Kubernetes API URL for KubeEdge edge pods
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - -n
+      - kube-flannel
+      - patch
+      - daemonset
+      - kube-flannel-ds
+      - --type=json
+      - -p
+      - >-
+        [{"op":"replace","path":"/spec/template/spec/containers/0/args","value":[
+        "--ip-masq","--kube-subnet-mgr",
+        "--kube-api-url=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443"]}]
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
 - name: Wait for flannel rollout
   ansible.builtin.command: kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=600s
   environment:
@@ -65,6 +96,8 @@
     --advertise-address={{ rm_kubeedge_cloudcore_cloud_ip }}
     --kubeedge-version={{ rm_kubeedge_cloudcore_kubeedge_version }}
     --force
+    {% if rm_kubeedge_cloudcore_enable_incluster_config | bool %}--set cloudCore.modules.dynamicController.enable=true{% endif %}
+    {% if rm_kubeedge_cloudcore_enable_incluster_config | bool %}--set cloudCore.featureGates.requireAuthorization=true{% endif %}
     --set mosquitto.enabled=false
     --set cloudCore.tolerations[0].key=node-role.kubernetes.io/control-plane
     --set cloudCore.tolerations[0].operator=Exists

@@ -3,3 +3,4 @@ rm_kubeedge_edge_join_cloud_ip: >-
   {{ cloud_ip | default(continuum_cloud_ip | default('')) }}
 rm_kubeedge_edge_join_continuum_home: "{{ continuum_home | default('/tmp') }}"
 rm_kubeedge_edge_join_kubeedge_version: "1.22.0"
+rm_kubeedge_edge_join_enable_incluster_config: true

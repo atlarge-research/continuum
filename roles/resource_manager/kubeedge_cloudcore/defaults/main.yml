@@ -6,3 +6,4 @@ rm_kubeedge_cloudcore_username: >-
 rm_kubeedge_cloudcore_continuum_home: "{{ continuum_home | default('/tmp') }}"
 rm_kubeedge_cloudcore_kubeversion: "{{ kubeversion | default(continuum_kubeversion | default('1.27.0')) }}"
 rm_kubeedge_cloudcore_kubeedge_version: "1.22.0"
+rm_kubeedge_cloudcore_enable_incluster_config: true

@@ -52,6 +52,22 @@
     regexp: "(\\n\\s*edgeStream:\\s*\\n(?:.*\\n)*?\\s*enable:\\s*)false\\b"
     replace: "\\1true"
 
+- name: Enable requireAuthorization feature gate in edgecore config
+  ansible.builtin.replace:
+    path: /etc/kubeedge/config/edgecore.yaml
+    backup: true
+    regexp: "(\\n\\s*featureGates:\\s*\\n(?:.*\\n)*?\\s*requireAuthorization:\\s*)false\\b"
+    replace: "\\1true"
+  when: rm_kubeedge_edge_join_enable_incluster_config | bool
+
+- name: Enable metaServer in edgecore config
+  ansible.builtin.replace:
+    path: /etc/kubeedge/config/edgecore.yaml
+    backup: true
+    regexp: "(\\n\\s*metaServer:\\s*\\n(?:.*\\n)*?\\s*enable:\\s*)false\\b"
+    replace: "\\1true"
+  when: rm_kubeedge_edge_join_enable_incluster_config | bool
+
 - name: Restart edgecore service
   ansible.builtin.systemd:
     name: edgecore
