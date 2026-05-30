@@ -108,35 +108,28 @@ Post-M1 parity progress after this checkpoint:
    to save its JSON summary with `OSError: [Errno 28] No space left on device`.
 6. Latest retained log:
    `/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/2026-05-29_23:56:00_edge_kubeedge_classify-images.log`.
-7. Current host storage evidence from the 2026-05-30 resume shows the installed
-   smoke wrapper already points at `/mnt/sdc/continuum_smoke`, but the old
-   retained root `/home/continuum-smoke/continuum_smoke` is still a real
-   directory on `/` and still holds about 74G of retained state. `/` is still
-   98% full while `/mnt/sdc` has about 2.1T free. Do not rerun full VM-backed
-   application evidence until this is fixed.
-8. The current `/usr/local/sbin/continuum-refresh-hostctl` wrapper is still
-   checksum-pinned to the previous setup script hash
-   `d45c3d6105645b7fda0fee67b2efb9c03d346386a1248f3d5fa0ce6b8abada07`.
-   After reviewing the current `scripts/test/setup_agent_host.sh`, the operator
-   should update the pinned hash to
-   `14a79d74b7b0e8e6c24cce1710d2b32226bc0543a0320d00c4a3c3fa46e26500`,
-   refresh the root-owned maintenance helper, then run:
-   `sudo -n /usr/local/bin/continuum-hostctl relocate-smoke-root
-   /mnt/sdc/continuum_smoke --replace-source-with-symlink`, followed by
-   `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
-   /mnt/sdc/continuum_smoke` and `sudo -n /usr/local/bin/continuum-hostctl
-   verify`. After this, `/home/continuum-smoke/continuum_smoke` should be a
-   symlink to `/mnt/sdc/continuum_smoke`.
-9. In the current agent session, every `sudo -n ...` command fails before
-   sudoers evaluation because `/` is mounted `ro,nosuid,nodev`; `stat` reports
-   `/usr/bin/sudo` as mode `4755`, but owned by `nobody:nogroup` inside the
-   agent namespace. Treat this as an execution-environment blocker, not as a
-   Continuum helper or sudoers-design failure. See
-   `docs/agent_sudo_boundaries.md` for the diagnostic path.
+7. The retained smoke root was relocated on 2026-05-30. Current evidence:
+   `/home/continuum-smoke/continuum_smoke` is a symlink to
+   `/mnt/sdc/continuum_smoke`; `run-continuum-smoke storage-report` reports 74G
+   retained state under `/mnt/sdc/continuum_smoke`; `/` has 84G free instead of
+   the previous 22G; and `sudo -n /usr/local/bin/continuum-hostctl verify`
+   passes.
+8. The installed wrapper base root is `/mnt/sdc/continuum_smoke`. The
+   maintenance helper still reports its configured `SMOKE_BASE_ROOT` as
+   `/home/continuum-smoke/continuum_smoke`, which is now the compatibility
+   symlink. Do not remove that symlink unless all retained-evidence references
+   and helper defaults are updated together.
+9. Optional host cleanup: `/usr/local/sbin/continuum-refresh-hostctl` was only
+   a checksum-pinned bootstrap helper for refreshing
+   `/usr/local/bin/continuum-hostctl`. After confirming no active sudoers rule
+   depends on it, an operator can remove it to avoid future confusion. Agents
+   should not remove it through broad sudo; it is outside the approved
+   `continuum-hostctl`/`run-continuum-smoke` command boundary.
 
-`P-QEMU-06` remains unclaimed. The next useful action is to relocate/prune
-retained smoke state, rerun `qemu_kubeedge_image_parity`, and then inspect any
-remaining application-phase failure with the retained debug wrapper.
+`P-QEMU-06` remains unclaimed. The next useful action is to rerun
+`qemu_kubeedge_image_parity` now that retained smoke state is on `/mnt/sdc`,
+and then inspect any remaining application-phase failure with the retained
+debug wrapper.
 
 ## Current Certified Scope
 

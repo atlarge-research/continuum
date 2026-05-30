@@ -163,6 +163,14 @@ and then installing the generated file with `/usr/bin/install` and
 If `setup_agent_host.sh` changes, the wrapper must fail until an operator
 reviews the change and updates the pinned hash. That is intentional.
 
+After the refresh has been applied and `/usr/local/bin/continuum-hostctl`
+contains the required stable verbs, `/usr/local/sbin/continuum-refresh-hostctl`
+is optional bootstrap machinery rather than part of the normal agent workflow.
+If the host no longer needs that refresh path, remove both the sudoers entry for
+the refresh wrapper and the wrapper file itself from an operator shell. Agents
+should keep using the stable `continuum-hostctl` verbs and should not request
+broad sudo solely to delete bootstrap files.
+
 ## 5. Template
 
 Use this as a starting point for similar one-command refresh wrappers:
@@ -354,6 +362,11 @@ sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-scrip
 ```
 
 Do not sudo the repo script directly.
+
+After a successful refresh, this wrapper is not required for day-to-day smoke
+execution. Prefer removing stale refresh wrappers and their sudoers entries
+from an operator shell once the installed `continuum-hostctl` has the required
+stable verbs.
 
 ## Diagnostics
 
