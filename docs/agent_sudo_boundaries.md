@@ -171,6 +171,13 @@ the refresh wrapper and the wrapper file itself from an operator shell. Agents
 should keep using the stable `continuum-hostctl` verbs and should not request
 broad sudo solely to delete bootstrap files.
 
+On the current certification host, the refresh-specific files are:
+
+```text
+/usr/local/sbin/continuum-refresh-hostctl
+/etc/sudoers.d/continuum-hostctl-refresh
+```
+
 ## 5. Template
 
 Use this as a starting point for similar one-command refresh wrappers:

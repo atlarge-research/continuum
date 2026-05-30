@@ -122,9 +122,11 @@ Post-M1 parity progress after this checkpoint:
 9. Optional host cleanup: `/usr/local/sbin/continuum-refresh-hostctl` was only
    a checksum-pinned bootstrap helper for refreshing
    `/usr/local/bin/continuum-hostctl`. After confirming no active sudoers rule
-   depends on it, an operator can remove it to avoid future confusion. Agents
-   should not remove it through broad sudo; it is outside the approved
-   `continuum-hostctl`/`run-continuum-smoke` command boundary.
+   depends on it, an operator can remove
+   `/usr/local/sbin/continuum-refresh-hostctl` and
+   `/etc/sudoers.d/continuum-hostctl-refresh` to avoid future confusion. Agents
+   should not remove those files through broad sudo; they are outside the
+   approved `continuum-hostctl`/`run-continuum-smoke` command boundary.
 
 `P-QEMU-06` remains unclaimed. The next useful action is to rerun
 `qemu_kubeedge_image_parity` now that retained smoke state is on `/mnt/sdc`,
