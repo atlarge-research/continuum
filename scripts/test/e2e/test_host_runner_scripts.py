@@ -137,7 +137,10 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('install-wrapper)', result.stdout)
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-05-24-prime-registry-cache', result.stdout)
+        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-05-30-wrapper-base-root', result.stdout)
+        self.assertIn('validate_smoke_base_root()', result.stdout)
+        self.assertIn('prepare_base_root_path()', result.stdout)
+        self.assertIn('INSTALLED_WRAPPER_BASE_ROOT=', result.stdout)
         self.assertIn('verify_hostctl_interface()', result.stdout)
         self.assertIn('Installed maintenance helper is stale', result.stdout)
         self.assertIn('scripts/test/prime_local_registry_cache.py', result.stdout)
@@ -202,7 +205,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-05-24-prime-registry-cache",
+            "2026-05-30-wrapper-base-root",
             result.stderr,
         )
 
@@ -213,7 +216,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-05-24-prime-registry-cache\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-05-30-wrapper-base-root\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -252,7 +255,12 @@ class HostRunnerScriptTests(unittest.TestCase):
                 "if [ \"$1\" = \"-u\" ]; then\n"
                 "  shift\n"
                 "  shift\n"
-                "  if [ \"$1\" = \"test\" ] && [ \"$2\" = \"-w\" ]; then exit 1; fi\n"
+                "  if [ \"$1\" = \"test\" ] && [ \"$2\" = \"-w\" ]; then\n"
+                "    case \"$3\" in\n"
+                "      */continuum.py) exit 1 ;;\n"
+                "      *) exit 0 ;;\n"
+                "    esac\n"
+                "  fi\n"
                 "  exit 0\n"
                 "fi\n"
                 "exec \"$@\"\n",
@@ -273,15 +281,18 @@ class HostRunnerScriptTests(unittest.TestCase):
                 encoding="utf-8",
             )
             fake_wrapper = temp_root / "run-continuum-smoke"
+            wrapper_base_root = temp_root / "runner-home" / "continuum_smoke"
+            wrapper_base_root.mkdir(parents=True)
             fake_wrapper.write_text(
                 f"#!/bin/sh\nREPO_ROOT={dedicated_repo}\n"
+                f"BASE_ROOT={wrapper_base_root}\n"
                 "# scripts/test/run_smoke_host.sh\n",
                 encoding="utf-8",
             )
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-05-24-prime-registry-cache\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-05-30-wrapper-base-root\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",

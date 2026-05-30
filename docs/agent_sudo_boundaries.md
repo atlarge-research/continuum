@@ -98,6 +98,7 @@ The host-helper subcommands intended for agent use are the ones exposed by:
 sudo -n /usr/local/bin/continuum-hostctl show-config
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
 sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
 sudo -n /usr/local/bin/continuum-hostctl verify
 sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite <suite>
 ```

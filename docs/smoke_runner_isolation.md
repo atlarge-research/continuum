@@ -416,18 +416,16 @@ Recommended retention policy:
 5. move `SMOKE_BASE_ROOT` to a large disk for sustained parity certification.
 
 To move retained smoke state to a larger disk such as `/mnt/sdc`, prepare the
-target as root/operator work and regenerate the installed helper/wrapper with
-the same `SMOKE_BASE_ROOT` value:
+target as root/operator work and regenerate the installed wrapper with the new
+base root. Existing retained state migration is an operator action; wrapper
+installation and verification stay inside the narrow `continuum-hostctl`
+surface:
 
 ```bash
 sudo install -d -o continuum-smoke -g continuum-smoke -m 0755 /mnt/sdc/continuum_smoke
 sudo rsync -a /home/continuum-smoke/continuum_smoke/ /mnt/sdc/continuum_smoke/
 sudo chown -R continuum-smoke:continuum-smoke /mnt/sdc/continuum_smoke
-sudo env SMOKE_BASE_ROOT=/mnt/sdc/continuum_smoke \
-  sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh prepare-base-root
-sudo env SMOKE_BASE_ROOT=/mnt/sdc/continuum_smoke \
-  sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh install-hostctl
-sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
 sudo -n /usr/local/bin/continuum-hostctl verify
 ```
 

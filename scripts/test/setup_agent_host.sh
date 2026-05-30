@@ -20,7 +20,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-05-24-prime-registry-cache"
+HOSTCTL_INTERFACE_VERSION="2026-05-30-wrapper-base-root"
 
 usage() {
   cat <<EOF
@@ -43,7 +43,7 @@ Compatibility commands:
   $0 prepare-base-root
   $0 install-host-prereqs
   $0 create-venv [dedicated|live]
-  $0 install-wrapper [dedicated|live]
+  $0 install-wrapper [dedicated|live] [absolute/path/to/continuum_smoke]
   $0 install-sudoers
   $0 all-live
   $0 all-dedicated
@@ -121,9 +121,35 @@ repo_root_for_mode() {
   esac
 }
 
+validate_smoke_base_root() {
+  path=$1
+  case "$path" in
+    /*)
+      ;;
+    *)
+      log "Smoke base root must be an absolute path: $path" >&2
+      exit 2
+      ;;
+  esac
+
+  case "$path" in
+    /|/home|/mnt|*..*|*//*)
+      log "Refusing unsafe smoke base root: $path" >&2
+      exit 2
+      ;;
+  esac
+
+  if [ "$(basename "$path")" != "continuum_smoke" ]; then
+    log "Smoke base root must end in continuum_smoke: $path" >&2
+    exit 2
+  fi
+}
+
 emit_wrapper_script() {
   wrapper_repo_root=$1
   wrapper_mode=$2
+  wrapper_base_root=${3:-$SMOKE_BASE_ROOT}
+  validate_smoke_base_root "$wrapper_base_root"
   cat <<EOF
 #!/bin/sh
 set -eu
@@ -132,7 +158,7 @@ umask 022
 REPO_ROOT=$wrapper_repo_root
 HOSTCTL_PATH=$HOSTCTL_PATH
 RUNNER_HOME=$RUNNER_HOME
-BASE_ROOT=$SMOKE_BASE_ROOT
+BASE_ROOT=$wrapper_base_root
 PYTHON_BIN=$VENV_ROOT/bin/python3
 ANSIBLE_PLAYBOOK_BIN=$VENV_ROOT/bin/ansible-playbook
 LIBVIRT_URI=$LIBVIRT_URI
@@ -186,10 +212,11 @@ EOF
 write_wrapper() {
   wrapper_repo_root=$1
   wrapper_mode=$2
+  wrapper_base_root=${3:-$SMOKE_BASE_ROOT}
 
   run_root install -d -m 0755 "$(dirname "$INSTALL_PATH")"
   tmp_wrapper=$(mktemp)
-  emit_wrapper_script "$wrapper_repo_root" "$wrapper_mode" >"$tmp_wrapper"
+  emit_wrapper_script "$wrapper_repo_root" "$wrapper_mode" "$wrapper_base_root" >"$tmp_wrapper"
   run_root install -m 0755 "$tmp_wrapper" "$INSTALL_PATH"
   run_root chown root:root "$INSTALL_PATH"
   rm -f "$tmp_wrapper"
@@ -222,7 +249,7 @@ usage() {
 Usage:
   \$0 show-config
   \$0 sync-repo
-  \$0 install-wrapper [dedicated|live]
+  \$0 install-wrapper [dedicated|live] [absolute/path/to/continuum_smoke]
   \$0 verify [dedicated|live]
   \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
   \$0 print-agent-command [scenario]
@@ -265,9 +292,46 @@ repo_root_for_mode() {
   esac
 }
 
+validate_smoke_base_root() {
+  path=\$1
+  case "\$path" in
+    /*)
+      ;;
+    *)
+      log "Smoke base root must be an absolute path: \$path" >&2
+      exit 2
+      ;;
+  esac
+
+  case "\$path" in
+    /|/home|/mnt|*..*|*//*)
+      log "Refusing unsafe smoke base root: \$path" >&2
+      exit 2
+      ;;
+  esac
+
+  if [ "\$(basename "\$path")" != "continuum_smoke" ]; then
+    log "Smoke base root must end in continuum_smoke: \$path" >&2
+    exit 2
+  fi
+}
+
+prepare_base_root_path() {
+  target_base_root=\$1
+  validate_smoke_base_root "\$target_base_root"
+  install -d -o "\$RUNNER_USER" -g "\$RUNNER_USER" -m 0755 "\$target_base_root"
+  if ! runner_exec test -w "\$target_base_root"; then
+    log "Smoke base root is not writable by \$RUNNER_USER: \$target_base_root" >&2
+    exit 1
+  fi
+  log "Prepared smoke base root at \$target_base_root"
+}
+
 write_wrapper() {
   wrapper_repo_root=\$1
   wrapper_mode=\$2
+  wrapper_base_root=\${3:-\$SMOKE_BASE_ROOT}
+  validate_smoke_base_root "\$wrapper_base_root"
 
   install -d -m 0755 "\$(dirname "\$INSTALL_PATH")"
   tmp_wrapper=\$(mktemp)
@@ -279,7 +343,7 @@ umask 022
 REPO_ROOT=\$wrapper_repo_root
 HOSTCTL_PATH=\$HOSTCTL_PATH
 RUNNER_HOME=\$RUNNER_HOME
-BASE_ROOT=\$SMOKE_BASE_ROOT
+BASE_ROOT=\$wrapper_base_root
 PYTHON_BIN=\$VENV_ROOT/bin/python3
 ANSIBLE_PLAYBOOK_BIN=\$VENV_ROOT/bin/ansible-playbook
 LIBVIRT_URI=\$LIBVIRT_URI
@@ -388,6 +452,13 @@ verify_wrapper_target() {
 
   if ! grep -q 'scripts/test/run_smoke_host.sh' "\$INSTALL_PATH"; then
     log "Installed wrapper is not using the canonical repo smoke runner script" >&2
+    exit 1
+  fi
+
+  wrapper_base_root=\$(awk -F= '/^BASE_ROOT=/{print \$2; exit}' "\$INSTALL_PATH")
+  validate_smoke_base_root "\$wrapper_base_root"
+  if ! runner_exec test -w "\$wrapper_base_root"; then
+    log "Installed wrapper smoke base root is not writable by \$RUNNER_USER: \$wrapper_base_root" >&2
     exit 1
   fi
 }
@@ -560,6 +631,13 @@ EOF_SHOW
   else
     printf 'DEDICATED_SYNC_MARKER_STATUS=unreadable\\n'
   fi
+
+  if [ -r "\$INSTALL_PATH" ]; then
+    wrapper_base_root=\$(awk -F= '/^BASE_ROOT=/{print \$2; exit}' "\$INSTALL_PATH")
+    if [ -n "\$wrapper_base_root" ]; then
+      printf 'INSTALLED_WRAPPER_BASE_ROOT=%s\\n' "\$wrapper_base_root"
+    fi
+  fi
 }
 
 if [ "\$(id -u)" -ne 0 ]; then
@@ -577,7 +655,10 @@ case "\$cmd" in
     sync_dedicated_repo
     ;;
   install-wrapper)
-    write_wrapper "\$(repo_root_for_mode "\${2:-dedicated}")" "\${2:-dedicated}"
+    mode_arg="\${2:-dedicated}"
+    target_base_root="\${3:-\$SMOKE_BASE_ROOT}"
+    prepare_base_root_path "\$target_base_root"
+    write_wrapper "\$(repo_root_for_mode "\$mode_arg")" "\$mode_arg" "\$target_base_root"
     ;;
   verify)
     verify "\${2:-dedicated}"
@@ -683,8 +764,18 @@ sync_dedicated_repo() {
 }
 
 prepare_base_root() {
-  run_root install -d -o "$RUNNER_USER" -g "$RUNNER_USER" -m 0755 "$SMOKE_BASE_ROOT"
-  log "Prepared smoke base root at $SMOKE_BASE_ROOT"
+  prepare_base_root_path "$SMOKE_BASE_ROOT"
+}
+
+prepare_base_root_path() {
+  target_base_root=$1
+  validate_smoke_base_root "$target_base_root"
+  run_root install -d -o "$RUNNER_USER" -g "$RUNNER_USER" -m 0755 "$target_base_root"
+  if ! runner_exec test -w "$target_base_root"; then
+    log "Smoke base root is not writable by $RUNNER_USER: $target_base_root" >&2
+    exit 1
+  fi
+  log "Prepared smoke base root at $target_base_root"
 }
 
 install_host_prereqs() {
@@ -712,8 +803,10 @@ create_venv() {
 
 install_wrapper() {
   mode_arg="${1:-$MODE}"
-  write_wrapper "$(repo_root_for_mode "$mode_arg")" "$mode_arg"
-  log "Installed wrapper at $INSTALL_PATH for $(repo_root_for_mode "$mode_arg")"
+  target_base_root="${2:-$SMOKE_BASE_ROOT}"
+  prepare_base_root_path "$target_base_root"
+  write_wrapper "$(repo_root_for_mode "$mode_arg")" "$mode_arg" "$target_base_root"
+  log "Installed wrapper at $INSTALL_PATH for $(repo_root_for_mode "$mode_arg") using $target_base_root"
 }
 
 install_sudoers() {
@@ -751,6 +844,13 @@ verify_wrapper_target() {
 
   if ! grep -q 'scripts/test/run_smoke_host.sh' "$INSTALL_PATH"; then
     log "Installed wrapper is not using the canonical repo smoke runner script" >&2
+    exit 1
+  fi
+
+  wrapper_base_root=$(awk -F= '/^BASE_ROOT=/{print $2; exit}' "$INSTALL_PATH")
+  validate_smoke_base_root "$wrapper_base_root"
+  if ! runner_exec test -w "$wrapper_base_root"; then
+    log "Installed wrapper smoke base root is not writable by $RUNNER_USER: $wrapper_base_root" >&2
     exit 1
   fi
 }
@@ -991,6 +1091,13 @@ EOF
   else
     printf 'DEDICATED_SYNC_MARKER_STATUS=unreadable\n'
   fi
+
+  if [ -r "$INSTALL_PATH" ]; then
+    wrapper_base_root=$(awk -F= '/^BASE_ROOT=/{print $2; exit}' "$INSTALL_PATH")
+    if [ -n "$wrapper_base_root" ]; then
+      printf 'INSTALLED_WRAPPER_BASE_ROOT=%s\n' "$wrapper_base_root"
+    fi
+  fi
 }
 
 cmd="${1:-}"
@@ -1044,7 +1151,7 @@ case "$cmd" in
     create_venv "${2:-$MODE}"
     ;;
   install-wrapper)
-    install_wrapper "${2:-$MODE}"
+    install_wrapper "${2:-$MODE}" "${3:-$SMOKE_BASE_ROOT}"
     ;;
   install-sudoers)
     install_sudoers
