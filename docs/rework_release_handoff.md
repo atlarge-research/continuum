@@ -108,12 +108,25 @@ Post-M1 parity progress after this checkpoint:
    to save its JSON summary with `OSError: [Errno 28] No space left on device`.
 6. Latest retained log:
    `/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/2026-05-29_23:56:00_edge_kubeedge_classify-images.log`.
-7. Current host storage evidence from
-   `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke storage-report`
-   shows 74G retained smoke state under `/home/continuum-smoke/continuum_smoke`;
-   `/` is still 98% full while `/mnt/sdc` has about 2.1T free. Move
-   `SMOKE_BASE_ROOT` to `/mnt/sdc/continuum_smoke` or prune superseded scenario
-   roots before rerunning full VM-backed application evidence.
+7. Current host storage evidence from the 2026-05-30 resume shows the installed
+   smoke wrapper already points at `/mnt/sdc/continuum_smoke`, but the old
+   retained root `/home/continuum-smoke/continuum_smoke` is still a real
+   directory on `/` and still holds about 74G of retained state. `/` is still
+   98% full while `/mnt/sdc` has about 2.1T free. Do not rerun full VM-backed
+   application evidence until this is fixed.
+8. The intended fix is to refresh the root-owned maintenance helper, then run:
+   `sudo -n /usr/local/bin/continuum-hostctl relocate-smoke-root
+   /mnt/sdc/continuum_smoke --replace-source-with-symlink`, followed by
+   `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+   /mnt/sdc/continuum_smoke` and `sudo -n /usr/local/bin/continuum-hostctl
+   verify`. After this, `/home/continuum-smoke/continuum_smoke` should be a
+   symlink to `/mnt/sdc/continuum_smoke`.
+9. In the current agent session, every `sudo -n ...` command fails before
+   sudoers evaluation because `/` is mounted `ro,nosuid,nodev`; `stat` reports
+   `/usr/bin/sudo` as mode `4755`, but owned by `nobody:nogroup` inside the
+   agent namespace. Treat this as an execution-environment blocker, not as a
+   Continuum helper or sudoers-design failure. See
+   `docs/agent_sudo_boundaries.md` for the diagnostic path.
 
 `P-QEMU-06` remains unclaimed. The next useful action is to relocate/prune
 retained smoke state, rerun `qemu_kubeedge_image_parity`, and then inspect any

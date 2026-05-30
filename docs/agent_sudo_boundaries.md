@@ -361,10 +361,31 @@ If `.git` or sudo behavior differs between the user's shell and the agent:
 
 ```bash
 findmnt -T /home/matthijs/continuum/.git -o TARGET,SOURCE,FSTYPE,OPTIONS
+mount | rg ' on / '
 git status --short
 stat -c '%u %g %a %A %n' /usr/bin/sudo
 ```
 
 Git needs `.git` writes for staging/committing. If `git add` works, no Git
 permission fix is needed even if mount diagnostics are confusing.
+
+If `sudo -n ...` fails before sudoers are evaluated with:
+
+```text
+sudo: /usr/bin/sudo must be owned by uid 0 and have the setuid bit set
+```
+
+check the agent mount namespace before changing sudoers:
+
+```bash
+mount | rg ' on / '
+stat -c '%U %G %a %A %n' /usr/bin/sudo
+```
+
+When `/` is mounted with `nosuid` inside the agent session, the setuid bit on
+`/usr/bin/sudo` is deliberately ignored. That is a session or harness boundary,
+not evidence that the narrow sudoers rule is wrong. In that state, either run
+the approved root-wrapper command from an operator shell that does not have
+`nosuid`, or restart the agent session with a mount namespace that permits
+setuid sudo. Do not broaden sudoers to compensate for a `nosuid` mount.
 ````
