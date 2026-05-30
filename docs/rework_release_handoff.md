@@ -114,7 +114,13 @@ Post-M1 parity progress after this checkpoint:
    directory on `/` and still holds about 74G of retained state. `/` is still
    98% full while `/mnt/sdc` has about 2.1T free. Do not rerun full VM-backed
    application evidence until this is fixed.
-8. The intended fix is to refresh the root-owned maintenance helper, then run:
+8. The current `/usr/local/sbin/continuum-refresh-hostctl` wrapper is still
+   checksum-pinned to the previous setup script hash
+   `d45c3d6105645b7fda0fee67b2efb9c03d346386a1248f3d5fa0ce6b8abada07`.
+   After reviewing the current `scripts/test/setup_agent_host.sh`, the operator
+   should update the pinned hash to
+   `14a79d74b7b0e8e6c24cce1710d2b32226bc0543a0320d00c4a3c3fa46e26500`,
+   refresh the root-owned maintenance helper, then run:
    `sudo -n /usr/local/bin/continuum-hostctl relocate-smoke-root
    /mnt/sdc/continuum_smoke --replace-source-with-symlink`, followed by
    `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
