@@ -422,17 +422,21 @@ installation and verification stay inside the narrow `continuum-hostctl`
 surface:
 
 ```bash
-sudo install -d -o continuum-smoke -g continuum-smoke -m 0755 /mnt/sdc/continuum_smoke
-sudo rsync -a /home/continuum-smoke/continuum_smoke/ /mnt/sdc/continuum_smoke/
-sudo chown -R continuum-smoke:continuum-smoke /mnt/sdc/continuum_smoke
+sudo -n /usr/local/bin/continuum-hostctl \
+  relocate-smoke-root /mnt/sdc/continuum_smoke --replace-source-with-symlink
 sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
 sudo -n /usr/local/bin/continuum-hostctl verify
 ```
 
+`relocate-smoke-root` copies retained state to the target, replaces the old
+`/home/continuum-smoke/continuum_smoke` directory with a symlink after the copy
+has succeeded, and only then removes the old root-backed copy. The confirmation
+flag is required because this is the step that frees root filesystem space.
+
 After verifying the relocated runner, the old
-`/home/continuum-smoke/continuum_smoke` tree can be archived or removed by the
-operator. Do not leave agents with broad sudo access to remove arbitrary host
-paths.
+`/home/continuum-smoke/continuum_smoke` evidence paths should still resolve
+through the symlink. Do not leave agents with broad sudo access to remove
+arbitrary host paths.
 
 ## 8. Host Requirements
 

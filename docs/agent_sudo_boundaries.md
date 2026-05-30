@@ -99,6 +99,7 @@ sudo -n /usr/local/bin/continuum-hostctl show-config
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
 sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
 sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
+sudo -n /usr/local/bin/continuum-hostctl relocate-smoke-root /mnt/sdc/continuum_smoke --replace-source-with-symlink
 sudo -n /usr/local/bin/continuum-hostctl verify
 sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite <suite>
 ```

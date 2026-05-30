@@ -20,7 +20,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-05-30-wrapper-base-root"
+HOSTCTL_INTERFACE_VERSION="2026-05-30-relocate-smoke-root"
 
 usage() {
   cat <<EOF
@@ -30,6 +30,7 @@ Usage:
   $0 sync-repo
   $0 verify
   $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
+  $0 relocate-smoke-root absolute/path/to/continuum_smoke --replace-source-with-symlink
   $0 install-hostctl
   $0 print-agent-command [scenario]
   $0 print-hostctl-command [subcommand...]
@@ -252,6 +253,7 @@ Usage:
   \$0 install-wrapper [dedicated|live] [absolute/path/to/continuum_smoke]
   \$0 verify [dedicated|live]
   \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
+  \$0 relocate-smoke-root absolute/path/to/continuum_smoke --replace-source-with-symlink
   \$0 print-agent-command [scenario]
 EOF_HOSTCTL
 }
@@ -325,6 +327,63 @@ prepare_base_root_path() {
     exit 1
   fi
   log "Prepared smoke base root at \$target_base_root"
+}
+
+relocate_smoke_root() {
+  target_base_root=\${1:-}
+  confirmation=\${2:-}
+
+  if [ -z "\$target_base_root" ]; then
+    log "Usage: \$0 relocate-smoke-root absolute/path/to/continuum_smoke --replace-source-with-symlink" >&2
+    exit 2
+  fi
+  if [ "\$confirmation" != "--replace-source-with-symlink" ]; then
+    log "Refusing to relocate smoke root without explicit confirmation." >&2
+    log "Retry with: \$0 relocate-smoke-root \$target_base_root --replace-source-with-symlink" >&2
+    exit 2
+  fi
+
+  validate_smoke_base_root "\$target_base_root"
+  if [ "\$target_base_root" = "\$SMOKE_BASE_ROOT" ]; then
+    log "Target smoke base root already matches configured source: \$target_base_root"
+    exit 0
+  fi
+
+  require_cmd rsync
+  prepare_base_root_path "\$target_base_root"
+
+  if [ -L "\$SMOKE_BASE_ROOT" ]; then
+    current_target=\$(readlink "\$SMOKE_BASE_ROOT")
+    if [ "\$current_target" = "\$target_base_root" ]; then
+      log "Smoke base root is already relocated to \$target_base_root"
+      exit 0
+    fi
+    log "Refusing to replace existing smoke-root symlink \$SMOKE_BASE_ROOT -> \$current_target" >&2
+    exit 1
+  fi
+
+  if [ -d "\$SMOKE_BASE_ROOT" ]; then
+    backup_path="\$SMOKE_BASE_ROOT.relocated-\$(date -u +%Y%m%dT%H%M%SZ)"
+    rsync -a "\$SMOKE_BASE_ROOT"/ "\$target_base_root"/
+    mv "\$SMOKE_BASE_ROOT" "\$backup_path"
+    ln -s "\$target_base_root" "\$SMOKE_BASE_ROOT"
+    chown -h "\$RUNNER_USER:\$RUNNER_USER" "\$SMOKE_BASE_ROOT" 2>/dev/null || true
+    if ! runner_exec test -w "\$SMOKE_BASE_ROOT"; then
+      log "Relocated smoke root symlink is not writable by \$RUNNER_USER: \$SMOKE_BASE_ROOT" >&2
+      exit 1
+    fi
+    rm -rf "\$backup_path"
+    log "Relocated smoke root from \$SMOKE_BASE_ROOT to \$target_base_root"
+    log "Legacy path now resolves through symlink: \$SMOKE_BASE_ROOT"
+  elif [ -e "\$SMOKE_BASE_ROOT" ]; then
+    log "Refusing to relocate non-directory smoke root: \$SMOKE_BASE_ROOT" >&2
+    exit 1
+  else
+    install -d -o "\$RUNNER_USER" -g "\$RUNNER_USER" -m 0755 "\$(dirname "\$SMOKE_BASE_ROOT")"
+    ln -s "\$target_base_root" "\$SMOKE_BASE_ROOT"
+    chown -h "\$RUNNER_USER:\$RUNNER_USER" "\$SMOKE_BASE_ROOT" 2>/dev/null || true
+    log "Created smoke root symlink: \$SMOKE_BASE_ROOT -> \$target_base_root"
+  fi
 }
 
 write_wrapper() {
@@ -667,6 +726,10 @@ case "\$cmd" in
     shift
     prime_registry_cache "\$@"
     ;;
+  relocate-smoke-root)
+    shift
+    relocate_smoke_root "\$@"
+    ;;
   print-agent-command)
     print_agent_command "\${2:-benchmark_k8s_resume}"
     ;;
@@ -776,6 +839,63 @@ prepare_base_root_path() {
     exit 1
   fi
   log "Prepared smoke base root at $target_base_root"
+}
+
+relocate_smoke_root() {
+  target_base_root=${1:-}
+  confirmation=${2:-}
+
+  if [ -z "$target_base_root" ]; then
+    log "Usage: $0 relocate-smoke-root absolute/path/to/continuum_smoke --replace-source-with-symlink" >&2
+    exit 2
+  fi
+  if [ "$confirmation" != "--replace-source-with-symlink" ]; then
+    log "Refusing to relocate smoke root without explicit confirmation." >&2
+    log "Retry with: $0 relocate-smoke-root $target_base_root --replace-source-with-symlink" >&2
+    exit 2
+  fi
+
+  validate_smoke_base_root "$target_base_root"
+  if [ "$target_base_root" = "$SMOKE_BASE_ROOT" ]; then
+    log "Target smoke base root already matches configured source: $target_base_root"
+    exit 0
+  fi
+
+  require_cmd rsync
+  prepare_base_root_path "$target_base_root"
+
+  if [ -L "$SMOKE_BASE_ROOT" ]; then
+    current_target=$(readlink "$SMOKE_BASE_ROOT")
+    if [ "$current_target" = "$target_base_root" ]; then
+      log "Smoke base root is already relocated to $target_base_root"
+      exit 0
+    fi
+    log "Refusing to replace existing smoke-root symlink $SMOKE_BASE_ROOT -> $current_target" >&2
+    exit 1
+  fi
+
+  if [ -d "$SMOKE_BASE_ROOT" ]; then
+    backup_path="$SMOKE_BASE_ROOT.relocated-$(date -u +%Y%m%dT%H%M%SZ)"
+    run_root rsync -a "$SMOKE_BASE_ROOT"/ "$target_base_root"/
+    run_root mv "$SMOKE_BASE_ROOT" "$backup_path"
+    run_root ln -s "$target_base_root" "$SMOKE_BASE_ROOT"
+    run_root chown -h "$RUNNER_USER:$RUNNER_USER" "$SMOKE_BASE_ROOT" 2>/dev/null || true
+    if ! runner_exec test -w "$SMOKE_BASE_ROOT"; then
+      log "Relocated smoke root symlink is not writable by $RUNNER_USER: $SMOKE_BASE_ROOT" >&2
+      exit 1
+    fi
+    run_root rm -rf "$backup_path"
+    log "Relocated smoke root from $SMOKE_BASE_ROOT to $target_base_root"
+    log "Legacy path now resolves through symlink: $SMOKE_BASE_ROOT"
+  elif [ -e "$SMOKE_BASE_ROOT" ]; then
+    log "Refusing to relocate non-directory smoke root: $SMOKE_BASE_ROOT" >&2
+    exit 1
+  else
+    run_root install -d -o "$RUNNER_USER" -g "$RUNNER_USER" -m 0755 "$(dirname "$SMOKE_BASE_ROOT")"
+    run_root ln -s "$target_base_root" "$SMOKE_BASE_ROOT"
+    run_root chown -h "$RUNNER_USER:$RUNNER_USER" "$SMOKE_BASE_ROOT" 2>/dev/null || true
+    log "Created smoke root symlink: $SMOKE_BASE_ROOT -> $target_base_root"
+  fi
 }
 
 install_host_prereqs() {
@@ -1032,7 +1152,7 @@ print_agent_command() {
 
 is_installed_hostctl_command() {
   case "$1" in
-    show-config|sync-repo|install-wrapper|verify|prime-registry-cache|print-agent-command)
+    show-config|sync-repo|install-wrapper|verify|prime-registry-cache|relocate-smoke-root|print-agent-command)
       return 0
       ;;
     *)
@@ -1118,6 +1238,10 @@ case "$cmd" in
   prime-registry-cache)
     shift
     prime_registry_cache "$@"
+    ;;
+  relocate-smoke-root)
+    shift
+    relocate_smoke_root "$@"
     ;;
   install-hostctl)
     install_hostctl

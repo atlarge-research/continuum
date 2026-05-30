@@ -137,9 +137,11 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('install-wrapper)', result.stdout)
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-05-30-wrapper-base-root', result.stdout)
+        self.assertIn('relocate-smoke-root)', result.stdout)
+        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-05-30-relocate-smoke-root', result.stdout)
         self.assertIn('validate_smoke_base_root()', result.stdout)
         self.assertIn('prepare_base_root_path()', result.stdout)
+        self.assertIn('relocate_smoke_root()', result.stdout)
         self.assertIn('INSTALLED_WRAPPER_BASE_ROOT=', result.stdout)
         self.assertIn('verify_hostctl_interface()', result.stdout)
         self.assertIn('Installed maintenance helper is stale', result.stdout)
@@ -158,6 +160,22 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertEqual(
             result.stdout,
             "sudo -n /usr/local/bin/continuum-hostctl verify\n",
+        )
+
+    def test_print_hostctl_command_formats_relocate_smoke_root(self):
+        result = self._run_setup_script(
+            "print-hostctl-command",
+            "relocate-smoke-root",
+            "/mnt/sdc/continuum_smoke",
+            "--replace-source-with-symlink",
+            extra_env={"HOSTCTL_PATH": "/usr/local/bin/continuum-hostctl"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "sudo -n /usr/local/bin/continuum-hostctl relocate-smoke-root "
+            "/mnt/sdc/continuum_smoke --replace-source-with-symlink\n",
         )
 
     def test_print_hostctl_command_rejects_setup_only_command(self):
@@ -205,7 +223,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-05-30-wrapper-base-root",
+            "2026-05-30-relocate-smoke-root",
             result.stderr,
         )
 
@@ -216,7 +234,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-05-30-wrapper-base-root\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-05-30-relocate-smoke-root\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -292,7 +310,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-05-30-wrapper-base-root\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-05-30-relocate-smoke-root\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",
