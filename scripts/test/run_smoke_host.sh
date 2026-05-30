@@ -28,6 +28,100 @@ RUN_MODE="config"
 REMOTE_TMP_TAG="${CONTINUUM_SMOKE_REMOTE_TMP_TAG:-$(basename -- "${HOME:-/home/continuum-smoke}")}"
 DEBUG_PLAYBOOK=""
 
+retained_scenario_path() {
+  case "$1" in
+    infra_one_vm|software_k8s_two_vm|network_netperf_two_vm|benchmark_k8s_resume|network_validation|qemu_infra_parity|qemu_k8s_nobench_parity|qemu_k8s_image_parity|qemu_kubeedge_software_parity|qemu_kubeedge_image_parity|qemu_mist_software_parity|qemu_mist_image_parity|qemu_endpoint_software_parity|qemu_endpoint_image_parity|qemu_openfaas_software_parity|qemu_openfaas_image_parity|prereqs)
+      printf '%s/%s\n' "$BASE_ROOT" "$1"
+      ;;
+    benchmark_k8s_resume_infra|benchmark_k8s_resume_software|benchmark_k8s_resume_application)
+      printf '%s/benchmark_k8s_resume\n' "$BASE_ROOT"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+print_retained_scenarios() {
+  cat <<EOF
+infra_one_vm
+software_k8s_two_vm
+network_netperf_two_vm
+benchmark_k8s_resume
+network_validation
+qemu_infra_parity
+qemu_k8s_nobench_parity
+qemu_k8s_image_parity
+qemu_kubeedge_software_parity
+qemu_kubeedge_image_parity
+qemu_mist_software_parity
+qemu_mist_image_parity
+qemu_endpoint_software_parity
+qemu_endpoint_image_parity
+qemu_openfaas_software_parity
+qemu_openfaas_image_parity
+prereqs
+EOF
+}
+
+storage_report() {
+  printf 'SMOKE_BASE_ROOT=%s\n' "$BASE_ROOT"
+  if [ ! -d "$BASE_ROOT" ]; then
+    echo "No retained smoke state found."
+    return 0
+  fi
+
+  echo "Retained scenario sizes:"
+  find "$BASE_ROOT" -mindepth 1 -maxdepth 1 -type d -exec du -sh {} + | sort -h
+  echo "Total retained smoke state:"
+  du -sh "$BASE_ROOT"
+}
+
+prune_scenario() {
+  scenario="${1:-}"
+  confirmation="${2:-}"
+
+  if [ -z "$scenario" ]; then
+    echo "Usage: $0 prune-scenario <scenario> --yes-delete-retained-state" >&2
+    echo "Known retained scenarios:" >&2
+    print_retained_scenarios >&2
+    return 2
+  fi
+
+  if ! scenario_path=$(retained_scenario_path "$scenario"); then
+    echo "Unsupported retained scenario for pruning: $scenario" >&2
+    echo "Known retained scenarios:" >&2
+    print_retained_scenarios >&2
+    return 2
+  fi
+
+  case "$scenario_path" in
+    "$BASE_ROOT"/*)
+      ;;
+    *)
+      echo "Refusing to prune path outside smoke base root: $scenario_path" >&2
+      return 1
+      ;;
+  esac
+
+  if [ "$confirmation" != "--yes-delete-retained-state" ]; then
+    echo "Refusing to delete retained state without explicit confirmation." >&2
+    echo "Would delete: $scenario_path" >&2
+    echo "Retry with: $0 prune-scenario $scenario --yes-delete-retained-state" >&2
+    return 2
+  fi
+
+  if [ ! -e "$scenario_path" ]; then
+    echo "No retained state exists for scenario: $scenario"
+    echo "Path: $scenario_path"
+    return 0
+  fi
+
+  rm -rf "$scenario_path"
+  echo "Deleted retained state for scenario: $scenario"
+  echo "Path: $scenario_path"
+}
+
 if [ "$SCENARIO" = "debug-playbook" ]; then
   if [ "$#" -lt 3 ]; then
     echo "Usage: $0 debug-playbook <scenario> <playbook> [ansible args...]" >&2
@@ -37,6 +131,17 @@ if [ "$SCENARIO" = "debug-playbook" ]; then
   SCENARIO=$2
   DEBUG_PLAYBOOK=$3
   shift 3
+fi
+
+if [ "$SCENARIO" = "storage-report" ]; then
+  storage_report
+  exit 0
+fi
+
+if [ "$SCENARIO" = "prune-scenario" ]; then
+  shift
+  prune_scenario "$@"
+  exit $?
 fi
 
 if [ ! -x "$PYTHON_BIN" ]; then
@@ -184,7 +289,7 @@ case "$SCENARIO" in
     ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, debug-playbook" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, debug-playbook, storage-report, prune-scenario" >&2
     exit 2
     ;;
 esac

@@ -3259,6 +3259,20 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                 "metadata base_install_fingerprints mismatch",
             )
 
+    def test_common_base_install_hosts_target_only_rebuilt_tiers(self):
+        self.assertEqual(
+            qemu_module._common_base_install_hosts_for_base_names(
+                ["base_cloud_kubeedge_np1", "base_edge_kubeedge_np1"]
+            ),
+            "base_cloud:base_edge",
+        )
+
+    def test_common_base_install_hosts_falls_back_for_legacy_base_names(self):
+        self.assertEqual(
+            qemu_module._common_base_install_hosts_for_base_names(["base0_continuum-smoke"]),
+            "base",
+        )
+
 
 class InfrastructureWorkspacePermissionTests(unittest.TestCase):
     def test_create_keypair_creates_local_keys_without_shell_compound_command(self):

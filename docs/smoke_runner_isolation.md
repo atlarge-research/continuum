@@ -368,10 +368,75 @@ The wrapper contract is:
 9. writes runtime logs, matplotlib state, and test artifacts under
    `<base_path>/.continuum/...`,
 10. runs with `umask 022` so libvirt/QEMU can traverse generated image paths.
-11. `debug-playbook` is for bounded replay only; it should not become a shell
+11. exposes `storage-report` and `prune-scenario` as unprivileged retained-state
+    maintenance commands,
+12. `debug-playbook` is for bounded replay only; it should not become a shell
     escape hatch.
 
-## 7. Host Requirements
+## 7. Retained State And Disk Use
+
+The smoke runner intentionally uses one retained workspace per scenario under
+`SMOKE_BASE_ROOT`, for example:
+
+```text
+/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/
+```
+
+This is useful while debugging failed VM-backed runs because `debug-playbook`
+can reuse the scenario inventory, SSH keys, Ansible paths, logs, state, and VM
+image cache. It should not be treated as permanent archival storage. A retained
+scenario can contain large qcow2 base images, per-run overlay images, cloud-init
+disks, logs, and test-result artifacts.
+
+Use the unprivileged wrapper to inspect retained storage:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke storage-report
+```
+
+Use explicit scenario pruning after evidence has been recorded or a failure has
+been diagnosed:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prune-scenario qemu_kubeedge_image_parity --yes-delete-retained-state
+```
+
+`prune-scenario` only accepts known retained scenario names and only removes the
+selected scenario root below `SMOKE_BASE_ROOT`. It is deliberately implemented
+in `run-continuum-smoke` rather than `continuum-hostctl` so retained-state
+cleanup does not require a root-level delete command.
+
+Recommended retention policy:
+
+1. keep the active failed scenario until the failure is understood,
+2. keep base-image caches for scenarios that are still being iterated,
+3. preserve compact release evidence in docs and test-results artifacts,
+4. prune superseded scenario roots after the evidence is captured,
+5. move `SMOKE_BASE_ROOT` to a large disk for sustained parity certification.
+
+To move retained smoke state to a larger disk such as `/mnt/sdc`, prepare the
+target as root/operator work and regenerate the installed helper/wrapper with
+the same `SMOKE_BASE_ROOT` value:
+
+```bash
+sudo install -d -o continuum-smoke -g continuum-smoke -m 0755 /mnt/sdc/continuum_smoke
+sudo rsync -a /home/continuum-smoke/continuum_smoke/ /mnt/sdc/continuum_smoke/
+sudo chown -R continuum-smoke:continuum-smoke /mnt/sdc/continuum_smoke
+sudo env SMOKE_BASE_ROOT=/mnt/sdc/continuum_smoke \
+  sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh prepare-base-root
+sudo env SMOKE_BASE_ROOT=/mnt/sdc/continuum_smoke \
+  sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh install-hostctl
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl verify
+```
+
+After verifying the relocated runner, the old
+`/home/continuum-smoke/continuum_smoke` tree can be archived or removed by the
+operator. Do not leave agents with broad sudo access to remove arbitrary host
+paths.
+
+## 8. Host Requirements
 
 The dedicated smoke user should have:
 
@@ -388,7 +453,7 @@ The scripted host-prereq step currently installs:
 3. `qemu-utils`
 4. `cloud-image-utils`
 
-## 8. Sudoers Shape
+## 9. Sudoers Shape
 
 If direct login as `continuum-smoke` is not desirable, prefer a narrow wrapper
 rule over broad shell access.
@@ -406,7 +471,7 @@ The important part is not the alias names. The important part is that the
 caller can invoke only the approved runner and maintenance helpers, not an
 arbitrary shell.
 
-## 9. External Allowlisting
+## 10. External Allowlisting
 
 If the surrounding harness supports external-command allowlisting, the allowed
 prefixes should be only:
@@ -417,7 +482,7 @@ prefixes should be only:
 Do not allow broader prefixes such as `/bin/bash`, `python3`, or `sudo` more
 generally.
 
-## 10. Operational Advice
+## 11. Operational Advice
 
 For first real host runs:
 
@@ -429,9 +494,12 @@ For first real host runs:
 6. inspect retained artifacts under
    `/home/continuum-smoke/continuum_smoke/<scenario>/.continuum/`,
 7. keep failed VM state until the failure is understood,
-8. run `sudo -n /usr/local/bin/continuum-hostctl verify` before reruns if the
+8. run the unprivileged `storage-report` command periodically during parity
+   certification,
+9. prune superseded scenario roots after release evidence has been captured,
+10. run `sudo -n /usr/local/bin/continuum-hostctl verify` before reruns if the
    live workspace changed,
-9. resync the dedicated repo before reruns if `verify` reports drift.
+11. resync the dedicated repo before reruns if `verify` reports drift.
 
 For operational reruns:
 

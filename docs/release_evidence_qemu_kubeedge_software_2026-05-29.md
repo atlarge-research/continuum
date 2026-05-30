@@ -72,7 +72,10 @@ This software-only evidence does not certify parent row `P-QEMU-06`.
 The full `qemu_kubeedge_image_parity` suite is ported but not certified. At the
 time this software-only evidence was captured, local-registry application image
 staging still needed Docker daemon access for the `continuum-smoke` user. The
-suite now gates on a primed local registry cache instead; keep full `P-QEMU-06`
-unclaimed until that cache is primed and a full VM-backed application run
+suite now gates on a host-primed local registry cache instead. A later full
+application attempt reached the application phase, then failed under host disk
+pressure while the endpoint publisher image was being pulled and while the test
+runner was saving its JSON summary. Keep full `P-QEMU-06` unclaimed until
+retained smoke state is moved/pruned and a full VM-backed application run
 passes. `P-QEMU-05` remains Docker-gated because it models a forced-prefetch
 row.

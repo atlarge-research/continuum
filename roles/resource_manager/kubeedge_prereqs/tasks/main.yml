@@ -61,6 +61,14 @@
     regexp: "^(.*\\s+swap\\s+.*)$"
     replace: "# \\1"
 
+- name: Include containerd setup role for KubeEdge image pulls
+  ansible.builtin.include_role:
+    name: containerd_setup
+  vars:
+    rm_containerd_setup_registry_ip: "{{ rm_kubeedge_prereqs_registry_ip }}"
+    rm_containerd_setup_config_src: "{{ continuum_repo_root }}/resource_manager/kubernetes/cloud/config.toml"
+  when: rm_kubeedge_prereqs_registry_ip | length > 0
+
 - name: Include docker setup role for KubeEdge nodes
   ansible.builtin.include_role:
     name: docker_setup

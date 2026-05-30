@@ -95,23 +95,29 @@ Post-M1 parity progress after this checkpoint:
 2. Direct registry probes from the agent sandbox cannot reach
    `192.168.1.104:5000`, so use the host helper result as the authoritative
    cache-readiness signal.
-3. A full `qemu_kubeedge_image_parity` wrapper run was attempted from clean VM
-   evidence source commit `67f49fa4f7af3b4f54912dabc8993ac923c8abdd`.
-4. The run reached infrastructure and software phases, skipped remote image
-   prefetch because the local registry cache was ready, then failed in the
-   application phase after 1655.1 seconds.
-5. Result summary:
-   `/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/test_results/test_results_2026-05-29_21-05-38.json`.
-6. Primary failure: `wait_kubernetes_workers_ready()` timed out. Diagnostic
-   pod status showed both image-classification pods stuck in `ContainerCreating`;
-   edge-node `kube-flannel` pods were in `CrashLoopBackOff`, while the
-   cloud-controller flannel pod was running.
-7. Flannel previous logs on both edge nodes reported:
-   `Failed to create SubnetManager: fail to create kubernetes config: invalid configuration: no configuration has been provided`.
+3. Multiple full `qemu_kubeedge_image_parity` wrapper runs were attempted. The
+   earlier retained evidence source commit
+   `67f49fa4f7af3b4f54912dabc8993ac923c8abdd` exposed the edge flannel
+   `CrashLoopBackOff`; follow-up code now injects an explicit flannel
+   kubeconfig and aligns KubeEdge/containerd runtime setup.
+4. The latest post-fix wrapper attempt reached infrastructure, software, and
+   the application phase with KubeEdge joined and flannel past the previous
+   `CrashLoopBackOff`.
+5. The latest run then failed under host disk pressure while endpoint Docker
+   was pulling the image-classification publisher image. The runner also failed
+   to save its JSON summary with `OSError: [Errno 28] No space left on device`.
+6. Latest retained log:
+   `/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/2026-05-29_23:56:00_edge_kubeedge_classify-images.log`.
+7. Current host storage evidence from
+   `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke storage-report`
+   shows 74G retained smoke state under `/home/continuum-smoke/continuum_smoke`;
+   `/` is still 98% full while `/mnt/sdc` has about 2.1T free. Move
+   `SMOKE_BASE_ROOT` to `/mnt/sdc/continuum_smoke` or prune superseded scenario
+   roots before rerunning full VM-backed application evidence.
 
-`P-QEMU-06` remains unclaimed. The next useful action is to diagnose why the
-edge flannel daemonset pods lack working in-cluster Kubernetes configuration in
-the KubeEdge full application topology.
+`P-QEMU-06` remains unclaimed. The next useful action is to relocate/prune
+retained smoke state, rerun `qemu_kubeedge_image_parity`, and then inspect any
+remaining application-phase failure with the retained debug wrapper.
 
 ## Current Certified Scope
 

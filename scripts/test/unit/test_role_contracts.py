@@ -191,6 +191,27 @@ class KubeEdgeRoleTests(unittest.TestCase):
             ["kubelet", "kubeadm", "kubectl"],
         )
 
+    def test_kubeedge_prereqs_configure_containerd_registry_for_edgecore(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        tasks_path = repo_root / "roles/resource_manager/kubeedge_prereqs/tasks/main.yml"
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+
+        containerd_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Include containerd setup role for KubeEdge image pulls"
+        )
+        self.assertEqual(containerd_task["ansible.builtin.include_role"]["name"], "containerd_setup")
+        self.assertEqual(
+            containerd_task["vars"]["rm_containerd_setup_registry_ip"],
+            "{{ rm_kubeedge_prereqs_registry_ip }}",
+        )
+        self.assertEqual(
+            containerd_task["vars"]["rm_containerd_setup_config_src"],
+            "{{ continuum_repo_root }}/resource_manager/kubernetes/cloud/config.toml",
+        )
+        self.assertEqual(containerd_task["when"], "rm_kubeedge_prereqs_registry_ip | length > 0")
+
     def test_kubeedge_cluster_playbook_verifies_edge_readiness(self):
         repo_root = Path(__file__).resolve().parents[3]
         playbook_path = repo_root / "playbooks/resource_manager/kubeedge_cluster.yml"
@@ -218,34 +239,44 @@ class KubeEdgeRoleTests(unittest.TestCase):
         self.assertIn("cloudCore.modules.dynamicController.enable=true", init_command)
         self.assertIn("cloudCore.featureGates.requireAuthorization=true", init_command)
 
-        flannel_env_task = next(
+        flannel_configmap_task = next(
             task
             for task in tasks
             if task.get("name")
-            == "Configure flannel Kubernetes API endpoint for KubeEdge edge pods"
+            == "Write KubeEdge flannel kubeconfig ConfigMap manifest"
         )
-        flannel_env_command = flannel_env_task["ansible.builtin.command"]
-        self.assertIn("kubectl -n kube-flannel set env daemonset/kube-flannel-ds", flannel_env_command)
-        self.assertIn("KUBERNETES_SERVICE_HOST={{ rm_kubeedge_cloudcore_cloud_ip }}", flannel_env_command)
-        self.assertIn("KUBERNETES_SERVICE_PORT=6443", flannel_env_command)
-        self.assertIn("KUBERNETES_MASTER=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443", flannel_env_command)
+        flannel_configmap_content = flannel_configmap_task["ansible.builtin.copy"]["content"]
+        self.assertIn("kubeconfig: |", flannel_configmap_content)
+        self.assertIn("server: https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443", flannel_configmap_content)
         self.assertIn(
-            "SSL_CERT_FILE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-            flannel_env_command,
+            "certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+            flannel_configmap_content,
+        )
+        self.assertIn("tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token", flannel_configmap_content)
+
+        apply_configmap_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Apply KubeEdge flannel kubeconfig ConfigMap"
+        )
+        self.assertEqual(
+            apply_configmap_task["ansible.builtin.command"],
+            "kubectl apply -f /tmp/continuum-kube-flannel-cfg.yaml",
         )
 
         flannel_api_task = next(
             task
             for task in tasks
             if task.get("name")
-            == "Configure flannel Kubernetes API URL for KubeEdge edge pods"
+            == "Configure flannel kubeconfig file for KubeEdge edge pods"
         )
         flannel_api_argv = flannel_api_task["ansible.builtin.command"]["argv"]
         self.assertIn("patch", flannel_api_argv)
         self.assertIn("--type=json", flannel_api_argv)
         self.assertTrue(
-            any("--kube-api-url=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443" in arg for arg in flannel_api_argv)
+            any("--kubeconfig-file=/etc/kube-flannel/kubeconfig" in arg for arg in flannel_api_argv)
         )
+        self.assertFalse(any("--kube-api-url" in arg for arg in flannel_api_argv))
 
     def test_kubeedge_edge_join_enables_edge_incluster_config_support(self):
         repo_root = Path(__file__).resolve().parents[3]
@@ -254,8 +285,10 @@ class KubeEdgeRoleTests(unittest.TestCase):
         defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
         tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
         task_names = {task.get("name") for task in tasks}
+        join_task = next(task for task in tasks if task.get("name") == "Join edge node to CloudCore")
 
         self.assertIs(defaults["rm_kubeedge_edge_join_enable_incluster_config"], True)
+        self.assertIn("--cgroupdriver=systemd", join_task["ansible.builtin.shell"])
         self.assertIn("Enable requireAuthorization feature gate in edgecore config", task_names)
         self.assertIn("Enable metaServer in edgecore config", task_names)
 

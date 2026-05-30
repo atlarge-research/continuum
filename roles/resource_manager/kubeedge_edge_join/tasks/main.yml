@@ -34,6 +34,7 @@
     keadm join
     --cloudcore-ipport={{ rm_kubeedge_edge_join_cloud_ip }}:10000
     --token=$(cat /tmp/join-command.txt)
+    --cgroupdriver=systemd
     --kubeedge-version={{ rm_kubeedge_edge_join_kubeedge_version }}
   args:
     executable: /bin/bash

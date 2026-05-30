@@ -162,8 +162,8 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Fix the edge-node flannel readiness failure found by the latest full
-   `P-QEMU-06` application attempt.
+1. Move or prune retained smoke state, then rerun the full `P-QEMU-06`
+   application attempt.
 2. Certify full `P-QEMU-06` and `P-QEMU-07` application rows after VM-backed
    application evidence passes.
 3. Resolve Docker-daemon or registry design for forced-prefetch application rows.

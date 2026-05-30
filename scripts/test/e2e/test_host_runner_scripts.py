@@ -478,6 +478,83 @@ class HostRunnerScriptTests(unittest.TestCase):
                 result.stdout,
             )
 
+    def test_run_smoke_storage_report_does_not_require_runner_python(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            smoke_base_root = temp_root / "smoke-base"
+            scenario_root = smoke_base_root / "qemu_kubeedge_image_parity"
+            scenario_root.mkdir(parents=True)
+            (scenario_root / "artifact.txt").write_text("retained state\n", encoding="utf-8")
+
+            result = self._run_smoke_script(
+                "storage-report",
+                extra_env={
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(temp_root / "missing-python"),
+                },
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"SMOKE_BASE_ROOT={smoke_base_root}", result.stdout)
+        self.assertIn("Retained scenario sizes:", result.stdout)
+        self.assertIn("qemu_kubeedge_image_parity", result.stdout)
+        self.assertIn("Total retained smoke state:", result.stdout)
+
+    def test_run_smoke_prune_scenario_requires_confirmation(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            smoke_base_root = temp_root / "smoke-base"
+            scenario_root = smoke_base_root / "qemu_kubeedge_image_parity"
+            scenario_root.mkdir(parents=True)
+
+            result = self._run_smoke_script(
+                "prune-scenario",
+                "qemu_kubeedge_image_parity",
+                extra_env={
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(temp_root / "missing-python"),
+                },
+            )
+
+            still_exists = scenario_root.exists()
+
+        self.assertEqual(result.returncode, 2)
+        self.assertTrue(still_exists)
+        self.assertIn("Refusing to delete retained state", result.stderr)
+        self.assertIn("Would delete:", result.stderr)
+
+    def test_run_smoke_prune_scenario_removes_only_selected_retained_root(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            smoke_base_root = temp_root / "smoke-base"
+            target_root = smoke_base_root / "qemu_kubeedge_image_parity"
+            other_root = smoke_base_root / "qemu_k8s_image_parity"
+            target_root.mkdir(parents=True)
+            other_root.mkdir(parents=True)
+            (target_root / "artifact.txt").write_text("delete\n", encoding="utf-8")
+            (other_root / "artifact.txt").write_text("keep\n", encoding="utf-8")
+
+            result = self._run_smoke_script(
+                "prune-scenario",
+                "qemu_kubeedge_image_parity",
+                "--yes-delete-retained-state",
+                extra_env={
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(temp_root / "missing-python"),
+                },
+            )
+
+            target_exists = target_root.exists()
+            other_exists = other_root.exists()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(target_exists)
+        self.assertTrue(other_exists)
+        self.assertIn("Deleted retained state for scenario: qemu_kubeedge_image_parity", result.stdout)
+
     def test_run_smoke_network_validation_uses_suite_runner(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp_root = Path(tempdir)

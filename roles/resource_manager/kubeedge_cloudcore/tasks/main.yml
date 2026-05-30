@@ -52,19 +52,81 @@
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false
 
-- name: Configure flannel Kubernetes API endpoint for KubeEdge edge pods
-  ansible.builtin.command: >-
-    kubectl -n kube-flannel set env daemonset/kube-flannel-ds
-    KUBERNETES_SERVICE_HOST={{ rm_kubeedge_cloudcore_cloud_ip }}
-    KUBERNETES_SERVICE_PORT=6443
-    KUBERNETES_MASTER=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443
-    SSL_CERT_FILE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-    --overwrite
+- name: Write KubeEdge flannel kubeconfig ConfigMap manifest
+  ansible.builtin.copy:
+    dest: /tmp/continuum-kube-flannel-cfg.yaml
+    mode: "0600"
+    content: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: kube-flannel-cfg
+        namespace: kube-flannel
+        labels:
+          app: flannel
+          k8s-app: flannel
+          tier: node
+      data:
+        cni-conf.json: |
+          {
+            "name": "cbr0",
+            "cniVersion": "0.3.1",
+            "plugins": [
+              {
+                "type": "flannel",
+                "delegate": {
+                  "hairpinMode": true,
+                  "isDefaultGateway": true
+                }
+              },
+              {
+                "type": "portmap",
+                "capabilities": {
+                  "portMappings": true
+                }
+              }
+            ]
+          }
+        kubeconfig: |
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: kubeedge
+            cluster:
+              certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              server: https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443
+          contexts:
+          - name: flannel
+            context:
+              cluster: kubeedge
+              namespace: kube-flannel
+              user: flannel
+          current-context: flannel
+          users:
+          - name: flannel
+            user:
+              tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+        net-conf.json: |
+          {
+            "Network": "10.244.0.0/16",
+            "EnableNFTables": false,
+            "Backend": {
+              "Type": "vxlan"
+            }
+          }
+
+- name: Apply KubeEdge flannel kubeconfig ConfigMap
+  ansible.builtin.command: kubectl apply -f /tmp/continuum-kube-flannel-cfg.yaml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false
 
-- name: Configure flannel Kubernetes API URL for KubeEdge edge pods
+- name: Remove temporary KubeEdge flannel ConfigMap manifest
+  ansible.builtin.file:
+    path: /tmp/continuum-kube-flannel-cfg.yaml
+    state: absent
+
+- name: Configure flannel kubeconfig file for KubeEdge edge pods
   ansible.builtin.command:
     argv:
       - kubectl
@@ -78,7 +140,7 @@
       - >-
         [{"op":"replace","path":"/spec/template/spec/containers/0/args","value":[
         "--ip-masq","--kube-subnet-mgr",
-        "--kube-api-url=https://{{ rm_kubeedge_cloudcore_cloud_ip }}:6443"]}]
+        "--kubeconfig-file=/etc/kube-flannel/kubeconfig"]}]
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false

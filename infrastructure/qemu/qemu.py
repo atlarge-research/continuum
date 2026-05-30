@@ -103,6 +103,20 @@ def _base_install_playbooks_for_base_names(config, machines, normalized_base_nam
     return playbooks
 
 
+def _common_base_install_hosts_for_base_names(normalized_base_names):
+    """Return the inventory host pattern for common setup on rebuilt base VMs."""
+    groups = []
+    for normalized_name in normalized_base_names:
+        tier = orchestration_schema.tier_from_base_name(normalized_name)
+        if tier is None:
+            return "base"
+        group = "base_%s" % (tier)
+        if group not in groups:
+            groups.append(group)
+
+    return ":".join(groups) if groups else "base"
+
+
 def _repo_path(config, path):
     """Return an absolute path for one repository-relative path."""
     if os.path.isabs(path):
@@ -719,6 +733,7 @@ def base_image(config, machines, runner=None):
         "playbooks/infrastructure/common_base_install.yml",
         inventory="vms",
         extra_vars={
+            "continuum_common_base_hosts": _common_base_install_hosts_for_base_names(base_names),
             "continuum_enable_mahimahi": (
                 isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
             )

@@ -1,6 +1,6 @@
 ---
 - name: Install common infrastructure software on base VMs
-  hosts: base
+  hosts: "{{ continuum_common_base_hosts | default('base') }}"
   become: true
   roles:
     - role: netperf
