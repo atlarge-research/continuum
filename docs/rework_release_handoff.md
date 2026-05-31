@@ -70,15 +70,33 @@ Pre-hardening host-runner and VM-evidence state:
 At that checkpoint, the dedicated runner was no longer blocked by repo drift or
 helper-interface drift, and all currently claimed VM-backed wrapper scenarios
 listed in `docs/release_notes_m1_draft.md` passed on 2026-05-29 from the clean
-evidence source commit. `python3 scripts/test/check_release_pretag.py` reported
-zero issues on the docs/checker-only release head. Re-run
-`sudo -n /usr/local/bin/continuum-hostctl show-config` and
-`sudo -n /usr/local/bin/continuum-hostctl verify` after manually reviewing and
-installing the hardened helper from this branch. The hardened helper intentionally
-uses interface version `2026-05-31-sudo-hardening`; older installed helpers are
-expected to report stale interface state until replaced. The hardened helper no
-longer runs `git` against the mutable live checkout as root, so commit/tree-state
-evidence should be recorded from the normal user shell or cloud-safe audit output.
+evidence source commit. Subsequent runtime, KubeEdge, host-runner, and helper
+hardening changes mean that pre-tag readiness is now blocked until VM-backed
+evidence is refreshed from the current release candidate.
+
+Current release-candidate head when this handoff was last updated:
+`1737dfa933247d4eb0d07c9b9a88d086b43fce0f`. On that head:
+
+1. `python3 scripts/test/check_release_claims.py`: 0 issues,
+2. `python3 scripts/test/check_release_matrix.py`: 0 issues,
+3. `python3 scripts/test/check_docs_paths.py`: 0 missing references,
+4. `python3 scripts/test/check_release_evidence_artifacts.py`: 0 issues,
+5. `python3 scripts/test/check_release_pretag.py`: 7 source-commit mismatch
+   issues, all caused by runtime-affecting changes after the current VM
+   evidence source commit.
+
+The installed `/usr/local/bin/continuum-hostctl` was checked non-mutatingly and
+is still stale: it reports interface `2026-05-30-relocate-smoke-root`, while the
+repo expects `2026-05-31-sudo-hardening`. The installed wrapper base root is
+already `/mnt/sdc/continuum_smoke`, and the retained root symlink remains in
+place. Before any new VM evidence run, an operator must manually review and
+replace `/usr/local/bin/continuum-hostctl` as documented in
+`docs/agent_sudo_boundaries.md`; then rerun `sudo -n
+/usr/local/bin/continuum-hostctl verify`.
+
+The hardened helper no longer runs `git` against the mutable live checkout as
+root, so commit/tree-state evidence should be recorded from the normal user
+shell or cloud-safe audit output.
 
 The previous sandbox problems were resolved for the earlier session:
 
@@ -154,10 +172,17 @@ checkpoint.
 
 ## Known Blockers
 
-There are no current M1 pre-tag checker blockers on the committed
-docs/checker-only release head. Runtime, config, profile, playbook, wrapper, or
-runner changes after the evidence source commit require rerunning affected
-VM-backed scenarios and refreshing the evidence documents.
+There are current M1 pre-tag checker blockers. The release evidence docs still
+name VM evidence source commit `67f49fa4f7af3b4f54912dabc8993ac923c8abdd`,
+while current `HEAD` is newer and includes runtime-affecting QEMU, KubeEdge,
+playbook, wrapper, and runner changes. Do not tag M1 until the affected
+VM-backed scenarios have been rerun from the current release candidate and the
+evidence documents name that source commit.
+
+The installed host helper is also stale until the manual reviewed replacement is
+performed. Do not run `sync-repo` or new VM certification runs through the
+installed helper until `sudo -n /usr/local/bin/continuum-hostctl verify` passes
+with interface `2026-05-31-sudo-hardening`.
 
 Remaining blockers for a final replacement release are the non-certified
 old-main parity rows in `docs/release_certification_matrix.md`, especially full
@@ -182,8 +207,9 @@ failure recorded above before rerunning the full application suite.
    counts.
 4. Keep generated `logs/cloud_static_audit/*.md` files uncommitted unless a
    maintainer explicitly asks for a dated audit snapshot.
-5. Before tagging M1 on the certification host, verify the installed host
-   helper and run the pre-tag command sequence in
+5. Before tagging M1 on the certification host, manually review and replace a
+   stale `/usr/local/bin/continuum-hostctl` if needed, then verify the installed
+   host helper and run the pre-tag command sequence in
    `docs/release_notes_m1_draft.md`.
 6. Rerun affected VM-backed rows after any runtime, runner, verifier, profile,
    or playbook changes.
