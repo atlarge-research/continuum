@@ -41,20 +41,21 @@ checks, and M1 pre-tag checks.
 
 The current M1 cloud-safe evidence table points to:
 
-`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-29T202812Z.md`
+`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md`
 
 That audit recorded:
 
 1. required cloud-safe gates: PASS,
-2. unit unittest discovery: 603 tests OK,
-3. e2e unittest discovery: 76 tests OK,
-4. combined unittest discovery: 679 tests OK,
-5. pytest mirror: 679 passed,
+2. unit unittest discovery: 609 tests OK,
+3. e2e unittest discovery: 86 tests OK,
+4. combined unittest discovery: 695 tests OK,
+5. pytest mirror: 695 passed,
 6. release claim issues: 0,
 7. release matrix issues: 0,
 8. docs path missing references: 0,
 9. release evidence artifact issues: 0,
-10. pre-tag issues: 0.
+10. pre-tag issues: 7 source-commit mismatch issues in the audit report; the
+    committed evidence doc now also records the stale host-helper state.
 
 Pre-hardening host-runner and VM-evidence state:
 
