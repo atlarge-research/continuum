@@ -30,12 +30,28 @@
   register: rm_kubeedge_edge_join_state
 
 - name: Join edge node to CloudCore
-  ansible.builtin.shell: >-
-    keadm join
-    --cloudcore-ipport={{ rm_kubeedge_edge_join_cloud_ip }}:10000
-    --token=$(cat /tmp/join-command.txt)
-    --cgroupdriver=systemd
-    --kubeedge-version={{ rm_kubeedge_edge_join_kubeedge_version }}
+  ansible.builtin.shell: |
+    set -u
+    rc=1
+    for attempt in 1 2 3; do
+      keadm join \
+        --cloudcore-ipport={{ rm_kubeedge_edge_join_cloud_ip }}:10000 \
+        --token=$(cat /tmp/join-command.txt) \
+        --cgroupdriver=systemd \
+        --kubeedge-version={{ rm_kubeedge_edge_join_kubeedge_version }}
+      rc=$?
+      if [ "$rc" -eq 0 ]; then
+        exit 0
+      fi
+      if [ "$attempt" -lt 3 ]; then
+        systemctl stop edgecore || true
+        keadm reset edge --force \
+          --remote-runtime-endpoint=unix:///run/containerd/containerd.sock || true
+        rm -rf /etc/kubeedge /var/lib/kubeedge
+        sleep 45
+      fi
+    done
+    exit "$rc"
   args:
     executable: /bin/bash
     creates: /etc/kubeedge/config/edgecore.yaml

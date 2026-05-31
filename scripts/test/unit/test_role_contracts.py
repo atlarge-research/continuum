@@ -292,6 +292,7 @@ class KubeEdgeRoleTests(unittest.TestCase):
 
         self.assertIs(defaults["rm_kubeedge_edge_join_enable_incluster_config"], True)
         self.assertIn("--cgroupdriver=systemd", join_task["ansible.builtin.shell"])
+        self.assertIn("keadm reset edge --force", join_task["ansible.builtin.shell"])
         self.assertIn("Enable requireAuthorization feature gate in edgecore config", task_names)
         self.assertIn("Enable metaServer in edgecore config", task_names)
 
