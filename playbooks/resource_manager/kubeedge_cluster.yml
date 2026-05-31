@@ -8,6 +8,7 @@
 - name: Join KubeEdge edge nodes
   hosts: edges
   become: true
+  serial: 1
   roles:
     - role: kubeedge_edge_join
 

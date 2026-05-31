@@ -217,6 +217,9 @@ class KubeEdgeRoleTests(unittest.TestCase):
         playbook_path = repo_root / "playbooks/resource_manager/kubeedge_cluster.yml"
         playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
 
+        edge_join_play = next(play for play in playbook if play.get("name") == "Join KubeEdge edge nodes")
+        self.assertEqual(edge_join_play["serial"], 1)
+
         self.assertEqual(playbook[-1]["name"], "Verify KubeEdge edge readiness")
         readiness_task = playbook[-1]["tasks"][0]
         self.assertIn("kubectl get nodes", readiness_task["ansible.builtin.shell"])
