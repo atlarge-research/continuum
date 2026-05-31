@@ -49,6 +49,14 @@
       - python3-jsonpatch
     state: present
 
+- name: Wait for containerd CRI endpoint before kubeadm init
+  ansible.builtin.command: crictl info
+  register: rm_k8s_control_plane_cri_info
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: rm_k8s_control_plane_cri_info.rc == 0
+
 - name: Check if control-plane is already initialized
   ansible.builtin.stat:
     path: /etc/kubernetes/admin.conf

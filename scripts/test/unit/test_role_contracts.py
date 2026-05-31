@@ -172,6 +172,40 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
             ["python3-kubernetes", "python3-jsonpatch"],
         )
 
+    def test_k8s_control_plane_waits_for_cri_before_kubeadm_init(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        task_path = repo_root / "roles/resource_manager/k8s_control_plane/tasks/main.yml"
+        tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+        task_names = [task.get("name") for task in tasks]
+
+        cri_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Wait for containerd CRI endpoint before kubeadm init"
+        )
+        self.assertEqual(cri_task["ansible.builtin.command"], "crictl info")
+        self.assertLess(
+            task_names.index("Wait for containerd CRI endpoint before kubeadm init"),
+            task_names.index("Initialize Kubernetes cluster with default kubeadm options"),
+        )
+
+    def test_k8s_worker_join_waits_for_cri_before_join(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        task_path = repo_root / "roles/resource_manager/k8s_worker_join/tasks/main.yml"
+        tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+        task_names = [task.get("name") for task in tasks]
+
+        cri_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Wait for containerd CRI endpoint before kubeadm join"
+        )
+        self.assertEqual(cri_task["ansible.builtin.command"], "crictl info")
+        self.assertLess(
+            task_names.index("Wait for containerd CRI endpoint before kubeadm join"),
+            task_names.index("Execute cluster join command"),
+        )
+
 
 class KubeEdgeRoleTests(unittest.TestCase):
     def test_kubeedge_prereqs_follow_profile_kubernetes_major_version(self):

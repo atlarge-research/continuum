@@ -29,6 +29,14 @@
     - name: net.ipv4.ip_forward
       value: "1"
 
+- name: Wait for containerd CRI endpoint before kubeadm join
+  ansible.builtin.command: crictl info
+  register: rm_k8s_worker_join_cri_info
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: rm_k8s_worker_join_cri_info.rc == 0
+
 - name: Wait for join command to exist on control machine
   ansible.builtin.wait_for:
     path: "{{ rm_k8s_worker_join_continuum_home }}/join-command.txt"
