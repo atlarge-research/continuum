@@ -117,6 +117,34 @@ If the installed helper is stale, replacing
 `/usr/local/bin/continuum-hostctl` is a manual reviewed operator action. Agents
 must not regenerate or overwrite it from repo-controlled code.
 
+### Manual `continuum-hostctl` Replacement
+
+When the repo-side helper interface changes, an operator should review the
+generated helper content before replacing the root-owned installed copy. The
+repo-side content that becomes `/usr/local/bin/continuum-hostctl` is exactly the
+stdout of:
+
+```bash
+sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script
+```
+
+Use this manual install sequence:
+
+```bash
+tmp=$(mktemp /tmp/continuum-hostctl.XXXXXX)
+sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script > "$tmp"
+sha256sum "$tmp"
+less "$tmp"
+sudo install -o root -g root -m 0755 "$tmp" /usr/local/bin/continuum-hostctl
+rm -f "$tmp"
+```
+
+This is intentionally not an agent-executable refresh flow. Do not run
+`sudo sh scripts/test/setup_agent_host.sh install-hostctl`, do not install a
+`continuum-refresh-hostctl` helper, and do not add a temporary sudoers rule that
+lets the agent overwrite `/usr/local/bin/continuum-hostctl` from mutable repo
+code.
+
 The stable helper contract is:
 
 1. `/home/matthijs/continuum` is mutable and untrusted from root's perspective.

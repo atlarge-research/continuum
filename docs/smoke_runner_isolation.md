@@ -129,6 +129,28 @@ Agents should keep using the installed allowlisted helper until it is replaced.
 Do not add sudoers access to `scripts/test/setup_agent_host.sh` directly,
 because that file lives in a mutable checkout.
 
+The repo-side content intended for `/usr/local/bin/continuum-hostctl` is exactly
+the output of:
+
+```bash
+sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script
+```
+
+An operator can replace the installed helper after review with:
+
+```bash
+tmp=$(mktemp /tmp/continuum-hostctl.XXXXXX)
+sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script > "$tmp"
+sha256sum "$tmp"
+less "$tmp"
+sudo install -o root -g root -m 0755 "$tmp" /usr/local/bin/continuum-hostctl
+rm -f "$tmp"
+```
+
+Do not reintroduce `/usr/local/sbin/continuum-refresh-hostctl` or any sudoers
+rule that lets an agent regenerate the root-owned helper from repo-controlled
+code.
+
 For pre-tag release checks, run both verification commands in the order shown
 above. An older installed helper can pass its own `verify` command before it
 knows about a newer helper-interface contract; the live setup-script verifier
