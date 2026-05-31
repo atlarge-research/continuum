@@ -39,13 +39,29 @@ The preferred setup is dedicated mode:
 - installed runner: `/usr/local/bin/run-continuum-smoke`
 - installed maintenance helper: `/usr/local/bin/continuum-hostctl`
 - dedicated repo copy: `/srv/continuum/repo`
-- retained state root: `/home/continuum-smoke/continuum_smoke`
+- retained state root: `/mnt/sdc/continuum_smoke`
+- compatibility symlink: `/home/continuum-smoke/continuum_smoke`
 
-Repo-local setup entrypoint:
+The root-owned maintenance helper is the privileged boundary. Do not run
+`sudo sh scripts/test/setup_agent_host.sh ...`, do not sudo repo scripts, and do
+not reintroduce a `continuum-refresh-hostctl` helper or temporary sudoers rule.
+
+When `/usr/local/bin/continuum-hostctl` itself is stale, replacing it is a manual
+operator action. The reviewed content is exactly:
 
 ```bash
-sh scripts/test/setup_agent_host.sh show-config
-sh scripts/test/setup_agent_host.sh install dedicated
+sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script
+```
+
+Operator install sequence, for the user to run after review:
+
+```bash
+tmp=$(mktemp /tmp/continuum-hostctl.XXXXXX)
+sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script > "$tmp"
+sha256sum "$tmp"
+less "$tmp"
+sudo install -o root -g root -m 0755 "$tmp" /usr/local/bin/continuum-hostctl
+rm -f "$tmp"
 ```
 
 After installation, prefer the root-owned maintenance helper:
@@ -53,13 +69,14 @@ After installation, prefer the root-owned maintenance helper:
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl show-config
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
-sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
 sudo -n /usr/local/bin/continuum-hostctl verify
 ```
 
 `sync-repo` writes a `.continuum-smoke-sync` marker in the dedicated repo.
-`verify` checks wrapper target, libvirt/KVM access, repo readability, dedicated
-repo drift, and runner prereqs.
+`verify` checks wrapper target, libvirt/KVM access, repo readability, that the
+dedicated repo is not writable by `continuum-smoke`, dedicated repo drift, and
+runner prereqs.
 
 ## Runner Scenarios
 
@@ -97,7 +114,13 @@ approval for the exact diagnostic command when it is not obviously read-only.
 
 ## Artifacts
 
-Inspect retained artifacts under:
+Inspect retained artifacts under the retained state root:
+
+```text
+/mnt/sdc/continuum_smoke/<scenario>/.continuum/
+```
+
+The compatibility path should resolve through the symlink:
 
 ```text
 /home/continuum-smoke/continuum_smoke/<scenario>/.continuum/
