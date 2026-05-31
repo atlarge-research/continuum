@@ -638,6 +638,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                 check_release_pretag,
                 "_changed_paths_between_commits",
                 return_value=[
+                    ".codex/skills/continuum-smoke-host-runner/SKILL.md",
                     "docs/release_evidence_m1_2026-05-29.md",
                     "docs/release_notes_m1_draft.md",
                     "scripts/test/check_release_pretag.py",

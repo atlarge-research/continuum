@@ -45,6 +45,7 @@ EXPECTED_M1_EVIDENCE_FIELDS = {
     "Verify result": "PASS",
 }
 POST_EVIDENCE_ALLOWED_PATH_PREFIXES = (
+    ".codex/skills/",
     "docs/",
     "scripts/test/check_release_",
     "scripts/test/unit/test_check_release_",
