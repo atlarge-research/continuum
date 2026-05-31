@@ -74,8 +74,7 @@ evidence source commit. Subsequent runtime, KubeEdge, host-runner, and helper
 hardening changes mean that pre-tag readiness is now blocked until VM-backed
 evidence is refreshed from the current release candidate.
 
-Current release-candidate head when this handoff was last updated:
-`1737dfa933247d4eb0d07c9b9a88d086b43fce0f`. On that head:
+On this post-hardening checkpoint series:
 
 1. `python3 scripts/test/check_release_claims.py`: 0 issues,
 2. `python3 scripts/test/check_release_matrix.py`: 0 issues,
