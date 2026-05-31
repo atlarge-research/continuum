@@ -8,5 +8,6 @@
 - name: Join Kubernetes worker nodes
   hosts: clouds:edges
   become: true
+  serial: 1
   roles:
     - role: k8s_worker_join

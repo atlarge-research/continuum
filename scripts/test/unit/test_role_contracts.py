@@ -206,6 +206,19 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
             task_names.index("Execute cluster join command"),
         )
 
+        join_task = next(
+            task for task in tasks if task.get("name") == "Execute cluster join command"
+        )
+        self.assertIn("kubeadm reset --force", join_task["ansible.builtin.shell"])
+
+    def test_k8s_cluster_playbook_serializes_worker_joins(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        playbook_path = repo_root / "playbooks/resource_manager/k8s_cluster.yml"
+        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+
+        worker_play = next(play for play in playbook if play.get("name") == "Join Kubernetes worker nodes")
+        self.assertEqual(worker_play["serial"], 1)
+
 
 class KubeEdgeRoleTests(unittest.TestCase):
     def test_kubeedge_prereqs_follow_profile_kubernetes_major_version(self):

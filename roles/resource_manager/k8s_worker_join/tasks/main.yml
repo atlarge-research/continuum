@@ -64,8 +64,24 @@
   register: rm_k8s_worker_join_kubelet_conf
 
 - name: Execute cluster join command
-  ansible.builtin.command: bash /tmp/join-command.txt
+  ansible.builtin.shell: |
+    set -u
+    rc=1
+    for attempt in 1 2 3; do
+      bash /tmp/join-command.txt
+      rc=$?
+      if [ "$rc" -eq 0 ]; then
+        exit 0
+      fi
+      if [ "$attempt" -lt 3 ]; then
+        kubeadm reset --force || true
+        systemctl restart kubelet || true
+        sleep 45
+      fi
+    done
+    exit "$rc"
   args:
+    executable: /bin/bash
     creates: /etc/kubernetes/kubelet.conf
   when: not rm_k8s_worker_join_kubelet_conf.stat.exists
 
