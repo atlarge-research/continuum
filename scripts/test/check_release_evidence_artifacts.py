@@ -2047,6 +2047,17 @@ def _extract_pytest_count(text: str, heading: str) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
+def _extract_marker_debt_scan_status(text: str) -> Optional[str]:
+    marker_label = "TO" + "DO/" + "FIX" + "ME debt scan"
+    pattern = re.compile(
+        r"^- %s: (?P<status>NO MATCHES|MATCHES FOUND \(\d+\))$"
+        % re.escape(marker_label),
+        re.MULTILINE,
+    )
+    match = pattern.search(text)
+    return match.group("status") if match else None
+
+
 def _evidence_table_fields(text: str) -> dict[str, str]:
     fields = {}
     for line in text.splitlines():
@@ -2157,10 +2168,7 @@ def _check_cloud_audit_evidence_summary(
         ),
     }
     if "Marker debt scan" in fields:
-        marker_clean_line = "- " + "TO" + "DO/" + "FIX" + "ME debt scan: NO MATCHES"
-        expectations["Marker debt scan"] = (
-            "NO MATCHES" if marker_clean_line in report_text else None
-        )
+        expectations["Marker debt scan"] = _extract_marker_debt_scan_status(report_text)
     return _field_expectation_issues(artifact, fields, expectations)
 
 

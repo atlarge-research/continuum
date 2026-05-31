@@ -3196,7 +3196,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             self._write_matrix(root)
-            marker_clean_line = "- " + "TO" + "DO/" + "FIX" + "ME debt scan: NO MATCHES\n"
+            marker_line = "- " + "TO" + "DO/" + "FIX" + "ME debt scan: MATCHES FOUND (2)\n"
             artifact = root / "logs" / "cloud_static_audit_2026-05-23T000000Z.md"
             artifact.parent.mkdir(parents=True)
             artifact.write_text(
@@ -3204,7 +3204,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 + "## Informational Checks\n"
                 + "- release evidence artifact audit: OK\n"
                 + "- M1 pre-tag readiness check: FINDINGS OR UNAVAILABLE (1)\n"
-                + marker_clean_line
+                + marker_line
                 + "\n"
                 "## Output Excerpts\n"
                 "### docs path reference check\n"
@@ -3234,7 +3234,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     "| E2E unittest discovery | 2 tests OK |\n"
                     "| Combined unittest discovery | 5 tests OK |\n"
                     "| Pytest mirror | 5 passed |\n"
-                    "| Marker debt scan | NO MATCHES |\n" % (artifact,)
+                    "| Marker debt scan | MATCHES FOUND (2) |\n" % (artifact,)
                 ),
                 encoding="utf-8",
             )

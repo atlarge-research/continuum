@@ -79,8 +79,23 @@ On this post-hardening checkpoint series:
 1. `python3 scripts/test/check_release_claims.py`: 0 issues,
 2. `python3 scripts/test/check_release_matrix.py`: 0 issues,
 3. `python3 scripts/test/check_docs_paths.py`: 0 missing references,
-4. `python3 scripts/test/check_release_evidence_artifacts.py`: 0 issues,
-5. `python3 scripts/test/check_release_pretag.py`: 7 source-commit mismatch
+4. `scripts/test/run_cloud_static_audit.sh`: required gates PASS, report
+   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md`,
+5. `python3 scripts/test/check_release_evidence_artifacts.py`: 0 issues,
+6. `python3 scripts/test/check_release_pretag.py`: host-helper stale plus
+   source-commit mismatch issues; after helper replacement, expect the remaining
+   issues to be source-commit mismatches until VM evidence is refreshed.
+
+The cloud-safe audit recorded 609 unit tests, 86 local e2e tests, 695 combined
+unittest tests, and 695 combined pytest tests. It also recorded
+`TOTAL_RELEASE_PRETAG_ISSUES=7` before the M1 evidence doc was updated to mark
+the current host-helper state as stale.
+
+The current M1 evidence doc records the stale helper state explicitly. Therefore
+`python3 scripts/test/check_release_pretag.py` reports:
+
+1. one `pretag-host-helper-not-ready` issue, and
+2. seven source-commit mismatch
    issues, all caused by runtime-affecting changes after the current VM
    evidence source commit.
 

@@ -131,14 +131,18 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-29T202812Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md` |
 | Required gates | PASS |
-| Unit unittest discovery | 603 tests OK |
-| E2E unittest discovery | 76 tests OK |
-| Combined unittest discovery | 679 tests OK |
-| Pytest mirror | 679 passed |
-| Marker debt scan | NO MATCHES |
-| Informational prereq findings | Every configured parity suite now has cloud-safe prerequisite visibility. Full `qemu_kubeedge_image_parity` and `qemu_mist_image_parity` still report missing local-registry cache images and remain unclaimed. Forced-prefetch image-row prereqs pass in the current shell, but those rows still require dedicated smoke-user wrapper VM evidence before certification. |
+| Unit unittest discovery | 609 tests OK |
+| E2E unittest discovery | 86 tests OK |
+| Combined unittest discovery | 695 tests OK |
+| Pytest mirror | 695 passed |
+| Marker debt scan | MATCHES FOUND (2) |
+| Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=7`; blocked by source-commit mismatch until VM-backed evidence is rerun from the current release candidate |
+| Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility and reports prerequisites satisfied in the current shell. Forced-prefetch and registry-cache application rows still require dedicated smoke-user wrapper VM evidence before certification. |
+
+The two marker debt scan matches are both from documented `mktemp` examples in
+the manual hostctl replacement flow.
 
 Local release-evidence artifact audit on the certification host:
 
@@ -148,21 +152,23 @@ Local release-evidence artifact audit on the certification host:
 | Primary artifacts checked | 15 |
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |
 
-Pre-tag host-helper status after the required helper-contract refresh:
+Current pre-tag host-helper status after the sudo-hardening interface bump:
 
 | Field | Value |
 | --- | --- |
 | Verify command | `sudo -n /usr/local/bin/continuum-hostctl verify` |
-| Verify result | PASS |
-| Current finding | None |
+| Verify result | STALE: installed interface `2026-05-30-relocate-smoke-root`; repo expects `2026-05-31-sudo-hardening` |
+| Current finding | Manually review and replace `/usr/local/bin/continuum-hostctl` before `sync-repo` or VM certification reruns. |
 
-Post-checkpoint host-runner status on 2026-05-29: the dedicated repo and
+Historical post-checkpoint host-runner status on 2026-05-29: the dedicated repo and
 installed wrapper were refreshed with `sudo -n /usr/local/bin/continuum-hostctl
 sync-repo` and `sudo -n /usr/local/bin/continuum-hostctl install-wrapper
 dedicated`. `sudo -n /usr/local/bin/continuum-hostctl verify` and
 `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke check-prereqs`
-both passed after syncing the clean live checkout. Repeat the sync and
-verification commands after any new commit before collecting VM-backed evidence.
+both passed after syncing the clean live checkout. That historical PASS no
+longer proves readiness for the current release candidate because the helper
+interface changed. Repeat the manual helper replacement, sync, and verification
+commands before collecting VM-backed evidence.
 
 The stricter pre-tag checker allows release documentation and release checker
 updates after the VM evidence source commit, but any runtime, config, profile,
