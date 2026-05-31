@@ -3,6 +3,8 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+SAFE_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+umask 027
 
 RUNNER_USER="${RUNNER_USER:-continuum-smoke}"
 CALLER_USER="${CALLER_USER:-${SUDO_USER:-${USER:-}}}"
@@ -20,7 +22,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-05-30-relocate-smoke-root"
+HOSTCTL_INTERFACE_VERSION="2026-05-31-sudo-hardening"
 
 usage() {
   cat <<EOF
@@ -31,7 +33,7 @@ Usage:
   $0 verify
   $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
   $0 relocate-smoke-root absolute/path/to/continuum_smoke --replace-source-with-symlink
-  $0 install-hostctl
+  $0 install-hostctl   # operator-reviewed manual update only
   $0 print-agent-command [scenario]
   $0 print-hostctl-command [subcommand...]
   $0 print-hostctl-script
@@ -146,6 +148,113 @@ validate_smoke_base_root() {
   fi
 }
 
+validate_absolute_path_token() {
+  label=$1
+  path=$2
+  case "$path" in
+    /*)
+      ;;
+    *)
+      log "$label must be an absolute path: $path" >&2
+      exit 2
+      ;;
+  esac
+  case "$path" in
+    *..*|*//*)
+      log "Refusing unsafe $label: $path" >&2
+      exit 2
+      ;;
+  esac
+}
+
+validate_fixed_roots() {
+  validate_absolute_path_token "live repo root" "$LIVE_REPO_ROOT"
+  validate_absolute_path_token "dedicated repo root" "$DEDICATED_REPO_ROOT"
+
+  live_real=$(readlink -f "$LIVE_REPO_ROOT" 2>/dev/null || true)
+  if [ -z "$live_real" ] || [ "$live_real" != "$LIVE_REPO_ROOT" ]; then
+    log "Live repo root must resolve exactly to $LIVE_REPO_ROOT; got ${live_real:-<missing>}" >&2
+    exit 1
+  fi
+
+  dedicated_parent=$(dirname "$DEDICATED_REPO_ROOT")
+  dedicated_parent_real=$(readlink -f "$dedicated_parent" 2>/dev/null || true)
+  if [ -z "$dedicated_parent_real" ] || [ "$dedicated_parent_real" != "$dedicated_parent" ]; then
+    log "Dedicated repo parent must resolve exactly to $dedicated_parent; got ${dedicated_parent_real:-<missing>}" >&2
+    exit 1
+  fi
+
+  case "$DEDICATED_REPO_ROOT" in
+    "$LIVE_REPO_ROOT"|"$LIVE_REPO_ROOT"/*)
+      log "Dedicated repo must not be inside the mutable live checkout: $DEDICATED_REPO_ROOT" >&2
+      exit 1
+      ;;
+  esac
+}
+
+validate_prime_registry_args() {
+  if [ "$#" -eq 0 ]; then
+    log "Usage: $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    exit 2
+  fi
+
+  mode=
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --suite)
+        if [ "${mode:-}" = "config" ]; then
+          log "Cannot mix --suite and --config for prime-registry-cache" >&2
+          exit 2
+        fi
+        mode=suite
+        shift
+        if [ "$#" -eq 0 ]; then
+          log "Missing suite name after --suite" >&2
+          exit 2
+        fi
+        case "$1" in
+          ""|/*|*..*|*/*|*';'*|*'&'*|*'|'*|*'`'*|*'$'*|*'\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+            log "Unsafe suite name for prime-registry-cache: $1" >&2
+            exit 2
+            ;;
+        esac
+        shift
+        ;;
+      --config)
+        if [ "${mode:-}" = "suite" ]; then
+          log "Cannot mix --suite and --config for prime-registry-cache" >&2
+          exit 2
+        fi
+        mode=config
+        shift
+        if [ "$#" -eq 0 ]; then
+          log "Missing config path after --config" >&2
+          exit 2
+        fi
+        case "$1" in
+          configs/experiments/*.yaml|configs/experiments/*.yml|configuration/tests/*.cfg)
+            ;;
+          *)
+            log "Unsupported config path for prime-registry-cache: $1" >&2
+            exit 2
+            ;;
+        esac
+        case "$1" in
+          /*|*..*|*';'*|*'&'*|*'|'*|*'`'*|*'$'*|*'\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+            log "Unsafe config path for prime-registry-cache: $1" >&2
+            exit 2
+            ;;
+        esac
+        shift
+        ;;
+      *)
+        log "Unsupported prime-registry-cache argument: $1" >&2
+        exit 2
+        ;;
+    esac
+  done
+}
+
 emit_wrapper_script() {
   wrapper_repo_root=$1
   wrapper_mode=$2
@@ -154,7 +263,9 @@ emit_wrapper_script() {
   cat <<EOF
 #!/bin/sh
 set -eu
-umask 022
+umask 027
+PATH=$SAFE_PATH
+export PATH
 
 REPO_ROOT=$wrapper_repo_root
 HOSTCTL_PATH=$HOSTCTL_PATH
@@ -198,7 +309,10 @@ if [ "\$WRAPPER_MODE" = "dedicated" ] && [ ! -r "\$SYNC_MARKER_PATH" ]; then
 fi
 
 exec env -i \\
+  PATH=$SAFE_PATH \\
   HOME=\$RUNNER_HOME \\
+  PYTHONDONTWRITEBYTECODE=1 \\
+  XDG_CACHE_HOME="\$BASE_ROOT/.cache" \\
   CONTINUUM_SMOKE_BASE_ROOT="\$BASE_ROOT" \\
   CONTINUUM_SMOKE_PYTHON="\$PYTHON_BIN" \\
   CONTINUUM_SMOKE_ANSIBLE_PLAYBOOK="\$ANSIBLE_PLAYBOOK_BIN" \\
@@ -227,7 +341,9 @@ emit_hostctl_script() {
   cat <<EOF
 #!/bin/sh
 set -eu
-umask 022
+umask 027
+PATH=$SAFE_PATH
+export PATH
 
 RUNNER_USER=$RUNNER_USER
 INSTALL_PATH=$INSTALL_PATH
@@ -267,6 +383,122 @@ require_cmd() {
     log "Missing required command: \$1" >&2
     exit 1
   fi
+}
+
+validate_no_extra_args() {
+  verb=\$1
+  shift
+  if [ "\$#" -ne 0 ]; then
+    log "Usage: \$0 \$verb" >&2
+    exit 2
+  fi
+}
+
+validate_absolute_path_token() {
+  label=\$1
+  path=\$2
+  case "\$path" in
+    /*)
+      ;;
+    *)
+      log "\$label must be an absolute path: \$path" >&2
+      exit 2
+      ;;
+  esac
+  case "\$path" in
+    *..*|*//*)
+      log "Refusing unsafe \$label: \$path" >&2
+      exit 2
+      ;;
+  esac
+}
+
+validate_fixed_roots() {
+  validate_absolute_path_token "live repo root" "\$LIVE_REPO_ROOT"
+  validate_absolute_path_token "dedicated repo root" "\$DEDICATED_REPO_ROOT"
+
+  live_real=\$(readlink -f "\$LIVE_REPO_ROOT" 2>/dev/null || true)
+  if [ -z "\$live_real" ] || [ "\$live_real" != "\$LIVE_REPO_ROOT" ]; then
+    log "Live repo root must resolve exactly to \$LIVE_REPO_ROOT; got \${live_real:-<missing>}" >&2
+    exit 1
+  fi
+
+  dedicated_parent=\$(dirname "\$DEDICATED_REPO_ROOT")
+  dedicated_parent_real=\$(readlink -f "\$dedicated_parent" 2>/dev/null || true)
+  if [ -z "\$dedicated_parent_real" ] || [ "\$dedicated_parent_real" != "\$dedicated_parent" ]; then
+    log "Dedicated repo parent must resolve exactly to \$dedicated_parent; got \${dedicated_parent_real:-<missing>}" >&2
+    exit 1
+  fi
+
+  case "\$DEDICATED_REPO_ROOT" in
+    "\$LIVE_REPO_ROOT"|"\$LIVE_REPO_ROOT"/*)
+      log "Dedicated repo must not be inside the mutable live checkout: \$DEDICATED_REPO_ROOT" >&2
+      exit 1
+      ;;
+  esac
+}
+
+validate_prime_registry_args() {
+  if [ "\$#" -eq 0 ]; then
+    log "Usage: \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    exit 2
+  fi
+
+  mode=
+  while [ "\$#" -gt 0 ]; do
+    case "\$1" in
+      --suite)
+        if [ "\${mode:-}" = "config" ]; then
+          log "Cannot mix --suite and --config for prime-registry-cache" >&2
+          exit 2
+        fi
+        mode=suite
+        shift
+        if [ "\$#" -eq 0 ]; then
+          log "Missing suite name after --suite" >&2
+          exit 2
+        fi
+        case "\$1" in
+          ""|/*|*..*|*/*|*';'*|*'&'*|*'|'*|*'\`'*|*'$'*|*'\\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+            log "Unsafe suite name for prime-registry-cache: \$1" >&2
+            exit 2
+            ;;
+        esac
+        shift
+        ;;
+      --config)
+        if [ "\${mode:-}" = "suite" ]; then
+          log "Cannot mix --suite and --config for prime-registry-cache" >&2
+          exit 2
+        fi
+        mode=config
+        shift
+        if [ "\$#" -eq 0 ]; then
+          log "Missing config path after --config" >&2
+          exit 2
+        fi
+        case "\$1" in
+          configs/experiments/*.yaml|configs/experiments/*.yml|configuration/tests/*.cfg)
+            ;;
+          *)
+            log "Unsupported config path for prime-registry-cache: \$1" >&2
+            exit 2
+            ;;
+        esac
+        case "\$1" in
+          /*|*..*|*';'*|*'&'*|*'|'*|*'\`'*|*'$'*|*'\\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+            log "Unsafe config path for prime-registry-cache: \$1" >&2
+            exit 2
+            ;;
+        esac
+        shift
+        ;;
+      *)
+        log "Unsupported prime-registry-cache argument: \$1" >&2
+        exit 2
+        ;;
+    esac
+  done
 }
 
 runner_exec() {
@@ -394,10 +626,12 @@ write_wrapper() {
 
   install -d -m 0755 "\$(dirname "\$INSTALL_PATH")"
   tmp_wrapper=\$(mktemp)
-  cat >"\$tmp_wrapper" <<EOF_WRAPPER
+cat >"\$tmp_wrapper" <<EOF_WRAPPER
 #!/bin/sh
 set -eu
-umask 022
+umask 027
+PATH=$SAFE_PATH
+export PATH
 
 REPO_ROOT=\$wrapper_repo_root
 HOSTCTL_PATH=\$HOSTCTL_PATH
@@ -441,7 +675,10 @@ if [ "\\\$WRAPPER_MODE" = "dedicated" ] && [ ! -r "\\\$SYNC_MARKER_PATH" ]; then
 fi
 
 exec env -i \\
+  PATH=$SAFE_PATH \\
   HOME=\\\$RUNNER_HOME \\
+  PYTHONDONTWRITEBYTECODE=1 \\
+  XDG_CACHE_HOME="\\\$BASE_ROOT/.cache" \\
   CONTINUUM_SMOKE_BASE_ROOT="\\\$BASE_ROOT" \\
   CONTINUUM_SMOKE_PYTHON="\\\$PYTHON_BIN" \\
   CONTINUUM_SMOKE_ANSIBLE_PLAYBOOK="\\\$ANSIBLE_PLAYBOOK_BIN" \\
@@ -458,8 +695,11 @@ EOF_WRAPPER
 
 sync_dedicated_repo() {
   require_cmd rsync
+  validate_fixed_roots
 
-  rsync -a --delete \\
+  rsync -rt --delete --delete-excluded --no-owner --no-group --no-perms \\
+    --no-devices --no-specials \\
+    --chmod=Du=rwx,Dg=rx,Do=,Fu=rwX,Fg=rX,Fo=,ugo-s \\
     --exclude '.git' \\
     --exclude '__pycache__' \\
     --exclude '.pytest_cache' \\
@@ -469,8 +709,10 @@ sync_dedicated_repo() {
 
   if [ "\$READONLY_DEDICATED_REPO" = "1" ]; then
     chown -R root:"\$RUNNER_USER" "\$DEDICATED_REPO_ROOT"
+    find "\$DEDICATED_REPO_ROOT" ! -type d ! -type f -exec rm -f {} +
     find "\$DEDICATED_REPO_ROOT" -type d -exec chmod 0750 {} +
-    find "\$DEDICATED_REPO_ROOT" -type f -exec chmod 0640 {} +
+    find "\$DEDICATED_REPO_ROOT" -type f -perm /111 -exec chmod 0750 {} +
+    find "\$DEDICATED_REPO_ROOT" -type f ! -perm /111 -exec chmod 0640 {} +
     log "Synced \$LIVE_REPO_ROOT to read-only dedicated repo \$DEDICATED_REPO_ROOT"
   else
     chown -R "\$RUNNER_USER:\$RUNNER_USER" "\$DEDICATED_REPO_ROOT"
@@ -478,12 +720,8 @@ sync_dedicated_repo() {
   fi
 
   tmp_marker=\$(mktemp)
-  live_head=\$(git -C "\$LIVE_REPO_ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')
-  if git -C "\$LIVE_REPO_ROOT" diff --quiet --ignore-submodules HEAD -- 2>/dev/null; then
-    live_tree_state=clean
-  else
-    live_tree_state=dirty_or_unknown
-  fi
+  live_head=not_recorded_by_root_helper
+  live_tree_state=not_recorded_by_root_helper
   {
     printf 'SYNCED_FROM=%s\\n' "\$LIVE_REPO_ROOT"
     printf 'SYNCED_AT_UTC=%s\\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -586,15 +824,14 @@ verify_hostctl_interface() {
 
   if [ "\$installed_version" != "\$source_version" ]; then
     log "Installed maintenance helper is stale: interface \$installed_version, expected \$source_version" >&2
-    log "Refresh the helper from the live checkout, then rerun verify:" >&2
-    log "  \$setup_script install-hostctl" >&2
+    log "Replace \$HOSTCTL_PATH only through a manual reviewed operator update, then rerun:" >&2
     log "  sudo -n \$HOSTCTL_PATH verify" >&2
     exit 1
   fi
 
   if ! grep -q 'prime-registry-cache)' "\$HOSTCTL_PATH"; then
     log "Installed maintenance helper does not expose prime-registry-cache" >&2
-    log "Refresh the helper from the live checkout with: \$setup_script install-hostctl" >&2
+    log "Replace \$HOSTCTL_PATH only through a manual reviewed operator update." >&2
     exit 1
   fi
 }
@@ -625,6 +862,10 @@ verify() {
     verify_dedicated_repo_sync
 
     log "Verifying dedicated repo is not writable by \$RUNNER_USER"
+    if runner_exec test -w "\$repo_root"; then
+      log "Dedicated repo root is unexpectedly writable by \$RUNNER_USER" >&2
+      exit 1
+    fi
     if runner_exec test -w "\$repo_root/continuum.py"; then
       log "Dedicated repo is unexpectedly writable by \$RUNNER_USER" >&2
       exit 1
@@ -636,26 +877,14 @@ verify() {
 }
 
 prime_registry_cache() {
-  if [ "\$#" -eq 0 ]; then
-    log "Usage: \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
-    exit 2
-  fi
-
-  require_cmd curl
-  require_cmd docker
+  validate_prime_registry_args "\$@"
 
   repo_root="\$DEDICATED_REPO_ROOT"
   if [ "\$READONLY_DEDICATED_REPO" = "1" ]; then
     verify_dedicated_repo_sync
   fi
 
-  if [ ! -x "\$VENV_ROOT/bin/python3" ]; then
-    log "Could not find Continuum smoke Python interpreter: \$VENV_ROOT/bin/python3" >&2
-    exit 2
-  fi
-
-  cd "\$repo_root"
-  PYTHONPATH=. "\$VENV_ROOT/bin/python3" scripts/test/prime_local_registry_cache.py "\$@"
+  runner_exec "\$INSTALL_PATH" prime-registry-cache "\$@"
 }
 
 print_agent_command() {
@@ -708,18 +937,34 @@ cmd="\${1:-}"
 
 case "\$cmd" in
   show-config)
+    if [ "\$#" -ne 1 ]; then
+      log "Usage: \$0 show-config" >&2
+      exit 2
+    fi
     show_config
     ;;
   sync-repo)
+    if [ "\$#" -ne 1 ]; then
+      log "Usage: \$0 sync-repo" >&2
+      exit 2
+    fi
     sync_dedicated_repo
     ;;
   install-wrapper)
+    if [ "\$#" -gt 3 ]; then
+      log "Usage: \$0 install-wrapper [dedicated|live] [absolute/path/to/continuum_smoke]" >&2
+      exit 2
+    fi
     mode_arg="\${2:-dedicated}"
     target_base_root="\${3:-\$SMOKE_BASE_ROOT}"
     prepare_base_root_path "\$target_base_root"
     write_wrapper "\$(repo_root_for_mode "\$mode_arg")" "\$mode_arg" "\$target_base_root"
     ;;
   verify)
+    if [ "\$#" -gt 2 ]; then
+      log "Usage: \$0 verify [dedicated|live]" >&2
+      exit 2
+    fi
     verify "\${2:-dedicated}"
     ;;
   prime-registry-cache)
@@ -731,6 +976,10 @@ case "\$cmd" in
     relocate_smoke_root "\$@"
     ;;
   print-agent-command)
+    if [ "\$#" -gt 2 ]; then
+      log "Usage: \$0 print-agent-command [scenario]" >&2
+      exit 2
+    fi
     print_agent_command "\${2:-benchmark_k8s_resume}"
     ;;
   ""|-h|--help|help)
@@ -789,8 +1038,11 @@ create_dedicated_repo() {
 
 sync_dedicated_repo() {
   require_cmd rsync
+  validate_fixed_roots
 
-  run_root rsync -a --delete \
+  run_root rsync -rt --delete --delete-excluded --no-owner --no-group --no-perms \
+    --no-devices --no-specials \
+    --chmod=Du=rwx,Dg=rx,Do=,Fu=rwX,Fg=rX,Fo=,ugo-s \
     --exclude '.git' \
     --exclude '__pycache__' \
     --exclude '.pytest_cache' \
@@ -800,8 +1052,10 @@ sync_dedicated_repo() {
 
   if [ "$READONLY_DEDICATED_REPO" = "1" ]; then
     run_root chown -R root:"$RUNNER_USER" "$DEDICATED_REPO_ROOT"
+    run_root find "$DEDICATED_REPO_ROOT" ! -type d ! -type f -exec rm -f {} +
     run_root find "$DEDICATED_REPO_ROOT" -type d -exec chmod 0750 {} +
-    run_root find "$DEDICATED_REPO_ROOT" -type f -exec chmod 0640 {} +
+    run_root find "$DEDICATED_REPO_ROOT" -type f -perm /111 -exec chmod 0750 {} +
+    run_root find "$DEDICATED_REPO_ROOT" -type f ! -perm /111 -exec chmod 0640 {} +
     log "Synced $LIVE_REPO_ROOT to read-only dedicated repo $DEDICATED_REPO_ROOT"
   else
     run_root chown -R "$RUNNER_USER:$RUNNER_USER" "$DEDICATED_REPO_ROOT"
@@ -809,12 +1063,8 @@ sync_dedicated_repo() {
   fi
 
   tmp_marker=$(mktemp)
-  live_head=$(git -C "$LIVE_REPO_ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')
-  if git -C "$LIVE_REPO_ROOT" diff --quiet --ignore-submodules HEAD -- 2>/dev/null; then
-    live_tree_state=clean
-  else
-    live_tree_state=dirty_or_unknown
-  fi
+  live_head=not_recorded_by_root_helper
+  live_tree_state=not_recorded_by_root_helper
   {
     printf 'SYNCED_FROM=%s\n' "$LIVE_REPO_ROOT"
     printf 'SYNCED_AT_UTC=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1043,15 +1293,14 @@ verify_hostctl_interface() {
 
   if [ "$installed_version" != "$source_version" ]; then
     log "Installed maintenance helper is stale: interface $installed_version, expected $source_version" >&2
-    log "Refresh the helper from the live checkout, then rerun verify:" >&2
-    log "  $setup_script install-hostctl" >&2
+    log "Replace $HOSTCTL_PATH only through a manual reviewed operator update, then rerun:" >&2
     log "  sudo -n $HOSTCTL_PATH verify" >&2
     exit 1
   fi
 
   if ! grep -q 'prime-registry-cache)' "$HOSTCTL_PATH"; then
     log "Installed maintenance helper does not expose prime-registry-cache" >&2
-    log "Refresh the helper from the live checkout with: $setup_script install-hostctl" >&2
+    log "Replace $HOSTCTL_PATH only through a manual reviewed operator update." >&2
     exit 1
   fi
 }
@@ -1083,6 +1332,10 @@ verify() {
     verify_dedicated_repo_sync
 
     log "Verifying dedicated repo is not writable by $RUNNER_USER"
+    if runner_exec test -w "$repo_root"; then
+      log "Dedicated repo root is unexpectedly writable by $RUNNER_USER" >&2
+      exit 1
+    fi
     if runner_exec test -w "$repo_root/continuum.py"; then
       log "Dedicated repo is unexpectedly writable by $RUNNER_USER" >&2
       exit 1
@@ -1094,30 +1347,18 @@ verify() {
 }
 
 prime_registry_cache() {
-  if [ "$#" -eq 0 ]; then
-    log "Usage: $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
-    exit 2
-  fi
+  validate_prime_registry_args "$@"
   if [ "$(id -u)" -ne 0 ]; then
-    log "Run this helper via sudo, or run scripts/test/prime_local_registry_cache.py directly as a Docker-capable user." >&2
+    log "Run this helper via sudo so it can delegate to the smoke runner." >&2
     exit 2
   fi
-
-  require_cmd curl
-  require_cmd docker
 
   repo_root=$(repo_root_for_mode "$MODE")
   if [ "$MODE" = "dedicated" ] && [ "$READONLY_DEDICATED_REPO" = "1" ]; then
     verify_dedicated_repo_sync
   fi
 
-  if [ ! -x "$VENV_ROOT/bin/python3" ]; then
-    log "Could not find Continuum smoke Python interpreter: $VENV_ROOT/bin/python3" >&2
-    exit 2
-  fi
-
-  cd "$repo_root"
-  PYTHONPATH=. "$VENV_ROOT/bin/python3" scripts/test/prime_local_registry_cache.py "$@"
+  runner_exec "$INSTALL_PATH" prime-registry-cache "$@"
 }
 
 install() {
@@ -1169,7 +1410,7 @@ print_hostctl_command() {
   if ! is_installed_hostctl_command "$1"; then
     log "Unsupported installed hostctl command for print-hostctl-command: $1" >&2
     if [ "$1" = "install-hostctl" ]; then
-      log "Refresh the helper with: $LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh install-hostctl" >&2
+      log "Hostctl replacement is a manual reviewed operator action." >&2
     fi
     return 2
   fi
@@ -1224,15 +1465,27 @@ cmd="${1:-}"
 
 case "$cmd" in
   show-config)
+    if [ "$#" -ne 1 ]; then
+      log "Usage: $0 show-config" >&2
+      exit 2
+    fi
     show_config
     ;;
   install)
     install "${2:-$MODE}"
     ;;
   sync-repo|sync-dedicated-repo)
+    if [ "$#" -ne 1 ]; then
+      log "Usage: $0 $cmd" >&2
+      exit 2
+    fi
     sync_dedicated_repo
     ;;
   verify)
+    if [ "$#" -gt 2 ]; then
+      log "Usage: $0 verify [dedicated|live]" >&2
+      exit 2
+    fi
     verify "${2:-$MODE}"
     ;;
   prime-registry-cache)
@@ -1275,6 +1528,10 @@ case "$cmd" in
     create_venv "${2:-$MODE}"
     ;;
   install-wrapper)
+    if [ "$#" -gt 3 ]; then
+      log "Usage: $0 install-wrapper [dedicated|live] [absolute/path/to/continuum_smoke]" >&2
+      exit 2
+    fi
     install_wrapper "${2:-$MODE}" "${3:-$SMOKE_BASE_ROOT}"
     ;;
   install-sudoers)

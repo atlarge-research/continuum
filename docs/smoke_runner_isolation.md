@@ -15,8 +15,8 @@ The desired operating model is:
 1. Continuum can reach real host QEMU/libvirt and `/dev/kvm`.
 2. The agent cannot execute arbitrary host commands.
 3. The executed Continuum checkout is as immutable as practical.
-4. All runtime logs and test artifacts live under the selected `base_path`, not
-   inside the repository checkout.
+4. All runtime logs and test artifacts live under the selected `base_path`,
+   currently `/mnt/sdc/continuum_smoke`, not inside the repository checkout.
 
 ## 2. Canonical Model
 
@@ -45,8 +45,8 @@ The smoke path actually needs:
 1. host `virsh` / libvirt access,
 2. `/dev/kvm` access,
 3. host bridge and route inspection commands,
-4. write access to a dedicated runtime workspace such as
-   `/home/continuum-smoke/continuum_smoke/`,
+4. write access to the dedicated runtime workspace
+   `/mnt/sdc/continuum_smoke/`,
 5. read access to the executed Continuum checkout.
 
 It does not need:
@@ -58,8 +58,12 @@ It does not need:
 
 That last point matters. Continuum now writes runtime logs and smoke-test result
 artifacts under `base_path/.continuum/...`, and the wrapper exports
-`PYTHONDONTWRITEBYTECODE=1`, so the dedicated execution checkout can stay
-read-only for the runner.
+`PYTHONDONTWRITEBYTECODE=1` with cache paths under the retained smoke root, so
+the dedicated execution checkout can stay read-only for the runner.
+
+The current retained root is `/mnt/sdc/continuum_smoke`. The legacy
+`/home/continuum-smoke/continuum_smoke` path remains a compatibility symlink to
+that larger disk and should not be removed independently.
 
 ## 4. Single-Script Setup
 
@@ -79,7 +83,7 @@ The default and recommended setup is the dedicated read-only repo mode:
 3. creates `/srv/continuum/repo`,
 4. syncs the current workspace into that repo copy,
 5. locks that repo copy down as non-writable for the runner,
-6. prepares `/home/continuum-smoke/continuum_smoke`,
+6. prepares the retained smoke root,
 7. installs host prerequisites,
 8. creates the dedicated runner venv,
 9. installs the root-owned wrapper,
@@ -104,21 +108,26 @@ with:
 
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
-sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
 sudo -n /usr/local/bin/continuum-hostctl verify
 sh scripts/test/setup_agent_host.sh verify
 ```
 
-If `verify` reports that the maintenance helper itself is stale, refresh that
-root-owned helper from the live checkout before retrying the allowlisted
-commands. This is an operator/admin action because it updates
-`/usr/local/bin/continuum-hostctl`; agents should keep using the installed
-allowlisted helper until it is refreshed.
+The root-owned helper treats `/home/matthijs/continuum` as untrusted mutable
+input. It may sync data out of the checkout, but it must not execute repo
+scripts, import Continuum Python modules, or preserve unsafe ownership or
+special-file metadata as root.
 
-When an agent needs a repeatable way to refresh that root-owned helper, use the
-checksum-pinned wrapper pattern in `docs/agent_sudo_boundaries.md`. Do not add
-sudoers access to `scripts/test/setup_agent_host.sh` directly, because that file
-lives in a mutable checkout.
+When `LIBVIRT_URI=qemu:///system`, membership in `libvirt`/`kvm` makes
+`continuum-smoke` a high-trust automation user rather than a strong sandbox.
+Prefer narrower libvirt modes only when they do not break the Continuum scenario
+being certified.
+
+If `verify` reports that the maintenance helper itself is stale, replacing
+`/usr/local/bin/continuum-hostctl` is a manual reviewed operator action.
+Agents should keep using the installed allowlisted helper until it is replaced.
+Do not add sudoers access to `scripts/test/setup_agent_host.sh` directly,
+because that file lives in a mutable checkout.
 
 For pre-tag release checks, run both verification commands in the order shown
 above. An older installed helper can pass its own `verify` command before it
@@ -128,7 +137,6 @@ is the check that catches that drift. The live verifier uses noninteractive
 instead of prompting during release checks.
 
 ```bash
-./scripts/test/setup_agent_host.sh install-hostctl
 sudo -n /usr/local/bin/continuum-hostctl verify
 ```
 
@@ -367,7 +375,7 @@ The wrapper contract is:
    - `CONTINUUM_QEMU_BRIDGE_GATEWAY`
 9. writes runtime logs, matplotlib state, and test artifacts under
    `<base_path>/.continuum/...`,
-10. runs with `umask 022` so libvirt/QEMU can traverse generated image paths.
+10. runs with `umask 027` and explicit chmods for generated runtime paths.
 11. exposes `storage-report` and `prune-scenario` as unprivileged retained-state
     maintenance commands,
 12. `debug-playbook` is for bounded replay only; it should not become a shell

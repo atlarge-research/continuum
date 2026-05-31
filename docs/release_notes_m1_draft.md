@@ -131,7 +131,6 @@ python3 scripts/test/check_release_claims.py
 python3 scripts/test/check_release_matrix.py
 python3 scripts/test/check_docs_paths.py
 git diff --check
-sh scripts/test/setup_agent_host.sh install-hostctl
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
 sudo -n /usr/local/bin/continuum-hostctl verify
 sh scripts/test/setup_agent_host.sh verify
@@ -145,11 +144,11 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_soft
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
 ```
 
-Keep this order. Refresh the installed helper from the exact source tree before
-syncing the dedicated repository. The live `setup_agent_host.sh verify` check
-must run after the installed `continuum-hostctl verify` check because older
-installed helpers can pass their own verification while missing the current
-helper-interface contract.
+Keep this order. Updating `/usr/local/bin/continuum-hostctl` is a manual
+reviewed operator action and is not part of the agent pre-tag command block.
+The live `setup_agent_host.sh verify` check must run after the installed
+`continuum-hostctl verify` check because older installed helpers can pass their
+own verification while missing the current helper-interface contract.
 
 The wrapper scenarios above are the VM-backed evidence gate for the rows claimed
 in section 3. If runtime, runner, verifier, profile, or playbook code changed
@@ -162,8 +161,8 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Move or prune retained smoke state, then rerun the full `P-QEMU-06`
-   application attempt.
+1. Rerun the full `P-QEMU-06` application attempt now that retained smoke state
+   is on `/mnt/sdc/continuum_smoke`.
 2. Certify full `P-QEMU-06` and `P-QEMU-07` application rows after VM-backed
    application evidence passes.
 3. Resolve Docker-daemon or registry design for forced-prefetch application rows.

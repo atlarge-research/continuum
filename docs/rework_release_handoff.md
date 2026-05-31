@@ -56,31 +56,35 @@ That audit recorded:
 9. release evidence artifact issues: 0,
 10. pre-tag issues: 0.
 
-Post-checkpoint host-runner and VM-evidence state:
+Pre-hardening host-runner and VM-evidence state:
 
 1. VM evidence source commit: `67f49fa4f7af3b4f54912dabc8993ac923c8abdd`,
 2. dedicated runner repo: resynced from `/home/matthijs/continuum` with
    `sudo -n /usr/local/bin/continuum-hostctl sync-repo`,
 3. installed wrapper: refreshed with
    `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated`,
-4. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS,
+4. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS at that checkpoint,
 5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
    check-prereqs`: PASS.
 
-The dedicated runner is no longer blocked by repo drift or helper-interface
-drift, and all currently claimed VM-backed wrapper scenarios listed in
-`docs/release_notes_m1_draft.md` passed on 2026-05-29 from the clean evidence
-source commit. `python3 scripts/test/check_release_pretag.py` reports zero
-issues on the current docs/checker-only release head. Re-run
+At that checkpoint, the dedicated runner was no longer blocked by repo drift or
+helper-interface drift, and all currently claimed VM-backed wrapper scenarios
+listed in `docs/release_notes_m1_draft.md` passed on 2026-05-29 from the clean
+evidence source commit. `python3 scripts/test/check_release_pretag.py` reported
+zero issues on the docs/checker-only release head. Re-run
 `sudo -n /usr/local/bin/continuum-hostctl show-config` and
-`sudo -n /usr/local/bin/continuum-hostctl verify` after any new runtime commit
-to confirm that `LIVE_HEAD` and the dedicated sync marker refer to the runtime
-tree intended for VM-backed evidence.
+`sudo -n /usr/local/bin/continuum-hostctl verify` after manually reviewing and
+installing the hardened helper from this branch. The hardened helper intentionally
+uses interface version `2026-05-31-sudo-hardening`; older installed helpers are
+expected to report stale interface state until replaced. The hardened helper no
+longer runs `git` against the mutable live checkout as root, so commit/tree-state
+evidence should be recorded from the normal user shell or cloud-safe audit output.
 
-The previous sandbox problems are resolved for the current session:
+The previous sandbox problems were resolved for the earlier session:
 
 1. Git staging and committing work.
-2. `sudo -n /usr/local/bin/continuum-hostctl verify` passes.
+2. `sudo -n /usr/local/bin/continuum-hostctl verify` passed before this helper
+   interface was bumped.
 3. Agent sudo policy is documented in `docs/agent_sudo_boundaries.md`.
 
 Generic sudo may still differ between the operator shell and an agent sandbox.
@@ -111,22 +115,17 @@ Post-M1 parity progress after this checkpoint:
 7. The retained smoke root was relocated on 2026-05-30. Current evidence:
    `/home/continuum-smoke/continuum_smoke` is a symlink to
    `/mnt/sdc/continuum_smoke`; `run-continuum-smoke storage-report` reports 74G
-   retained state under `/mnt/sdc/continuum_smoke`; `/` has 84G free instead of
-   the previous 22G; and `sudo -n /usr/local/bin/continuum-hostctl verify`
-   passes.
+   retained state under `/mnt/sdc/continuum_smoke`; and `/` has 84G free instead
+   of the previous 22G.
 8. The installed wrapper base root is `/mnt/sdc/continuum_smoke`. The
    maintenance helper still reports its configured `SMOKE_BASE_ROOT` as
    `/home/continuum-smoke/continuum_smoke`, which is now the compatibility
    symlink. Do not remove that symlink unless all retained-evidence references
    and helper defaults are updated together.
-9. Optional host cleanup: `/usr/local/sbin/continuum-refresh-hostctl` was only
-   a checksum-pinned bootstrap helper for refreshing
-   `/usr/local/bin/continuum-hostctl`. After confirming no active sudoers rule
-   depends on it, an operator can remove
-   `/usr/local/sbin/continuum-refresh-hostctl` and
-   `/etc/sudoers.d/continuum-hostctl-refresh` to avoid future confusion. Agents
-   should not remove those files through broad sudo; they are outside the
-   approved `continuum-hostctl`/`run-continuum-smoke` command boundary.
+9. The old checksum-pinned bootstrap refresh helper and its sudoers file have
+   been removed from the host. Do not reintroduce them. Updating
+   `/usr/local/bin/continuum-hostctl` is a manual reviewed operator action;
+   the agent workflow starts from the already-installed root-owned helper.
 
 `P-QEMU-06` remains unclaimed. The next useful action is to rerun
 `qemu_kubeedge_image_parity` now that retained smoke state is on `/mnt/sdc`,

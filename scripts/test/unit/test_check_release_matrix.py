@@ -117,7 +117,6 @@ python3 scripts/test/check_release_claims.py
 python3 scripts/test/check_release_matrix.py
 python3 scripts/test/check_docs_paths.py
 git diff --check
-sh scripts/test/setup_agent_host.sh install-hostctl
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
 sudo -n /usr/local/bin/continuum-hostctl verify
 sh scripts/test/setup_agent_host.sh verify
@@ -1490,11 +1489,10 @@ When converting this seed into issues:
                 "## 4. Old-Main Provider And Topology Parity",
                 "Preferred M1 host command sequence:\n\n"
                 "1. `scripts/test/run_cloud_static_audit.sh`\n"
-                "2. `sh scripts/test/setup_agent_host.sh install-hostctl`\n"
                 "2. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`\n"
-                "4. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
-                "5. `sh scripts/test/setup_agent_host.sh verify`\n"
-                "6. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "2. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
+                "4. `sh scripts/test/setup_agent_host.sh verify`\n"
+                "5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
                 "qemu_infra_parity`\n\n"
                 "## 4. Old-Main Provider And Topology Parity",
             )
@@ -1506,7 +1504,7 @@ When converting this seed into issues:
                     check_release_matrix.MatrixIssue(
                         "matrix-host-command-numbering",
                         "Preferred M1 host command sequence lists "
-                        "'sudo -n /usr/local/bin/continuum-hostctl sync-repo' "
+                        "'sudo -n /usr/local/bin/continuum-hostctl verify' "
                         "as item 2; expected item 3",
                     )
                 ],
@@ -1519,10 +1517,9 @@ When converting this seed into issues:
                 "## 4. Old-Main Provider And Topology Parity",
                 "Preferred M1 host command sequence:\n\n"
                 "1. `scripts/test/run_cloud_static_audit.sh`\n"
-                "2. `sh scripts/test/setup_agent_host.sh install-hostctl`\n"
-                "3. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`\n"
-                "4. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
-                "5. `sh scripts/test/setup_agent_host.sh verify`\n\n"
+                "2. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`\n"
+                "3. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
+                "4. `sh scripts/test/setup_agent_host.sh verify`\n\n"
                 "## 4. Old-Main Provider And Topology Parity",
             )
             self._write_repo(root, matrix_text)
@@ -1547,10 +1544,9 @@ When converting this seed into issues:
                 "## 4. Old-Main Provider And Topology Parity",
                 "Preferred M1 host command sequence:\n\n"
                 "1. `scripts/test/run_cloud_static_audit.sh`\n"
-                "2. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`\n"
-                "3. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
-                "4. `sh scripts/test/setup_agent_host.sh verify`\n"
-                "5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "2. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
+                "3. `sh scripts/test/setup_agent_host.sh verify`\n"
+                "4. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
                 "qemu_infra_parity`\n\n"
                 "## 4. Old-Main Provider And Topology Parity",
             )
@@ -1562,7 +1558,7 @@ When converting this seed into issues:
                     check_release_matrix.MatrixIssue(
                         "matrix-host-required-command-missing",
                         "Preferred M1 host command sequence is missing "
-                        "'sh scripts/test/setup_agent_host.sh install-hostctl'",
+                        "'sudo -n /usr/local/bin/continuum-hostctl sync-repo'",
                     )
                 ],
             )

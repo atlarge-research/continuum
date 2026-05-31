@@ -138,7 +138,11 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
         self.assertIn('relocate-smoke-root)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-05-30-relocate-smoke-root', result.stdout)
+        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-05-31-sudo-hardening', result.stdout)
+        self.assertIn('umask 027', result.stdout)
+        self.assertIn('PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', result.stdout)
+        self.assertIn('validate_fixed_roots()', result.stdout)
+        self.assertIn('validate_prime_registry_args()', result.stdout)
         self.assertIn('validate_smoke_base_root()', result.stdout)
         self.assertIn('prepare_base_root_path()', result.stdout)
         self.assertIn('relocate_smoke_root()', result.stdout)
@@ -146,6 +150,11 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('verify_hostctl_interface()', result.stdout)
         self.assertIn('Installed maintenance helper is stale', result.stdout)
         self.assertIn('scripts/test/prime_local_registry_cache.py', result.stdout)
+        self.assertIn('runner_exec "$INSTALL_PATH" prime-registry-cache "$@"', result.stdout)
+        self.assertNotIn('PYTHONPATH=. "$VENV_ROOT/bin/python3" scripts/test/prime_local_registry_cache.py', result.stdout)
+        self.assertIn('rsync -rt --delete --delete-excluded --no-owner --no-group --no-perms', result.stdout)
+        self.assertIn('--chmod=Du=rwx,Dg=rx,Do=,Fu=rwX,Fg=rX,Fo=,ugo-s', result.stdout)
+        self.assertIn('find "$DEDICATED_REPO_ROOT" -type f -perm /111 -exec chmod 0750 {} +', result.stdout)
         self.assertIn('sudo -n \\$HOSTCTL_PATH sync-repo', result.stdout)
         self.assertNotIn('./scripts/test/setup_agent_host.sh sync-repo', result.stdout)
 
@@ -191,11 +200,17 @@ class HostRunnerScriptTests(unittest.TestCase):
             result.stderr,
         )
         self.assertIn(
-            "Refresh the helper with: /tmp/continuum-live/scripts/test/setup_agent_host.sh "
-            "install-hostctl",
+            "Hostctl replacement is a manual reviewed operator action.",
             result.stderr,
         )
         self.assertEqual(result.stdout, "")
+
+    def test_setup_sync_repo_rejects_extra_target_argument(self):
+        result = self._run_setup_script("sync-repo", "/tmp/evil")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Usage:", result.stderr)
+        self.assertIn("sync-repo", result.stderr)
 
     def test_verify_reports_stale_installed_hostctl_interface_version(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -223,7 +238,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-05-30-relocate-smoke-root",
+            "2026-05-31-sudo-hardening",
             result.stderr,
         )
 
@@ -234,7 +249,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-05-30-relocate-smoke-root\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-05-31-sudo-hardening\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -275,7 +290,7 @@ class HostRunnerScriptTests(unittest.TestCase):
                 "  shift\n"
                 "  if [ \"$1\" = \"test\" ] && [ \"$2\" = \"-w\" ]; then\n"
                 "    case \"$3\" in\n"
-                "      */continuum.py) exit 1 ;;\n"
+                "      */dedicated|*/continuum.py) exit 1 ;;\n"
                 "      *) exit 0 ;;\n"
                 "    esac\n"
                 "  fi\n"
@@ -310,7 +325,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-05-30-relocate-smoke-root\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-05-31-sudo-hardening\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",
@@ -529,6 +544,89 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Retained scenario sizes:", result.stdout)
         self.assertIn("qemu_kubeedge_image_parity", result.stdout)
         self.assertIn("Total retained smoke state:", result.stdout)
+
+    def test_run_smoke_rejects_malformed_scenario_names(self):
+        for scenario in ("../evil", "/tmp/evil", "x;id"):
+            with self.subTest(scenario=scenario):
+                result = self._run_smoke_script(
+                    scenario,
+                    extra_env={"CONTINUUM_REPO_ROOT": str(self.repo_root)},
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("Invalid smoke scenario name", result.stderr)
+
+    def test_run_smoke_prune_rejects_malformed_scenario_names(self):
+        result = self._run_smoke_script(
+            "prune-scenario",
+            "../evil",
+            "--yes-delete-retained-state",
+            extra_env={"CONTINUUM_REPO_ROOT": str(self.repo_root)},
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Invalid smoke scenario name", result.stderr)
+
+    def test_run_smoke_debug_playbook_rejects_absolute_path(self):
+        result = self._run_smoke_script(
+            "debug-playbook",
+            "benchmark_k8s_resume_software",
+            "/tmp/evil.yml",
+            extra_env={"CONTINUUM_REPO_ROOT": str(self.repo_root)},
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Debug playbook must be a repo-relative playbook path", result.stderr)
+
+    def test_run_smoke_prime_registry_cache_runs_as_runner_mode(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            runner_home = temp_root / "runner-home"
+            runner_home.mkdir()
+            venv_bin = temp_root / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            fake_python = venv_bin / "python3"
+            fake_python.write_text(
+                "#!/bin/sh\n"
+                "printf 'HOME=%s\\n' \"$HOME\"\n"
+                "printf 'XDG_CACHE_HOME=%s\\n' \"$XDG_CACHE_HOME\"\n"
+                "printf 'PYARGS:%s\\n' \"$*\"\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            smoke_base_root = temp_root / "smoke-base"
+
+            result = self._run_smoke_script(
+                "prime-registry-cache",
+                "--suite",
+                "qemu_kubeedge_image_parity",
+                extra_env={
+                    "HOME": str(runner_home),
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(fake_python),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                },
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"HOME={runner_home}", result.stdout)
+        self.assertIn(f"XDG_CACHE_HOME={smoke_base_root / '.cache'}", result.stdout)
+        self.assertIn(
+            "PYARGS:scripts/test/prime_local_registry_cache.py --suite "
+            "qemu_kubeedge_image_parity",
+            result.stdout,
+        )
+
+    def test_run_smoke_prime_registry_cache_rejects_unsafe_args(self):
+        result = self._run_smoke_script(
+            "prime-registry-cache",
+            "--suite",
+            "../evil",
+            extra_env={"CONTINUUM_REPO_ROOT": str(self.repo_root)},
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Unsafe suite name for prime-registry-cache", result.stderr)
 
     def test_run_smoke_prune_scenario_requires_confirmation(self):
         with tempfile.TemporaryDirectory() as tempdir:

@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
-umask 022
+umask 027
+
+SAFE_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+PATH=$SAFE_PATH
+export PATH
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
@@ -27,6 +31,108 @@ QEMU_BRIDGE_GATEWAY="${CONTINUUM_QEMU_BRIDGE_GATEWAY:-}"
 RUN_MODE="config"
 REMOTE_TMP_TAG="${CONTINUUM_SMOKE_REMOTE_TMP_TAG:-$(basename -- "${HOME:-/home/continuum-smoke}")}"
 DEBUG_PLAYBOOK=""
+
+invalid_name_pattern() {
+  case "$1" in
+    ""|/*|*..*|*/*|*';'*|*'&'*|*'|'*|*'`'*|*'$'*|*'\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+validate_scenario_name() {
+  scenario=$1
+  if invalid_name_pattern "$scenario"; then
+    echo "Invalid smoke scenario name: $scenario" >&2
+    return 2
+  fi
+}
+
+validate_debug_playbook_path() {
+  playbook=$1
+  case "$playbook" in
+    playbooks/*.yml|playbooks/*.yaml)
+      ;;
+    *)
+      echo "Debug playbook must be a repo-relative playbook path under playbooks/: $playbook" >&2
+      return 2
+      ;;
+  esac
+  case "$playbook" in
+    /*|*..*|*';'*|*'&'*|*'|'*|*'`'*|*'$'*|*'\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+      echo "Unsafe debug playbook path: $playbook" >&2
+      return 2
+      ;;
+  esac
+  if [ ! -f "$REPO_ROOT/$playbook" ]; then
+    echo "Debug playbook does not exist: $playbook" >&2
+    return 2
+  fi
+}
+
+validate_prime_registry_args() {
+  if [ "$#" -eq 0 ]; then
+    echo "Usage: $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    return 2
+  fi
+
+  mode=
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --suite)
+        if [ "${mode:-}" = "config" ]; then
+          echo "Cannot mix --suite and --config for prime-registry-cache" >&2
+          return 2
+        fi
+        mode=suite
+        shift
+        if [ "$#" -eq 0 ]; then
+          echo "Missing suite name after --suite" >&2
+          return 2
+        fi
+        if invalid_name_pattern "$1"; then
+          echo "Unsafe suite name for prime-registry-cache: $1" >&2
+          return 2
+        fi
+        shift
+        ;;
+      --config)
+        if [ "${mode:-}" = "suite" ]; then
+          echo "Cannot mix --suite and --config for prime-registry-cache" >&2
+          return 2
+        fi
+        mode=config
+        shift
+        if [ "$#" -eq 0 ]; then
+          echo "Missing config path after --config" >&2
+          return 2
+        fi
+        case "$1" in
+          configs/experiments/*.yaml|configs/experiments/*.yml|configuration/tests/*.cfg)
+            ;;
+          *)
+            echo "Unsupported config path for prime-registry-cache: $1" >&2
+            return 2
+            ;;
+        esac
+        case "$1" in
+          /*|*..*|*';'*|*'&'*|*'|'*|*'`'*|*'$'*|*'\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+            echo "Unsafe config path for prime-registry-cache: $1" >&2
+            return 2
+            ;;
+        esac
+        shift
+        ;;
+      *)
+        echo "Unsupported prime-registry-cache argument: $1" >&2
+        return 2
+        ;;
+    esac
+  done
+}
 
 retained_scenario_path() {
   case "$1" in
@@ -88,6 +194,8 @@ prune_scenario() {
     return 2
   fi
 
+  validate_scenario_name "$scenario" || return $?
+
   if ! scenario_path=$(retained_scenario_path "$scenario"); then
     echo "Unsupported retained scenario for pruning: $scenario" >&2
     echo "Known retained scenarios:" >&2
@@ -130,8 +238,12 @@ if [ "$SCENARIO" = "debug-playbook" ]; then
   RUN_MODE="debug_playbook"
   SCENARIO=$2
   DEBUG_PLAYBOOK=$3
+  validate_scenario_name "$SCENARIO"
+  validate_debug_playbook_path "$DEBUG_PLAYBOOK"
   shift 3
 fi
+
+validate_scenario_name "$SCENARIO"
 
 if [ "$SCENARIO" = "storage-report" ]; then
   storage_report
@@ -142,6 +254,12 @@ if [ "$SCENARIO" = "prune-scenario" ]; then
   shift
   prune_scenario "$@"
   exit $?
+fi
+
+if [ "$SCENARIO" = "prime-registry-cache" ]; then
+  shift
+  validate_prime_registry_args "$@"
+  set -- prime-registry-cache "$@"
 fi
 
 if [ ! -x "$PYTHON_BIN" ]; then
@@ -255,9 +373,10 @@ case "$SCENARIO" in
     cd "$REPO_ROOT"
     exec env -i \
       HOME="${HOME:-/home/continuum-smoke}" \
-      PATH="$VENV_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+      PATH="$VENV_BIN:$SAFE_PATH" \
       PYTHONPATH=. \
       PYTHONDONTWRITEBYTECODE=1 \
+      XDG_CACHE_HOME="$BASE_ROOT/.cache" \
       MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
       LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \
       CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \
@@ -276,9 +395,10 @@ case "$SCENARIO" in
     cd "$REPO_ROOT"
     exec env -i \
       HOME="${HOME:-/home/continuum-smoke}" \
-      PATH="$VENV_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+      PATH="$VENV_BIN:$SAFE_PATH" \
       PYTHONPATH=. \
       PYTHONDONTWRITEBYTECODE=1 \
+      XDG_CACHE_HOME="$BASE_ROOT/.cache" \
       MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
       LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \
       CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \
@@ -287,9 +407,36 @@ case "$SCENARIO" in
       ${QEMU_BRIDGE_GATEWAY:+CONTINUUM_QEMU_BRIDGE_GATEWAY="$QEMU_BRIDGE_GATEWAY"} \
       "$PYTHON_BIN" scripts/test/run_tests.py --list-suites
     ;;
+  prime-registry-cache)
+    shift
+    validate_prime_registry_args "$@"
+    BASE_PATH="$BASE_ROOT/prereqs"
+    CONTINUUM_HOME="$BASE_PATH/.continuum"
+    TEST_RESULTS_DIR="$CONTINUUM_HOME/test_results"
+    MPLCONFIGDIR_PATH="$CONTINUUM_HOME/mplconfig"
+    XDG_CACHE_HOME_PATH="$BASE_ROOT/.cache"
+    mkdir -p "$BASE_PATH" "$CONTINUUM_HOME" "$TEST_RESULTS_DIR" "$MPLCONFIGDIR_PATH" \
+      "$XDG_CACHE_HOME_PATH"
+    chmod 0750 "$BASE_PATH" "$CONTINUUM_HOME" "$TEST_RESULTS_DIR" "$MPLCONFIGDIR_PATH" \
+      "$XDG_CACHE_HOME_PATH"
+    cd "$REPO_ROOT"
+    exec env -i \
+      HOME="${HOME:-/home/continuum-smoke}" \
+      PATH="$VENV_BIN:$SAFE_PATH" \
+      PYTHONPATH=. \
+      PYTHONDONTWRITEBYTECODE=1 \
+      XDG_CACHE_HOME="$XDG_CACHE_HOME_PATH" \
+      MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
+      LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \
+      CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \
+      CONTINUUM_TEST_RESULTS_DIR="$TEST_RESULTS_DIR" \
+      ${QEMU_BRIDGE_NAME:+CONTINUUM_QEMU_BRIDGE_NAME="$QEMU_BRIDGE_NAME"} \
+      ${QEMU_BRIDGE_GATEWAY:+CONTINUUM_QEMU_BRIDGE_GATEWAY="$QEMU_BRIDGE_GATEWAY"} \
+      "$PYTHON_BIN" scripts/test/prime_local_registry_cache.py "$@"
+    ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, debug-playbook, storage-report, prune-scenario" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, prune-scenario" >&2
     exit 2
     ;;
 esac
@@ -306,20 +453,14 @@ chmod 0755 "$BASE_PATH" "$CONTINUUM_HOME" "$TEST_RESULTS_DIR" "$MPLCONFIGDIR_PAT
 
 cd "$REPO_ROOT"
 if [ "$RUN_MODE" = "debug_playbook" ]; then
-  case "$DEBUG_PLAYBOOK" in
-    /*)
-      PLAYBOOK_PATH=$DEBUG_PLAYBOOK
-      ;;
-    *)
-      PLAYBOOK_PATH="$REPO_ROOT/$DEBUG_PLAYBOOK"
-      ;;
-  esac
+  PLAYBOOK_PATH="$REPO_ROOT/$DEBUG_PLAYBOOK"
 
   exec env -i \
     HOME="${HOME:-/home/continuum-smoke}" \
-    PATH="$VENV_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    PATH="$VENV_BIN:$SAFE_PATH" \
     PYTHONPATH=. \
     PYTHONDONTWRITEBYTECODE=1 \
+    XDG_CACHE_HOME="$BASE_ROOT/.cache" \
     MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
     ANSIBLE_CONFIG="$REPO_ROOT/ansible.cfg" \
     ANSIBLE_LOCAL_TEMP="$ANSIBLE_LOCAL_TEMP_PATH" \
@@ -337,9 +478,10 @@ fi
 if [ "$RUN_MODE" = "suite" ]; then
   exec env -i \
     HOME="${HOME:-/home/continuum-smoke}" \
-    PATH="$VENV_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    PATH="$VENV_BIN:$SAFE_PATH" \
     PYTHONPATH=. \
     PYTHONDONTWRITEBYTECODE=1 \
+    XDG_CACHE_HOME="$BASE_ROOT/.cache" \
     MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
     CONTINUUM_SMOKE_BASE_ROOT="$BASE_ROOT" \
     CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \
@@ -354,9 +496,10 @@ fi
 
 exec env -i \
   HOME="${HOME:-/home/continuum-smoke}" \
-  PATH="$VENV_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+  PATH="$VENV_BIN:$SAFE_PATH" \
   PYTHONPATH=. \
   PYTHONDONTWRITEBYTECODE=1 \
+  XDG_CACHE_HOME="$BASE_ROOT/.cache" \
   MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
   CONTINUUM_SMOKE_BASE_ROOT="$BASE_ROOT" \
   CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \

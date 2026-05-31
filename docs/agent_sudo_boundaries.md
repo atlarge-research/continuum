@@ -22,8 +22,9 @@ When an agent asks for new sudo access, resolve it in this order:
    shell, Python, Ansible, package manager, service manager, or editor.
 3. Add one root-owned wrapper outside the repo, normally under
    `/usr/local/sbin`, with strict internal argument validation.
-4. If the wrapper uses a repo file, pin and verify that file's SHA-256 before
-   using it.
+4. Do not execute repo-controlled shell/Python/Make/Ansible code as root. If a
+   wrapper needs repo data, treat it as untrusted input and validate paths and
+   arguments explicitly.
 5. Add one sudoers entry for that exact root-owned wrapper path.
 6. Validate with `visudo -cf` and one `sudo -n <wrapper>` command.
 7. Update this document and the relevant Continuum skill or handoff document.
@@ -59,10 +60,8 @@ Use this model for any new agent sudo capability:
    are needed, the target command must validate a small allowlisted argument
    set internally.
 4. The command takes either no arguments or that small allowlisted argument set.
-5. If the command consumes a repo script, it verifies the script checksum before
-   executing or generating anything from it.
-6. The command fails closed on checksum mismatch, unsupported arguments, missing
-   prerequisites, or unexpected ownership.
+5. The command fails closed on unsupported arguments, missing prerequisites, or
+   unexpected ownership.
 7. The agent uses `sudo -n` so failures are noninteractive and visible.
 
 Do not grant sudoers access to:
@@ -114,73 +113,32 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke debug-playbook <su
 For `debug-playbook`, use only read-only diagnostics unless the user explicitly
 approves the exact mutating command.
 
-If the installed helper is stale, the operator can refresh it with:
+If the installed helper is stale, replacing
+`/usr/local/bin/continuum-hostctl` is a manual reviewed operator action. Agents
+must not regenerate or overwrite it from repo-controlled code.
 
-```bash
-sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh install-hostctl
-sudo -n /usr/local/bin/continuum-hostctl verify
-```
+The stable helper contract is:
 
-Do not add extra mode arguments to `install-hostctl`; `install` takes an
-optional mode, but `install-hostctl` does not.
+1. `/home/matthijs/continuum` is mutable and untrusted from root's perspective.
+2. `/usr/local/bin/continuum-hostctl` may copy data from that checkout but must
+   not source files from it, import Continuum modules as root, call repo shell
+   scripts as root, or preserve unsafe metadata during sync.
+3. `/srv/continuum/repo` is a synced runner checkout owned by a trusted owner
+   such as `root:continuum-smoke`; it is readable/executable by
+   `continuum-smoke` but not writable by that user.
+4. `/mnt/sdc/continuum_smoke` is the mutable retained smoke root. The legacy
+   `/home/continuum-smoke/continuum_smoke` path remains a compatibility symlink
+   to it.
+5. `run-continuum-smoke` runs repo-controlled Continuum code as
+   `continuum-smoke`, with a sanitized environment, bytecode writes disabled,
+   and cache paths under the retained smoke root.
+6. `continuum-smoke` is isolated from the normal user checkout and home state,
+   but it is still a high-trust automation user when `qemu:///system`,
+   `/dev/kvm`, Docker, or the system libvirt socket are required.
 
-## 4. Continuum Host Helper Refresh
+## 4. Wrapper Template
 
-The host-helper refresh case uses this pattern:
-
-1. Review the repo script that emits the helper:
-   `scripts/test/setup_agent_host.sh`.
-2. Compute its hash:
-
-   ```bash
-   sha256sum /home/matthijs/continuum/scripts/test/setup_agent_host.sh
-   ```
-
-3. Create a root-owned wrapper at
-   `/usr/local/sbin/continuum-refresh-hostctl` with that hash pinned in
-   `EXPECTED_SHA256`.
-4. Add exactly this sudoers capability:
-
-   ```text
-   matthijs ALL=(root) NOPASSWD: /usr/local/sbin/continuum-refresh-hostctl
-   ```
-
-5. The agent may then run only:
-
-   ```bash
-   sudo -n /usr/local/sbin/continuum-refresh-hostctl
-   ```
-
-The wrapper should regenerate `/usr/local/bin/continuum-hostctl` by running:
-
-```bash
-sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script
-```
-
-and then installing the generated file with `/usr/bin/install` and
-`/usr/bin/chown`.
-
-If `setup_agent_host.sh` changes, the wrapper must fail until an operator
-reviews the change and updates the pinned hash. That is intentional.
-
-After the refresh has been applied and `/usr/local/bin/continuum-hostctl`
-contains the required stable verbs, `/usr/local/sbin/continuum-refresh-hostctl`
-is optional bootstrap machinery rather than part of the normal agent workflow.
-If the host no longer needs that refresh path, remove both the sudoers entry for
-the refresh wrapper and the wrapper file itself from an operator shell. Agents
-should keep using the stable `continuum-hostctl` verbs and should not request
-broad sudo solely to delete bootstrap files.
-
-On the current certification host, the refresh-specific files are:
-
-```text
-/usr/local/sbin/continuum-refresh-hostctl
-/etc/sudoers.d/continuum-hostctl-refresh
-```
-
-## 5. Template
-
-Use this as a starting point for similar one-command refresh wrappers:
+Use this as a starting point for similar one-command host wrappers:
 
 ```sh
 #!/bin/sh
@@ -284,7 +242,7 @@ Skill body:
 ````markdown
 ---
 name: continuum-safe-sudo
-description: Use when an agent needs, audits, documents, or troubleshoots narrow sudo access for Continuum host operations, including root-owned wrappers, sudoers allowlists, checksum-pinned repo scripts, sudo -n commands, and sandbox-versus-host permission differences.
+description: Use when an agent needs, audits, documents, or troubleshoots narrow sudo access for Continuum host operations, including root-owned wrappers, sudoers allowlists, sudo -n commands, and sandbox-versus-host permission differences.
 ---
 
 # Continuum Safe Sudo
@@ -309,8 +267,9 @@ entry.
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke ...`
 3. For a new capability, propose a root-owned wrapper outside the repo, usually
    under `/usr/local/sbin`.
-4. If the wrapper depends on a repo file, require a pinned SHA-256 check before
-   executing or generating anything from that repo file.
+4. Do not execute mutable repo shell/Python/Make/Ansible code as root. Treat
+   repo files as untrusted input unless an operator has explicitly reviewed and
+   installed a new root-owned helper.
 5. Use `sudo -n` only. Noninteractive failure is expected and should be reported.
 6. Document the exact command, sudoers path, wrapper path, verification command,
    and failure mode.
@@ -348,32 +307,42 @@ sudo visudo -cf /etc/sudoers.d/example-wrapper
 sudo -n /usr/local/sbin/example-wrapper
 ```
 
-## Continuum Host Helper Refresh
+## Host Boundary Verification
 
-For refreshing `/usr/local/bin/continuum-hostctl`, the intended command is:
-
-```bash
-sudo -n /usr/local/sbin/continuum-refresh-hostctl
-```
-
-The wrapper should checksum-pin:
-
-```text
-/home/matthijs/continuum/scripts/test/setup_agent_host.sh
-```
-
-and install only the output of:
+Use these checks after host setup or manual helper replacement:
 
 ```bash
-sh /home/matthijs/continuum/scripts/test/setup_agent_host.sh print-hostctl-script
+stat -c '%U %G %a %n' \
+  /usr/local/bin \
+  /usr/local/bin/continuum-hostctl \
+  /usr/local/bin/run-continuum-smoke \
+  /srv/continuum/repo \
+  /mnt/sdc/continuum_smoke
+sudo -l -U matthijs
+sudo -n /usr/local/bin/continuum-hostctl verify
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke storage-report
 ```
 
-Do not sudo the repo script directly.
+These negative checks should fail unless they are explicitly added as reviewed
+helper capabilities:
 
-After a successful refresh, this wrapper is not required for day-to-day smoke
-execution. Prefer removing stale refresh wrappers and their sudoers entries
-from an operator shell once the installed `continuum-hostctl` has the required
-stable verbs.
+```bash
+sudo -n /bin/sh -c 'id'
+sudo -n -u root /bin/sh -c 'id'
+sudo -n -u continuum-smoke /bin/sh -c 'id'
+sudo -n /usr/local/bin/continuum-hostctl bogus
+sudo -n /usr/local/bin/continuum-hostctl sync-repo /tmp/evil
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke ../evil
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke 'x;id'
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke /tmp/evil
+```
+
+## Continuum Host Helper Updates
+
+Do not add a refresh helper for `/usr/local/bin/continuum-hostctl`. Updating
+that root-owned helper changes the privileged boundary and must remain a manual
+reviewed operator action. The agent-facing workflow starts after the reviewed
+helper is already installed and uses only the stable `continuum-hostctl` verbs.
 
 ## Diagnostics
 

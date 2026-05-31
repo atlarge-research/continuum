@@ -61,7 +61,6 @@ REQUIRED_M1_PRE_TAG_COMMANDS = (
     "python3 scripts/test/check_release_matrix.py",
     "python3 scripts/test/check_docs_paths.py",
     "git diff --check",
-    "sh scripts/test/setup_agent_host.sh install-hostctl",
     "sudo -n /usr/local/bin/continuum-hostctl sync-repo",
     "sudo -n /usr/local/bin/continuum-hostctl verify",
     "sh scripts/test/setup_agent_host.sh verify",
@@ -76,7 +75,6 @@ REQUIRED_M1_PRE_TAG_COMMANDS = (
 )
 REQUIRED_M1_HOST_SEQUENCE_COMMANDS = (
     "scripts/test/run_cloud_static_audit.sh",
-    "sh scripts/test/setup_agent_host.sh install-hostctl",
     "sudo -n /usr/local/bin/continuum-hostctl sync-repo",
     "sudo -n /usr/local/bin/continuum-hostctl verify",
     "sh scripts/test/setup_agent_host.sh verify",
