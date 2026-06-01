@@ -157,32 +157,26 @@
                 ]
             },
             "prerequisites": {
-                "summary": "Requires a local QEMU/libvirt host with SSH access, tc/netperf support, and Docker daemon access for forced image prefetch",
+                "summary": "Requires a local QEMU/libvirt host with SSH access, tc/netperf support, and a primed local registry cache for Kubernetes image-classification application images",
                 "commands": [
                     "virsh",
                     "ssh",
                     "tc",
                     "setfacl",
                     "curl",
-                    "docker",
                     "qemu-img",
                     "cloud-localds",
                     "ansible-playbook"
                 ],
                 "checks": [
                     {
-                        "name": "Docker socket access",
+                        "name": "Local registry cache",
                         "command": [
-                            "test",
-                            "-w",
-                            "/var/run/docker.sock"
-                        ]
-                    },
-                    {
-                        "name": "Docker daemon access",
-                        "command": [
-                            "docker",
-                            "info"
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_k8s_image_parity",
+                            "--check-only"
                         ]
                     }
                 ]
@@ -441,32 +435,26 @@
                 ]
             },
             "prerequisites": {
-                "summary": "Requires a local QEMU/libvirt host with SSH access, tc support, and Docker daemon access for forced endpoint image prefetch",
+                "summary": "Requires a local QEMU/libvirt host with SSH access, tc support, and a primed local registry cache for endpoint image-classification application images",
                 "commands": [
                     "virsh",
                     "ssh",
                     "tc",
                     "setfacl",
                     "curl",
-                    "docker",
                     "qemu-img",
                     "cloud-localds",
                     "ansible-playbook"
                 ],
                 "checks": [
                     {
-                        "name": "Docker socket access",
+                        "name": "Local registry cache",
                         "command": [
-                            "test",
-                            "-w",
-                            "/var/run/docker.sock"
-                        ]
-                    },
-                    {
-                        "name": "Docker daemon access",
-                        "command": [
-                            "docker",
-                            "info"
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_endpoint_image_parity",
+                            "--check-only"
                         ]
                     }
                 ]

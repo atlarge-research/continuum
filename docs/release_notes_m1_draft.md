@@ -99,8 +99,9 @@ milestones.
    exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`.
    Full Mist application parity is certified only for `P-QEMU-07`; the exact
    evidence is `docs/release_evidence_qemu_mist_image_2026-06-01.md`.
-3. Forced image-prefetch rows still require Docker daemon access on the
-   certification host.
+3. Full OpenFaaS application parity still requires either Docker daemon access
+   for forced image-prefetch or a cache-backed registry design compatible with
+   that row.
 4. Full OpenFaaS application parity also needs a decision on exact legacy
    resource-shape certification or a larger/external QEMU runner.
 5. Cloud-provider rows need YAML profiles, credential/cost documentation, and
@@ -173,7 +174,9 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Resolve Docker-daemon or registry design for forced-prefetch application rows.
+1. Record clean-source VM evidence for cache-backed `P-QEMU-05` and
+   `P-QEMU-08`, then resolve Docker-daemon or registry design for full
+   `P-QEMU-10`.
 2. Decide exact-resource versus practical-runner claims for full `P-QEMU-10`.
 3. Port or explicitly demote GCP/AWS historical rows.
 4. Convert the remaining parity matrix into issues grouped by provider and

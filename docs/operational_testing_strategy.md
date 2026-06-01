@@ -329,9 +329,10 @@ human-readable docs. The active suite contract is now:
 3. `network_validation` preflights the same base commands plus `tc` for network emulation,
 4. `qemu_infra_parity` preflights the local QEMU/libvirt commands plus `tc` for infra-only old-main parity rows,
 5. `qemu_k8s_nobench_parity` preflights the local QEMU/libvirt commands plus `tc` for the old-main Kubernetes no-benchmark row,
-6. `qemu_k8s_image_parity` preflights Docker daemon access in addition to the
-   QEMU/libvirt and network commands because it models a legacy forced
-   image-prefetch row,
+6. `qemu_k8s_image_parity` preflights local-registry cache readiness in
+   addition to the QEMU/libvirt and network commands because the full
+   Kubernetes application row uses `image_prefetch: "off"` with cached
+   application images,
 7. `qemu_kubeedge_software_parity` preflights the local QEMU/libvirt runner
    commands for KubeEdge software-only certification,
 8. `qemu_kubeedge_image_parity` preflights local-registry cache readiness in
@@ -344,9 +345,10 @@ human-readable docs. The active suite contract is now:
    application row uses `image_prefetch: "off"` with cached application images,
 11. `qemu_endpoint_software_parity` preflights the local QEMU/libvirt runner
    commands plus `tc` for endpoint-runtime software-only certification,
-12. `qemu_endpoint_image_parity` preflights Docker daemon access in addition to
-   the QEMU/libvirt and network commands because it models the legacy
-   endpoint-only forced image-prefetch row,
+12. `qemu_endpoint_image_parity` preflights local-registry cache readiness in
+   addition to the QEMU/libvirt and network commands because the full
+   endpoint-only application row uses `image_prefetch: "off"` with cached
+   application images,
 13. `qemu_openfaas_software_parity` preflights the local QEMU/libvirt runner
    commands for OpenFaaS software-only certification on a single-host CPU-capped
    variant of the legacy node counts,
@@ -390,7 +392,7 @@ What is already covered:
 18. dedicated host-wrapper scenario and suite for the QEMU Kubernetes
     no-benchmark parity row: `qemu_k8s_nobench_parity`.
 19. dedicated host-wrapper scenario and suite for the QEMU Kubernetes
-    image-classification row, with explicit Docker preflight:
+    image-classification row, with explicit local-registry cache preflight:
     `qemu_k8s_image_parity`.
 20. dedicated host-wrapper scenario and suite for QEMU KubeEdge software-only
     parity: `qemu_kubeedge_software_parity`.
@@ -405,7 +407,7 @@ What is already covered:
 24. dedicated host-wrapper scenario and suite for QEMU endpoint-runtime
     software-only parity: `qemu_endpoint_software_parity`.
 25. dedicated host-wrapper scenario and suite for the full QEMU endpoint-only
-    image-classification row, with explicit Docker preflight:
+    image-classification row, with explicit local-registry cache preflight:
     `qemu_endpoint_image_parity`.
 26. dedicated host-wrapper scenario and suite for QEMU OpenFaaS software-only
     evidence on a single-host CPU-capped variant:

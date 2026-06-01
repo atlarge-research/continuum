@@ -213,8 +213,14 @@ To run the QEMU Kubernetes image-classification parity suite, use:
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity
 ```
 
-This suite models the legacy `docker_pull = True` row and therefore preflights
-Docker daemon access before starting VMs.
+This full application suite uses `image_prefetch: "off"` and therefore expects
+the required application images to exist in the local registry cache before VM
+provisioning starts:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prime-registry-cache --check-only --suite qemu_k8s_image_parity
+```
 
 To run the QEMU KubeEdge software-only parity suite, use:
 
@@ -275,8 +281,13 @@ To preflight the full QEMU endpoint image-classification parity suite, use:
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity
 ```
 
-This full application suite currently preflights Docker daemon access before
-starting VMs because the legacy endpoint row used forced image prefetch.
+This full application suite uses the same cache-backed registry model as the
+other certified application parity rows:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prime-registry-cache --check-only --suite qemu_endpoint_image_parity
+```
 
 To run the QEMU OpenFaaS software-only suite on the single-host CPU-capped
 variant, use:

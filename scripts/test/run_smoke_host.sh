@@ -75,13 +75,16 @@ validate_debug_playbook_path() {
 
 validate_prime_registry_args() {
   if [ "$#" -eq 0 ]; then
-    echo "Usage: $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    echo "Usage: $0 prime-registry-cache [--check-only] [--suite SUITE | --config CONFIG ...]" >&2
     return 2
   fi
 
   mode=
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --check-only)
+        shift
+        ;;
       --suite)
         if [ "${mode:-}" = "config" ]; then
           echo "Cannot mix --suite and --config for prime-registry-cache" >&2
@@ -132,6 +135,24 @@ validate_prime_registry_args() {
         ;;
     esac
   done
+}
+
+validate_check_prereqs_args() {
+  CHECK_PREREQS_SUITE=smoke
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+
+  if [ "$#" -ne 2 ] || [ "$1" != "--suite" ]; then
+    echo "Usage: $0 check-prereqs [--suite SUITE]" >&2
+    return 2
+  fi
+
+  if invalid_name_pattern "$2"; then
+    echo "Unsafe suite name for check-prereqs: $2" >&2
+    return 2
+  fi
+  CHECK_PREREQS_SUITE=$2
 }
 
 retained_scenario_path() {
@@ -260,6 +281,12 @@ if [ "$SCENARIO" = "prime-registry-cache" ]; then
   shift
   validate_prime_registry_args "$@"
   set -- prime-registry-cache "$@"
+fi
+
+if [ "$SCENARIO" = "check-prereqs" ]; then
+  shift
+  validate_check_prereqs_args "$@"
+  set -- check-prereqs "$@"
 fi
 
 if [ ! -x "$PYTHON_BIN" ]; then
@@ -404,7 +431,7 @@ case "$SCENARIO" in
       CONTINUUM_TEST_RESULTS_DIR="$TEST_RESULTS_DIR" \
       ${QEMU_BRIDGE_NAME:+CONTINUUM_QEMU_BRIDGE_NAME="$QEMU_BRIDGE_NAME"} \
       ${QEMU_BRIDGE_GATEWAY:+CONTINUUM_QEMU_BRIDGE_GATEWAY="$QEMU_BRIDGE_GATEWAY"} \
-      "$PYTHON_BIN" scripts/test/run_tests.py --suite smoke --check-prereqs
+      "$PYTHON_BIN" scripts/test/run_tests.py --suite "$CHECK_PREREQS_SUITE" --check-prereqs
     ;;
   list-suites)
     BASE_PATH="$BASE_ROOT/prereqs"

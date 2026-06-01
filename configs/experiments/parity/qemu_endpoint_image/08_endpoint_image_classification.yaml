@@ -8,7 +8,7 @@ use:
 
 run:
   targets: [infrastructure, software, application]
-  image_prefetch: "on"
+  image_prefetch: "off"
   dry_run: false
   clean: false
 

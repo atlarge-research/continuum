@@ -31,7 +31,7 @@ Usage:
   $0 install [dedicated|live]
   $0 sync-repo
   $0 verify
-  $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
+  $0 prime-registry-cache [--check-only] [--suite SUITE | --config CONFIG ...]
   $0 relocate-smoke-root absolute/path/to/continuum_smoke --replace-source-with-symlink
   $0 install-hostctl   # operator-reviewed manual update only
   $0 print-agent-command [scenario]
@@ -194,13 +194,16 @@ validate_fixed_roots() {
 
 validate_prime_registry_args() {
   if [ "$#" -eq 0 ]; then
-    log "Usage: $0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    log "Usage: $0 prime-registry-cache [--check-only] [--suite SUITE | --config CONFIG ...]" >&2
     exit 2
   fi
 
   mode=
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --check-only)
+        shift
+        ;;
       --suite)
         if [ "${mode:-}" = "config" ]; then
           log "Cannot mix --suite and --config for prime-registry-cache" >&2
@@ -369,7 +372,7 @@ Usage:
   \$0 sync-repo
   \$0 install-wrapper [dedicated|live] [absolute/path/to/continuum_smoke]
   \$0 verify [dedicated|live]
-  \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]
+  \$0 prime-registry-cache [--check-only] [--suite SUITE | --config CONFIG ...]
   \$0 relocate-smoke-root absolute/path/to/continuum_smoke --replace-source-with-symlink
   \$0 print-agent-command [scenario]
 EOF_HOSTCTL
@@ -441,13 +444,16 @@ validate_fixed_roots() {
 
 validate_prime_registry_args() {
   if [ "\$#" -eq 0 ]; then
-    log "Usage: \$0 prime-registry-cache [--suite SUITE | --config CONFIG ...]" >&2
+    log "Usage: \$0 prime-registry-cache [--check-only] [--suite SUITE | --config CONFIG ...]" >&2
     exit 2
   fi
 
   mode=
   while [ "\$#" -gt 0 ]; do
     case "\$1" in
+      --check-only)
+        shift
+        ;;
       --suite)
         if [ "\${mode:-}" = "config" ]; then
           log "Cannot mix --suite and --config for prime-registry-cache" >&2
