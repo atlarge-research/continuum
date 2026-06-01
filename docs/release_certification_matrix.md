@@ -111,7 +111,7 @@ VM-backed or cloud-backed run proves the claim on the rework stack.
 | P-QEMU-02 | `configuration/tests/qemu/02_infraonly-edge.cfg` | QEMU edge-only infrastructure | `configs/experiments/parity/qemu/02_infraonly_edge.yaml`; suite `qemu_infra_parity` | `certified` | Evidence: `docs/release_evidence_qemu_infra_parity_2026-06-01.md`. |
 | P-QEMU-03 | `configuration/tests/qemu/03_infraonly-endpoint.cfg` | QEMU endpoint-only infrastructure | `configs/experiments/parity/qemu/03_infraonly_endpoint.yaml`; suite `qemu_infra_parity` | `certified` | Evidence: `docs/release_evidence_qemu_infra_parity_2026-06-01.md`. |
 | P-QEMU-04 | `configuration/tests/qemu/04_infraonly-all.cfg` | QEMU cloud/edge/endpoint infrastructure | `configs/experiments/parity/qemu/04_infraonly_all.yaml`; suite `qemu_infra_parity` | `certified` | Evidence: `docs/release_evidence_qemu_infra_parity_2026-06-01.md`. |
-| P-QEMU-05 | `configuration/tests/qemu/05_kuberentes-img.cfg` | QEMU Kubernetes plus image-classification application with netperf enabled | `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml`; suite `qemu_k8s_image_parity` | `ported-unverified` | The suite now uses the cache-backed local-registry model instead of forcing Docker daemon access for `continuum-smoke`. Keep unclaimed until a clean-source VM run is recorded in release evidence, then certify application metric artifacts plus netperf evidence. |
+| P-QEMU-05 | `configuration/tests/qemu/05_kuberentes-img.cfg` | QEMU Kubernetes plus image-classification application with netperf enabled | `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml`; suite `qemu_k8s_image_parity` | `ported-unverified` | Candidate clean-source evidence exists in `docs/candidate_evidence_qemu_k8s_image_2026-06-01.md`, but keep unclaimed until the full release-evidence set is refreshed on one runtime source commit or the release scope is split. |
 | P-QEMU-06-SW | Subset of `configuration/tests/qemu/06_kubeedge-img.cfg` | QEMU KubeEdge software phase on the legacy cloud/edge/endpoint topology, without image-classification application | `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml`; suite `qemu_kubeedge_software_parity` | `certified` | Evidence: `docs/release_evidence_qemu_kubeedge_software_2026-06-01.md`. This does not certify the full P-QEMU-06 application row. |
 | P-QEMU-06 | `configuration/tests/qemu/06_kubeedge-img.cfg` | QEMU KubeEdge image-classification application path | `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml`; suite `qemu_kubeedge_image_parity` | `certified` | Evidence: `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`. |
 | P-QEMU-07-SW | Subset of `configuration/tests/qemu/07_mist-img.cfg` | QEMU Mist software phase on the legacy edge/endpoint topology, without image-classification application | `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml`; suite `qemu_mist_software_parity` | `certified` | Evidence: `docs/release_evidence_qemu_mist_software_2026-06-01.md`. This does not certify the full P-QEMU-07 application row. |
@@ -202,10 +202,11 @@ that moves to `certified`.
    prerequisite fixes, so the release evidence set is intentionally mixed until
    those rows are rerun or the release scope is split.
 8. Keep the Docker-daemon prerequisite for full `P-QEMU-10` until the runner
-   host or registry design supports that claim. `P-QEMU-05` and `P-QEMU-08`
-   now use cache-backed local-registry preflights and still need clean-source
-   VM evidence before certification.
-9. Continue QEMU software/application parity rows `P-QEMU-05` through `P-QEMU-08`
+   host or registry design supports that claim. `P-QEMU-05` has candidate
+   clean-source evidence but still needs release-evidence alignment;
+   `P-QEMU-08` now uses cache-backed local-registry preflights and still needs
+   clean-source VM evidence before certification.
+9. Continue QEMU software/application parity rows `P-QEMU-05`, `P-QEMU-08`,
    and full `P-QEMU-10`, starting with rows that can produce truthful VM
    evidence on the available runner.
 10. Convert the parity table into issues after M1, grouped by provider and

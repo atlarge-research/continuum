@@ -106,8 +106,9 @@ milestones.
    resource-shape certification or a larger/external QEMU runner.
 5. Cloud-provider rows need YAML profiles, credential/cost documentation, and
    cloud-backed evidence before they can be release-supported.
-6. Cache-backed full application parity rows still require an explicitly primed
-   local registry cache and fresh full VM-backed evidence before certification.
+6. Remaining cache-backed full application parity rows still require an
+   explicitly primed local registry cache and fresh full VM-backed evidence
+   before certification.
    Host-side cache priming is exposed through the allowlisted
    `continuum-hostctl prime-registry-cache` helper.
 
@@ -174,9 +175,9 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Record clean-source VM evidence for cache-backed `P-QEMU-05` and
-   `P-QEMU-08`, then resolve Docker-daemon or registry design for full
-   `P-QEMU-10`.
+1. Align the candidate `P-QEMU-05` evidence with the release-evidence source
+   commit set, record clean-source VM evidence for cache-backed `P-QEMU-08`,
+   then resolve Docker-daemon or registry design for full `P-QEMU-10`.
 2. Decide exact-resource versus practical-runner claims for full `P-QEMU-10`.
 3. Port or explicitly demote GCP/AWS historical rows.
 4. Convert the remaining parity matrix into issues grouped by provider and
