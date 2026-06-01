@@ -1,4 +1,4 @@
-# QEMU Endpoint Runtime Evidence - 2026-05-29
+# QEMU Endpoint Runtime Evidence - 2026-05-31
 
 ## Scope
 
@@ -15,9 +15,9 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-08-SW` |
-| Git commit | `67f49fa4f7af3b4f54912dabc8993ac923c8abdd` |
+| Git commit | `9b380abed1909aa0afad8ef32bc71a1d203941ea` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-05-29 |
+| Date | 2026-05-31 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo` and `verify` |
 | Config | `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` |
@@ -27,14 +27,14 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and tc support for endpoint network emulation and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, endpoint-runtime software-phase evidence, teardown evidence |
-| Result summary path | `/home/continuum-smoke/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-05-29_19-18-15.json` |
-| Artifact root | `/home/continuum-smoke/continuum_smoke/qemu_endpoint_software_parity/.continuum/` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-05-31_19-49-15.json` |
+| Artifact root | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` | PASS | 104.8s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
+| `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` | PASS | 240.3s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
 
 The run exercised two endpoint VMs with network emulation enabled, matching the
 legacy endpoint-only topology shape from `configuration/tests/qemu/08_endpoint_img.cfg`.

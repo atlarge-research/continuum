@@ -16,13 +16,13 @@ marked `certified` or `core-ready` in
 Use these documents as the release evidence set:
 
 1. `docs/release_certification_matrix.md`
-2. `docs/release_evidence_m1_2026-05-29.md`
-3. `docs/release_evidence_qemu_infra_parity_2026-05-29.md`
-4. `docs/release_evidence_qemu_k8s_nobench_2026-05-29.md`
-5. `docs/release_evidence_qemu_kubeedge_software_2026-05-29.md`
-6. `docs/release_evidence_qemu_mist_software_2026-05-29.md`
-7. `docs/release_evidence_qemu_endpoint_software_2026-05-29.md`
-8. `docs/release_evidence_qemu_openfaas_software_2026-05-29.md`
+2. `docs/release_evidence_m1_2026-05-31.md`
+3. `docs/release_evidence_qemu_infra_parity_2026-05-31.md`
+4. `docs/release_evidence_qemu_k8s_nobench_2026-05-31.md`
+5. `docs/release_evidence_qemu_kubeedge_software_2026-05-31.md`
+6. `docs/release_evidence_qemu_mist_software_2026-05-31.md`
+7. `docs/release_evidence_qemu_endpoint_software_2026-05-31.md`
+8. `docs/release_evidence_qemu_openfaas_software_2026-05-31.md`
 
 Before tagging, rerun the commands in section 7. VM-backed evidence may name a
 clean runtime source commit that precedes final release-documentation commits,

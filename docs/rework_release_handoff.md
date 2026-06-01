@@ -54,26 +54,26 @@ That audit recorded:
 7. release matrix issues: 0,
 8. docs path missing references: 0,
 9. release evidence artifact issues: 0,
-10. pre-tag issues: 7 source-commit mismatch issues in the audit report; the
-    committed evidence doc now also records the stale host-helper state.
+10. pre-tag issues: the last full cloud-static audit report recorded stale
+    pre-tag issues before the host-helper replacement and VM evidence refresh;
+    rerun the cloud-static audit before tagging after this documentation update.
 
-Pre-hardening host-runner and VM-evidence state:
+Current host-runner and VM-evidence state:
 
-1. VM evidence source commit: `67f49fa4f7af3b4f54912dabc8993ac923c8abdd`,
+1. VM evidence source commit: `9b380abed1909aa0afad8ef32bc71a1d203941ea`,
 2. dedicated runner repo: resynced from `/home/matthijs/continuum` with
    `sudo -n /usr/local/bin/continuum-hostctl sync-repo`,
 3. installed wrapper: refreshed with
-   `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated`,
-4. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS at that checkpoint,
+   `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke`,
+4. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS,
 5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
    check-prereqs`: PASS.
 
-At that checkpoint, the dedicated runner was no longer blocked by repo drift or
-helper-interface drift, and all currently claimed VM-backed wrapper scenarios
-listed in `docs/release_notes_m1_draft.md` passed on 2026-05-29 from the clean
-evidence source commit. Subsequent runtime, KubeEdge, host-runner, and helper
-hardening changes mean that pre-tag readiness is now blocked until VM-backed
-evidence is refreshed from the current release candidate.
+At the current checkpoint, the dedicated runner is no longer blocked by repo
+drift or helper-interface drift, and all currently claimed VM-backed wrapper
+scenarios listed in `docs/release_notes_m1_draft.md` passed on 2026-05-31 from
+the clean evidence source commit
+`9b380abed1909aa0afad8ef32bc71a1d203941ea`.
 
 On this post-hardening checkpoint series:
 
@@ -83,26 +83,15 @@ On this post-hardening checkpoint series:
 4. `scripts/test/run_cloud_static_audit.sh`: required gates PASS, report
    `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md`,
 5. `python3 scripts/test/check_release_evidence_artifacts.py`: 0 issues,
-6. `python3 scripts/test/check_release_pretag.py`: host-helper stale plus
-   source-commit mismatch issues; after helper replacement, expect the remaining
-   issues to be source-commit mismatches until VM evidence is refreshed.
+6. `python3 scripts/test/check_release_pretag.py`: expected to pass after the
+   2026-05-31 evidence refresh and repo-side documentation update.
 
 The cloud-safe audit recorded 609 unit tests, 86 local e2e tests, 695 combined
-unittest tests, and 695 combined pytest tests. It also recorded
-`TOTAL_RELEASE_PRETAG_ISSUES=7` before the M1 evidence doc was updated to mark
-the current host-helper state as stale.
+unittest tests, and 695 combined pytest tests. It also recorded stale pre-tag
+issues before the helper replacement and 2026-05-31 VM evidence refresh.
 
-The current M1 evidence doc records the stale helper state explicitly. Therefore
-`python3 scripts/test/check_release_pretag.py` reports:
-
-1. one `pretag-host-helper-not-ready` issue, and
-2. seven source-commit mismatch
-   issues, all caused by runtime-affecting changes after the current VM
-   evidence source commit.
-
-The installed `/usr/local/bin/continuum-hostctl` was checked non-mutatingly and
-is still stale: it reports interface `2026-05-30-relocate-smoke-root`, while the
-repo expects `2026-05-31-sudo-hardening`. The installed wrapper base root is
+The current M1 evidence doc records the installed helper as verified. The
+installed wrapper base root is
 already `/mnt/sdc/continuum_smoke`, and the retained root symlink remains in
 place. Before any new VM evidence run, an operator must manually review and
 replace `/usr/local/bin/continuum-hostctl` as documented in
@@ -187,12 +176,10 @@ checkpoint.
 
 ## Known Blockers
 
-There are current M1 pre-tag checker blockers. The release evidence docs still
-name VM evidence source commit `67f49fa4f7af3b4f54912dabc8993ac923c8abdd`,
-while current `HEAD` is newer and includes runtime-affecting QEMU, KubeEdge,
-playbook, wrapper, and runner changes. Do not tag M1 until the affected
-VM-backed scenarios have been rerun from the current release candidate and the
-evidence documents name that source commit.
+There are no known VM-evidence blockers for the currently claimed M1 and
+software-only QEMU parity rows after the 2026-05-31 reruns. Do not tag M1 until
+the cloud-safe pre-tag checks are rerun on the final source tree and report zero
+issues.
 
 The installed host helper is also stale until the manual reviewed replacement is
 performed. Do not run `sync-repo` or new VM certification runs through the
@@ -218,7 +205,7 @@ failure recorded above before rerunning the full application suite.
    - `python3 scripts/test/check_release_evidence_artifacts.py`
    - `python3 scripts/test/check_release_pretag.py`
 3. If source changed, run `scripts/test/run_cloud_static_audit.sh` and update
-   `docs/release_evidence_m1_2026-05-29.md` with the new report path and
+   `docs/release_evidence_m1_2026-05-31.md` with the new report path and
    counts.
 4. Keep generated `logs/cloud_static_audit/*.md` files uncommitted unless a
    maintainer explicitly asks for a dated audit snapshot.
