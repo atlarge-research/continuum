@@ -127,6 +127,42 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 return token.split("=", 1)[1]
         return "infrastructure"
 
+    def _append_test_result_entry(
+        self,
+        summary_path: Path,
+        artifact_name: str,
+        config_path: str,
+        success_reason: str,
+    ):
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        artifacts_dir = Path(payload["artifacts_dir"])
+        artifact_dir = artifacts_dir / artifact_name
+        artifact_dir.mkdir(parents=True)
+        stdout_artifact = artifact_dir / "stdout.txt"
+        stderr_artifact = artifact_dir / "stderr.txt"
+        metadata_artifact = artifact_dir / "metadata.json"
+        stdout_artifact.write_text("fixture stdout\n", encoding="utf-8")
+        stderr_artifact.write_text("", encoding="utf-8")
+        result_entry = {
+            "config_path": config_path,
+            "success": True,
+            "exit_code": 0,
+            "success_reason": success_reason,
+            "start_time": "2026-05-23 18:35:48",
+            "execution_time": 1.25,
+            "timed_out": False,
+            "base_images_rebuilt": [],
+            "parameter_overrides": {},
+            "stdout_artifact": str(stdout_artifact),
+            "stderr_artifact": str(stderr_artifact),
+            "metadata_artifact": str(metadata_artifact),
+        }
+        metadata_artifact.write_text(json.dumps(result_entry), encoding="utf-8")
+        payload["results"].append(result_entry)
+        payload["total_tests"] = len(payload["results"])
+        payload["passed"] = len(payload["results"])
+        summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
     def _write_config_targets(
         self,
         root: Path,
@@ -536,6 +572,63 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     )
                 ],
             )
+
+    def test_multi_entry_resume_summary_allows_shared_final_state_phase(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self._write_matrix(root)
+            infra_config = "configs/experiments/resume/infra.yaml"
+            software_config = "configs/experiments/resume/software.yaml"
+            application_config = "configs/experiments/resume/application.yaml"
+            self._write_config_targets(root, config_path=infra_config, targets="[infrastructure]")
+            self._write_config_targets(root, config_path=software_config, targets="[software]")
+            self._write_config_targets(
+                root,
+                config_path=application_config,
+                targets="[application]",
+                benchmark_pipeline=True,
+            )
+            artifact = (
+                root
+                / "artifacts"
+                / ".continuum"
+                / "test_results"
+                / "test_results_2026-05-23_18-35-48.json"
+            )
+            self._write_test_results(artifact, config_path=infra_config)
+            self._append_test_result_entry(
+                artifact,
+                "02_software",
+                software_config,
+                "Success: exit_code=0, experiment_lock_written, "
+                "state_file_written, state_phase=software, resume_contract_match",
+            )
+            self._append_test_result_entry(
+                artifact,
+                "03_application",
+                application_config,
+                "Success: exit_code=0, experiment_lock_written, "
+                "state_file_written, state_phase=application, resume_contract_match",
+            )
+            state_path = artifact.parent.parent / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "phase_completed": "application",
+                        "resume_contract": {"hash": "sha256:fixture-contract"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "docs" / "release_evidence_example.md").write_text(
+                self._evidence_text(
+                    "| Result summary path | `%s` |\n" % (artifact,),
+                    runtime_targets="`infrastructure`, `software`, `application`",
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_release_evidence_artifacts.find_artifact_issues(root), [])
 
     def test_evidence_doc_runtime_targets_must_cover_config_run_targets(self):
         with tempfile.TemporaryDirectory() as tempdir:

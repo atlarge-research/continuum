@@ -1360,6 +1360,7 @@ def _check_state_payload(
     state_path: Path,
     payload,
     success_reason: str,
+    shared_final_state_phase: str = "",
 ) -> list[EvidenceArtifactIssue]:
     if not isinstance(payload, dict):
         return [
@@ -1371,6 +1372,8 @@ def _check_state_payload(
 
     expected_phase = _success_reason_state_phase(success_reason)
     if not expected_phase or payload.get("phase_completed") == expected_phase:
+        return []
+    if shared_final_state_phase and payload.get("phase_completed") == shared_final_state_phase:
         return []
     return [
         EvidenceArtifactIssue(
@@ -1416,6 +1419,7 @@ def _check_result_persistence_artifacts(
     result: dict,
     success_reason: str,
     result_config_paths: tuple[str, ...],
+    shared_final_state_phases: dict[Path, str],
 ) -> list[EvidenceArtifactIssue]:
     issues = []
     continuum_root = _continuum_root_from_result(result)
@@ -1487,6 +1491,7 @@ def _check_result_persistence_artifacts(
                         state_path,
                         state_payload,
                         success_reason,
+                        shared_final_state_phases.get(continuum_root, ""),
                     )
                 )
 
@@ -1500,6 +1505,27 @@ def _check_result_persistence_artifacts(
             )
         )
     return issues
+
+
+def _shared_final_state_phases_by_root(results: list) -> dict[Path, str]:
+    """Return final success-reason phase for summaries sharing one retained state root."""
+    counts: dict[Path, int] = {}
+    final_phases: dict[Path, str] = {}
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        continuum_root = _continuum_root_from_result(result)
+        if continuum_root is None:
+            continue
+        success_reason = result.get("success_reason")
+        if not isinstance(success_reason, str):
+            continue
+        state_phase = _success_reason_state_phase(success_reason)
+        if not state_phase:
+            continue
+        counts[continuum_root] = counts.get(continuum_root, 0) + 1
+        final_phases[continuum_root] = state_phase
+    return {root: phase for root, phase in final_phases.items() if counts.get(root, 0) > 1}
 
 
 def _check_test_results(artifact: EvidenceArtifact) -> list[EvidenceArtifactIssue]:
@@ -1597,6 +1623,7 @@ def _check_test_results(artifact: EvidenceArtifact) -> list[EvidenceArtifactIssu
     if not isinstance(results, list) or not results:
         issues.append(EvidenceArtifactIssue("test-results-missing-results", str(artifact.path)))
         return issues
+    shared_final_state_phases = _shared_final_state_phases_by_root(results)
     result_config_paths = tuple(
         sorted(
             {
@@ -1753,6 +1780,7 @@ def _check_test_results(artifact: EvidenceArtifact) -> list[EvidenceArtifactIssu
                 result,
                 success_reason,
                 result_config_paths,
+                shared_final_state_phases,
             )
         )
     return issues
