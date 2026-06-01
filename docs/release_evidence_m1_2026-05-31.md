@@ -131,12 +131,12 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T012040Z.md` |
 | Required gates | PASS |
-| Unit unittest discovery | 609 tests OK |
-| E2E unittest discovery | 86 tests OK |
-| Combined unittest discovery | 695 tests OK |
-| Pytest mirror | 695 passed |
+| Unit unittest discovery | 614 tests OK |
+| E2E unittest discovery | 87 tests OK |
+| Combined unittest discovery | 701 tests OK |
+| Pytest mirror | 701 passed |
 | Marker debt scan | MATCHES FOUND (2) |
 | Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after recording a guarded non-VM-impact disposition for the exact `release-artifact-audit` wrapper addition; final publication still requires host-helper refresh and wrapper `release-artifact-audit` PASS on the certification host |
 | Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility and reports prerequisites satisfied in the current shell. Forced-prefetch and registry-cache application rows still require dedicated smoke-user wrapper VM evidence before certification. |
@@ -152,7 +152,7 @@ Local release-evidence artifact audit on the certification host:
 | Primary artifacts checked | 15 |
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |
 
-Current pre-tag host-helper status after the sudo-hardening interface bump:
+Recorded host-helper status for the 2026-05-31 VM evidence run:
 
 | Field | Value |
 | --- | --- |
