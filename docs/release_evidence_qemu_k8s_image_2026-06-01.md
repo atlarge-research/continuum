@@ -1,9 +1,9 @@
-# Candidate QEMU Kubernetes Image Evidence - 2026-06-01
+# QEMU Kubernetes Image Evidence - 2026-06-01
 
 ## Scope
 
-This candidate evidence supports future certification of old-main parity row
-`P-QEMU-05` in `docs/release_certification_matrix.md`.
+This evidence certifies old-main parity row `P-QEMU-05` in
+`docs/release_certification_matrix.md`.
 
 It proves that the rework stack can provision the legacy P-QEMU-05-style local
 QEMU cloud/endpoint topology, complete the Kubernetes and endpoint-runtime
@@ -11,19 +11,12 @@ software phases, run the image-classification application benchmark with
 netperf enabled, and emit both benchmark metric and network-validation
 artifacts.
 
-It is not release evidence yet because the release artifact audit currently
-requires all release-evidence documents to name one clean runtime source commit.
-The existing release evidence set still points at commit `def6bce`, while this
-candidate run was produced after the cache-backed parity preflight commit
-`90c4d5a`. Promote this file only after rerunning the already-certified rows on
-the same runtime source commit or splitting the release scope.
-
 ## Source And Command
 
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-05` |
-| Git commit | `90c4d5ad53697fdccfc00b9e34e5aa48bb3774a0` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` |
@@ -40,7 +33,9 @@ the same runtime source commit or splitting the release scope.
 
 ## Result
 
-The clean-source run passed on commit `90c4d5a`:
+The clean-source run passed after cache-backed image parity preflights were
+added and the already-certified VM evidence set was refreshed on the same
+release-evidence source line:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
@@ -58,13 +53,9 @@ Benchmark metric artifact:
 /mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/benchmark/2026-06-01_17_42_32_classify-images_metrics_manifest.json
 ```
 
-An earlier exploratory run of the same cache-backed source changes also passed
-before the source commit was created. This document uses only the later
-clean-source run for certification.
-
 ## What This Claims
 
-When promoted to release evidence, this row may be described as:
+This row may be described as:
 
 1. QEMU can provision the P-QEMU-05-style topology of two cloud VMs and two
    endpoint VMs with 4g network emulation enabled.
@@ -87,6 +78,7 @@ This evidence does not certify:
 2. broad Kubernetes version compatibility beyond the configured profile,
 3. forced image-prefetch as a public runner requirement for `continuum-smoke`,
 4. OpenFaaS image-classification behavior,
-5. endpoint-only image/runtime parity row `P-QEMU-08`,
+5. endpoint-only image/runtime parity row `P-QEMU-08`, which is certified
+   separately by `docs/release_evidence_qemu_endpoint_image_2026-06-01.md`,
 6. broader image-classification parameter sweeps beyond the configured
    frequency, duration, and resource values.

@@ -19,7 +19,7 @@ KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |
@@ -37,7 +37,7 @@ KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
 | Config | `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml` |
 | Suite | `qemu_k8s_nobench_parity` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes node-ready and observability software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-06-01_16-01-12.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-06-01_19-45-18.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/` |
 
 Before the final passing execution, the dedicated repo was synced from the live
@@ -89,12 +89,12 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_p
 Result summary:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-06-01_16-01-12.json
+/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-06-01_19-45-18.json
 ```
 
 | Matrix Row | YAML Config | Result | Evidence |
 | --- | --- | --- | --- |
-| `P-QEMU-09` | `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml` | PASS, 1622.8s | `exit_code=0`, `ssh_output_found`, `experiment_lock_written`, `state_file_written`, `state_phase=software`, `resume_contract_match` |
+| `P-QEMU-09` | `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml` | PASS, 1623.1s | `exit_code=0`, `ssh_output_found`, `experiment_lock_written`, `state_file_written`, `state_phase=software`, `resume_contract_match` |
 
 ## 6. Certification Result
 

@@ -20,7 +20,7 @@ image-classification application benchmark from
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-10-SW-LOCAL` |
-| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` |
@@ -32,14 +32,14 @@ image-classification application benchmark from
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and enough local CPU capacity for the capped single-host OpenFaaS shape; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes node-ready and OpenFaaS software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-06-01_15-22-26.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-06-01_21-52-52.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1140.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
+| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1311.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
 The experiment lock records:
 

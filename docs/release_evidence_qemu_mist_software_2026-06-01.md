@@ -16,7 +16,7 @@ parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-06-01.md`.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07-SW` |
-| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` |
@@ -28,14 +28,14 @@ parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-06-01.md`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, and SSH access for Mist software execution and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-06-01_14-56-48.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-06-01_21-12-57.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` | PASS | 1421.5s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
+| `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` | PASS | 499.0s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
 
 The run exercised two edge VMs and four endpoint VMs with CPU pinning enabled,
 matching the legacy Mist topology shape from

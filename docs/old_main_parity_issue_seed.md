@@ -25,8 +25,6 @@ full old-main parity claims yet.
 
 | Row | Current Status | Issue Seed | Matrix Certification Action |
 | --- | --- | --- | --- |
-| `P-QEMU-05` | `ported-unverified` | Candidate clean-source VM evidence exists for the cache-backed Kubernetes plus image-classification suite; align the release-evidence source commit set and record fresh release evidence before promoting it. | Candidate clean-source evidence exists in `docs/candidate_evidence_qemu_k8s_image_2026-06-01.md`, but keep unclaimed until the full release-evidence set is refreshed on one runtime source commit or the release scope is split. |
-| `P-QEMU-08` | `ported-unverified` | Candidate clean-source VM evidence exists for the cache-backed endpoint image/runtime suite; align the release-evidence source commit set and record fresh release evidence before promoting it. | Candidate clean-source evidence exists in `docs/candidate_evidence_qemu_endpoint_image_2026-06-01.md`, but keep unclaimed until the full release-evidence set is refreshed on one runtime source commit or the release scope is split. |
 | `P-QEMU-10` | `ported-unverified` | Decide exact legacy 26-core resource shape versus practical-runner support, resolve forced OpenFaaS image-prefetch access, then run full application evidence. | Full application suite is ported, but its preflight is blocked on Docker daemon access for forced OpenFaaS image prefetch. The exact 26-core legacy shape also needs external QEMU capacity or a runner host with a higher local core budget. Keep unclaimed until both prerequisites or the support claim are resolved, then certify with VM evidence and application metric artifacts. |
 
 ## 3. Cloud Provider Parity

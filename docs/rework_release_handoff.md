@@ -41,15 +41,15 @@ checks, and M1 pre-tag checks.
 
 The current M1 cloud-safe evidence table points to:
 
-`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T160434Z.md`
+`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T220439Z.md`
 
 That audit recorded:
 
 1. required cloud-safe gates: PASS,
 2. unit unittest discovery: 619 tests OK,
-3. e2e unittest discovery: 87 tests OK,
-4. combined unittest discovery: 706 tests OK,
-5. pytest mirror: 706 passed,
+3. e2e unittest discovery: 89 tests OK,
+4. combined unittest discovery: 708 tests OK,
+5. pytest mirror: 708 passed,
 6. release claim issues: 0,
 7. release matrix issues: 0,
 8. docs path missing references: 0,
@@ -60,7 +60,7 @@ That audit recorded:
 
 Current host-runner and VM-evidence state:
 
-1. VM evidence source commit: `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6`,
+1. VM evidence source commit: `295a5eec7664f1fb95047704422ddc736bb05718`,
 2. dedicated runner repo: resynced from `/home/matthijs/continuum` with
    `sudo -n /usr/local/bin/continuum-hostctl sync-repo`,
 3. installed wrapper: refreshed with
@@ -73,7 +73,7 @@ At the current checkpoint, the dedicated runner is no longer blocked by repo
 drift, helper-interface drift, or release-artifact-audit availability. All
 currently claimed VM-backed wrapper scenarios listed in
 `docs/release_notes_m1_draft.md` passed on 2026-06-01 from the clean evidence
-source commit `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6`.
+source commit `295a5eec7664f1fb95047704422ddc736bb05718`.
 
 On this post-hardening checkpoint series:
 
@@ -81,15 +81,15 @@ On this post-hardening checkpoint series:
 2. `python3 scripts/test/check_release_matrix.py`: 0 issues,
 3. `python3 scripts/test/check_docs_paths.py`: 0 missing references,
 4. `scripts/test/run_cloud_static_audit.sh`: required gates PASS, report
-   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T160434Z.md`,
+   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T220439Z.md`,
 5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
    release-artifact-audit`: 0 issues,
 6. `python3 scripts/test/check_release_pretag.py`: 0 issues,
 7. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS with the hardened
    root-owned helper and read-only `/srv/continuum/repo`.
 
-The cloud-safe audit recorded 619 unit tests, 87 local e2e tests, 706 combined
-unittest tests, and 706 combined pytest tests.
+The cloud-safe audit recorded 619 unit tests, 89 local e2e tests, 708 combined
+unittest tests, and 708 combined pytest tests.
 
 After commit `412e682`, the only post-evidence wrapper changes are the exact
 guarded `release-artifact-audit` scenario addition, the corresponding
@@ -203,8 +203,10 @@ verifies, and the dedicated repo is synced and read-only for
 
 There is no known release-artifact/pretag blocker at this checkpoint. The
 primary M1 and old-main QEMU evidence docs now name the same release-candidate
-runtime source commit, and the wrapper-based artifact audit validates the
-retained artifacts with `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0`.
+runtime source commit. The full P-QEMU-05 and P-QEMU-08 image parity rows have
+been promoted from candidate evidence to release evidence, and the
+wrapper-based artifact audit validates the retained artifacts with
+`TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0`.
 
 M1 still needs the normal final publication discipline: rerun the pre-tag
 sequence from `docs/release_notes_m1_draft.md` on the exact source tree that
@@ -214,12 +216,12 @@ evidence before tagging.
 
 Remaining blockers for a final replacement release are the non-certified
 old-main parity rows in `docs/release_certification_matrix.md`, especially
-remaining full QEMU application parity rows, cloud-provider rows, bare-metal
-scope, and unverified software/application modules.
+the remaining full QEMU OpenFaaS application parity row, cloud-provider rows,
+bare-metal scope, and unverified software/application modules.
 
-For the next old-main parity step, start with forced-prefetch rows `P-QEMU-05`
-or `P-QEMU-08`, or refresh older claimed evidence rows on the current runtime
-source commit to reduce the pretag blocker count.
+For the next old-main parity step, resolve full `P-QEMU-10` OpenFaaS
+application evidence, including the forced image-prefetch/Docker access
+question and the exact-resource versus practical-runner support boundary.
 
 ## Next Agent Checklist
 

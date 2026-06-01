@@ -59,13 +59,13 @@ after the maintenance helper is refreshed.
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation` | Run the dedicated network-validation suite through the installed wrapper |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity` | Run the QEMU infra-only old-main parity suite through the installed wrapper |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity` | Run the QEMU Kubernetes no-benchmark old-main parity suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` | Run the QEMU Kubernetes image-classification old-main parity suite; currently requires Docker daemon access for forced image prefetch |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` | Run the QEMU Kubernetes image-classification old-main parity suite after the local registry cache is primed |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` | Run the QEMU KubeEdge software-only parity suite through the installed wrapper |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity` | Run the full QEMU KubeEdge image-classification parity suite after the local registry cache is primed |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` | Run the QEMU Mist software-only parity suite through the installed wrapper |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` | Run the full QEMU Mist image-classification parity suite after the local registry cache is primed |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` | Run the QEMU endpoint-runtime software-only parity suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` | Preflight the full QEMU endpoint image-classification parity suite; currently requires Docker daemon access for forced image prefetch |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` | Run the full QEMU endpoint image-classification parity suite after the local registry cache is primed |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` | Run the QEMU OpenFaaS software-only suite on the single-host CPU-capped variant |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity` | Preflight the full QEMU OpenFaaS image-classification parity suite; currently requires Docker daemon access for forced image prefetch |
 

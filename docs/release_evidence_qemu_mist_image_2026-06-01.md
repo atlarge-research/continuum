@@ -15,7 +15,7 @@ metric artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07` |
-| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` |
@@ -27,7 +27,7 @@ metric artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, application phase evidence, benchmark metrics manifest, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-06-01_12-47-57.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-06-01_21-28-22.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/` |
 
 ## Result
@@ -37,12 +37,12 @@ handling and the Mist worker readiness Docker status command:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 818.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found |
+| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 919.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found |
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-06-01_12_34_19_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-06-01_21_13_03_classify-images_metrics_manifest.json
 ```
 
 The passing run followed two failed 2026-06-01 attempts that exposed Mist

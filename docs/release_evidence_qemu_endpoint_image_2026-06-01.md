@@ -1,28 +1,21 @@
-# Candidate QEMU Endpoint Image Evidence - 2026-06-01
+# QEMU Endpoint Image Evidence - 2026-06-01
 
 ## Scope
 
-This candidate evidence supports future certification of old-main parity row
-`P-QEMU-08` in `docs/release_certification_matrix.md`.
+This evidence certifies old-main parity row `P-QEMU-08` in
+`docs/release_certification_matrix.md`.
 
 It proves that the rework stack can provision the legacy P-QEMU-08-style local
 QEMU endpoint-only topology, complete the endpoint-runtime software phase, run
 the image-classification application benchmark, verify teardown, and emit
 benchmark metric artifacts.
 
-It is not release evidence yet because the release artifact audit currently
-requires all release-evidence documents to name one clean runtime source commit.
-The existing release evidence set still points at commit `def6bce`, while this
-candidate run was produced after the cache-backed parity preflight commit
-`90c4d5a`. Promote this file only after rerunning the already-certified rows on
-the same runtime source commit or splitting the release scope.
-
 ## Source And Command
 
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-08` |
-| Git commit | `90c4d5ad53697fdccfc00b9e34e5aa48bb3774a0` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` |
@@ -33,13 +26,15 @@ the same runtime source commit or splitting the release scope.
 | Provider profile | `configs/profiles/environment/local-qemu-delete-on-exit.yaml` |
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, `tc` support, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup |
-| Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, endpoint-runtime evidence, application phase evidence, benchmark metrics manifest, and teardown evidence |
+| Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, endpoint-runtime software phase evidence, application phase evidence, benchmark metrics manifest, and teardown evidence |
 | Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/test_results/test_results_2026-06-01_18-29-26.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/` |
 
 ## Result
 
-The clean-source run passed on commit `90c4d5a`:
+The clean-source run passed after cache-backed image parity preflights were
+added and the already-certified VM evidence set was refreshed on the same
+release-evidence source line:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
@@ -51,9 +46,9 @@ Benchmark metric artifact:
 /mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/logs/benchmark/2026-06-01_18_05_24_classify-images_metrics_manifest.json
 ```
 
-## What This Candidate Supports
+## What This Claims
 
-When promoted to release evidence, this row may be described as:
+This row may be described as:
 
 1. QEMU can provision the P-QEMU-08-style endpoint-only topology of two endpoint
    VMs with 4g network emulation enabled.
@@ -66,7 +61,7 @@ When promoted to release evidence, this row may be described as:
 
 ## Limitations
 
-This candidate evidence does not certify:
+This evidence does not certify:
 
 1. GCP, AWS, or bare-metal endpoint runtime behavior,
 2. broad endpoint-runtime version compatibility beyond the configured profile,

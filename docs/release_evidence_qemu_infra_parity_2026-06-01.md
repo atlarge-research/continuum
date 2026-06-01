@@ -17,7 +17,7 @@ Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |
@@ -33,7 +33,7 @@ Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity` |
 | Suite | `qemu_infra_parity` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-06-01_15-32-07.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-06-01_19-18-09.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/` |
 
 Before execution, the dedicated repo was synced from the live checkout and
@@ -73,17 +73,17 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity
 Result summary:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-06-01_15-32-07.json
+/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-06-01_19-18-09.json
 ```
 
 | Matrix Row | YAML Config | Result | Evidence |
 | --- | --- | --- | --- |
-| `P-QEMU-01` | `configs/experiments/parity/qemu/01_infraonly_cloud.yaml` | PASS, 72.2s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
-| `P-QEMU-02` | `configs/experiments/parity/qemu/02_infraonly_edge.yaml` | PASS, 91.8s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
-| `P-QEMU-03` | `configs/experiments/parity/qemu/03_infraonly_endpoint.yaml` | PASS, 131.9s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
-| `P-QEMU-04` | `configs/experiments/parity/qemu/04_infraonly_all.yaml` | PASS, 173.6s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-01` | `configs/experiments/parity/qemu/01_infraonly_cloud.yaml` | PASS, 63.7s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-02` | `configs/experiments/parity/qemu/02_infraonly_edge.yaml` | PASS, 102.5s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-03` | `configs/experiments/parity/qemu/03_infraonly_endpoint.yaml` | PASS, 140.3s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-04` | `configs/experiments/parity/qemu/04_infraonly_all.yaml` | PASS, 169.4s | `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
 
-Total suite time: 469.4s.
+Total suite time: 475.9s.
 
 ## 5. Certification Result
 

@@ -106,11 +106,13 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
     "benchmark_smoke": "benchmark smoke suite prerequisites",
     "network_validation": "network validation suite prerequisites",
     "qemu_infra_parity": "QEMU infra parity suite prerequisites",
+    "qemu_k8s_image_parity": "QEMU Kubernetes image parity registry-cache prerequisites",
     "qemu_k8s_nobench_parity": "QEMU Kubernetes no-benchmark parity suite prerequisites",
     "qemu_kubeedge_software_parity": "QEMU KubeEdge software parity suite prerequisites",
     "qemu_kubeedge_image_parity": "QEMU KubeEdge image parity registry-cache prerequisites",
     "qemu_mist_software_parity": "QEMU Mist software parity suite prerequisites",
     "qemu_mist_image_parity": "QEMU Mist image parity registry-cache prerequisites",
+    "qemu_endpoint_image_parity": "QEMU endpoint image parity registry-cache prerequisites",
     "qemu_endpoint_software_parity": "QEMU endpoint-runtime software parity suite prerequisites",
     "qemu_openfaas_software_parity": "QEMU OpenFaaS software parity suite prerequisites",
 }

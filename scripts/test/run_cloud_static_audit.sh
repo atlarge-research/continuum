@@ -199,23 +199,24 @@ run_capture prereq_qemu_openfaas_software_parity "QEMU OpenFaaS software parity 
 
 forced_prefetch_notice() {
     cat <<'EOF'
-Forced-prefetch application parity rows P-QEMU-05, P-QEMU-08, and P-QEMU-10
-are not certified by this cloud-safe audit. Current-user Docker access is not a
-release-support signal for those rows; certification requires the dedicated
-smoke-user wrapper context plus retained VM/application evidence. See
+Forced-prefetch application parity row P-QEMU-10 is not certified by this
+cloud-safe audit. Current-user Docker access is not a release-support signal
+for that row; certification requires the dedicated smoke-user wrapper context
+plus retained VM/application evidence. Cache-backed P-QEMU-05 and P-QEMU-08
+are certified separately by retained wrapper evidence. See
 docs/release_certification_matrix.md for the active blockers.
 EOF
 }
 
 run_capture prereq_forced_prefetch_notice "forced-prefetch image parity certification notice" optional \
     forced_prefetch_notice
-run_capture prereq_qemu_k8s_image_parity "QEMU Kubernetes image parity forced-prefetch prerequisites" optional \
+run_capture prereq_qemu_k8s_image_parity "QEMU Kubernetes image parity registry-cache prerequisites" optional \
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_k8s_image_parity
 run_capture prereq_qemu_kubeedge_image_parity "QEMU KubeEdge image parity registry-cache prerequisites" optional \
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_kubeedge_image_parity
 run_capture prereq_qemu_mist_image_parity "QEMU Mist image parity registry-cache prerequisites" optional \
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_mist_image_parity
-run_capture prereq_qemu_endpoint_image_parity "QEMU endpoint image parity forced-prefetch prerequisites" optional \
+run_capture prereq_qemu_endpoint_image_parity "QEMU endpoint image parity registry-cache prerequisites" optional \
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_endpoint_image_parity
 run_capture prereq_qemu_openfaas_image_parity "QEMU OpenFaaS image parity forced-prefetch prerequisites" optional \
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_openfaas_image_parity

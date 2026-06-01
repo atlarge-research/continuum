@@ -15,7 +15,7 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-08-SW` |
-| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
+| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` |
@@ -27,14 +27,14 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and tc support for endpoint network emulation and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, endpoint-runtime software-phase evidence, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-06-01_15-01-40.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-06-01_21-30-53.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` | PASS | 153.3s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
+| `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` | PASS | 145.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
 
 The run exercised two endpoint VMs with network emulation enabled, matching the
 legacy endpoint-only topology shape from `configuration/tests/qemu/08_endpoint_img.cfg`.
@@ -62,9 +62,6 @@ This evidence does not certify:
    images,
 4. cloud-provider endpoint-only behavior.
 
-This software-only evidence does not certify parent row `P-QEMU-08`.
-
-The full `qemu_endpoint_image_parity` suite is ported but not certified. Its
-preflight currently fails for the `continuum-smoke` user because the legacy
-`docker_pull = True` behavior maps to forced local-registry image prefetch:
-`Docker socket access: exit code 1; Docker daemon access: permission denied`.
+This software-only evidence does not certify parent row `P-QEMU-08`. The full
+endpoint image/runtime parent row is certified separately by
+`docs/release_evidence_qemu_endpoint_image_2026-06-01.md`.
