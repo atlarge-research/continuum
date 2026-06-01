@@ -5,11 +5,11 @@
     state: present
     update_cache: true
 
-- name: Ensure mosquitto service is enabled and running
+- name: Ensure host mosquitto service does not conflict with KubeEdge broker pod
   ansible.builtin.systemd:
     name: mosquitto
-    state: started
-    enabled: true
+    state: stopped
+    enabled: false
 
 - name: Wait for join token file on local controller
   ansible.builtin.wait_for:

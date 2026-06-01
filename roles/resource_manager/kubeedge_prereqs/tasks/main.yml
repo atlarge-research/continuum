@@ -27,6 +27,7 @@
     content: |
       overlay
       br_netfilter
+      vxlan
 
 - name: Load required kernel modules
   community.general.modprobe:
@@ -35,6 +36,7 @@
   loop:
     - overlay
     - br_netfilter
+    - vxlan
 
 - name: Configure Kubernetes networking sysctls
   ansible.posix.sysctl:
