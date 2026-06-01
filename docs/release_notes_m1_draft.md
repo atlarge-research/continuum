@@ -20,15 +20,21 @@ Use these documents as the release evidence set:
 3. `docs/release_evidence_qemu_infra_parity_2026-05-31.md`
 4. `docs/release_evidence_qemu_k8s_nobench_2026-05-31.md`
 5. `docs/release_evidence_qemu_kubeedge_software_2026-05-31.md`
-6. `docs/release_evidence_qemu_mist_software_2026-05-31.md`
-7. `docs/release_evidence_qemu_endpoint_software_2026-05-31.md`
-8. `docs/release_evidence_qemu_openfaas_software_2026-05-31.md`
+6. `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`
+7. `docs/release_evidence_qemu_mist_software_2026-05-31.md`
+8. `docs/release_evidence_qemu_endpoint_software_2026-05-31.md`
+9. `docs/release_evidence_qemu_openfaas_software_2026-05-31.md`
 
 Before tagging, rerun the commands in section 7. VM-backed evidence may name a
 clean runtime source commit that precedes final release-documentation commits,
 but no runtime, config, profile, playbook, wrapper, or runner path may change
 after that evidence source commit without rerunning the affected wrapper
 scenario.
+
+Current checkpoint note: the P-QEMU-06 evidence was produced after KubeEdge
+runtime-prerequisite fixes, so the evidence set is not tag-ready until the older
+claimed VM-backed rows are refreshed on the same runtime source commit or the
+release scope is split.
 
 ## 3. What This Milestone Certifies
 
@@ -55,6 +61,7 @@ This milestone certifies the following local QEMU/libvirt rows:
 | `P-QEMU-01` through `P-QEMU-04` | Old-main QEMU infrastructure-only parity rows |
 | `P-QEMU-09` | Old-main QEMU Kubernetes no-benchmark parity row |
 | `P-QEMU-06-SW` | KubeEdge software-only subset of old-main P-QEMU-06 |
+| `P-QEMU-06` | Full KubeEdge image-classification application parity row |
 | `P-QEMU-07-SW` | Mist software-only subset of old-main P-QEMU-07 |
 | `P-QEMU-08-SW` | Endpoint-runtime software-only subset of old-main P-QEMU-08 |
 | `P-QEMU-10-SW-LOCAL` | Single-host CPU-capped OpenFaaS software-only subset of old-main P-QEMU-10 |
@@ -68,8 +75,8 @@ Do not describe this milestone as full old-main parity.
 
 The following rows remain unclaimed:
 
-1. full QEMU application parity rows `P-QEMU-05`, `P-QEMU-06`, `P-QEMU-07`,
-   `P-QEMU-08`, and full `P-QEMU-10`,
+1. full QEMU application parity rows `P-QEMU-05`, `P-QEMU-07`, `P-QEMU-08`,
+   and full `P-QEMU-10`,
 2. exact legacy P-QEMU-10 resource shape with three 6-core cloud VMs,
 3. GCP rows `P-GCP-01` through `P-GCP-10`,
 4. AWS row `P-AWS-01`,
@@ -86,11 +93,9 @@ milestones.
 ## 5. Known Limitations
 
 1. QEMU is a provider module, not Continuum core.
-2. Full KubeEdge and Mist application parity rows require fresh full VM-backed
-   evidence before certification. The latest KubeEdge full application attempt
-   moved past the earlier edge-node flannel readiness failure, then failed under
-   host disk pressure while pulling the endpoint publisher image; retained smoke
-   state has since been moved to `/mnt/sdc/continuum_smoke`.
+2. Full Mist application parity still requires fresh full VM-backed evidence
+   before certification. Full KubeEdge application parity is certified only for `P-QEMU-06`; the exact evidence is
+   `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`.
 3. Forced image-prefetch rows still require Docker daemon access on the
    certification host.
 4. Full OpenFaaS application parity also needs a decision on exact legacy
@@ -116,7 +121,7 @@ Avoid wording like:
 1. "Continuum rework fully replaces main",
 2. "Continuum supports GCP/AWS on this release",
 3. "QEMU core",
-4. "KubeEdge/Mist/OpenFaaS application parity is certified",
+4. "Mist/OpenFaaS application parity is certified",
 5. "Full QEMU parity is certified",
 6. "M1 is the final/full release",
 7. "All shipped YAML examples are release-supported".
@@ -141,6 +146,7 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
@@ -163,12 +169,10 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Rerun the full `P-QEMU-06` application attempt now that retained smoke state
-   is on `/mnt/sdc/continuum_smoke`.
-2. Certify full `P-QEMU-06` and `P-QEMU-07` application rows after VM-backed
-   application evidence passes.
-3. Resolve Docker-daemon or registry design for forced-prefetch application rows.
-4. Decide exact-resource versus practical-runner claims for full `P-QEMU-10`.
-5. Port or explicitly demote GCP/AWS historical rows.
-6. Convert the remaining parity matrix into issues grouped by provider and
+1. Certify full `P-QEMU-07` application evidence after the required local
+   registry cache is primed.
+2. Resolve Docker-daemon or registry design for forced-prefetch application rows.
+3. Decide exact-resource versus practical-runner claims for full `P-QEMU-10`.
+4. Port or explicitly demote GCP/AWS historical rows.
+5. Convert the remaining parity matrix into issues grouped by provider and
    module family.

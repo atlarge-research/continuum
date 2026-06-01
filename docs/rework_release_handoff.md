@@ -134,38 +134,42 @@ Post-M1 parity progress after this checkpoint:
 2. Direct registry probes from the agent sandbox cannot reach
    `192.168.1.104:5000`, so use the host helper result as the authoritative
    cache-readiness signal.
-3. Multiple full `qemu_kubeedge_image_parity` wrapper runs were attempted. The
+3. Multiple full `qemu_kubeedge_image_parity` wrapper runs were attempted. An
    earlier retained evidence source commit
    `67f49fa4f7af3b4f54912dabc8993ac923c8abdd` exposed the edge flannel
    `CrashLoopBackOff`; follow-up code now injects an explicit flannel
    kubeconfig and aligns KubeEdge/containerd runtime setup.
-4. The latest post-fix wrapper attempt reached infrastructure, software, and
-   the application phase with KubeEdge joined and flannel past the previous
-   `CrashLoopBackOff`.
-5. The latest run then failed under host disk pressure while endpoint Docker
-   was pulling the image-classification publisher image. The runner also failed
-   to save its JSON summary with `OSError: [Errno 28] No space left on device`.
-6. Latest retained log:
-   `/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/2026-05-29_23:56:00_edge_kubeedge_classify-images.log`.
-7. The retained smoke root was relocated on 2026-05-30. Current evidence:
+4. A later post-fix wrapper attempt reached the application phase, then failed
+   under host disk pressure while endpoint Docker was pulling the
+   image-classification publisher image. The runner also failed to save its JSON
+   summary with `OSError: [Errno 28] No space left on device`.
+5. The retained smoke root was relocated on 2026-05-30. Current evidence:
    `/home/continuum-smoke/continuum_smoke` is a symlink to
    `/mnt/sdc/continuum_smoke`; `run-continuum-smoke storage-report` reports 74G
    retained state under `/mnt/sdc/continuum_smoke`; and `/` has 84G free instead
    of the previous 22G.
-8. The installed wrapper base root is `/mnt/sdc/continuum_smoke`. The
+6. The first 2026-06-01 rerun reached application startup but failed because
+   edge1 flannel could not create a VXLAN device and the host mosquitto service
+   conflicted with the KubeEdge broker pod on port 1883.
+7. Commit `c4f034715459d5a7199bac1789b5115699848afb` fixed those runtime
+   prerequisites by loading/persisting `vxlan` for KubeEdge base images and
+   stopping/disabling the host mosquitto service on edge nodes.
+8. After pruning the retained `qemu_kubeedge_image_parity` scenario to rebuild
+   base images, the full wrapper run passed in 4138.3s on 2026-06-01. Evidence:
+   `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`.
+9. The installed wrapper base root is `/mnt/sdc/continuum_smoke`. The
    maintenance helper still reports its configured `SMOKE_BASE_ROOT` as
    `/home/continuum-smoke/continuum_smoke`, which is now the compatibility
    symlink. Do not remove that symlink unless all retained-evidence references
    and helper defaults are updated together.
-9. The old checksum-pinned bootstrap refresh helper and its sudoers file have
+10. The old checksum-pinned bootstrap refresh helper and its sudoers file have
    been removed from the host. Do not reintroduce them. Updating
    `/usr/local/bin/continuum-hostctl` is a manual reviewed operator action;
    the agent workflow starts from the already-installed root-owned helper.
 
-`P-QEMU-06` remains unclaimed. The next useful action is to rerun
-`qemu_kubeedge_image_parity` now that retained smoke state is on `/mnt/sdc`,
-and then inspect any remaining application-phase failure with the retained
-debug wrapper.
+`P-QEMU-06` is now certified. The next useful old-main parity action is
+`P-QEMU-07`, the full Mist image-classification row, after priming the local
+registry cache for `qemu_mist_image_parity`.
 
 ## Current Certified Scope
 
@@ -180,19 +184,29 @@ The certified or core-ready scope is exactly the set named in
 5. QEMU old-main infrastructure-only parity rows `P-QEMU-01` through
    `P-QEMU-04`,
 6. QEMU Kubernetes no-benchmark row `P-QEMU-09`,
-7. software-only subset rows `P-QEMU-06-SW`, `P-QEMU-07-SW`,
+7. full KubeEdge image-classification row `P-QEMU-06`,
+8. software-only subset rows `P-QEMU-06-SW`, `P-QEMU-07-SW`,
    `P-QEMU-08-SW`, and `P-QEMU-10-SW-LOCAL`.
 
 Do not claim full old-main parity, cloud-provider support, full QEMU
-application parity, or full KubeEdge/Mist/OpenFaaS application parity from this
-checkpoint.
+application parity, or full Mist/OpenFaaS application parity from this
+checkpoint. KubeEdge application parity is certified only for `P-QEMU-06`.
 
 ## Known Blockers
 
-There is no known host-helper or release-artifact-audit blocker at this
-checkpoint. The installed helper verifies, the dedicated repo is synced and
-read-only for `continuum-smoke`, and the wrapper-based release-artifact audit
-reports zero issues.
+There is no known host-helper blocker at this checkpoint. The installed helper
+verifies, and the dedicated repo is synced and read-only for
+`continuum-smoke`.
+
+There is a known release-artifact/pretag blocker after adding the full
+P-QEMU-06 evidence: the release evidence set now spans the older
+`9b380abed1909aa0afad8ef32bc71a1d203941ea` VM-evidence source commit and the
+newer `c4f034715459d5a7199bac1789b5115699848afb` P-QEMU-06 runtime source
+commit. The wrapper-based artifact audit validates the retained artifacts but
+reports `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` for that mixed source
+context. `check_release_pretag.py` must continue to fail until the older
+claimed VM-backed rows are refreshed on the current runtime source commit or
+the release scope is split.
 
 M1 still needs the normal final publication discipline: rerun the pre-tag
 sequence from `docs/release_notes_m1_draft.md` on the exact source tree that
@@ -201,15 +215,12 @@ code changes, rerun the affected VM-backed wrapper scenarios and refresh the
 evidence before tagging.
 
 Remaining blockers for a final replacement release are the non-certified
-old-main parity rows in `docs/release_certification_matrix.md`, especially full
-QEMU application parity, cloud-provider rows, bare-metal scope, and unverified
-software/application modules.
+old-main parity rows in `docs/release_certification_matrix.md`, especially
+remaining full QEMU application parity rows, cloud-provider rows, bare-metal
+scope, and unverified software/application modules.
 
-For the next old-main parity step, start with `P-QEMU-06`. The latest retained
-run had already moved past the earlier edge flannel `CrashLoopBackOff`; the
-next action is a full rerun now that retained smoke state is on
-`/mnt/sdc/continuum_smoke`, followed by retained debug inspection only if the
-application phase still fails.
+For the next old-main parity step, start with full `P-QEMU-07`
+`qemu_mist_image_parity`.
 
 ## Next Agent Checklist
 

@@ -205,6 +205,14 @@ ALLOWED_CLAIM_CONTEXTS = {
         re.compile(r"\bdo\s+not\s+claim\b", re.IGNORECASE),
         re.compile(r"\b(?:does\s+)?not\s+certif", re.IGNORECASE),
         re.compile(
+            r"\bkubeedge\b.{0,120}\bcertified\s+only\s+for\b.{0,120}\bP-QEMU-06\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bcertified\s+only\s+for\b.{0,120}\bP-QEMU-06\b.{0,120}\bkubeedge\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
             r"\b(?:need|needs|require|requires|required)\b.{0,120}\bevidence\b",
             re.IGNORECASE,
         ),
@@ -234,9 +242,13 @@ ALLOWED_CLAIM_CONTEXTS = {
 }
 
 
-def _is_allowed_claim_context(kind: str, line: str) -> bool:
+def _is_allowed_claim_context(kind: str, *lines: str) -> bool:
     """Return whether a matched claim appears in explicit non-claim context."""
-    return any(pattern.search(line) for pattern in ALLOWED_CLAIM_CONTEXTS.get(kind, ()))
+    return any(
+        pattern.search(line)
+        for pattern in ALLOWED_CLAIM_CONTEXTS.get(kind, ())
+        for line in lines
+    )
 
 
 def _strip_inline_code(line: str) -> str:
@@ -330,7 +342,7 @@ def _unsupported_claim_issues(root: Path) -> list[ReleaseClaimIssue]:
             for claim_pattern in CLAIM_PATTERNS:
                 if not claim_pattern.regex.search(scan_line):
                     continue
-                if _is_allowed_claim_context(claim_pattern.kind, scan_line):
+                if _is_allowed_claim_context(claim_pattern.kind, scan_line, line):
                     continue
                 issues.append(
                     ReleaseClaimIssue(

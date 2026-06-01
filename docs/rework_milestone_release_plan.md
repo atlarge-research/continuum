@@ -96,7 +96,9 @@ infrastructure parity rows are recorded separately in
 old-main QEMU Kubernetes no-benchmark parity row is recorded in
 `docs/release_evidence_qemu_k8s_nobench_2026-05-31.md`. The KubeEdge
 software-only subset row is recorded in
-`docs/release_evidence_qemu_kubeedge_software_2026-05-31.md`, and the Mist
+`docs/release_evidence_qemu_kubeedge_software_2026-05-31.md`, and the full
+KubeEdge image-classification row is recorded in
+`docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`. The Mist
 software-only subset row is recorded in
 `docs/release_evidence_qemu_mist_software_2026-05-31.md`. The endpoint-runtime
 software-only subset row is recorded in
@@ -149,8 +151,8 @@ configuration tree:
    - combined cloud/edge/endpoint.
 3. software/resource-manager coverage:
    - Kubernetes image/build path,
-   - KubeEdge software-only path is certified for one QEMU topology, while the
-     full KubeEdge image/build path still needs application evidence,
+   - KubeEdge application parity is certified only for `P-QEMU-06`; the
+     software-only subset also remains certified for one QEMU topology,
    - Mist software-only path is certified for one QEMU topology, while the full
      Mist image/build path still needs application evidence,
    - endpoint-only runtime path is certified for one QEMU topology, while the

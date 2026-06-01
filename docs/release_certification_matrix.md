@@ -65,9 +65,10 @@ Preferred M1 host command sequence:
 7. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity` when certifying old-main QEMU infrastructure parity rows.
 8. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity` when certifying the Kubernetes no-benchmark parity row.
 9. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` when certifying the KubeEdge software-only subset row.
-10. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` when certifying the Mist software-only subset row.
-11. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` when certifying the endpoint-runtime software-only subset row.
-12. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` when certifying the OpenFaaS software-only subset row.
+10. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity` when certifying the full KubeEdge image-classification parity row.
+11. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` when certifying the Mist software-only subset row.
+12. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` when certifying the endpoint-runtime software-only subset row.
+13. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` when certifying the OpenFaaS software-only subset row.
 
 The current wrapper supports `operational_regression`, which chains
 `phase_smoke_matrix` and `benchmark_k8s_resume`. The dedicated
@@ -111,7 +112,7 @@ VM-backed or cloud-backed run proves the claim on the rework stack.
 | P-QEMU-04 | `configuration/tests/qemu/04_infraonly-all.cfg` | QEMU cloud/edge/endpoint infrastructure | `configs/experiments/parity/qemu/04_infraonly_all.yaml`; suite `qemu_infra_parity` | `certified` | Evidence: `docs/release_evidence_qemu_infra_parity_2026-05-31.md`. |
 | P-QEMU-05 | `configuration/tests/qemu/05_kuberentes-img.cfg` | QEMU Kubernetes plus image-classification application with netperf enabled | `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml`; suite `qemu_k8s_image_parity` | `ported-unverified` | VM attempt reached the forced image-prefetch path and is blocked on Docker daemon access for the smoke user. Keep unclaimed until the host prerequisite or registry design is fixed, then certify application metric artifacts plus netperf evidence. |
 | P-QEMU-06-SW | Subset of `configuration/tests/qemu/06_kubeedge-img.cfg` | QEMU KubeEdge software phase on the legacy cloud/edge/endpoint topology, without image-classification application | `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml`; suite `qemu_kubeedge_software_parity` | `certified` | Evidence: `docs/release_evidence_qemu_kubeedge_software_2026-05-31.md`. This does not certify the full P-QEMU-06 application row. |
-| P-QEMU-06 | `configuration/tests/qemu/06_kubeedge-img.cfg` | QEMU KubeEdge image-classification application path | `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml`; suite `qemu_kubeedge_image_parity`; software subset: `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` | `ported-unverified` | Full application suite is ported and the local registry cache was primed through `sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kubeedge_image_parity`. The latest post-fix wrapper attempt reached the application phase with KubeEdge joined and flannel past the previous `CrashLoopBackOff`, then failed under host disk pressure while endpoint Docker was pulling the publisher image; the test runner also failed to save its JSON summary with `OSError: [Errno 28] No space left on device`. Retained smoke state has since been moved to `/mnt/sdc/continuum_smoke`; keep unclaimed until a full VM suite records application metric artifacts as certification evidence. Latest retained log: `/home/continuum-smoke/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/2026-05-29_23:56:00_edge_kubeedge_classify-images.log`. |
+| P-QEMU-06 | `configuration/tests/qemu/06_kubeedge-img.cfg` | QEMU KubeEdge image-classification application path | `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml`; suite `qemu_kubeedge_image_parity` | `certified` | Evidence: `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`. |
 | P-QEMU-07-SW | Subset of `configuration/tests/qemu/07_mist-img.cfg` | QEMU Mist software phase on the legacy edge/endpoint topology, without image-classification application | `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml`; suite `qemu_mist_software_parity` | `certified` | Evidence: `docs/release_evidence_qemu_mist_software_2026-05-31.md`. This does not certify the full P-QEMU-07 application row. |
 | P-QEMU-07 | `configuration/tests/qemu/07_mist-img.cfg` | QEMU Mist image/build path | `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml`; suite `qemu_mist_image_parity` | `ported-unverified` | Full application suite is ported and now gates on a primed local registry cache instead of Docker daemon access for the smoke user. Keep unclaimed until the cache is primed and the full VM suite records application metric artifacts as certification evidence. |
 | P-QEMU-08-SW | Subset of `configuration/tests/qemu/08_endpoint_img.cfg` | QEMU endpoint runtime software phase on the legacy endpoint-only topology, without image-classification application | `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml`; suite `qemu_endpoint_software_parity` | `certified` | Evidence: `docs/release_evidence_qemu_endpoint_software_2026-05-31.md`. This does not certify the full P-QEMU-08 application row. |
@@ -139,19 +140,19 @@ evidence.
 
 | Module Family | Current Evidence Shape | Status | Required Before Public Claim |
 | --- | --- | --- | --- |
-| `qemu` provider | M1 local module-set rows, old-main infra-only parity rows, the Kubernetes no-benchmark row, the KubeEdge/Mist/endpoint-runtime software-only subset rows, and the OpenFaaS single-host software-only variant have VM-backed evidence. | `certified` for M1 rows, `P-QEMU-01` through `P-QEMU-04`, `P-QEMU-06-SW`, `P-QEMU-07-SW`, `P-QEMU-08-SW`, `P-QEMU-09`, and `P-QEMU-10-SW-LOCAL` only | Continue remaining old-main QEMU application parity rows before broadening the QEMU parity claim. `image_prefetch: "off"` rows now require a primed local registry cache; forced-prefetch rows still require Docker daemon access on the runner host. Exact P-QEMU-10 resource parity needs external QEMU capacity or a larger local runner. |
+| `qemu` provider | M1 local module-set rows, old-main infra-only parity rows, the Kubernetes no-benchmark row, the full KubeEdge image-classification row, the Mist/endpoint-runtime software-only subset rows, and the OpenFaaS single-host software-only variant have VM-backed evidence. | `certified` for M1 rows, `P-QEMU-01` through `P-QEMU-04`, `P-QEMU-06`, `P-QEMU-06-SW`, `P-QEMU-07-SW`, `P-QEMU-08-SW`, `P-QEMU-09`, and `P-QEMU-10-SW-LOCAL` only | Continue remaining old-main QEMU application parity rows before broadening the QEMU parity claim. `image_prefetch: "off"` rows require a primed local registry cache; forced-prefetch rows still require Docker daemon access on the runner host. Exact P-QEMU-10 resource parity needs external QEMU capacity or a larger local runner. |
 | `gcp` provider | Provider code and legacy cfg tests exist; no YAML environment profile identified in current configs. | `historical` | YAML profile, cloud prerequisites, cloud-backed evidence, cost/credential docs. |
 | `aws` provider | Provider code and one legacy cfg test exist; no YAML environment profile identified in current configs. | `historical` | Scope decision, YAML profile, cloud-backed evidence, cost/credential docs. |
 | `baremetal` provider | Provider code exists. | `ported-unverified` | Decide support target and add host/cluster certification path. |
 | `kubernetes` | YAML profile, M1 smoke rows, the QEMU no-benchmark parity row, and the OpenFaaS single-host software-only variant have VM-backed evidence. | `certified` for M1 rows, `P-QEMU-09`, and `P-QEMU-10-SW-LOCAL` only | Fresh VM evidence per additional claimed topology. |
-| `kubeedge` | YAML profiles exist; a software-only legacy-topology suite has VM-backed software-phase evidence on the legacy topology; the full application suite is ported and can use the host-primed local-registry cache. | `certified` for `P-QEMU-06-SW` only | Rerun full application evidence with metric artifacts now that retained smoke state has been moved to `/mnt/sdc/continuum_smoke`. |
+| `kubeedge` | YAML profiles exist; a software-only legacy-topology suite and the full QEMU image-classification application suite have VM-backed evidence on the legacy topology. | `certified` for `P-QEMU-06-SW` and `P-QEMU-06` only | Fresh VM/cloud evidence per additional KubeEdge topology or application claim. |
 | `mist` | YAML profiles and suites exist; a software-only legacy-topology suite has VM-backed evidence with teardown verified; the full application suite is ported and now preflights local-registry cache readiness. | `certified` for `P-QEMU-07-SW` only | Full application evidence after the required images are primed into the local registry cache; longer-term cleanup should split Mist from the shared KubeEdge base-install path. |
 | `openfaas` | YAML profile, suite, and a single-host CPU-capped software-only variant have VM-backed software-phase evidence. | `certified` for `P-QEMU-10-SW-LOCAL` only | Full application evidence after Docker image-prefetch access and exact-resource-capacity decisions are resolved. |
 | `endpoint_runtime` | YAML profiles, the M1 benchmark row, the QEMU no-benchmark parity row, and the KubeEdge/Mist/endpoint-only/OpenFaaS software subset rows have VM-backed evidence. | `certified` for M1 benchmark row, `P-QEMU-06-SW`, `P-QEMU-07-SW`, `P-QEMU-08-SW`, `P-QEMU-09`, and `P-QEMU-10-SW-LOCAL` only | Fresh retained benchmark or software-phase evidence for additional claims. |
 | `observability` | YAML module and QEMU no-benchmark parity row have VM-backed evidence. | `certified` for `P-QEMU-09` only | Fresh evidence per additional Kubernetes/KubeControl/Kata topology before broader claims. |
 | `kubecontrol` | Resource-manager module exists. | `ported-unverified` | Define supported module set, config, image-prefetch behavior, and evidence. |
 | `kube_kata` | Resource-manager module and `empty_kata` application exist. | `ported-unverified` | Define supported module set, host prerequisites, runtime evidence, and limitations. |
-| `image_classification` | M1 benchmark-smoke path has VM-backed evidence and metric artifacts. | `certified` for M1 benchmark row only | Fresh retained benchmark evidence and metric artifact summary for additional claims. |
+| `image_classification` | M1 benchmark-smoke path and the full QEMU KubeEdge parity row have VM-backed evidence and metric artifacts. | `certified` for M1 benchmark row and `P-QEMU-06` only | Fresh retained benchmark evidence and metric artifact summary for additional claims. |
 | `text_translation` | Application module exists. | `ported-unverified` | Add example config, success detector, and VM-backed evidence before public claim. |
 | `stress`, `mem_usage`, `empty`, `empty_kata` | Application modules exist. | `ported-unverified` | Decide whether each remains public release scope; add configs and evidence if claimed. |
 
@@ -195,14 +196,16 @@ that moves to `certified`.
    replace the root-owned helper only through a manual reviewed operator action.
 6. Keep `docs/release_notes_m1_draft.md` synchronized with this matrix before
    publishing an intermediate release.
-7. Rerun the full `P-QEMU-06` application evidence path after successful
-   host-side registry cache priming.
-   Keep the Docker-daemon prerequisite for forced-prefetch rows `P-QEMU-05`,
+7. Refresh older certified VM-backed rows on the current runtime source commit
+   before tagging; the P-QEMU-06 evidence was produced after KubeEdge runtime
+   prerequisite fixes, so the release evidence set is intentionally mixed until
+   those rows are rerun or the release scope is split.
+8. Keep the Docker-daemon prerequisite for forced-prefetch rows `P-QEMU-05`,
    `P-QEMU-08`, and full `P-QEMU-10` until the runner host or registry design
    supports that claim.
-8. Continue QEMU software/application parity rows `P-QEMU-05` through `P-QEMU-08`
+9. Continue QEMU software/application parity rows `P-QEMU-05` through `P-QEMU-08`
    and full `P-QEMU-10`, starting with rows that can produce truthful VM
    evidence on the available runner.
-9. Convert the parity table into issues after M1, grouped by provider and
+10. Convert the parity table into issues after M1, grouped by provider and
    software family.
-10. For each historical row, choose port, preserve-as-historical, or deprecate.
+11. For each historical row, choose port, preserve-as-historical, or deprecate.
