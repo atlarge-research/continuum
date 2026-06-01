@@ -21,6 +21,28 @@ BENCHMARK_METRICS_KIND = "ContinuumBenchmarkMetrics"
 BENCHMARK_METRICS_SCHEMA_VERSION = 1
 
 
+def _docker_start_stderr_is_fatal(output, error):
+    """Return whether docker run stderr should fail worker startup."""
+    if not error:
+        return False
+    if not output:
+        return True
+
+    fatal_markers = [
+        "cannot connect to the docker daemon",
+        "denied:",
+        "docker: error",
+        "error response from daemon",
+        "manifest unknown",
+        "no such host",
+        "non-zero return code",
+        "pull access denied",
+        "unauthorized:",
+    ]
+    combined = "\n".join(error).lower()
+    return any(marker in combined for marker in fatal_markers)
+
+
 def _safe_artifact_token(value):
     """Return a filesystem-safe token for benchmark artifact names."""
     token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value)).strip("._")
@@ -524,7 +546,7 @@ def start_worker_mist(config, machines, app_vars):
     results = machines[0].process(config, commands, ssh=ssh_targets)
     for ssh_target, (output, error) in zip(ssh_targets, results):
         logging.debug("Check output of mist endpoint start in ssh [%s]", ssh_target)
-        if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+        if _docker_start_stderr_is_fatal(output, error):
             logging.error("".join(error))
             sys.exit(1)
         if not output:
@@ -580,7 +602,7 @@ def start_worker_baremetal(config, machines, app_vars):
 
     output, error = machines[0].process(config, command)[0]
     logging.debug("Check output of worker container")
-    if error and "Your kernel does not support swap limit capabilities" not in error[0]:
+    if _docker_start_stderr_is_fatal(output, error):
         logging.error("".join(error))
         sys.exit(1)
     if not output:

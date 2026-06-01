@@ -403,6 +403,50 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         self.assertIn("--env MQTT_LOGS=True", issued_command)
         self.assertIn("--env MQTT_LOCAL_IP=10.0.0.2", issued_command)
 
+    @mock.patch("application.runtime_helpers.time.sleep", autospec=True)
+    def test_start_worker_mist_allows_nonfatal_ssh_and_docker_warnings(self, _mock_sleep):
+        config = {
+            "registry": "registry.local:5000",
+            "images": {"worker": "repo/worker:1.0"},
+            "domains": {
+                "benchmark": {
+                    "pipeline": [
+                        {
+                            "id": "img",
+                            "type": "image_classification",
+                            "config": {
+                                "application_worker_cpu": 0.5,
+                                "application_worker_memory": 1.5,
+                            },
+                        }
+                    ]
+                }
+            },
+            "edge_ssh": ["edge0@10.0.0.2"],
+            "infrastructure": {"provider": "qemu"},
+        }
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            [
+                (
+                    ["container-id"],
+                    [
+                        "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\n",
+                        "WARNING: Your kernel does not support swap limit capabilities.\n",
+                    ],
+                )
+            ],
+            [(["deadbeef: Up 2 seconds edge0"], [])],
+        ]
+
+        container_names = runtime_helpers.start_worker_mist(
+            config,
+            [machine],
+            ["MQTT_LOGS=True"],
+        )
+
+        self.assertEqual(container_names, ["edge0"])
+
     def test_run_kubernetes_benchmark_playbook_uses_generated_path(self):
         config = {
             "infrastructure": {"base_path": "/tmp/continuum-run"},
