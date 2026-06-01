@@ -202,13 +202,14 @@ verifies, and the dedicated repo is synced and read-only for
 `continuum-smoke`.
 
 There is a known release-artifact/pretag blocker after adding the full
-P-QEMU-06-SW, P-QEMU-06, and P-QEMU-07 evidence: the release evidence set now
-spans the older `9b380abed1909aa0afad8ef32bc71a1d203941ea` VM-evidence source
-commit, the `65d3e193ca29249c1ca33b5aa364367c16911006` refreshed P-QEMU-06
-runtime source commit, the `10e90c08295fbd2a0b428f496c95854c723b37fa`
-P-QEMU-06-SW runtime source commit, and the
-`44ed14bcb2cffb224352ba219b9ade5b62b24e6a` P-QEMU-07 runtime source commit.
-The wrapper-based artifact audit validates the retained artifacts but
+P-QEMU-06-SW, P-QEMU-06, P-QEMU-07-SW, and P-QEMU-07 evidence: the release
+evidence set now spans the older `9b380abed1909aa0afad8ef32bc71a1d203941ea`
+VM-evidence source commit, the `65d3e193ca29249c1ca33b5aa364367c16911006`
+refreshed P-QEMU-06 runtime source commit, the
+`10e90c08295fbd2a0b428f496c95854c723b37fa` P-QEMU-06-SW runtime source commit,
+the `af00a4bbe461e9c5b0c777fbaf2d23a517a6416a` P-QEMU-07-SW runtime source
+commit, and the `44ed14bcb2cffb224352ba219b9ade5b62b24e6a` P-QEMU-07 runtime
+source commit. The wrapper-based artifact audit validates the retained artifacts but
 reports `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` for that mixed source
 context. `check_release_pretag.py` must continue to fail until older claimed
 VM-backed rows are refreshed on the current runtime source commit or the release

@@ -21,7 +21,7 @@ Use these documents as the release evidence set:
 4. `docs/release_evidence_qemu_k8s_nobench_2026-05-31.md`
 5. `docs/release_evidence_qemu_kubeedge_software_2026-06-01.md`
 6. `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`
-7. `docs/release_evidence_qemu_mist_software_2026-05-31.md`
+7. `docs/release_evidence_qemu_mist_software_2026-06-01.md`
 8. `docs/release_evidence_qemu_mist_image_2026-06-01.md`
 9. `docs/release_evidence_qemu_endpoint_software_2026-05-31.md`
 10. `docs/release_evidence_qemu_openfaas_software_2026-05-31.md`
