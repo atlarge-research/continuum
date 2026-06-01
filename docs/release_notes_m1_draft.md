@@ -19,7 +19,7 @@ Use these documents as the release evidence set:
 2. `docs/release_evidence_m1_2026-05-31.md`
 3. `docs/release_evidence_qemu_infra_parity_2026-05-31.md`
 4. `docs/release_evidence_qemu_k8s_nobench_2026-05-31.md`
-5. `docs/release_evidence_qemu_kubeedge_software_2026-05-31.md`
+5. `docs/release_evidence_qemu_kubeedge_software_2026-06-01.md`
 6. `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`
 7. `docs/release_evidence_qemu_mist_software_2026-05-31.md`
 8. `docs/release_evidence_qemu_mist_image_2026-06-01.md`
