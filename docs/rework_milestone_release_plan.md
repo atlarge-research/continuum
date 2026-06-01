@@ -92,7 +92,7 @@ engine and first local module sets:
 The current M1 evidence snapshot certifies the first local QEMU/libvirt module
 set in `docs/release_evidence_m1_2026-05-31.md`. The first old-main QEMU
 infrastructure parity rows are recorded separately in
-`docs/release_evidence_qemu_infra_parity_2026-05-31.md`, and the first
+`docs/release_evidence_qemu_infra_parity_2026-06-01.md`, and the first
 old-main QEMU Kubernetes no-benchmark parity row is recorded in
 `docs/release_evidence_qemu_k8s_nobench_2026-05-31.md`. The KubeEdge
 software-only subset row is recorded in
