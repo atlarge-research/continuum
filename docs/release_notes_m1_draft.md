@@ -175,9 +175,9 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Align the candidate `P-QEMU-05` evidence with the release-evidence source
-   commit set, record clean-source VM evidence for cache-backed `P-QEMU-08`,
-   then resolve Docker-daemon or registry design for full `P-QEMU-10`.
+1. Align the candidate `P-QEMU-05` and `P-QEMU-08` evidence with the
+   release-evidence source commit set, then resolve Docker-daemon or registry
+   design for full `P-QEMU-10`.
 2. Decide exact-resource versus practical-runner claims for full `P-QEMU-10`.
 3. Port or explicitly demote GCP/AWS historical rows.
 4. Convert the remaining parity matrix into issues grouped by provider and
