@@ -642,12 +642,68 @@ class CheckReleasePretagTests(unittest.TestCase):
                     "docs/release_evidence_m1_2026-05-31.md",
                     "docs/release_notes_m1_draft.md",
                     "scripts/test/check_release_pretag.py",
+                    "scripts/test/e2e/test_host_runner_scripts.py",
                     "scripts/test/unit/test_check_release_pretag.py",
                 ],
             ):
                 self.assertEqual(
                     self._find_pretag_issues(root, current_commit="1234567"),
                     [],
+                )
+
+    def test_evidence_commit_may_precede_release_artifact_audit_wrapper_delta(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self._write_release_notes(root)
+            self._write_evidence(root, git_commit="abcdef0")
+
+            with mock.patch.object(
+                check_release_pretag,
+                "_changed_paths_between_commits",
+                return_value=[
+                    "docs/release_notes_m1_draft.md",
+                    "scripts/test/run_smoke_host.sh",
+                    "scripts/test/setup_agent_host.sh",
+                ],
+            ), mock.patch.object(
+                check_release_pretag,
+                "_is_release_artifact_audit_only_wrapper_change",
+                return_value=True,
+            ):
+                self.assertEqual(
+                    self._find_pretag_issues(root, current_commit="1234567"),
+                    [],
+                )
+
+    def test_evidence_commit_rejects_other_wrapper_delta(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self._write_release_notes(root)
+            self._write_evidence(root, git_commit="abcdef0")
+
+            with mock.patch.object(
+                check_release_pretag,
+                "_changed_paths_between_commits",
+                return_value=[
+                    "scripts/test/run_smoke_host.sh",
+                    "scripts/test/setup_agent_host.sh",
+                ],
+            ), mock.patch.object(
+                check_release_pretag,
+                "_is_release_artifact_audit_only_wrapper_change",
+                return_value=False,
+            ):
+                self.assertEqual(
+                    self._find_pretag_issues(root, current_commit="1234567"),
+                    [
+                        check_release_pretag.PretagIssue(
+                            "pretag-source-commit-mismatch",
+                            "docs/release_evidence_m1_2026-05-31.md Git commit="
+                            "'abcdef0' differs from current HEAD '1234567'; "
+                            "runtime-affecting paths changed since evidence commit: "
+                            "scripts/test/run_smoke_host.sh, scripts/test/setup_agent_host.sh",
+                        )
+                    ],
                 )
 
     def test_evidence_commit_mismatch_reports_runtime_path_changes(self):

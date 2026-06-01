@@ -48,8 +48,42 @@ POST_EVIDENCE_ALLOWED_PATH_PREFIXES = (
     ".codex/skills/",
     "docs/",
     "scripts/test/check_release_",
+    "scripts/test/e2e/test_",
     "scripts/test/unit/test_check_release_",
 )
+RELEASE_ARTIFACT_AUDIT_WRAPPER_PATHS = {
+    "scripts/test/run_smoke_host.sh",
+    "scripts/test/setup_agent_host.sh",
+}
+RELEASE_ARTIFACT_AUDIT_ADDED_LINES = {
+    '  release-artifact-audit)',
+    '    BASE_PATH="$BASE_ROOT/prereqs"',
+    '    CONTINUUM_HOME="$BASE_PATH/.continuum"',
+    '    MPLCONFIGDIR_PATH="$CONTINUUM_HOME/mplconfig"',
+    '    XDG_CACHE_HOME_PATH="$BASE_ROOT/.cache"',
+    '    mkdir -p "$BASE_PATH" "$CONTINUUM_HOME" "$MPLCONFIGDIR_PATH" "$XDG_CACHE_HOME_PATH"',
+    '    chmod 0750 "$BASE_PATH" "$CONTINUUM_HOME" "$MPLCONFIGDIR_PATH" "$XDG_CACHE_HOME_PATH"',
+    '    cd "$REPO_ROOT"',
+    '    exec env -i \\',
+    '      HOME="${HOME:-/home/continuum-smoke}" \\',
+    '      PATH="$VENV_BIN:$SAFE_PATH" \\',
+    '      PYTHONPATH=. \\',
+    '      PYTHONDONTWRITEBYTECODE=1 \\',
+    '      XDG_CACHE_HOME="$XDG_CACHE_HOME_PATH" \\',
+    '      MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \\',
+    '      CONTINUUM_RELEASE_AUDIT_ROOT="${CONTINUUM_RELEASE_AUDIT_ROOT:-$REPO_ROOT}" \\',
+    '      CONTINUUM_SMOKE_BASE_ROOT="$BASE_ROOT" \\',
+    '      CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \\',
+    '      LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \\',
+    '      "$PYTHON_BIN" scripts/test/check_release_evidence_artifacts.py',
+    "    ;;",
+    'HOSTCTL_INTERFACE_VERSION="2026-06-01-release-artifact-audit"',
+    '  CONTINUUM_RELEASE_AUDIT_ROOT="\\$LIVE_REPO_ROOT" \\\\',
+    '  CONTINUUM_RELEASE_AUDIT_ROOT="\\\\\\$LIVE_REPO_ROOT" \\\\',
+}
+RELEASE_ARTIFACT_AUDIT_REMOVED_LINES = {
+    'HOSTCTL_INTERFACE_VERSION="2026-05-31-sudo-hardening"',
+}
 STALE_HOST_HELPER_FINDING_RE = re.compile(
     r"\b("
     r"does not declare|does not expose|fail(?:ed|ure)?|missing|not ready|stale|"
@@ -192,12 +226,86 @@ def _changed_paths_between_commits(
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+def _diff_lines_between_commits(
+    root: Path,
+    base_commit: str,
+    current_commit: str,
+    paths: list[str],
+) -> list[str] | None:
+    """Return zero-context diff lines for selected paths."""
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "diff",
+            "--unified=0",
+            base_commit,
+            current_commit,
+            "--",
+            *paths,
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.splitlines()
+
+
 def _is_allowed_post_evidence_path(path: str) -> bool:
     """Return whether a path may change after VM evidence without rerunning VMs."""
     normalized = path.replace("\\", "/")
     return any(
         normalized.startswith(prefix) for prefix in POST_EVIDENCE_ALLOWED_PATH_PREFIXES
     )
+
+
+def _is_allowed_release_artifact_audit_diff_line(line: str) -> bool:
+    """Return whether one diff line belongs to the wrapper-only audit addition."""
+    if not line or line.startswith(("diff ", "index ", "@@", "+++", "---")):
+        return True
+    if line.startswith("+"):
+        content = line[1:]
+        return (
+            content in RELEASE_ARTIFACT_AUDIT_ADDED_LINES
+            or (
+                content.startswith('    echo "Allowed values:')
+                and "release-artifact-audit" in content
+            )
+        )
+    if line.startswith("-"):
+        content = line[1:]
+        return (
+            content in RELEASE_ARTIFACT_AUDIT_REMOVED_LINES
+            or (
+                content.startswith('    echo "Allowed values:')
+                and "release-artifact-audit" not in content
+            )
+        )
+    return True
+
+
+def _is_release_artifact_audit_only_wrapper_change(
+    root: Path,
+    evidence_commit: str,
+    current_commit: str,
+    disallowed_paths: list[str],
+) -> bool:
+    """Return whether disallowed paths are exactly the guarded audit wrapper delta."""
+    normalized_paths = {path.replace("\\", "/") for path in disallowed_paths}
+    if normalized_paths != RELEASE_ARTIFACT_AUDIT_WRAPPER_PATHS:
+        return False
+    diff_lines = _diff_lines_between_commits(
+        root,
+        evidence_commit,
+        current_commit,
+        sorted(RELEASE_ARTIFACT_AUDIT_WRAPPER_PATHS),
+    )
+    if diff_lines is None:
+        return False
+    return all(_is_allowed_release_artifact_audit_diff_line(line) for line in diff_lines)
 
 
 def _source_commit_mismatch_issue(
@@ -219,6 +327,13 @@ def _source_commit_mismatch_issue(
         path for path in changed_paths if not _is_allowed_post_evidence_path(path)
     ]
     if not disallowed_paths:
+        return None
+    if _is_release_artifact_audit_only_wrapper_change(
+        root,
+        evidence_commit,
+        current_commit,
+        disallowed_paths,
+    ):
         return None
 
     sample_paths = ", ".join(disallowed_paths[:5])

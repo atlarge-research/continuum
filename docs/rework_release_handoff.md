@@ -91,6 +91,14 @@ The cloud-safe audit recorded 609 unit tests, 86 local e2e tests, 695 combined
 unittest tests, and 695 combined pytest tests. It also recorded stale pre-tag
 issues before the helper replacement and 2026-05-31 VM evidence refresh.
 
+After commit `d2a12a9e2f2a7da6262775edb0bac50c5a66f1be`, the only
+post-evidence wrapper changes are the exact guarded `release-artifact-audit`
+scenario addition, the corresponding `CONTINUUM_RELEASE_AUDIT_ROOT` wrapper
+environment, and the helper-interface bump. The pre-tag checker treats this
+specific diff as a release guardrail change, not as new VM runtime evidence
+scope. Any other change to `scripts/test/run_smoke_host.sh` or
+`scripts/test/setup_agent_host.sh` still requires fresh affected VM evidence.
+
 The current M1 evidence doc records the installed helper as verified. The
 installed wrapper base root is
 already `/mnt/sdc/continuum_smoke`, and the retained root symlink remains in
@@ -177,15 +185,14 @@ checkpoint.
 
 ## Known Blockers
 
-There are no known VM-evidence blockers for the currently claimed M1 and
-software-only QEMU parity rows after the 2026-05-31 reruns. Do not tag M1 until
-the cloud-safe pre-tag checks are rerun on the final source tree and report zero
-issues.
+The remaining host-side blocker is installation state, not source-tree evidence:
+the installed helper and wrapper must be refreshed from the current source tree,
+and the new `release-artifact-audit` scenario must pass before tagging.
 
 The installed host helper is also stale until the manual reviewed replacement is
 performed. Do not run `sync-repo` or new VM certification runs through the
 installed helper until `sudo -n /usr/local/bin/continuum-hostctl verify` passes
-with interface `2026-05-31-sudo-hardening`.
+with interface `2026-06-01-release-artifact-audit`.
 
 Remaining blockers for a final replacement release are the non-certified
 old-main parity rows in `docs/release_certification_matrix.md`, especially full

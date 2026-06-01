@@ -22,7 +22,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-05-31-sudo-hardening"
+HOSTCTL_INTERFACE_VERSION="2026-06-01-release-artifact-audit"
 
 usage() {
   cat <<EOF
