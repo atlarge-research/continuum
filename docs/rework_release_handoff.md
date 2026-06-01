@@ -41,22 +41,22 @@ checks, and M1 pre-tag checks.
 
 The current M1 cloud-safe evidence table points to:
 
-`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md`
+`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T012040Z.md`
 
 That audit recorded:
 
 1. required cloud-safe gates: PASS,
-2. unit unittest discovery: 609 tests OK,
-3. e2e unittest discovery: 86 tests OK,
-4. combined unittest discovery: 695 tests OK,
-5. pytest mirror: 695 passed,
+2. unit unittest discovery: 614 tests OK,
+3. e2e unittest discovery: 87 tests OK,
+4. combined unittest discovery: 701 tests OK,
+5. pytest mirror: 701 passed,
 6. release claim issues: 0,
 7. release matrix issues: 0,
 8. docs path missing references: 0,
 9. release evidence artifact issues: 0,
-10. pre-tag issues: the last full cloud-static audit report recorded stale
-    pre-tag issues before the host-helper replacement and VM evidence refresh;
-    rerun the cloud-static audit before tagging after this documentation update.
+10. pre-tag issues: 0 at the current repo-side checkpoint after the guarded
+    release-artifact audit wrapper addition and resume-state artifact checker
+    fix.
 
 Current host-runner and VM-evidence state:
 
@@ -70,10 +70,10 @@ Current host-runner and VM-evidence state:
    check-prereqs`: PASS.
 
 At the current checkpoint, the dedicated runner is no longer blocked by repo
-drift or helper-interface drift, and all currently claimed VM-backed wrapper
-scenarios listed in `docs/release_notes_m1_draft.md` passed on 2026-05-31 from
-the clean evidence source commit
-`9b380abed1909aa0afad8ef32bc71a1d203941ea`.
+drift, helper-interface drift, or release-artifact-audit availability. All
+currently claimed VM-backed wrapper scenarios listed in
+`docs/release_notes_m1_draft.md` passed on 2026-05-31 from the clean evidence
+source commit `9b380abed1909aa0afad8ef32bc71a1d203941ea`.
 
 On this post-hardening checkpoint series:
 
@@ -81,31 +81,35 @@ On this post-hardening checkpoint series:
 2. `python3 scripts/test/check_release_matrix.py`: 0 issues,
 3. `python3 scripts/test/check_docs_paths.py`: 0 missing references,
 4. `scripts/test/run_cloud_static_audit.sh`: required gates PASS, report
-   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md`,
+   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T012040Z.md`,
 5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
    release-artifact-audit`: 0 issues,
-6. `python3 scripts/test/check_release_pretag.py`: expected to pass after the
-   2026-05-31 evidence refresh and repo-side documentation update.
+6. `python3 scripts/test/check_release_pretag.py`: 0 issues,
+7. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS with the hardened
+   root-owned helper and read-only `/srv/continuum/repo`.
 
-The cloud-safe audit recorded 609 unit tests, 86 local e2e tests, 695 combined
-unittest tests, and 695 combined pytest tests. It also recorded stale pre-tag
-issues before the helper replacement and 2026-05-31 VM evidence refresh.
+The cloud-safe audit recorded 614 unit tests, 87 local e2e tests, 701 combined
+unittest tests, and 701 combined pytest tests.
 
-After commit `d2a12a9e2f2a7da6262775edb0bac50c5a66f1be`, the only
-post-evidence wrapper changes are the exact guarded `release-artifact-audit`
-scenario addition, the corresponding `CONTINUUM_RELEASE_AUDIT_ROOT` wrapper
-environment, and the helper-interface bump. The pre-tag checker treats this
-specific diff as a release guardrail change, not as new VM runtime evidence
-scope. Any other change to `scripts/test/run_smoke_host.sh` or
-`scripts/test/setup_agent_host.sh` still requires fresh affected VM evidence.
+After commit `412e682`, the only post-evidence wrapper changes are the exact
+guarded `release-artifact-audit` scenario addition, the corresponding
+`CONTINUUM_RELEASE_AUDIT_ROOT` wrapper environment, and the helper-interface
+bump. Commit `545cd17` then fixed the release-artifact checker so resumed
+multi-phase evidence may validate a shared final `state.json` without
+weakening per-entry `state_phase` checks. These changes are release guardrail
+changes, not new VM runtime evidence scope. Any other change to
+`scripts/test/run_smoke_host.sh` or `scripts/test/setup_agent_host.sh` still
+requires fresh affected VM evidence.
 
 The current M1 evidence doc records the installed helper as verified. The
 installed wrapper base root is
-already `/mnt/sdc/continuum_smoke`, and the retained root symlink remains in
-place. Before any new VM evidence run, an operator must manually review and
-replace `/usr/local/bin/continuum-hostctl` as documented in
-`docs/agent_sudo_boundaries.md`; then rerun `sudo -n
-/usr/local/bin/continuum-hostctl verify`.
+`/mnt/sdc/continuum_smoke`, and the retained root symlink remains in place.
+The installed `/usr/local/bin/continuum-hostctl` was manually refreshed from
+the reviewed repo-generated helper, then `sync-repo`, `install-wrapper
+dedicated /mnt/sdc/continuum_smoke`, and `verify` passed. If the helper
+interface changes again, the replacement must again be a manual reviewed
+operator action as documented in `docs/agent_sudo_boundaries.md`; do not add a
+refresh helper or temporary sudoers rule.
 
 The hardened helper no longer runs `git` against the mutable live checkout as
 root, so commit/tree-state evidence should be recorded from the normal user
@@ -114,8 +118,8 @@ shell or cloud-safe audit output.
 The previous sandbox problems were resolved for the earlier session:
 
 1. Git staging and committing work.
-2. `sudo -n /usr/local/bin/continuum-hostctl verify` passed before this helper
-   interface was bumped.
+2. `sudo -n /usr/local/bin/continuum-hostctl verify` passes with the current
+   installed helper.
 3. Agent sudo policy is documented in `docs/agent_sudo_boundaries.md`.
 
 Generic sudo may still differ between the operator shell and an agent sandbox.
@@ -185,22 +189,27 @@ checkpoint.
 
 ## Known Blockers
 
-The remaining host-side blocker is installation state, not source-tree evidence:
-the installed helper and wrapper must be refreshed from the current source tree,
-and the new `release-artifact-audit` scenario must pass before tagging.
+There is no known host-helper or release-artifact-audit blocker at this
+checkpoint. The installed helper verifies, the dedicated repo is synced and
+read-only for `continuum-smoke`, and the wrapper-based release-artifact audit
+reports zero issues.
 
-The installed host helper is also stale until the manual reviewed replacement is
-performed. Do not run `sync-repo` or new VM certification runs through the
-installed helper until `sudo -n /usr/local/bin/continuum-hostctl verify` passes
-with interface `2026-06-01-release-artifact-audit-root`.
+M1 still needs the normal final publication discipline: rerun the pre-tag
+sequence from `docs/release_notes_m1_draft.md` on the exact source tree that
+will be tagged. If any runtime, runner, verifier, profile, playbook, or config
+code changes, rerun the affected VM-backed wrapper scenarios and refresh the
+evidence before tagging.
 
 Remaining blockers for a final replacement release are the non-certified
 old-main parity rows in `docs/release_certification_matrix.md`, especially full
 QEMU application parity, cloud-provider rows, bare-metal scope, and unverified
 software/application modules.
 
-For the next old-main parity step, start with the `P-QEMU-06` edge flannel
-failure recorded above before rerunning the full application suite.
+For the next old-main parity step, start with `P-QEMU-06`. The latest retained
+run had already moved past the earlier edge flannel `CrashLoopBackOff`; the
+next action is a full rerun now that retained smoke state is on
+`/mnt/sdc/continuum_smoke`, followed by retained debug inspection only if the
+application phase still fails.
 
 ## Next Agent Checklist
 
@@ -213,15 +222,17 @@ failure recorded above before rerunning the full application suite.
    - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
      release-artifact-audit`
    - `python3 scripts/test/check_release_pretag.py`
-3. If source changed, run `scripts/test/run_cloud_static_audit.sh` and update
+3. If source changed after the current checkpoint, run
+   `scripts/test/run_cloud_static_audit.sh` and update
    `docs/release_evidence_m1_2026-05-31.md` with the new report path and
    counts.
 4. Keep generated `logs/cloud_static_audit/*.md` files uncommitted unless a
    maintainer explicitly asks for a dated audit snapshot.
-5. Before tagging M1 on the certification host, manually review and replace a
-   stale `/usr/local/bin/continuum-hostctl` if needed, then verify the installed
-   host helper and run the pre-tag command sequence in
-   `docs/release_notes_m1_draft.md`.
+5. Before tagging M1 on the certification host, verify the installed host
+   helper and run the pre-tag command sequence in
+   `docs/release_notes_m1_draft.md`. Manually review and replace
+   `/usr/local/bin/continuum-hostctl` only if the repo-generated helper changed
+   or verification reports helper-interface drift.
 6. Rerun affected VM-backed rows after any runtime, runner, verifier, profile,
    or playbook changes.
 7. Only after `check_release_pretag.py` reports zero issues should M1 be tagged

@@ -87,8 +87,10 @@ milestones.
 
 1. QEMU is a provider module, not Continuum core.
 2. Full KubeEdge and Mist application parity rows require fresh full VM-backed
-   evidence before certification; the latest KubeEdge full application attempt
-   still fails on edge-node flannel readiness.
+   evidence before certification. The latest KubeEdge full application attempt
+   moved past the earlier edge-node flannel readiness failure, then failed under
+   host disk pressure while pulling the endpoint publisher image; retained smoke
+   state has since been moved to `/mnt/sdc/continuum_smoke`.
 3. Forced image-prefetch rows still require Docker daemon access on the
    certification host.
 4. Full OpenFaaS application parity also needs a decision on exact legacy

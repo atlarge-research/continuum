@@ -138,7 +138,7 @@ audit section:
 | Combined unittest discovery | 701 tests OK |
 | Pytest mirror | 701 passed |
 | Marker debt scan | MATCHES FOUND (2) |
-| Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after recording a guarded non-VM-impact disposition for the exact `release-artifact-audit` wrapper addition; final publication still requires host-helper refresh and wrapper `release-artifact-audit` PASS on the certification host |
+| Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after recording a guarded non-VM-impact disposition for the exact `release-artifact-audit` wrapper addition and validating resumed multi-phase evidence with a shared final state file. The current certification host helper verifies and wrapper `release-artifact-audit` reports zero issues; final publication still requires rerunning the pre-tag sequence on the exact source tree being tagged. |
 | Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility and reports prerequisites satisfied in the current shell. Forced-prefetch and registry-cache application rows still require dedicated smoke-user wrapper VM evidence before certification. |
 
 The two marker debt scan matches are both from documented `mktemp` examples in
