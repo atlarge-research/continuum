@@ -402,6 +402,11 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         issued_command = first_call.args[1][0]
         self.assertIn("--env MQTT_LOGS=True", issued_command)
         self.assertIn("--env MQTT_LOCAL_IP=10.0.0.2", issued_command)
+        status_call = machine.process.call_args_list[1]
+        self.assertEqual(
+            status_call.args[1],
+            'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"',
+        )
 
     @mock.patch("application.runtime_helpers.time.sleep", autospec=True)
     def test_start_worker_mist_allows_nonfatal_ssh_and_docker_warnings(self, _mock_sleep):

@@ -559,7 +559,7 @@ def start_worker_mist(config, machines, app_vars):
         machines,
         config["edge_ssh"],
         container_names,
-        'docker container ls -a --format \\"{{.ID}}: {{.Status}} {{.Names}}\\"',
+        'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"',
     )
     return container_names
 
