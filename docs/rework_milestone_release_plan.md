@@ -106,7 +106,7 @@ image-classification row is recorded in
 software-only subset row is recorded in
 `docs/release_evidence_qemu_endpoint_software_2026-06-01.md`. The OpenFaaS
 software-only single-host variant is recorded in
-`docs/release_evidence_qemu_openfaas_software_2026-05-31.md`. If code, configs,
+`docs/release_evidence_qemu_openfaas_software_2026-06-01.md`. If code, configs,
 or runner semantics change before a tag is cut, the affected rows need fresh
 evidence.
 
