@@ -110,6 +110,7 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
     "qemu_kubeedge_software_parity": "QEMU KubeEdge software parity suite prerequisites",
     "qemu_kubeedge_image_parity": "QEMU KubeEdge image parity registry-cache prerequisites",
     "qemu_mist_software_parity": "QEMU Mist software parity suite prerequisites",
+    "qemu_mist_image_parity": "QEMU Mist image parity registry-cache prerequisites",
     "qemu_endpoint_software_parity": "QEMU endpoint-runtime software parity suite prerequisites",
     "qemu_openfaas_software_parity": "QEMU OpenFaaS software parity suite prerequisites",
 }

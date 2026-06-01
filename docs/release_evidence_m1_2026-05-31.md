@@ -149,15 +149,16 @@ Local release-evidence artifact audit on the certification host:
 | Field | Value |
 | --- | --- |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` |
-| Primary artifacts checked | 17 |
+| Primary artifacts checked | 19 |
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` |
 
 This nonzero audit result is expected for the current checkpoint: the P-QEMU-06
-evidence was produced from runtime source commit
-`c4f034715459d5a7199bac1789b5115699848afb`, while the earlier M1 evidence docs
+and P-QEMU-07 evidence were produced from newer runtime source commits
+`c4f034715459d5a7199bac1789b5115699848afb` and
+`44ed14bcb2cffb224352ba219b9ade5b62b24e6a`, while the earlier M1 evidence docs
 still reference `9b380abed1909aa0afad8ef32bc71a1d203941ea`. Before tagging,
-refresh the older claimed VM-backed rows on the current runtime source commit
-or split the release evidence set so every published claim has coherent source
+refresh older claimed VM-backed rows on the current runtime source commit or
+split the release evidence set so every published claim has coherent source
 context.
 
 Recorded host-helper status for the 2026-05-31 VM evidence run:

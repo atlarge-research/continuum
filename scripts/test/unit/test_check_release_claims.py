@@ -519,6 +519,21 @@ class CheckReleaseClaimsTests(unittest.TestCase):
 
             self.assertEqual(check_release_claims.find_release_claim_issues(root), [])
 
+    def test_exact_certified_mist_application_row_is_allowed(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self._write_public_docs(
+                root,
+                {
+                    "README.md": (
+                        "Release support is tracked in docs/release_certification_matrix.md.\n"
+                        "Mist application parity is certified only for `P-QEMU-07`.\n"
+                    )
+                },
+            )
+
+            self.assertEqual(check_release_claims.find_release_claim_issues(root), [])
+
     def test_full_qemu_parity_claim_is_reported(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

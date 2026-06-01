@@ -213,6 +213,14 @@ ALLOWED_CLAIM_CONTEXTS = {
             re.IGNORECASE,
         ),
         re.compile(
+            r"\bmist\b.{0,120}\bcertified\s+only\s+for\b.{0,120}\bP-QEMU-07\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bcertified\s+only\s+for\b.{0,120}\bP-QEMU-07\b.{0,120}\bmist\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
             r"\b(?:need|needs|require|requires|required)\b.{0,120}\bevidence\b",
             re.IGNORECASE,
         ),

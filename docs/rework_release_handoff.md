@@ -167,9 +167,10 @@ Post-M1 parity progress after this checkpoint:
    `/usr/local/bin/continuum-hostctl` is a manual reviewed operator action;
    the agent workflow starts from the already-installed root-owned helper.
 
-`P-QEMU-06` is now certified. The next useful old-main parity action is
-`P-QEMU-07`, the full Mist image-classification row, after priming the local
-registry cache for `qemu_mist_image_parity`.
+`P-QEMU-06` is now certified. `P-QEMU-07` is also certified after commit
+`44ed14bcb2cffb224352ba219b9ade5b62b24e6a` fixed Mist Docker startup warning
+handling and the Mist worker readiness Docker status command. Evidence:
+`docs/release_evidence_qemu_mist_image_2026-06-01.md`.
 
 ## Current Certified Scope
 
@@ -185,12 +186,14 @@ The certified or core-ready scope is exactly the set named in
    `P-QEMU-04`,
 6. QEMU Kubernetes no-benchmark row `P-QEMU-09`,
 7. full KubeEdge image-classification row `P-QEMU-06`,
-8. software-only subset rows `P-QEMU-06-SW`, `P-QEMU-07-SW`,
+8. full Mist image-classification row `P-QEMU-07`,
+9. software-only subset rows `P-QEMU-06-SW`, `P-QEMU-07-SW`,
    `P-QEMU-08-SW`, and `P-QEMU-10-SW-LOCAL`.
 
 Do not claim full old-main parity, cloud-provider support, full QEMU
-application parity, or full Mist/OpenFaaS application parity from this
-checkpoint. KubeEdge application parity is certified only for `P-QEMU-06`.
+application parity, or full OpenFaaS application parity from this checkpoint.
+KubeEdge application parity is certified only for `P-QEMU-06`; Mist application
+parity is certified only for `P-QEMU-07`.
 
 ## Known Blockers
 
@@ -199,14 +202,15 @@ verifies, and the dedicated repo is synced and read-only for
 `continuum-smoke`.
 
 There is a known release-artifact/pretag blocker after adding the full
-P-QEMU-06 evidence: the release evidence set now spans the older
-`9b380abed1909aa0afad8ef32bc71a1d203941ea` VM-evidence source commit and the
-newer `c4f034715459d5a7199bac1789b5115699848afb` P-QEMU-06 runtime source
+P-QEMU-06 and P-QEMU-07 evidence: the release evidence set now spans the older
+`9b380abed1909aa0afad8ef32bc71a1d203941ea` VM-evidence source commit, the
+`c4f034715459d5a7199bac1789b5115699848afb` P-QEMU-06 runtime source commit,
+and the `44ed14bcb2cffb224352ba219b9ade5b62b24e6a` P-QEMU-07 runtime source
 commit. The wrapper-based artifact audit validates the retained artifacts but
 reports `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` for that mixed source
-context. `check_release_pretag.py` must continue to fail until the older
-claimed VM-backed rows are refreshed on the current runtime source commit or
-the release scope is split.
+context. `check_release_pretag.py` must continue to fail until older claimed
+VM-backed rows are refreshed on the current runtime source commit or the release
+scope is split.
 
 M1 still needs the normal final publication discipline: rerun the pre-tag
 sequence from `docs/release_notes_m1_draft.md` on the exact source tree that
@@ -219,8 +223,9 @@ old-main parity rows in `docs/release_certification_matrix.md`, especially
 remaining full QEMU application parity rows, cloud-provider rows, bare-metal
 scope, and unverified software/application modules.
 
-For the next old-main parity step, start with full `P-QEMU-07`
-`qemu_mist_image_parity`.
+For the next old-main parity step, start with forced-prefetch rows `P-QEMU-05`
+or `P-QEMU-08`, or refresh older claimed evidence rows on the current runtime
+source commit to reduce the pretag blocker count.
 
 ## Next Agent Checklist
 
