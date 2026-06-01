@@ -2863,7 +2863,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     "Local release-evidence artifact audit on the certification host:\n\n"
                     "| Field | Value |\n"
                     "| --- | --- |\n"
-                    "| Command | `python3 scripts/test/check_release_evidence_artifacts.py` |\n"
+                    "| Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` |\n"
                     "| Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |\n"
                     % (artifact,)
                 ),
@@ -2912,7 +2912,8 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     check_release_evidence_artifacts.EvidenceArtifactIssue(
                         "artifact-audit-summary-mismatch",
                         "docs/release_evidence_example.md Command='wrong command' "
-                        "expected 'python3 scripts/test/check_release_evidence_artifacts.py'",
+                        "expected 'sudo -n -u continuum-smoke "
+                        "/usr/local/bin/run-continuum-smoke release-artifact-audit'",
                     )
                 ],
             )

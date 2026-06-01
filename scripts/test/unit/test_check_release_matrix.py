@@ -111,7 +111,7 @@ Nothing else in this tiny fixture.
 
 ```bash
 scripts/test/run_cloud_static_audit.sh
-python3 scripts/test/check_release_evidence_artifacts.py
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
 python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_claims.py
 python3 scripts/test/check_release_matrix.py
@@ -1177,7 +1177,8 @@ When converting this seed into issues:
                 root,
                 self._passing_matrix(),
                 release_notes_text=self._passing_release_notes().replace(
-                    "python3 scripts/test/check_release_evidence_artifacts.py\n",
+                    "sudo -n -u continuum-smoke "
+                    "/usr/local/bin/run-continuum-smoke release-artifact-audit\n",
                     "",
                 ),
             )
@@ -1188,7 +1189,8 @@ When converting this seed into issues:
                     check_release_matrix.MatrixIssue(
                         "release-notes-pretag-command-missing",
                         "section 7 is missing "
-                        "'python3 scripts/test/check_release_evidence_artifacts.py'",
+                        "'sudo -n -u continuum-smoke "
+                        "/usr/local/bin/run-continuum-smoke release-artifact-audit'",
                     )
                 ],
             )

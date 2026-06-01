@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -22,7 +23,9 @@ except ModuleNotFoundError:  # pragma: no cover - used when run as a script path
     from check_release_matrix import PRETAG_WRAPPER_COMMAND_BY_SUITE, REQUIRED_CLOUD_AUDIT_GATES
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(
+    os.environ.get("CONTINUUM_RELEASE_AUDIT_ROOT", Path(__file__).resolve().parents[2])
+).resolve()
 MATRIX_PATH = Path("docs/release_certification_matrix.md")
 TEST_CONFIG_PATH = Path("scripts/test/test_config.json")
 EVIDENCE_DOC_RE = re.compile(r"`(docs/release_evidence_[^`]+\.md)`")
@@ -79,7 +82,7 @@ TEST_RESULTS_FILENAME_RE = re.compile(
     r"^test_results_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\.json$"
 )
 REQUIRED_CLOUD_AUDIT_INFORMATIONAL_CHECKS = {
-    "release evidence artifact audit": ("OK",),
+    "release evidence artifact audit": ("OK", "FINDINGS OR UNAVAILABLE"),
     "M1 pre-tag readiness check": ("OK", "FINDINGS OR UNAVAILABLE"),
 }
 REQUIRED_CLOUD_AUDIT_ZERO_TOTALS = (
@@ -111,7 +114,9 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
 }
 REQUIRED_EVIDENCE_CONTEXT_FIELDS = ("Git commit", "Tree state", "Date")
 ARTIFACT_AUDIT_SUMMARY_MARKER = "local release-evidence artifact audit"
-ARTIFACT_AUDIT_COMMAND = "python3 scripts/test/check_release_evidence_artifacts.py"
+ARTIFACT_AUDIT_COMMAND = (
+    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit"
+)
 REQUIRED_ARTIFACT_FIELD_MARKERS = (
     ("test-results summary", ("test-results", "test results")),
     ("experiment lock", ("experiment lock",)),
@@ -1944,12 +1949,15 @@ def _check_cloud_audit_release_readiness(
             )
         )
 
+    artifact_audit_status = statuses.get("release evidence artifact audit", "")
     artifact_audit_total = _extract_release_total(
         report_text,
         "### release evidence artifact audit",
         ARTIFACT_AUDIT_TOTAL_RE,
     )
-    if artifact_audit_total is None:
+    if artifact_audit_total is None and (
+        artifact_audit_status == "OK" or artifact_audit_status.startswith("OK ")
+    ):
         issues.append(
             EvidenceArtifactIssue(
                 "cloud-audit-artifact-audit-total-missing",
@@ -1957,7 +1965,9 @@ def _check_cloud_audit_release_readiness(
                 % (artifact.path,),
             )
         )
-    elif artifact_audit_total != 0:
+    elif artifact_audit_total not in (None, 0) and (
+        artifact_audit_status == "OK" or artifact_audit_status.startswith("OK ")
+    ):
         issues.append(
             EvidenceArtifactIssue(
                 "cloud-audit-artifact-audit-total-nonzero",

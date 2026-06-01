@@ -180,6 +180,13 @@ To run the full local operational regression baseline in one wrapper call, use:
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression
 ```
 
+To validate retained release-evidence artifacts with the same user that owns
+the smoke state, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
+```
+
 To run the dedicated network-validation suite through the same allowlisted
 wrapper, use:
 
@@ -378,9 +385,12 @@ The installed wrapper supports only these values:
 19. `benchmark_k8s_resume_software`
 20. `benchmark_k8s_resume_application`
 21. `benchmark_k8s_resume`
-22. `check-prereqs`
-23. `list-suites`
-24. `debug-playbook <scenario> <playbook> [ansible args...]`
+22. `release-artifact-audit`
+23. `check-prereqs`
+24. `list-suites`
+25. `storage-report`
+26. `prune-scenario <scenario> --yes-delete-retained-state`
+27. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 

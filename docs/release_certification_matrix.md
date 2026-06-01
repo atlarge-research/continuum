@@ -80,7 +80,7 @@ VM-backed wrapper scenario for rows claimed by the milestone.
 Before publishing a release candidate from the certification host, also run:
 
 ```bash
-python3 scripts/test/check_release_evidence_artifacts.py
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
 python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_claims.py
 ```
@@ -185,8 +185,9 @@ that moves to `certified`.
 2. Rerun affected M1 VM-backed rows if runtime, runner, verifier, profile,
    playbook, or config code changes after the recorded VM-evidence source
    commit.
-3. Run `python3 scripts/test/check_release_evidence_artifacts.py` on the
-   certification host before tagging any row as release-ready.
+3. Run `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
+   release-artifact-audit` on the certification host before tagging any row as
+   release-ready.
 4. Run `python3 scripts/test/check_release_pretag.py` and keep M1 untagged
    until it reports zero issues.
 5. Verify the installed `/usr/local/bin/continuum-hostctl` helper on the

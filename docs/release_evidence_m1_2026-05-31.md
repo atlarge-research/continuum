@@ -59,8 +59,8 @@ module-readiness overclaim checks for unsupported gateway/edge readiness wording
 cloud-audit zero-total checks for docs paths, release claims, and release
 matrix drift,
 clean marker debt scan, host helper interface drift checks, pre-tag command
-ordering checks, local release-evidence artifact audit and pre-tag readiness report entries,
-cloud-audit artifact-audit status and zero-issue total checks,
+ordering checks, wrapper-based release-evidence artifact audit and pre-tag readiness report entries,
+cloud-audit artifact-audit availability checks,
 ready-suite prerequisite status checks,
 ready-suite prerequisite coverage in the cloud-static audit, ready-row
 wrapper-scenario traceability, non-ready suite command exclusion from the
@@ -148,7 +148,7 @@ Local release-evidence artifact audit on the certification host:
 
 | Field | Value |
 | --- | --- |
-| Command | `python3 scripts/test/check_release_evidence_artifacts.py` |
+| Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` |
 | Primary artifacts checked | 15 |
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |
 

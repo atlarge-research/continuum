@@ -363,6 +363,27 @@ case "$SCENARIO" in
   qemu_openfaas_image_parity)
     set_suite_scenario qemu_openfaas_image_parity qemu_openfaas_image_parity
     ;;
+  release-artifact-audit)
+    BASE_PATH="$BASE_ROOT/prereqs"
+    CONTINUUM_HOME="$BASE_PATH/.continuum"
+    MPLCONFIGDIR_PATH="$CONTINUUM_HOME/mplconfig"
+    XDG_CACHE_HOME_PATH="$BASE_ROOT/.cache"
+    mkdir -p "$BASE_PATH" "$CONTINUUM_HOME" "$MPLCONFIGDIR_PATH" "$XDG_CACHE_HOME_PATH"
+    chmod 0750 "$BASE_PATH" "$CONTINUUM_HOME" "$MPLCONFIGDIR_PATH" "$XDG_CACHE_HOME_PATH"
+    cd "$REPO_ROOT"
+    exec env -i \
+      HOME="${HOME:-/home/continuum-smoke}" \
+      PATH="$VENV_BIN:$SAFE_PATH" \
+      PYTHONPATH=. \
+      PYTHONDONTWRITEBYTECODE=1 \
+      XDG_CACHE_HOME="$XDG_CACHE_HOME_PATH" \
+      MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
+      CONTINUUM_RELEASE_AUDIT_ROOT="${CONTINUUM_RELEASE_AUDIT_ROOT:-$REPO_ROOT}" \
+      CONTINUUM_SMOKE_BASE_ROOT="$BASE_ROOT" \
+      CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \
+      LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \
+      "$PYTHON_BIN" scripts/test/check_release_evidence_artifacts.py
+    ;;
   check-prereqs)
     BASE_PATH="$BASE_ROOT/prereqs"
     CONTINUUM_HOME="$BASE_PATH/.continuum"
@@ -436,7 +457,7 @@ case "$SCENARIO" in
     ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, prune-scenario" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, release-artifact-audit, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, prune-scenario" >&2
     exit 2
     ;;
 esac

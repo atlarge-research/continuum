@@ -231,8 +231,9 @@ code and SSH output heuristics. It also requires schema-v2 state payloads and
 matching `resume_contract` hashes between `experiment_lock.yaml` and `state.json`.
 
 Release certification adds one more local audit step on the certification host:
-`python3 scripts/test/check_release_evidence_artifacts.py` checks the primary
-artifact paths named by release evidence docs. This confirms that retained
+run `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
+release-artifact-audit` to check the primary artifact paths named by release
+evidence docs. This confirms that retained
 runner summary JSON reports zero failures, cloud-static required gates passed,
 and benchmark/network evidence artifacts are still parseable. It is not a
 cloud-safe CI gate because it intentionally depends on local retained VM-backed

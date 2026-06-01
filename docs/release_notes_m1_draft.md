@@ -125,7 +125,7 @@ Run these checks before tagging:
 
 ```bash
 scripts/test/run_cloud_static_audit.sh
-python3 scripts/test/check_release_evidence_artifacts.py
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
 python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_claims.py
 python3 scripts/test/check_release_matrix.py

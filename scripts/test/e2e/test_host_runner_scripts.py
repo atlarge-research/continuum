@@ -147,6 +147,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('prepare_base_root_path()', result.stdout)
         self.assertIn('relocate_smoke_root()', result.stdout)
         self.assertIn('INSTALLED_WRAPPER_BASE_ROOT=', result.stdout)
+        self.assertIn('CONTINUUM_RELEASE_AUDIT_ROOT=', result.stdout)
         self.assertIn('verify_hostctl_interface()', result.stdout)
         self.assertIn('Installed maintenance helper is stale', result.stdout)
         self.assertIn('scripts/test/prime_local_registry_cache.py', result.stdout)
@@ -616,6 +617,41 @@ class HostRunnerScriptTests(unittest.TestCase):
             "qemu_kubeedge_image_parity",
             result.stdout,
         )
+
+    def test_run_smoke_release_artifact_audit_runs_as_runner_mode(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            runner_home = temp_root / "runner-home"
+            runner_home.mkdir()
+            venv_bin = temp_root / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            fake_python = venv_bin / "python3"
+            fake_python.write_text(
+                "#!/bin/sh\n"
+                "printf 'HOME=%s\\n' \"$HOME\"\n"
+                "printf 'AUDIT_ROOT=%s\\n' \"$CONTINUUM_RELEASE_AUDIT_ROOT\"\n"
+                "printf 'PYARGS:%s\\n' \"$*\"\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            smoke_base_root = temp_root / "smoke-base"
+            audit_root = temp_root / "live-repo"
+
+            result = self._run_smoke_script(
+                "release-artifact-audit",
+                extra_env={
+                    "HOME": str(runner_home),
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_RELEASE_AUDIT_ROOT": str(audit_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(fake_python),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                },
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"HOME={runner_home}", result.stdout)
+        self.assertIn(f"AUDIT_ROOT={audit_root}", result.stdout)
+        self.assertIn("PYARGS:scripts/test/check_release_evidence_artifacts.py", result.stdout)
 
     def test_run_smoke_prime_registry_cache_rejects_unsafe_args(self):
         result = self._run_smoke_script(

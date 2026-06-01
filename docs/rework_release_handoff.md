@@ -82,7 +82,8 @@ On this post-hardening checkpoint series:
 3. `python3 scripts/test/check_docs_paths.py`: 0 missing references,
 4. `scripts/test/run_cloud_static_audit.sh`: required gates PASS, report
    `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-05-31T092920Z.md`,
-5. `python3 scripts/test/check_release_evidence_artifacts.py`: 0 issues,
+5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
+   release-artifact-audit`: 0 issues,
 6. `python3 scripts/test/check_release_pretag.py`: expected to pass after the
    2026-05-31 evidence refresh and repo-side documentation update.
 
@@ -202,7 +203,8 @@ failure recorded above before rerunning the full application suite.
    - `python3 scripts/test/check_release_claims.py`
    - `python3 scripts/test/check_release_matrix.py`
    - `python3 scripts/test/check_docs_paths.py`
-   - `python3 scripts/test/check_release_evidence_artifacts.py`
+   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
+     release-artifact-audit`
    - `python3 scripts/test/check_release_pretag.py`
 3. If source changed, run `scripts/test/run_cloud_static_audit.sh` and update
    `docs/release_evidence_m1_2026-05-31.md` with the new report path and

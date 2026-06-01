@@ -53,7 +53,7 @@ after the maintenance helper is refreshed.
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity` | Prime the local registry cache for an `image_prefetch: "off"` image suite as a Docker-capable user |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity --check-only` | Verify that the local registry cache is ready without Docker access |
 | `scripts/test/run_cloud_static_audit.sh` | Run cloud-safe compile, tests, docs, lint, and suite metadata checks |
-| `python3 scripts/test/check_release_evidence_artifacts.py` | Validate retained release-evidence artifacts on the certification host |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` | Validate retained release-evidence artifacts on the certification host |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke phase_smoke_matrix` | Run the three phase-boundary host-backed smoke scenarios through the installed wrapper |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression` | Run the phase matrix plus retained benchmark smoke |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation` | Run the dedicated network-validation suite through the installed wrapper |
