@@ -77,7 +77,9 @@ This evidence does not certify:
 
 1. GCP, AWS, or bare-metal Mist behavior,
 2. broad Mist version compatibility beyond the configured profile,
-3. forced image-prefetch rows that still require Docker daemon access,
+3. full OpenFaaS application parity, which still needs root-helper cache
+   priming, exact-resource capacity resolution, and retained application
+   evidence,
 4. broader Mist applications beyond the image-classification path,
 5. the longer-term architecture cleanup needed to split Mist from the shared
    KubeEdge base-install path.

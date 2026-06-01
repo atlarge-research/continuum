@@ -352,9 +352,9 @@ human-readable docs. The active suite contract is now:
 13. `qemu_openfaas_software_parity` preflights the local QEMU/libvirt runner
    commands for OpenFaaS software-only certification on a single-host CPU-capped
    variant of the legacy node counts,
-14. `qemu_openfaas_image_parity` preflights Docker daemon access in addition to
-   the QEMU/libvirt commands because it models the legacy OpenFaaS forced
-   image-prefetch row,
+14. `qemu_openfaas_image_parity` preflights local-registry cache readiness in
+   addition to the QEMU/libvirt commands because the full OpenFaaS application
+   row uses `image_prefetch: "off"` with cached application images,
 15. missing prerequisites fail before config discovery or VM provisioning starts,
 16. operators can inspect the configured suite contract with
    `python3 scripts/test/run_tests.py --list-suites`,

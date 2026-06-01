@@ -302,8 +302,19 @@ To preflight the full QEMU OpenFaaS image-classification parity suite, use:
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity
 ```
 
-This full application suite currently preflights Docker daemon access before
-starting VMs because the legacy OpenFaaS row used forced image prefetch.
+This full application suite uses the cache-backed registry model. It still
+requires the local registry cache to be primed before starting VMs, and it is
+not release-certified until the exact resource/capacity boundary is resolved
+and retained VM/application evidence passes.
+
+After installing the `2026-06-02-root-cache-priming` hostctl interface, prime
+the OpenFaaS application image cache with the reviewed root-owned helper:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prime-registry-cache --check-only --suite qemu_openfaas_image_parity
+```
 
 To advance the retained benchmark state one phase at a time, use:
 

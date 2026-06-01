@@ -525,31 +525,25 @@
                 ]
             },
             "prerequisites": {
-                "summary": "Requires a local QEMU/libvirt host with SSH access and Docker daemon access for forced OpenFaaS image prefetch",
+                "summary": "Requires a local QEMU/libvirt host with SSH access and a primed local registry cache for OpenFaaS application images",
                 "commands": [
                     "virsh",
                     "ssh",
                     "setfacl",
                     "curl",
-                    "docker",
                     "qemu-img",
                     "cloud-localds",
                     "ansible-playbook"
                 ],
                 "checks": [
                     {
-                        "name": "Docker socket access",
+                        "name": "Local registry cache",
                         "command": [
-                            "test",
-                            "-w",
-                            "/var/run/docker.sock"
-                        ]
-                    },
-                    {
-                        "name": "Docker daemon access",
-                        "command": [
-                            "docker",
-                            "info"
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_openfaas_image_parity",
+                            "--check-only"
                         ]
                     }
                 ]

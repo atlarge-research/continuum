@@ -22,7 +22,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-06-01-release-artifact-audit-root"
+HOSTCTL_INTERFACE_VERSION="2026-06-02-root-cache-priming"
 
 usage() {
   cat <<EOF
@@ -255,6 +255,136 @@ validate_prime_registry_args() {
         exit 2
         ;;
     esac
+  done
+}
+
+parse_prime_registry_invocation() {
+  PRIME_CHECK_ONLY=0
+  PRIME_SUITE=
+  PRIME_CONFIG_MODE=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --check-only)
+        PRIME_CHECK_ONLY=1
+        shift
+        ;;
+      --suite)
+        shift
+        PRIME_SUITE=$1
+        shift
+        ;;
+      --config)
+        PRIME_CONFIG_MODE=1
+        shift 2
+        ;;
+    esac
+  done
+}
+
+registry_host_ip() {
+  if [ -n "${CONTINUUM_REGISTRY_HOST_IP:-}" ]; then
+    printf '%s\n' "$CONTINUUM_REGISTRY_HOST_IP"
+    return 0
+  fi
+  host_name=$(hostname)
+  host_ip=$(getent hosts "$host_name" 2>/dev/null | awk 'NF { print $1; exit }')
+  if [ -z "$host_ip" ]; then
+    host_ip=$(hostname -I 2>/dev/null | awk 'NF { print $1; exit }')
+  fi
+  if [ -z "$host_ip" ]; then
+    log "Could not determine local registry host IP" >&2
+    exit 1
+  fi
+  printf '%s\n' "$host_ip"
+}
+
+registry_endpoint() {
+  printf '%s:5000\n' "$(registry_host_ip)"
+}
+
+validate_registry_image_ref() {
+  label=$1
+  value=$2
+  case "$value" in
+    ""|/*|*..*|*';'*|*'&'*|*'|'*|*'`'*|*'$'*|*'\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+      log "Unsafe $label for registry cache priming: $value" >&2
+      exit 2
+      ;;
+  esac
+}
+
+registry_image_requirements_for_suite() {
+  case "$1" in
+    qemu_k8s_image_parity|qemu_kubeedge_image_parity|qemu_mist_image_parity|qemu_endpoint_image_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kubeedge-applications:image_classification_combined|kubeedge-applications:image_classification_combined
+redplanet00/kubeedge-applications:image_classification_publisher|kubeedge-applications:image_classification_publisher
+redplanet00/kubeedge-applications:image_classification_subscriber|kubeedge-applications:image_classification_subscriber
+EOF_IMAGE_REQUIREMENTS
+      ;;
+    qemu_openfaas_image_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kubeedge-applications:image_classification_publisher_serverless|kubeedge-applications:image_classification_publisher_serverless
+redplanet00/kubeedge-applications:image_classification_subscriber_serverless|kubeedge-applications:image_classification_subscriber_serverless
+EOF_IMAGE_REQUIREMENTS
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ensure_local_registry_running() {
+  registry=$1
+  require_cmd curl
+  require_cmd docker
+  if curl -fsS "http://$registry/v2/_catalog" >/dev/null 2>&1; then
+    return 0
+  fi
+  if docker container inspect registry >/dev/null 2>&1; then
+    docker start registry >/dev/null
+  else
+    docker run -d -p 5000:5000 -e REGISTRY_STORAGE_DELETE_ENABLED=true \
+      --restart=always --name registry registry:2 >/dev/null
+  fi
+  if ! curl -fsS "http://$registry/v2/_catalog" >/dev/null 2>&1; then
+    log "Local Docker registry is not reachable at $registry after startup" >&2
+    exit 1
+  fi
+}
+
+registry_has_image() {
+  registry=$1
+  local_name=$2
+  repo_name=${local_name%:*}
+  tag_name=${local_name##*:}
+  if [ "$repo_name" = "$local_name" ] || [ -z "$tag_name" ]; then
+    return 1
+  fi
+  curl -fsS "http://$registry/v2/$repo_name/tags/list" 2>/dev/null | grep -q "\"$tag_name\""
+}
+
+prime_registry_cache_as_root() {
+  suite=$1
+  if ! registry_image_requirements_for_suite "$suite" >/dev/null; then
+    log "Root cache priming supports only known cache-backed image suites: $suite" >&2
+    exit 2
+  fi
+  registry=$(registry_endpoint)
+  ensure_local_registry_running "$registry"
+  registry_image_requirements_for_suite "$suite" | while IFS='|' read -r source_ref local_name; do
+    [ -n "$source_ref" ] || continue
+    validate_registry_image_ref source_ref "$source_ref"
+    validate_registry_image_ref local_name "$local_name"
+    if registry_has_image "$registry" "$local_name"; then
+      log "OK $suite: $local_name already cached in $registry"
+      continue
+    fi
+    dest="$registry/$local_name"
+    docker pull "$source_ref"
+    docker tag "$source_ref" "$dest"
+    docker push "$dest"
+    log "OK $suite: primed $dest from $source_ref"
   done
 }
 
@@ -505,6 +635,136 @@ validate_prime_registry_args() {
         exit 2
         ;;
     esac
+  done
+}
+
+parse_prime_registry_invocation() {
+  PRIME_CHECK_ONLY=0
+  PRIME_SUITE=
+  PRIME_CONFIG_MODE=0
+  while [ "\$#" -gt 0 ]; do
+    case "\$1" in
+      --check-only)
+        PRIME_CHECK_ONLY=1
+        shift
+        ;;
+      --suite)
+        shift
+        PRIME_SUITE=\$1
+        shift
+        ;;
+      --config)
+        PRIME_CONFIG_MODE=1
+        shift 2
+        ;;
+    esac
+  done
+}
+
+registry_host_ip() {
+  if [ -n "\${CONTINUUM_REGISTRY_HOST_IP:-}" ]; then
+    printf '%s\\n' "\$CONTINUUM_REGISTRY_HOST_IP"
+    return 0
+  fi
+  host_name=\$(hostname)
+  host_ip=\$(getent hosts "\$host_name" 2>/dev/null | awk 'NF { print \$1; exit }')
+  if [ -z "\$host_ip" ]; then
+    host_ip=\$(hostname -I 2>/dev/null | awk 'NF { print \$1; exit }')
+  fi
+  if [ -z "\$host_ip" ]; then
+    log "Could not determine local registry host IP" >&2
+    exit 1
+  fi
+  printf '%s\\n' "\$host_ip"
+}
+
+registry_endpoint() {
+  printf '%s:5000\\n' "\$(registry_host_ip)"
+}
+
+validate_registry_image_ref() {
+  label=\$1
+  value=\$2
+  case "\$value" in
+    ""|/*|*..*|*';'*|*'&'*|*'|'*|*'\`'*|*'$'*|*'\\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
+      log "Unsafe \$label for registry cache priming: \$value" >&2
+      exit 2
+      ;;
+  esac
+}
+
+registry_image_requirements_for_suite() {
+  case "\$1" in
+    qemu_k8s_image_parity|qemu_kubeedge_image_parity|qemu_mist_image_parity|qemu_endpoint_image_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kubeedge-applications:image_classification_combined|kubeedge-applications:image_classification_combined
+redplanet00/kubeedge-applications:image_classification_publisher|kubeedge-applications:image_classification_publisher
+redplanet00/kubeedge-applications:image_classification_subscriber|kubeedge-applications:image_classification_subscriber
+EOF_IMAGE_REQUIREMENTS
+      ;;
+    qemu_openfaas_image_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kubeedge-applications:image_classification_publisher_serverless|kubeedge-applications:image_classification_publisher_serverless
+redplanet00/kubeedge-applications:image_classification_subscriber_serverless|kubeedge-applications:image_classification_subscriber_serverless
+EOF_IMAGE_REQUIREMENTS
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ensure_local_registry_running() {
+  registry=\$1
+  require_cmd curl
+  require_cmd docker
+  if curl -fsS "http://\$registry/v2/_catalog" >/dev/null 2>&1; then
+    return 0
+  fi
+  if docker container inspect registry >/dev/null 2>&1; then
+    docker start registry >/dev/null
+  else
+    docker run -d -p 5000:5000 -e REGISTRY_STORAGE_DELETE_ENABLED=true \\
+      --restart=always --name registry registry:2 >/dev/null
+  fi
+  if ! curl -fsS "http://\$registry/v2/_catalog" >/dev/null 2>&1; then
+    log "Local Docker registry is not reachable at \$registry after startup" >&2
+    exit 1
+  fi
+}
+
+registry_has_image() {
+  registry=\$1
+  local_name=\$2
+  repo_name=\${local_name%:*}
+  tag_name=\${local_name##*:}
+  if [ "\$repo_name" = "\$local_name" ] || [ -z "\$tag_name" ]; then
+    return 1
+  fi
+  curl -fsS "http://\$registry/v2/\$repo_name/tags/list" 2>/dev/null | grep -q "\"\$tag_name\""
+}
+
+prime_registry_cache_as_root() {
+  suite=\$1
+  if ! registry_image_requirements_for_suite "\$suite" >/dev/null; then
+    log "Root cache priming supports only known cache-backed image suites: \$suite" >&2
+    exit 2
+  fi
+  registry=\$(registry_endpoint)
+  ensure_local_registry_running "\$registry"
+  registry_image_requirements_for_suite "\$suite" | while IFS='|' read -r source_ref local_name; do
+    [ -n "\$source_ref" ] || continue
+    validate_registry_image_ref source_ref "\$source_ref"
+    validate_registry_image_ref local_name "\$local_name"
+    if registry_has_image "\$registry" "\$local_name"; then
+      log "OK \$suite: \$local_name already cached in \$registry"
+      continue
+    fi
+    dest="\$registry/\$local_name"
+    docker pull "\$source_ref"
+    docker tag "\$source_ref" "\$dest"
+    docker push "\$dest"
+    log "OK \$suite: primed \$dest from \$source_ref"
   done
 }
 
@@ -886,13 +1146,30 @@ verify() {
 
 prime_registry_cache() {
   validate_prime_registry_args "\$@"
+  parse_prime_registry_invocation "\$@"
+  if [ "\$PRIME_CHECK_ONLY" = "1" ]; then
+    runner_exec "\$INSTALL_PATH" prime-registry-cache "\$@"
+    return
+  fi
+  if [ "\$PRIME_CONFIG_MODE" = "1" ]; then
+    log "Root cache priming supports --suite for known cache-backed image suites; use --check-only for config validation." >&2
+    exit 2
+  fi
+  if [ -z "\$PRIME_SUITE" ]; then
+    log "Missing suite name for root cache priming" >&2
+    exit 2
+  fi
+  if [ "\$(id -u)" -ne 0 ]; then
+    log "Run this helper via sudo so it can prime the local registry cache." >&2
+    exit 2
+  fi
 
   repo_root="\$DEDICATED_REPO_ROOT"
   if [ "\$READONLY_DEDICATED_REPO" = "1" ]; then
     verify_dedicated_repo_sync
   fi
 
-  runner_exec "\$INSTALL_PATH" prime-registry-cache "\$@"
+  prime_registry_cache_as_root "\$PRIME_SUITE"
 }
 
 print_agent_command() {
@@ -1356,8 +1633,21 @@ verify() {
 
 prime_registry_cache() {
   validate_prime_registry_args "$@"
+  parse_prime_registry_invocation "$@"
+  if [ "$PRIME_CHECK_ONLY" = "1" ]; then
+    runner_exec "$INSTALL_PATH" prime-registry-cache "$@"
+    return
+  fi
+  if [ "$PRIME_CONFIG_MODE" = "1" ]; then
+    log "Root cache priming supports --suite for known cache-backed image suites; use --check-only for config validation." >&2
+    exit 2
+  fi
+  if [ -z "$PRIME_SUITE" ]; then
+    log "Missing suite name for root cache priming" >&2
+    exit 2
+  fi
   if [ "$(id -u)" -ne 0 ]; then
-    log "Run this helper via sudo so it can delegate to the smoke runner." >&2
+    log "Run this helper via sudo so it can prime the local registry cache." >&2
     exit 2
   fi
 
@@ -1366,7 +1656,7 @@ prime_registry_cache() {
     verify_dedicated_repo_sync
   fi
 
-  runner_exec "$INSTALL_PATH" prime-registry-cache "$@"
+  prime_registry_cache_as_root "$PRIME_SUITE"
 }
 
 install() {

@@ -1050,12 +1050,6 @@ RELEASE_NOTES_LIMITATION_REQUIREMENTS = (
         "section 5 must mention the local registry cache blocker",
     ),
     (
-        "docker-daemon-prefetch",
-        ("docker daemon", "forced image-prefetch", "forced-prefetch"),
-        ("docker daemon", "forced image-prefetch", "forced-prefetch"),
-        "section 5 must mention the Docker daemon or forced-prefetch blocker",
-    ),
-    (
         "host-helper-interface",
         ("hostctl_interface_version", "prime-registry-cache"),
         ("hostctl_interface_version", "prime-registry-cache"),

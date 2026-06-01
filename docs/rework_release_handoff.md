@@ -219,9 +219,25 @@ old-main parity rows in `docs/release_certification_matrix.md`, especially
 the remaining full QEMU OpenFaaS application parity row, cloud-provider rows,
 bare-metal scope, and unverified software/application modules.
 
-For the next old-main parity step, resolve full `P-QEMU-10` OpenFaaS
-application evidence, including the forced image-prefetch/Docker access
-question and the exact-resource versus practical-runner support boundary.
+For the next old-main parity step, manually refresh the root-owned
+`continuum-hostctl`, prime the local registry cache for
+`qemu_openfaas_image_parity`, and resolve full `P-QEMU-10` OpenFaaS application
+evidence, including the exact-resource versus practical-runner support
+boundary.
+
+At this checkpoint the repo-generated hostctl interface is
+`2026-06-02-root-cache-priming`. If `/usr/local/bin/continuum-hostctl` still
+reports `2026-06-01-release-artifact-audit-root`, replace it only through the
+manual reviewed helper install flow documented in `docs/smoke_runner_isolation.md`.
+Then run:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl sync-repo
+sudo -n /usr/local/bin/continuum-hostctl verify
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prime-registry-cache --check-only --suite qemu_openfaas_image_parity
+```
 
 ## Next Agent Checklist
 

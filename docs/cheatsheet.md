@@ -52,6 +52,7 @@ after the maintenance helper is refreshed.
 | `python3 scripts/test/run_tests.py --suite smoke --check-prereqs` | Check host readiness without provisioning |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity` | Prime the local registry cache for an `image_prefetch: "off"` image suite as a Docker-capable user |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity --check-only` | Verify that the local registry cache is ready without Docker access |
+| `sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity` | Prime the full OpenFaaS image parity cache after installing the `2026-06-02-root-cache-priming` helper |
 | `scripts/test/run_cloud_static_audit.sh` | Run cloud-safe compile, tests, docs, lint, and suite metadata checks |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` | Validate retained release-evidence artifacts on the certification host |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke phase_smoke_matrix` | Run the three phase-boundary host-backed smoke scenarios through the installed wrapper |
@@ -67,7 +68,7 @@ after the maintenance helper is refreshed.
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` | Run the QEMU endpoint-runtime software-only parity suite through the installed wrapper |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` | Run the full QEMU endpoint image-classification parity suite after the local registry cache is primed |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` | Run the QEMU OpenFaaS software-only suite on the single-host CPU-capped variant |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity` | Preflight the full QEMU OpenFaaS image-classification parity suite; currently requires Docker daemon access for forced image prefetch |
+| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity` | Run the full QEMU OpenFaaS image-classification parity suite after the local registry cache is primed |
 
 ## VM Debugging
 

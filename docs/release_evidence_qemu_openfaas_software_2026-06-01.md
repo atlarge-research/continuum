@@ -75,8 +75,7 @@ This evidence does not certify:
 2. multi-host QEMU scheduling for the exact 26-core legacy shape,
 3. the full OpenFaaS image-classification application benchmark,
 4. image-classification metric artifacts on OpenFaaS,
-5. Docker image prefetch or local-registry behavior for OpenFaaS application
-   images,
+5. local-registry cache behavior for OpenFaaS application images,
 6. cloud-provider OpenFaaS behavior,
 7. gateway-specific OpenFaaS readiness beyond software-phase completion.
 
@@ -87,7 +86,7 @@ capacity and auto-selected `matthijs@node3`; that host was unreachable from the
 runner during the attempt saved at
 `/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-05-23_21-32-24.json`.
 
-The full `qemu_openfaas_image_parity` suite is ported but not certified. Its
-preflight currently fails for the `continuum-smoke` user because the legacy
-`docker_pull = True` behavior maps to forced image prefetch:
-`Docker socket access: exit code 1; Docker daemon access: permission denied`.
+The full `qemu_openfaas_image_parity` suite is ported but not certified. It now
+uses cache-backed image preflight, but it still requires a refreshed
+root-owned cache-priming helper, a primed local registry cache, and full
+retained VM/application evidence before parent row `P-QEMU-10` can be claimed.

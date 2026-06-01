@@ -138,11 +138,14 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
         self.assertIn('relocate-smoke-root)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit-root', result.stdout)
+        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-06-02-root-cache-priming', result.stdout)
         self.assertIn('umask 027', result.stdout)
         self.assertIn('PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', result.stdout)
         self.assertIn('validate_fixed_roots()', result.stdout)
         self.assertIn('validate_prime_registry_args()', result.stdout)
+        self.assertIn('prime_registry_cache_as_root()', result.stdout)
+        self.assertIn('docker pull "$source_ref"', result.stdout)
+        self.assertIn('image_classification_publisher_serverless', result.stdout)
         self.assertIn('validate_smoke_base_root()', result.stdout)
         self.assertIn('prepare_base_root_path()', result.stdout)
         self.assertIn('relocate_smoke_root()', result.stdout)
@@ -239,7 +242,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-06-01-release-artifact-audit-root",
+            "2026-06-02-root-cache-priming",
             result.stderr,
         )
 
@@ -250,7 +253,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit-root\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-06-02-root-cache-priming\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -326,7 +329,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit-root\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-06-02-root-cache-priming\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",

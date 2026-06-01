@@ -79,6 +79,8 @@ This evidence does not certify:
 
 1. GCP, AWS, or bare-metal KubeEdge behavior,
 2. broad KubeEdge version compatibility beyond the configured profile,
-3. forced image-prefetch rows that still require Docker daemon access,
+3. full OpenFaaS application parity, which still needs root-helper cache
+   priming, exact-resource capacity resolution, and retained application
+   evidence,
 4. teardown behavior, because the legacy row and rework config retain VMs,
 5. broader KubeEdge applications beyond the image-classification path.

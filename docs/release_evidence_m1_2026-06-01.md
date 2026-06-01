@@ -139,7 +139,7 @@ audit section:
 | Pytest mirror | 708 passed |
 | Marker debt scan | MATCHES FOUND (2) |
 | Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after refreshing the primary VM-backed evidence set and validating the final release-evidence artifact audit. |
-| Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility and reports prerequisites satisfied in the current shell. Certified cache-backed image parity rows require a primed local registry cache; the full OpenFaaS image row still requires Docker daemon access for forced image prefetch before certification. |
+| Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility. Certified cache-backed image parity rows require a primed local registry cache; the full OpenFaaS image row still requires a refreshed host helper, primed local registry cache, and retained VM/application evidence before certification. |
 
 The two marker debt scan matches are both from documented `mktemp` examples in
 the manual hostctl replacement flow.

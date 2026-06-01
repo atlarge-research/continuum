@@ -1362,63 +1362,6 @@ When converting this seed into issues:
 
             self.assertEqual(check_release_matrix.find_matrix_issues(root), [])
 
-    def test_release_notes_known_limitations_must_include_docker_blocker(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            matrix_text = self._passing_matrix().replace(
-                "## 5. Module Certification Backlog\n",
-                "## 5. Module Certification Backlog\n\n"
-                "| Module Family | Current Evidence Shape | Status | "
-                "Required Before Public Claim |\n"
-                "| --- | --- | --- | --- |\n"
-                "| `image_prefetch` | Runtime helper exists. | `ported-unverified` | "
-                "Forced image-prefetch rows require Docker daemon access before "
-                "VM evidence. |\n",
-            )
-            release_notes = self._passing_release_notes().replace(
-                "Nothing else in this tiny fixture.",
-                "`image_prefetch` remains unclaimed.",
-            )
-            self._write_repo(root, matrix_text, release_notes_text=release_notes)
-
-            self.assertEqual(
-                check_release_matrix.find_matrix_issues(root),
-                [
-                    check_release_matrix.MatrixIssue(
-                        "release-notes-known-limitation-missing",
-                        "docker-daemon-prefetch: section 5 must mention the Docker "
-                        "daemon or forced-prefetch blocker",
-                    )
-                ],
-            )
-
-    def test_release_notes_known_limitations_accept_active_blocker_terms(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            matrix_text = self._passing_matrix().replace(
-                "## 5. Module Certification Backlog\n",
-                "## 5. Module Certification Backlog\n\n"
-                "| Module Family | Current Evidence Shape | Status | "
-                "Required Before Public Claim |\n"
-                "| --- | --- | --- | --- |\n"
-                "| `image_prefetch` | Runtime helper exists. | `ported-unverified` | "
-                "Forced image-prefetch rows require Docker daemon access before "
-                "VM evidence. |\n",
-            )
-            release_notes = self._passing_release_notes().replace(
-                "Nothing else in this tiny fixture.",
-                "`image_prefetch` remains unclaimed.",
-            ).replace(
-                "## 5. Known Limitations\n\n## 7. Pre-Tag Gate",
-                "## 5. Known Limitations\n\n"
-                "Docker daemon access remains required for forced image-prefetch "
-                "rows.\n\n"
-                "## 7. Pre-Tag Gate",
-            )
-            self._write_repo(root, matrix_text, release_notes_text=release_notes)
-
-            self.assertEqual(check_release_matrix.find_matrix_issues(root), [])
-
     def test_release_notes_known_limitations_must_include_host_helper_blocker(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
