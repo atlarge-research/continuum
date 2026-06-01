@@ -48,6 +48,7 @@ POST_EVIDENCE_ALLOWED_PATH_PREFIXES = (
     ".codex/skills/",
     "docs/",
     "scripts/test/check_release_",
+    "scripts/test/run_cloud_static_audit.sh",
     "scripts/test/e2e/test_",
     "scripts/test/unit/test_check_release_",
 )
