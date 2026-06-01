@@ -19,7 +19,7 @@ KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `cf1e4d27a3745c6aab80353c5ac93a927cc56974` |
+| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |

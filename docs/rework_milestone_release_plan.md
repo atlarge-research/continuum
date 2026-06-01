@@ -90,7 +90,7 @@ engine and first local module sets:
 6. cloud-safe unit/e2e-runner discovery is broad enough to catch many regressions.
 
 The current M1 evidence snapshot certifies the first local QEMU/libvirt module
-set in `docs/release_evidence_m1_2026-05-31.md`. The first old-main QEMU
+set in `docs/release_evidence_m1_2026-06-01.md`. The first old-main QEMU
 infrastructure parity rows are recorded separately in
 `docs/release_evidence_qemu_infra_parity_2026-06-01.md`, and the first
 old-main QEMU Kubernetes no-benchmark parity row is recorded in

@@ -17,7 +17,7 @@ Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `6d7023d77d2c59537d248032e50b5b0ff49e5213` |
+| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |

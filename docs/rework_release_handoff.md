@@ -41,15 +41,15 @@ checks, and M1 pre-tag checks.
 
 The current M1 cloud-safe evidence table points to:
 
-`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T012040Z.md`
+`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T160434Z.md`
 
 That audit recorded:
 
 1. required cloud-safe gates: PASS,
-2. unit unittest discovery: 614 tests OK,
+2. unit unittest discovery: 619 tests OK,
 3. e2e unittest discovery: 87 tests OK,
-4. combined unittest discovery: 701 tests OK,
-5. pytest mirror: 701 passed,
+4. combined unittest discovery: 706 tests OK,
+5. pytest mirror: 706 passed,
 6. release claim issues: 0,
 7. release matrix issues: 0,
 8. docs path missing references: 0,
@@ -60,7 +60,7 @@ That audit recorded:
 
 Current host-runner and VM-evidence state:
 
-1. VM evidence source commit: `9b380abed1909aa0afad8ef32bc71a1d203941ea`,
+1. VM evidence source commit: `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6`,
 2. dedicated runner repo: resynced from `/home/matthijs/continuum` with
    `sudo -n /usr/local/bin/continuum-hostctl sync-repo`,
 3. installed wrapper: refreshed with
@@ -72,8 +72,8 @@ Current host-runner and VM-evidence state:
 At the current checkpoint, the dedicated runner is no longer blocked by repo
 drift, helper-interface drift, or release-artifact-audit availability. All
 currently claimed VM-backed wrapper scenarios listed in
-`docs/release_notes_m1_draft.md` passed on 2026-05-31 from the clean evidence
-source commit `9b380abed1909aa0afad8ef32bc71a1d203941ea`.
+`docs/release_notes_m1_draft.md` passed on 2026-06-01 from the clean evidence
+source commit `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6`.
 
 On this post-hardening checkpoint series:
 
@@ -81,15 +81,15 @@ On this post-hardening checkpoint series:
 2. `python3 scripts/test/check_release_matrix.py`: 0 issues,
 3. `python3 scripts/test/check_docs_paths.py`: 0 missing references,
 4. `scripts/test/run_cloud_static_audit.sh`: required gates PASS, report
-   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T012040Z.md`,
+   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T160434Z.md`,
 5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
    release-artifact-audit`: 0 issues,
 6. `python3 scripts/test/check_release_pretag.py`: 0 issues,
 7. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS with the hardened
    root-owned helper and read-only `/srv/continuum/repo`.
 
-The cloud-safe audit recorded 614 unit tests, 87 local e2e tests, 701 combined
-unittest tests, and 701 combined pytest tests.
+The cloud-safe audit recorded 619 unit tests, 87 local e2e tests, 706 combined
+unittest tests, and 706 combined pytest tests.
 
 After commit `412e682`, the only post-evidence wrapper changes are the exact
 guarded `release-artifact-audit` scenario addition, the corresponding
@@ -201,15 +201,10 @@ There is no known host-helper blocker at this checkpoint. The installed helper
 verifies, and the dedicated repo is synced and read-only for
 `continuum-smoke`.
 
-There is a known release-artifact/pretag blocker after refreshing the primary
-old-main QEMU parity evidence: the release evidence set now spans the older
-`9b380abed1909aa0afad8ef32bc71a1d203941ea` M1 aggregate VM-evidence source
-commit and newer row-specific runtime source commits. The wrapper-based
-artifact audit validates the retained artifacts but
-reports `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` for that mixed source
-context. `check_release_pretag.py` must continue to fail until the M1 aggregate
-evidence is refreshed on the current runtime source commit or the release scope
-is split.
+There is no known release-artifact/pretag blocker at this checkpoint. The
+primary M1 and old-main QEMU evidence docs now name the same release-candidate
+runtime source commit, and the wrapper-based artifact audit validates the
+retained artifacts with `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0`.
 
 M1 still needs the normal final publication discipline: rerun the pre-tag
 sequence from `docs/release_notes_m1_draft.md` on the exact source tree that
@@ -239,7 +234,7 @@ source commit to reduce the pretag blocker count.
    - `python3 scripts/test/check_release_pretag.py`
 3. If source changed after the current checkpoint, run
    `scripts/test/run_cloud_static_audit.sh` and update
-   `docs/release_evidence_m1_2026-05-31.md` with the new report path and
+   `docs/release_evidence_m1_2026-06-01.md` with the new report path and
    counts.
 4. Keep generated `logs/cloud_static_audit/*.md` files uncommitted unless a
    maintainer explicitly asks for a dated audit snapshot.

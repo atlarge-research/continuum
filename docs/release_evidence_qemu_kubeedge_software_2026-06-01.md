@@ -17,7 +17,7 @@ that parent row is certified separately by
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-06-SW` |
-| Git commit | `10e90c08295fbd2a0b428f496c95854c723b37fa` |
+| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` |

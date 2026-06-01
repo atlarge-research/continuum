@@ -15,7 +15,7 @@ metric artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07` |
-| Git commit | `44ed14bcb2cffb224352ba219b9ade5b62b24e6a` |
+| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` |

@@ -1,4 +1,4 @@
-# M1 Release Evidence Snapshot - 2026-05-31
+# M1 Release Evidence Snapshot - 2026-06-01
 
 ## 1. Scope
 
@@ -14,7 +14,7 @@ This is evidence for an intermediate milestone, not for final replacement of old
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `9b380abed1909aa0afad8ef32bc71a1d203941ea` |
+| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |
@@ -25,7 +25,7 @@ This is evidence for an intermediate milestone, not for final replacement of old
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup across the certified M1 rows |
 | Required artifacts checked | Cloud-static audit report, retained test-results summaries, experiment locks, state files, stdout/stderr/metadata artifacts, infrastructure phase evidence, software phase evidence, network NDJSON, benchmark metrics manifest, teardown evidence |
 | Profile IDs | Environment profiles: `local-qemu`, `local-qemu-netperf`, `local-qemu-delete-on-exit`; software profiles: `none`, `k8s`, `k8s-endpoint-runtime` |
-| Date | 2026-05-31 |
+| Date | 2026-06-01 |
 
 Before VM-backed execution, the dedicated repo was synced from the live checkout
 and verified:
@@ -131,14 +131,14 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T012040Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T160434Z.md` |
 | Required gates | PASS |
-| Unit unittest discovery | 614 tests OK |
+| Unit unittest discovery | 619 tests OK |
 | E2E unittest discovery | 87 tests OK |
-| Combined unittest discovery | 701 tests OK |
-| Pytest mirror | 701 passed |
+| Combined unittest discovery | 706 tests OK |
+| Pytest mirror | 706 passed |
 | Marker debt scan | MATCHES FOUND (2) |
-| Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after recording a guarded non-VM-impact disposition for the exact `release-artifact-audit` wrapper addition and validating resumed multi-phase evidence with a shared final state file. The current certification host helper verifies and wrapper `release-artifact-audit` reports zero issues; final publication still requires rerunning the pre-tag sequence on the exact source tree being tagged. |
+| Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after refreshing the primary VM-backed evidence set and validating the final release-evidence artifact audit. |
 | Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility and reports prerequisites satisfied in the current shell. Forced-prefetch and registry-cache application rows still require dedicated smoke-user wrapper VM evidence before certification. |
 
 The two marker debt scan matches are both from documented `mktemp` examples in
@@ -150,17 +150,11 @@ Local release-evidence artifact audit on the certification host:
 | --- | --- |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` |
 | Primary artifacts checked | 19 |
-| Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` |
+| Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |
 
-This nonzero audit result is expected for the current checkpoint: all primary
-old-main QEMU parity evidence except the M1 aggregate has been refreshed on
-newer runtime source commits. The remaining mixed-source blocker is the M1
-aggregate evidence, which still references
-`9b380abed1909aa0afad8ef32bc71a1d203941ea`. Before tagging, refresh the M1
-aggregate evidence on the current runtime source commit or split the release
-evidence set so every published claim has coherent source context.
+The final audit result is zero after refreshing the primary M1 and old-main QEMU evidence set on the release-candidate runtime source.
 
-Recorded host-helper status for the 2026-05-31 VM evidence run:
+Recorded host-helper status for the 2026-06-01 VM evidence run:
 
 | Field | Value |
 | --- | --- |
@@ -168,7 +162,7 @@ Recorded host-helper status for the 2026-05-31 VM evidence run:
 | Verify result | PASS |
 | Current finding | None; the installed helper interface matches the repo-generated helper, the dedicated repo is synced and read-only for `continuum-smoke`, and wrapper prerequisites pass. |
 
-Host-runner status on 2026-05-31: the dedicated repo and installed wrapper were
+Host-runner status on 2026-06-01: the dedicated repo and installed wrapper were
 refreshed with `sudo -n /usr/local/bin/continuum-hostctl sync-repo` and
 `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated
 /mnt/sdc/continuum_smoke`. `sudo -n /usr/local/bin/continuum-hostctl verify`
@@ -194,15 +188,15 @@ This wrapper scenario chains `phase_smoke_matrix` and `benchmark_k8s_resume`.
 
 | Matrix Row | Config(s) | Result | Evidence |
 | --- | --- | --- | --- |
-| `M1-QEMU-INFRA` | `configs/experiments/smoke/infra_one_vm.yaml` | PASS, 61.1s | `/mnt/sdc/continuum_smoke/infra_one_vm/.continuum/test_results/test_results_2026-05-31_17-53-16.json` |
-| `M1-QEMU-K8S` | `configs/experiments/smoke/software_k8s_two_vm.yaml` | PASS, 725.7s | `/mnt/sdc/continuum_smoke/software_k8s_two_vm/.continuum/test_results/test_results_2026-05-31_18-05-22.json` |
-| `M1-QEMU-NET-SMOKE` | `configs/experiments/smoke/network_netperf_two_vm.yaml` | PASS, 136.6s | `/mnt/sdc/continuum_smoke/network_netperf_two_vm/.continuum/test_results/test_results_2026-05-31_18-07-39.json` |
-| `M1-QEMU-BENCH` | `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml` | PASS, 1242.5s total | `/mnt/sdc/continuum_smoke/benchmark_k8s_resume/.continuum/test_results/test_results_2026-05-31_18-28-22.json` |
+| `M1-QEMU-INFRA` | `configs/experiments/smoke/infra_one_vm.yaml` | PASS, 62.5s | `/mnt/sdc/continuum_smoke/infra_one_vm/.continuum/test_results/test_results_2026-06-01_16-06-30.json` |
+| `M1-QEMU-K8S` | `configs/experiments/smoke/software_k8s_two_vm.yaml` | PASS, 651.7s | `/mnt/sdc/continuum_smoke/software_k8s_two_vm/.continuum/test_results/test_results_2026-06-01_16-17-23.json` |
+| `M1-QEMU-NET-SMOKE` | `configs/experiments/smoke/network_netperf_two_vm.yaml` | PASS, 138.3s | `/mnt/sdc/continuum_smoke/network_netperf_two_vm/.continuum/test_results/test_results_2026-06-01_16-19-41.json` |
+| `M1-QEMU-BENCH` | `configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml`; `configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml` | PASS, 1183.1s total | `/mnt/sdc/continuum_smoke/benchmark_k8s_resume/.continuum/test_results/test_results_2026-06-01_16-39-25.json` |
 
 Structured netperf artifact for `M1-QEMU-NET-SMOKE`:
 
 ```text
-/mnt/sdc/continuum_smoke/network_netperf_two_vm/.continuum/logs/network_validation/netperf_results_2026-05-31_18:05:23.ndjson
+/mnt/sdc/continuum_smoke/network_netperf_two_vm/.continuum/logs/network_validation/netperf_results_2026-06-01_16:17:24.ndjson
 ```
 
 Runner success evidence included:
@@ -214,7 +208,7 @@ Runner success evidence included:
 5. SSH output where required,
 6. benchmark stdout/metric evidence for the application leg,
 7. latest benchmark metric artifact:
-   `/mnt/sdc/continuum_smoke/benchmark_k8s_resume/.continuum/logs/benchmark/2026-05-31_18_25_06_classify-images_metrics_manifest.json`,
+   `/mnt/sdc/continuum_smoke/benchmark_k8s_resume/.continuum/logs/benchmark/2026-06-01_16_36_13_classify-images_metrics_manifest.json`,
 8. teardown verified for the retained benchmark application leg.
 
 ## 5. Dedicated Network-Validation Evidence
@@ -245,12 +239,12 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation
 
 | Matrix Row | Config | Result | Evidence |
 | --- | --- | --- | --- |
-| `M1-QEMU-NET-SUITE` | `configs/experiments/network_validation/bench_net_4g.yaml` | PASS, 254.7s | `/mnt/sdc/continuum_smoke/network_validation/.continuum/test_results/test_results_2026-05-31_18-32-53.json` |
+| `M1-QEMU-NET-SUITE` | `configs/experiments/network_validation/bench_net_4g.yaml` | PASS, 248.9s | `/mnt/sdc/continuum_smoke/network_validation/.continuum/test_results/test_results_2026-06-01_16-43-41.json` |
 
 Structured netperf artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/network_validation/.continuum/logs/network_validation/netperf_results_2026-05-31_18:28:39.ndjson
+/mnt/sdc/continuum_smoke/network_validation/.continuum/logs/network_validation/netperf_results_2026-06-01_16:39:33.ndjson
 ```
 
 The final success reason included `exit_code=0`, `experiment_lock_written`,

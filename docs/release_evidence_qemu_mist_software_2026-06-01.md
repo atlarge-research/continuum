@@ -16,7 +16,7 @@ parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-06-01.md`.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07-SW` |
-| Git commit | `af00a4bbe461e9c5b0c777fbaf2d23a517a6416a` |
+| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` |

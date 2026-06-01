@@ -15,7 +15,7 @@ benchmark to metric-artifact completion.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-06` |
-| Git commit | `65d3e193ca29249c1ca33b5aa364367c16911006` |
+| Git commit | `def6bcedb0bd60dd1eab11b84a706934f9bbe9f6` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-01 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity` |
