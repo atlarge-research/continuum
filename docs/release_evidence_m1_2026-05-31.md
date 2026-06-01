@@ -152,22 +152,13 @@ Local release-evidence artifact audit on the certification host:
 | Primary artifacts checked | 19 |
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` |
 
-This nonzero audit result is expected for the current checkpoint: the
-P-QEMU-01 through P-QEMU-04, P-QEMU-06, P-QEMU-06-SW, P-QEMU-07, P-QEMU-07-SW,
-P-QEMU-08-SW, and P-QEMU-10-SW-LOCAL evidence were produced from newer runtime source commits
-`65d3e193ca29249c1ca33b5aa364367c16911006`,
-`10e90c08295fbd2a0b428f496c95854c723b37fa`,
-`44ed14bcb2cffb224352ba219b9ade5b62b24e6a`, plus
-`af00a4bbe461e9c5b0c777fbaf2d23a517a6416a` for the refreshed Mist
-software-only row and `4d1a72f7bf3d3f4a806faef22b5640b932ce2d69` for the
-refreshed endpoint software-only row,
-`2102d145357c9580d106456c32d91ac1def993a6` for the refreshed OpenFaaS
-software-only row, and `6d7023d77d2c59537d248032e50b5b0ff49e5213` for the
-refreshed QEMU infrastructure parity rows, while the earlier M1 evidence docs
-still reference `9b380abed1909aa0afad8ef32bc71a1d203941ea`. Before tagging,
-refresh older claimed VM-backed rows on the current runtime source commit or
-split the release evidence set so every published claim has coherent source
-context.
+This nonzero audit result is expected for the current checkpoint: all primary
+old-main QEMU parity evidence except the M1 aggregate has been refreshed on
+newer runtime source commits. The remaining mixed-source blocker is the M1
+aggregate evidence, which still references
+`9b380abed1909aa0afad8ef32bc71a1d203941ea`. Before tagging, refresh the M1
+aggregate evidence on the current runtime source commit or split the release
+evidence set so every published claim has coherent source context.
 
 Recorded host-helper status for the 2026-05-31 VM evidence run:
 
