@@ -204,7 +204,7 @@ verifies, and the dedicated repo is synced and read-only for
 There is a known release-artifact/pretag blocker after adding the full
 P-QEMU-06 and P-QEMU-07 evidence: the release evidence set now spans the older
 `9b380abed1909aa0afad8ef32bc71a1d203941ea` VM-evidence source commit, the
-`c4f034715459d5a7199bac1789b5115699848afb` P-QEMU-06 runtime source commit,
+`65d3e193ca29249c1ca33b5aa364367c16911006` refreshed P-QEMU-06 runtime source commit,
 and the `44ed14bcb2cffb224352ba219b9ade5b62b24e6a` P-QEMU-07 runtime source
 commit. The wrapper-based artifact audit validates the retained artifacts but
 reports `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` for that mixed source

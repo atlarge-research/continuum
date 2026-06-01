@@ -154,7 +154,7 @@ Local release-evidence artifact audit on the certification host:
 
 This nonzero audit result is expected for the current checkpoint: the P-QEMU-06
 and P-QEMU-07 evidence were produced from newer runtime source commits
-`c4f034715459d5a7199bac1789b5115699848afb` and
+`65d3e193ca29249c1ca33b5aa364367c16911006` and
 `44ed14bcb2cffb224352ba219b9ade5b62b24e6a`, while the earlier M1 evidence docs
 still reference `9b380abed1909aa0afad8ef32bc71a1d203941ea`. Before tagging,
 refresh older claimed VM-backed rows on the current runtime source commit or
