@@ -192,7 +192,7 @@ and the new `release-artifact-audit` scenario must pass before tagging.
 The installed host helper is also stale until the manual reviewed replacement is
 performed. Do not run `sync-repo` or new VM certification runs through the
 installed helper until `sudo -n /usr/local/bin/continuum-hostctl verify` passes
-with interface `2026-06-01-release-artifact-audit`.
+with interface `2026-06-01-release-artifact-audit-root`.
 
 Remaining blockers for a final replacement release are the non-certified
 old-main parity rows in `docs/release_certification_matrix.md`, especially full

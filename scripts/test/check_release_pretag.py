@@ -77,9 +77,9 @@ RELEASE_ARTIFACT_AUDIT_ADDED_LINES = {
     '      LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \\',
     '      "$PYTHON_BIN" scripts/test/check_release_evidence_artifacts.py',
     "    ;;",
-    'HOSTCTL_INTERFACE_VERSION="2026-06-01-release-artifact-audit"',
+    'HOSTCTL_INTERFACE_VERSION="2026-06-01-release-artifact-audit-root"',
+    '  CONTINUUM_RELEASE_AUDIT_ROOT="$LIVE_REPO_ROOT" \\\\',
     '  CONTINUUM_RELEASE_AUDIT_ROOT="\\$LIVE_REPO_ROOT" \\\\',
-    '  CONTINUUM_RELEASE_AUDIT_ROOT="\\\\\\$LIVE_REPO_ROOT" \\\\',
 }
 RELEASE_ARTIFACT_AUDIT_REMOVED_LINES = {
     'HOSTCTL_INTERFACE_VERSION="2026-05-31-sudo-hardening"',

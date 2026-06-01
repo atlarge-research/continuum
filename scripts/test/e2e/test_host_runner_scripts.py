@@ -138,7 +138,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
         self.assertIn('relocate-smoke-root)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit', result.stdout)
+        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit-root', result.stdout)
         self.assertIn('umask 027', result.stdout)
         self.assertIn('PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', result.stdout)
         self.assertIn('validate_fixed_roots()', result.stdout)
@@ -239,7 +239,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-06-01-release-artifact-audit",
+            "2026-06-01-release-artifact-audit-root",
             result.stderr,
         )
 
@@ -250,7 +250,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit-root\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -326,7 +326,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-06-01-release-artifact-audit-root\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",
