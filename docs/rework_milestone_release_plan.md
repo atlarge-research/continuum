@@ -104,7 +104,7 @@ software-only subset row is recorded in
 image-classification row is recorded in
 `docs/release_evidence_qemu_mist_image_2026-06-01.md`. The endpoint-runtime
 software-only subset row is recorded in
-`docs/release_evidence_qemu_endpoint_software_2026-05-31.md`. The OpenFaaS
+`docs/release_evidence_qemu_endpoint_software_2026-06-01.md`. The OpenFaaS
 software-only single-host variant is recorded in
 `docs/release_evidence_qemu_openfaas_software_2026-05-31.md`. If code, configs,
 or runner semantics change before a tag is cut, the affected rows need fresh

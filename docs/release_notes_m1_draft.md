@@ -23,7 +23,7 @@ Use these documents as the release evidence set:
 6. `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`
 7. `docs/release_evidence_qemu_mist_software_2026-06-01.md`
 8. `docs/release_evidence_qemu_mist_image_2026-06-01.md`
-9. `docs/release_evidence_qemu_endpoint_software_2026-05-31.md`
+9. `docs/release_evidence_qemu_endpoint_software_2026-06-01.md`
 10. `docs/release_evidence_qemu_openfaas_software_2026-05-31.md`
 
 Before tagging, rerun the commands in section 7. VM-backed evidence may name a
