@@ -18,7 +18,7 @@ Use these documents as the release evidence set:
 1. `docs/release_certification_matrix.md`
 2. `docs/release_evidence_m1_2026-06-01.md`
 3. `docs/release_evidence_qemu_infra_parity_2026-06-01.md`
-4. `docs/release_evidence_qemu_k8s_image_2026-06-01.md`
+4. `docs/release_evidence_qemu_k8s_image_2026-06-02.md`
 5. `docs/release_evidence_qemu_k8s_nobench_2026-06-01.md`
 6. `docs/release_evidence_qemu_kubeedge_software_2026-06-01.md`
 7. `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`
@@ -101,7 +101,7 @@ milestones.
 
 1. QEMU is a provider module, not Continuum core.
 2. Full Kubernetes image-classification parity is certified for `P-QEMU-05`;
-   the exact evidence is `docs/release_evidence_qemu_k8s_image_2026-06-01.md`.
+   the exact evidence is `docs/release_evidence_qemu_k8s_image_2026-06-02.md`.
    Full endpoint image/runtime parity is certified for `P-QEMU-08`; the exact
    evidence is `docs/release_evidence_qemu_endpoint_image_2026-06-02.md`.
 3. Full KubeEdge application parity is certified only for `P-QEMU-06`; the
