@@ -79,6 +79,6 @@ This evidence does not certify:
 3. forced image-prefetch as a public runner requirement for `continuum-smoke`,
 4. OpenFaaS image-classification behavior,
 5. endpoint-only image/runtime parity row `P-QEMU-08`, which is certified
-   separately by `docs/release_evidence_qemu_endpoint_image_2026-06-01.md`,
+   separately by `docs/release_evidence_qemu_endpoint_image_2026-06-02.md`,
 6. broader image-classification parameter sweeps beyond the configured
    frequency, duration, and resource values.

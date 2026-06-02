@@ -25,7 +25,7 @@ Use these documents as the release evidence set:
 8. `docs/release_evidence_qemu_mist_software_2026-06-01.md`
 9. `docs/release_evidence_qemu_mist_image_2026-06-01.md`
 10. `docs/release_evidence_qemu_endpoint_software_2026-06-01.md`
-11. `docs/release_evidence_qemu_endpoint_image_2026-06-01.md`
+11. `docs/release_evidence_qemu_endpoint_image_2026-06-02.md`
 12. `docs/release_evidence_qemu_openfaas_software_2026-06-02.md`
 13. `docs/release_evidence_qemu_openfaas_image_local_2026-06-02.md`
 
@@ -103,7 +103,7 @@ milestones.
 2. Full Kubernetes image-classification parity is certified for `P-QEMU-05`;
    the exact evidence is `docs/release_evidence_qemu_k8s_image_2026-06-01.md`.
    Full endpoint image/runtime parity is certified for `P-QEMU-08`; the exact
-   evidence is `docs/release_evidence_qemu_endpoint_image_2026-06-01.md`.
+   evidence is `docs/release_evidence_qemu_endpoint_image_2026-06-02.md`.
 3. Full KubeEdge application parity is certified only for `P-QEMU-06`; the
    exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`.
    Full Mist application parity is certified only for `P-QEMU-07`; the exact
