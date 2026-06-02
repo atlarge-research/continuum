@@ -4,6 +4,7 @@
     name: "mosquitto=1.6.9-1"
     state: present
     update_cache: true
+    lock_timeout: "{{ rm_mosquitto_apt_lock_timeout | default(300) }}"
 
 - name: Ensure host mosquitto service does not conflict with KubeEdge broker pod
   ansible.builtin.systemd:

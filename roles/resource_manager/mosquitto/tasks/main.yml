@@ -4,6 +4,7 @@
     name: "mosquitto={{ rm_mosquitto_version }}"
     state: present
     update_cache: true
+    lock_timeout: "{{ rm_mosquitto_apt_lock_timeout }}"
 
 - name: Ensure mosquitto service is enabled and running
   ansible.builtin.systemd:

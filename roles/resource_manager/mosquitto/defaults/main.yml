@@ -1,2 +1,3 @@
 ---
 rm_mosquitto_version: "1.6.9-1"
+rm_mosquitto_apt_lock_timeout: 300
