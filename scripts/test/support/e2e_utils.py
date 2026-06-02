@@ -771,6 +771,17 @@ def verify_benchmark_metric_artifacts(
     return True, "benchmark_metric_artifacts=%s" % (manifest_path,)
 
 
+def _stdout_has_fatal_ansible_failure(stdout: str) -> bool:
+    """Return whether stdout contains a final Ansible failure, not retry noise."""
+    if "Ansible playbook reported FAILED!" in stdout:
+        return True
+    if re.search(r"(?m)^fatal: \[[^\]]+\]: FAILED!", stdout):
+        return True
+    if re.search(r"(?m)\bfailed=[1-9][0-9]*\b", stdout):
+        return True
+    return "non-zero return code" in stdout
+
+
 def _strip_log_prefix(line: str) -> str:
     """Return a log message line without Continuum's logging prefix when present."""
     if "] " in line:
@@ -1045,9 +1056,9 @@ def detect_success(
     if check_logs:
         pass
 
-    # Heuristic: even if exit code is 0, treat known Ansible failures as test failures
-    ansible_failed = ("FAILED!" in stdout) or ("non-zero return code" in stdout)
-    if ansible_failed:
+    # Heuristic: even if exit code is 0, treat final Ansible failures as test failures.
+    # Ansible can print FAILED - RETRYING during successful retry loops.
+    if _stdout_has_fatal_ansible_failure(stdout):
         return False, "Ansible reported FAILED in stdout despite exit_code=0"
 
     reason_str = "Success: " + ", ".join(reasons) if reasons else "Success"

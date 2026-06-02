@@ -841,6 +841,54 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertIn("Network validation artifact missing", reason)
 
+    def test_detect_success_allows_successful_ansible_retry_noise(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "infrastructure")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": True,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="FAILED - RETRYING: [node]: Install package\n",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={"require_ssh_output": False},
+            )
+
+            self.assertTrue(success)
+            self.assertIn("exit_code=0", reason)
+
+    def test_detect_success_rejects_fatal_ansible_stdout(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_success_artifacts(Path(tempdir), "infrastructure")
+
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "infra_only": True,
+                },
+                "benchmark": {
+                    "resource_manager_only": False,
+                },
+            }
+            success, reason = test_utils.detect_success(
+                stdout="fatal: [node]: FAILED! => msg=boom\n",
+                stderr="",
+                exit_code=0,
+                config=config,
+                success_config={"require_ssh_output": False},
+            )
+
+            self.assertFalse(success)
+            self.assertEqual(reason, "Ansible reported FAILED in stdout despite exit_code=0")
+
     def test_detect_success_rejects_missing_lock_file(self):
         with tempfile.TemporaryDirectory() as tempdir:
             continuum_dir = Path(tempdir) / ".continuum"
