@@ -21,7 +21,7 @@ Use these documents as the release evidence set:
 4. `docs/release_evidence_qemu_k8s_image_2026-06-02.md`
 5. `docs/release_evidence_qemu_k8s_nobench_2026-06-01.md`
 6. `docs/release_evidence_qemu_kubeedge_software_2026-06-01.md`
-7. `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`
+7. `docs/release_evidence_qemu_kubeedge_image_2026-06-02.md`
 8. `docs/release_evidence_qemu_mist_software_2026-06-01.md`
 9. `docs/release_evidence_qemu_mist_image_2026-06-01.md`
 10. `docs/release_evidence_qemu_endpoint_software_2026-06-02.md`
@@ -105,7 +105,7 @@ milestones.
    Full endpoint image/runtime parity is certified for `P-QEMU-08`; the exact
    evidence is `docs/release_evidence_qemu_endpoint_image_2026-06-02.md`.
 3. Full KubeEdge application parity is certified only for `P-QEMU-06`; the
-   exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`.
+   exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-06-02.md`.
    Full Mist application parity is certified only for `P-QEMU-07`; the exact
    evidence is `docs/release_evidence_qemu_mist_image_2026-06-01.md`.
 4. Evidence for `P-QEMU-10-APP-LOCAL` covers only the single-host CPU-capped

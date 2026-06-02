@@ -98,7 +98,7 @@ old-main QEMU Kubernetes no-benchmark parity row is recorded in
 software-only subset row is recorded in
 `docs/release_evidence_qemu_kubeedge_software_2026-06-01.md`, and the full
 KubeEdge image-classification row is recorded in
-`docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`. The Mist
+`docs/release_evidence_qemu_kubeedge_image_2026-06-02.md`. The Mist
 software-only subset row is recorded in
 `docs/release_evidence_qemu_mist_software_2026-06-01.md`, and the full Mist
 image-classification row is recorded in

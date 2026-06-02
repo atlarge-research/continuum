@@ -156,7 +156,7 @@ Post-M1 parity progress after this checkpoint:
    stopping/disabling the host mosquitto service on edge nodes.
 8. After pruning the retained `qemu_kubeedge_image_parity` scenario to rebuild
    base images, the full wrapper run passed in 4138.3s on 2026-06-01. Evidence:
-   `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`.
+   `docs/release_evidence_qemu_kubeedge_image_2026-06-02.md`.
 9. The installed wrapper base root is `/mnt/sdc/continuum_smoke`. The
    maintenance helper still reports its configured `SMOKE_BASE_ROOT` as
    `/home/continuum-smoke/continuum_smoke`, which is now the compatibility
