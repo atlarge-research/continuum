@@ -1,4 +1,4 @@
-# QEMU Mist Image Evidence - 2026-06-01
+# QEMU Mist Image Evidence - 2026-06-02
 
 ## Scope
 
@@ -15,11 +15,11 @@ metric artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07` |
-| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
+| Git commit | `57b18f44f4d560b7448119c7f91fd1c48686abe8` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-06-01 |
+| Date | 2026-06-02 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` |
-| Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, local registry cache priming, retained failed-run diagnostics, and Mist Docker startup/runtime-helper fixes |
+| Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, local registry cache priming, retained failed-run diagnostics, Mist Docker startup/runtime-helper fixes, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` |
 | Suite | `qemu_mist_image_parity` |
 | Software profile | `configs/profiles/software/mist-endpoint-runtime.yaml` |
@@ -27,34 +27,43 @@ metric artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, application phase evidence, benchmark metrics manifest, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-06-01_21-28-22.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-06-02_17-16-41.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/` |
 
 ## Result
 
 The final synced-tree run passed after fixing Mist Docker startup warning
-handling and the Mist worker readiness Docker status command:
+handling, the Mist worker readiness Docker status command, Mist worker SSH
+startup retries, Docker `--env` argv construction, Mosquitto apt-lock retries,
+and Ansible retry-noise success detection:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 919.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found |
+| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 970.4s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found, benchmark metric artifacts found |
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-06-01_21_13_03_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-06-02_17_00_31_classify-images_metrics_manifest.json
 ```
 
-The passing run followed two failed 2026-06-01 attempts that exposed Mist
-application runtime issues:
+The passing run followed failed 2026-06-01 and 2026-06-02 attempts that exposed
+Mist application/runtime and host-readiness issues:
 
 1. Mist Docker worker startup treated nonfatal SSH/Docker warning stderr as
    fatal even when Docker returned a container id.
 2. Mist worker readiness used over-escaped Docker status formatting, causing
    `docker container ls` to reject the command.
+3. Retried per-edge Mist worker startup needed Docker `--env` arguments as
+   separate argv entries after moving from a batched command list to per-target
+   SSH retries.
+4. Fresh endpoint base-image rebuilds could race unattended-upgrades while
+   installing Mosquitto, so the Mosquitto apt task now waits and retries.
+5. Successful Ansible package retries can emit `FAILED - RETRYING`; the test
+   runner now treats that as retry noise instead of a final failure when the
+   run exits cleanly and all required artifacts are present.
 
-Commits `a5aeaf7` and `44ed14b` fixed those issues before this passing evidence
-run.
+Commits through `57b18f44` fixed those issues before this passing evidence run.
 
 ## What This Claims
 

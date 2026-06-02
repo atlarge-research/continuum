@@ -170,7 +170,7 @@ Post-M1 parity progress after this checkpoint:
 `P-QEMU-06` is now certified. `P-QEMU-07` is also certified after commit
 `44ed14bcb2cffb224352ba219b9ade5b62b24e6a` fixed Mist Docker startup warning
 handling and the Mist worker readiness Docker status command. Evidence:
-`docs/release_evidence_qemu_mist_image_2026-06-01.md`.
+`docs/release_evidence_qemu_mist_image_2026-06-02.md`.
 
 ## Current Certified Scope
 
