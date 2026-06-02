@@ -16,7 +16,7 @@ artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-05` |
-| Git commit | `27d0ea3e7f1755c456fcab15b318dd90af94c780` |
+| Git commit | `aaad31f27e3c747ff269a6b4700791e58da0b74f` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Date | 2026-06-02 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` |
@@ -28,7 +28,7 @@ artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, `tc`/netperf support, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes software-phase evidence, endpoint-runtime evidence, application phase evidence, benchmark metrics manifest, and network NDJSON artifact |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/test_results/test_results_2026-06-02_13-44-02.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/test_results/test_results_2026-06-02_20-02-53.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/` |
 
 ## Result
@@ -39,18 +39,18 @@ release-evidence source line:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml` | PASS | 1382.1s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, network-validation results found, benchmark evidence found, benchmark metric tables found |
+| `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml` | PASS | 2373.0s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, network-validation results found, benchmark evidence found, benchmark metric tables found |
 
 Network-validation artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/network_validation/netperf_results_2026-06-02_13:21:01.ndjson
+/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/network_validation/netperf_results_2026-06-02_19:23:20.ndjson
 ```
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/benchmark/2026-06-02_13_21_01_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/benchmark/2026-06-02_19_23_20_classify-images_metrics_manifest.json
 ```
 
 ## What This Claims
