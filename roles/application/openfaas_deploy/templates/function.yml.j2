@@ -1,16 +1,17 @@
-#jinja2: trim_blocks: False, lstrip_blocks: False
+---
+version: 1.0
 provider:
   name: openfaas
-  gateway: {{ app_openfaas_deploy_gateway }}
+  gateway: {{app_openfaas_deploy_gateway}}
 
 functions:
-  {{ app_openfaas_deploy_app_name }}:
-    image: {{ app_openfaas_deploy_image }}
+  {{app_openfaas_deploy_app_name}}:
+    image: {{app_openfaas_deploy_image}}
     environment:
-      CPU_THREADS: "{{ app_openfaas_deploy_cpu_threads }}"
+      CPU_THREADS: "{{app_openfaas_deploy_cpu_threads}}"
     requests:
-      memory: "{{ app_openfaas_deploy_memory_req }}Mi"
-      cpu: {{ app_openfaas_deploy_cpu_req }}
+      memory: "{{app_openfaas_deploy_memory_req}}Mi"
+      cpu: {{app_openfaas_deploy_cpu_req}}
     labels:
-      com.openfaas.scale.min: {{ app_openfaas_deploy_scale_min }}
-      com.openfaas.scale.max: {{ app_openfaas_deploy_scale_max }}
+      com.openfaas.scale.min: {{app_openfaas_deploy_scale_min}}
+      com.openfaas.scale.max: {{app_openfaas_deploy_scale_max}}

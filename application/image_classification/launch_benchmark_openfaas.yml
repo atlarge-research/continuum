@@ -3,6 +3,6 @@
   hosts: cloudcontroller
   become: true
   roles:
-    - role: openfaas_deploy
+    - role: application/openfaas_deploy
       vars:
         app_openfaas_deploy_scale_max: 5

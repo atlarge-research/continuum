@@ -288,6 +288,7 @@ Runnable experiment examples:
 - `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml`
 - `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml`
 - `configs/experiments/parity/qemu_openfaas_image/10_openfaas_image_classification.yaml`
+- `configs/experiments/parity/qemu_openfaas_image_local/10_openfaas_image_classification_local.yaml`
 - `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml`
 - `configs/experiments/smoke/infra_one_vm.yaml`
 - `configs/experiments/smoke/network_netperf_two_vm.yaml`

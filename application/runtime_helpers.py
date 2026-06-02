@@ -238,22 +238,26 @@ def run_kubernetes_benchmark_playbook(config, app_vars, runner=None):
 def resolve_benchmark_launch_playbook(config, runner=None):
     """Resolve the benchmark-launch playbook path for the active app/orchestrator.
 
-    Prefer a generated ``.continuum/launch_benchmark.yml`` when present, but fall back
-    to the checked-in application playbook so resumed application-only runs do not
-    depend on a missing generation step.
+    Prefer a generated ``.continuum/launch_benchmark.yml`` for Kubernetes job
+    launch when present, but fall back to the checked-in application playbook so
+    resumed application-only runs do not depend on a missing generation step.
     """
-    generated_playbook = os.path.join(
-        config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"
-    )
-    if os.path.isfile(generated_playbook):
-        return generated_playbook
-
     repo_root = getattr(runner, "repo_root", None) or os.path.abspath(config.get("base", "."))
     benchmark_stage_type = config_access.benchmark_primary_stage_type(config)
     orchestrator_name = config_access.orchestrator_name(config)
     kube_deployment = config_access.orchestrator_value_optional(config, "kube_deployment")
+    has_openfaas = config_access.has_addon(config, "openfaas")
+
+    if not has_openfaas:
+        generated_playbook = os.path.join(
+            config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"
+        )
+        if os.path.isfile(generated_playbook):
+            return generated_playbook
 
     orchestrator_tokens = []
+    if has_openfaas:
+        orchestrator_tokens.append("openfaas")
     for token in (
         orchestrator_name,
         orchestrator_name.replace("_", "-"),
@@ -288,7 +292,7 @@ def resolve_benchmark_launch_playbook(config, runner=None):
 
     logging.error(
         "Could not resolve benchmark launch playbook. Tried generated path %s and repo candidates %s",
-        generated_playbook,
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"),
         ", ".join(candidates),
     )
     sys.exit(1)

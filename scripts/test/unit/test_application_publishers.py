@@ -3,6 +3,9 @@
 import ast
 from pathlib import Path
 import unittest
+from unittest import mock
+
+from application.image_classification import image_classification
 
 
 class PublisherCompletionLoopTests(unittest.TestCase):
@@ -58,3 +61,30 @@ class PublisherCompletionLoopTests(unittest.TestCase):
         source_path = repo_root / "application/text_translation/src/publisher/src/publisher.py"
 
         self.assert_waits_until_at_least_target(source_path, "RECEIVED", "MAX_TXTS")
+
+
+class ImageClassificationMetricTableTests(unittest.TestCase):
+    def test_cloud_mode_without_worker_metrics_writes_only_endpoint_table(self):
+        config = {
+            "mode": "cloud",
+            "infrastructure": {"endpoint_nodes": 1},
+        }
+        endpoint_metrics = [
+            {
+                "worker_id": 0,
+                "total_time": 1.0,
+                "proc_avg": 2.0,
+                "data_avg": 3.0,
+                "latency_avg": 4.0,
+                "latency_stdev": 0.5,
+            }
+        ]
+
+        with mock.patch(
+            "application.image_classification.image_classification."
+            "runtime_helpers.write_benchmark_metric_artifacts"
+        ) as write_artifacts:
+            image_classification.format_output(config, [], endpoint_metrics)
+
+        tables = write_artifacts.call_args.args[1]
+        self.assertEqual([table["label"] for table in tables], ["ENDPOINT OUTPUT"])

@@ -128,6 +128,7 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_soft
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
 ```
 """
 

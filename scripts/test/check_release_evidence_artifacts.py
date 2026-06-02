@@ -115,6 +115,9 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
     "qemu_endpoint_image_parity": "QEMU endpoint image parity registry-cache prerequisites",
     "qemu_endpoint_software_parity": "QEMU endpoint-runtime software parity suite prerequisites",
     "qemu_openfaas_software_parity": "QEMU OpenFaaS software parity suite prerequisites",
+    "qemu_openfaas_image_local_parity": (
+        "QEMU OpenFaaS local image parity suite prerequisites"
+    ),
 }
 REQUIRED_EVIDENCE_CONTEXT_FIELDS = ("Git commit", "Tree state", "Date")
 ARTIFACT_AUDIT_SUMMARY_MARKER = "local release-evidence artifact audit"

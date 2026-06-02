@@ -455,7 +455,57 @@ class BenchmarkLaunchPlaybookTests(unittest.TestCase):
         )
         signal_role = self._role_entry("application/signal_classification/launch_benchmark_openfaas.yml")
 
-        self.assertEqual(image_role["role"], "openfaas_deploy")
+        self.assertEqual(image_role["role"], "application/openfaas_deploy")
         self.assertEqual(image_role["vars"]["app_openfaas_deploy_scale_max"], 5)
-        self.assertEqual(signal_role["role"], "openfaas_deploy")
+        self.assertEqual(signal_role["role"], "application/openfaas_deploy")
         self.assertEqual(signal_role["vars"]["app_openfaas_deploy_scale_max"], 3)
+
+    def test_openfaas_deploy_uses_versioned_stack_and_waits_for_function(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        defaults_path = repo_root / "roles/application/openfaas_deploy/defaults/main.yml"
+        tasks_path = repo_root / "roles/application/openfaas_deploy/tasks/main.yml"
+        template_path = repo_root / "roles/application/openfaas_deploy/templates/function.yml.j2"
+
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        template = template_path.read_text(encoding="utf-8")
+        deploy_task = next(
+            task for task in tasks if task.get("name") == "Launch OpenFaaS function"
+        )
+        wait_task = next(
+            task for task in tasks if task.get("name") == "Wait for OpenFaaS function deployment"
+        )
+
+        self.assertEqual(defaults["app_openfaas_deploy_kubeconfig"], "/etc/kubernetes/admin.conf")
+        self.assertIn("version: 1.0", template)
+        self.assertIn("--gateway {{ app_openfaas_deploy_gateway }}", deploy_task["ansible.builtin.command"]["cmd"])
+        self.assertIn(
+            "deployment/{{ app_openfaas_deploy_app_name }}",
+            wait_task["ansible.builtin.command"]["cmd"],
+        )
+        self.assertEqual(wait_task["environment"]["KUBECONFIG"], "{{ app_openfaas_deploy_kubeconfig }}")
+
+    def test_openfaas_install_gateway_port_forward_is_endpoint_reachable(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        defaults_path = repo_root / "roles/resource_manager/openfaas_install/defaults/main.yml"
+        tasks_path = repo_root / "roles/resource_manager/openfaas_install/tasks/main.yml"
+
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        install_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Install OpenFaaS gateway port-forward service"
+        )
+        arkade_install_task = next(
+            task for task in tasks if task.get("name") == "Install OpenFaaS CE with arkade"
+        )
+        content = install_task["ansible.builtin.copy"]["content"]
+
+        self.assertEqual(defaults["rm_openfaas_install_gateway_address"], "0.0.0.0")
+        self.assertEqual(defaults["rm_openfaas_install_retries"], 3)
+        self.assertEqual(defaults["rm_openfaas_install_retry_delay"], 30)
+        self.assertEqual(arkade_install_task["retries"], "{{ rm_openfaas_install_retries }}")
+        self.assertEqual(arkade_install_task["delay"], "{{ rm_openfaas_install_retry_delay }}")
+        self.assertEqual(arkade_install_task["until"], "openfaas_install_result.rc == 0")
+        self.assertIn("--address {{ rm_openfaas_install_gateway_address }}", content)

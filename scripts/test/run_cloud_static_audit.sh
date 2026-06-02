@@ -196,6 +196,8 @@ run_capture prereq_qemu_endpoint_software_parity "QEMU endpoint-runtime software
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_endpoint_software_parity
 run_capture prereq_qemu_openfaas_software_parity "QEMU OpenFaaS software parity suite prerequisites" optional \
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_openfaas_software_parity
+run_capture prereq_qemu_openfaas_image_local_parity "QEMU OpenFaaS local image parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_openfaas_image_local_parity
 
 forced_prefetch_notice() {
     cat <<'EOF'

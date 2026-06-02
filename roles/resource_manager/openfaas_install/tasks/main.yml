@@ -19,6 +19,10 @@
 - name: Install OpenFaaS CE with arkade
   ansible.builtin.command: arkade install openfaas-ce
   when: openfaas_gateway_state.rc != 0
+  register: openfaas_install_result
+  retries: "{{ rm_openfaas_install_retries }}"
+  delay: "{{ rm_openfaas_install_retry_delay }}"
+  until: openfaas_install_result.rc == 0
   changed_when: true
   environment:
     KUBECONFIG: "{{ rm_openfaas_install_kubeconfig }}"
@@ -50,7 +54,7 @@
       ExecStart=/usr/bin/kubectl \
         --kubeconfig={{ rm_openfaas_install_kubeconfig }} \
         port-forward -n openfaas svc/gateway {{ rm_openfaas_install_gateway_port }}:8080 \
-        --address 127.0.0.1
+        --address {{ rm_openfaas_install_gateway_address }}
       Restart=always
       RestartSec=5
 

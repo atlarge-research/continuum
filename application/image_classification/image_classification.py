@@ -353,7 +353,7 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
 
     metric_tables = []
     df1 = None
-    if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:
+    if (config["mode"] == "cloud" or config["mode"] == "edge") and worker_metrics:
         logging.info("------------------------------------")
         logging.info("%s OUTPUT", config["mode"].upper())
         logging.info("------------------------------------")
@@ -417,7 +417,7 @@ def format_output(config, worker_metrics, endpoint_metrics, status=None):
     runtime_helpers.write_benchmark_metric_artifacts(config, metric_tables)
 
     # Print ouput in csv format
-    if config["mode"] == "cloud" or config["mode"] == "edge" and worker_metrics:
+    if (config["mode"] == "cloud" or config["mode"] == "edge") and worker_metrics:
         logging.debug("Output in csv format\n%s\n%s", repr(df1.to_csv()), repr(df2.to_csv()))
     else:
         logging.debug("Output in csv format\n%s", repr(df2.to_csv()))

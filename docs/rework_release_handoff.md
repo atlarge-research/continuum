@@ -188,12 +188,16 @@ The certified or core-ready scope is exactly the set named in
 7. full KubeEdge image-classification row `P-QEMU-06`,
 8. full Mist image-classification row `P-QEMU-07`,
 9. software-only subset rows `P-QEMU-06-SW`, `P-QEMU-07-SW`,
-   `P-QEMU-08-SW`, and `P-QEMU-10-SW-LOCAL`.
+   `P-QEMU-08-SW`, and `P-QEMU-10-SW-LOCAL`,
+10. the single-host CPU-capped OpenFaaS application subset
+   `P-QEMU-10-APP-LOCAL`.
 
 Do not claim full old-main parity, cloud-provider support, full QEMU
-application parity, or full OpenFaaS application parity from this checkpoint.
-KubeEdge application parity is certified only for `P-QEMU-06`; Mist application
-parity is certified only for `P-QEMU-07`.
+application parity, or exact parent-row OpenFaaS application parity from this
+checkpoint. KubeEdge application parity is certified only for `P-QEMU-06`; Mist
+application parity is certified only for `P-QEMU-07`; the OpenFaaS
+image-classification row `P-QEMU-10-APP-LOCAL` is certified only as a local
+CPU-capped subset.
 
 ## Known Blockers
 
@@ -216,14 +220,17 @@ evidence before tagging.
 
 Remaining blockers for a final replacement release are the non-certified
 old-main parity rows in `docs/release_certification_matrix.md`, especially
-the remaining full QEMU OpenFaaS application parity row, cloud-provider rows,
-bare-metal scope, and unverified software/application modules.
+the remaining exact full QEMU OpenFaaS application parity row, cloud-provider
+rows, bare-metal scope, and unverified software/application modules.
 
-For the next old-main parity step, manually refresh the root-owned
-`continuum-hostctl`, prime the local registry cache for
-`qemu_openfaas_image_parity`, and resolve full `P-QEMU-10` OpenFaaS application
-evidence, including the exact-resource versus practical-runner support
-boundary.
+The local OpenFaaS application evidence boundary has been resolved:
+`P-QEMU-10-APP-LOCAL` is certified by
+`docs/release_evidence_qemu_openfaas_image_local_2026-06-02.md`. The exact
+`P-QEMU-10` application config is still only ported. Its 26-core legacy shape
+selected external host `matthijs@node3` and failed before provisioning because
+SSH returned `No route to host`; keep parent row `P-QEMU-10` unclaimed until
+external QEMU capacity is reachable or a larger local runner can produce exact
+retained VM/application evidence.
 
 At this checkpoint the repo-generated hostctl interface is
 `2026-06-02-root-cache-priming`. If `/usr/local/bin/continuum-hostctl` still
@@ -233,10 +240,11 @@ Then run:
 
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
+sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
 sudo -n /usr/local/bin/continuum-hostctl verify
-sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
-  prime-registry-cache --check-only --suite qemu_openfaas_image_parity
+  prime-registry-cache --check-only --suite qemu_openfaas_image_local_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
 ```
 
 ## Next Agent Checklist

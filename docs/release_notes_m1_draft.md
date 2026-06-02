@@ -27,6 +27,7 @@ Use these documents as the release evidence set:
 10. `docs/release_evidence_qemu_endpoint_software_2026-06-01.md`
 11. `docs/release_evidence_qemu_endpoint_image_2026-06-01.md`
 12. `docs/release_evidence_qemu_openfaas_software_2026-06-01.md`
+13. `docs/release_evidence_qemu_openfaas_image_local_2026-06-02.md`
 
 Before tagging, rerun the commands in section 7. VM-backed evidence may name a
 clean runtime source commit that precedes final release-documentation commits,
@@ -71,6 +72,7 @@ This milestone certifies the following local QEMU/libvirt rows:
 | `P-QEMU-08-SW` | Endpoint-runtime software-only subset of old-main P-QEMU-08 |
 | `P-QEMU-08` | Full endpoint image/runtime application parity row |
 | `P-QEMU-10-SW-LOCAL` | Single-host CPU-capped OpenFaaS software-only subset of old-main P-QEMU-10 |
+| `P-QEMU-10-APP-LOCAL` | Single-host CPU-capped OpenFaaS image-classification application subset of old-main P-QEMU-10 |
 
 These rows are certified only for the exact configs, profiles, host context,
 runtime targets, and limitations recorded in the evidence documents.
@@ -106,14 +108,12 @@ milestones.
    exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-06-01.md`.
    Full Mist application parity is certified only for `P-QEMU-07`; the exact
    evidence is `docs/release_evidence_qemu_mist_image_2026-06-01.md`.
-4. Full OpenFaaS application parity still requires a manually refreshed
-   `continuum-hostctl` helper with root-owned registry-cache priming, a primed
-   local registry cache, and retained VM/application evidence.
-5. Full OpenFaaS application parity also needs a decision on exact legacy
-   resource-shape certification or a larger/external QEMU runner.
-6. Cloud-provider rows need YAML profiles, credential/cost documentation, and
+4. Evidence for `P-QEMU-10-APP-LOCAL` covers only the single-host CPU-capped
+   OpenFaaS subset; exact parent row `P-QEMU-10` still needs exact legacy
+   resource-shape evidence or a larger/external QEMU runner.
+5. Cloud-provider rows need YAML profiles, credential/cost documentation, and
    cloud-backed evidence before they can be release-supported.
-7. Cache-backed full application parity rows require an explicitly primed local
+6. Cache-backed full application parity rows require an explicitly primed local
    registry cache for certification. Host-side cache priming is exposed through
    the allowlisted `continuum-hostctl prime-registry-cache` helper.
 
@@ -163,6 +163,7 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_pa
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
 ```
 
 Keep this order. Updating `/usr/local/bin/continuum-hostctl` is a manual
@@ -182,9 +183,10 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Refresh the root-owned helper, prime the local registry cache, and run full
-   `P-QEMU-10` OpenFaaS application evidence.
-2. Decide exact-resource versus practical-runner claims for full `P-QEMU-10`.
+1. Provide reachable external QEMU capacity or a larger local runner, then run
+   exact `P-QEMU-10` OpenFaaS application evidence.
+2. Decide exact-resource versus practical-runner claims for any future broader
+   OpenFaaS application claim.
 3. Port or explicitly demote GCP/AWS historical rows.
 4. Convert the remaining parity matrix into issues grouped by provider and
    module family.

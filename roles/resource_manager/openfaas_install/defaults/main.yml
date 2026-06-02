@@ -1,3 +1,6 @@
 ---
 rm_openfaas_install_kubeconfig: /etc/kubernetes/admin.conf
 rm_openfaas_install_gateway_port: 8080
+rm_openfaas_install_gateway_address: 0.0.0.0
+rm_openfaas_install_retries: 3
+rm_openfaas_install_retry_delay: 30

@@ -25,7 +25,7 @@ full old-main parity claims yet.
 
 | Row | Current Status | Issue Seed | Matrix Certification Action |
 | --- | --- | --- | --- |
-| `P-QEMU-10` | `ported-unverified` | Decide exact legacy 26-core resource shape versus practical-runner support, refresh the root-owned cache-priming helper, prime the OpenFaaS application image cache, then run full application evidence. | Full application suite is ported and uses cache-backed image preflight, but its local registry cache still needs to be primed through the refreshed root-owned helper. The exact 26-core legacy shape also needs external QEMU capacity or a runner host with a higher local core budget. Keep unclaimed until both prerequisites or the support claim are resolved, then certify with VM evidence and application metric artifacts. |
+| `P-QEMU-10` | `ported-unverified` | Provide reachable capacity for the exact 26 requested VM cores, or a larger local runner, then rerun the exact OpenFaaS application suite and record retained VM/application evidence. | Full application suite is ported and uses cache-backed image preflight. On 2026-06-02 the cache was primed, but the exact 26-core legacy shape selected external host `matthijs@node3`, which was unreachable over SSH. Keep unclaimed until external QEMU capacity is available or a larger local runner can produce retained VM/application evidence for the exact shape. |
 
 ## 3. Cloud Provider Parity
 

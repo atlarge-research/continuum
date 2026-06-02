@@ -23,6 +23,16 @@ SEC_PER_FRAME = float(1 / FREQUENCY)
 MAX_IMGS = FREQUENCY * DURATION
 
 
+def _response_time(response_text):
+    """Extract the original request timestamp from an OpenFaaS response body."""
+    for line in reversed([line.strip() for line in response_text.splitlines() if line.strip()]):
+        try:
+            return int(json.loads(line.replace("'", '"'))["time"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    raise ValueError("Could not find timestamp in OpenFaaS response")
+
+
 def send():
     """Loop over local images, and send them one by one to a remote MQTT broker"""
     # Loop over the dataset of 60 images
@@ -59,13 +69,10 @@ def send():
         # pylint: disable=broad-except
         try:
             response = response.text
-            return_line = response.split("\n")[-2]
-            return_dict_str = return_line.replace("'", '"')
-            return_dict = json.loads(return_dict_str)
-            t_old = int(return_dict["time"])
+            t_old = _response_time(response)
         except Exception:
             print("ERROR: Can't decode the output, something went wrong")
-            print(response.text)
+            print(response)
             sys.exit(1)
         # pylint: enable=broad-except
 

@@ -72,6 +72,7 @@ REQUIRED_M1_PRE_TAG_COMMANDS = (
     "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity",
     "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity",
     "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity",
+    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity",
 )
 REQUIRED_M1_HOST_SEQUENCE_COMMANDS = (
     "scripts/test/run_cloud_static_audit.sh",
@@ -198,6 +199,10 @@ PRETAG_WRAPPER_COMMAND_BY_SUITE = {
     "qemu_openfaas_software_parity": (
         "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
         "qemu_openfaas_software_parity"
+    ),
+    "qemu_openfaas_image_local_parity": (
+        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "qemu_openfaas_image_local_parity"
     ),
     "qemu_openfaas_image_parity": (
         "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "

@@ -549,6 +549,75 @@
                 ]
             }
         },
+        "qemu_openfaas_image_local_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_openfaas_image_local/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "ENDPOINT OUTPUT",
+                    "latency_avg (ms)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "ENDPOINT OUTPUT",
+                        "columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "numeric_columns": [
+                            "latency_avg (ms)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "latency_avg (ms)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and a primed local registry cache for OpenFaaS application images on a single-host CPU-capped variant",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Local registry cache",
+                        "command": [
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_openfaas_image_local_parity",
+                            "--check-only"
+                        ]
+                    }
+                ]
+            }
+        },
         "benchmark_smoke": {
             "directories": [
                 "configs/experiments/benchmark_smoke/"

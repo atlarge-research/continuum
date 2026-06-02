@@ -453,9 +453,7 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         self.assertEqual(container_names, ["edge0"])
 
     def test_run_kubernetes_benchmark_playbook_uses_generated_path(self):
-        config = {
-            "infrastructure": {"base_path": "/tmp/continuum-run"},
-        }
+        config = self._planner_handoff_config()
         runner = mock.Mock()
         with mock.patch("application.runtime_helpers.os.path.isfile", return_value=True):
             runtime_helpers.run_kubernetes_benchmark_playbook(
@@ -468,6 +466,36 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
             "/tmp/continuum-run/.continuum/launch_benchmark.yml",
             inventory="vms",
             extra_vars={"key": "value"},
+        )
+
+    def test_resolve_benchmark_launch_playbook_prefers_openfaas_addon_playbook(self):
+        config = self._planner_handoff_config()
+        config["base"] = "/tmp/continuum-repo"
+        config["domains"]["software"]["modules"].append(
+            {
+                "id": "openfaas-main",
+                "type": "openfaas",
+                "config": {},
+            }
+        )
+        runner = mock.Mock()
+        runner.repo_root = "/repo-root"
+
+        def fake_isfile(path):
+            return path in {
+                "/tmp/continuum-run/.continuum/launch_benchmark.yml",
+                "/repo-root/application/image_classification/launch_benchmark_openfaas.yml",
+            }
+
+        with mock.patch("application.runtime_helpers.os.path.isfile", side_effect=fake_isfile):
+            playbook = runtime_helpers.resolve_benchmark_launch_playbook(
+                config,
+                runner=runner,
+            )
+
+        self.assertEqual(
+            playbook,
+            "/repo-root/application/image_classification/launch_benchmark_openfaas.yml",
         )
 
     def test_resolve_benchmark_launch_playbook_falls_back_to_repo_playbook(self):

@@ -42,7 +42,8 @@ prerequisites.
 
 Latest cloud-safe audit after the M1, QEMU infra-parity, KubeEdge software,
 Mist software, endpoint-runtime software, OpenFaaS software, cache-backed
-image-parity preflight inventory, forced-prefetch certification-context notice,
+image-parity preflight inventory, OpenFaaS local image-parity preflight
+inventory, forced-prefetch certification-context notice,
 stricter release-matrix drift/status/evidence/config/suite/release-note sync,
 release-note orphan-evidence and unknown-row checks, pre-tag wrapper-scenario,
 pre-tag exact-source checks, release-evidence source-context,
@@ -131,15 +132,15 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T220439Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-02T120323Z.md` |
 | Required gates | PASS |
-| Unit unittest discovery | 619 tests OK |
-| E2E unittest discovery | 89 tests OK |
-| Combined unittest discovery | 708 tests OK |
-| Pytest mirror | 708 passed |
+| Unit unittest discovery | 622 tests OK |
+| E2E unittest discovery | 90 tests OK |
+| Combined unittest discovery | 712 tests OK |
+| Pytest mirror | 712 passed |
 | Marker debt scan | MATCHES FOUND (2) |
 | Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after refreshing the primary VM-backed evidence set and validating the final release-evidence artifact audit. |
-| Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility. Certified cache-backed image parity rows require a primed local registry cache; the full OpenFaaS image row still requires a refreshed host helper, primed local registry cache, and retained VM/application evidence before certification. |
+| Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility, including the OpenFaaS local image subset. Certified cache-backed image parity rows require a primed local registry cache; the exact full OpenFaaS image row still requires reachable external QEMU capacity or a larger local runner before certification. |
 
 The two marker debt scan matches are both from documented `mktemp` examples in
 the manual hostctl replacement flow.
@@ -149,10 +150,14 @@ Local release-evidence artifact audit on the certification host:
 | Field | Value |
 | --- | --- |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` |
-| Primary artifacts checked | 24 |
-| Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |
+| Primary artifacts checked | 26 |
+| Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` |
 
-The final audit result is zero after refreshing the primary M1 and old-main QEMU evidence set on the release-candidate runtime source.
+The current audit has one source-commit consistency issue because the OpenFaaS
+local application subset evidence was captured from the current dirty worktree,
+while the earlier M1 and old-main QEMU evidence docs still name the previous
+release-candidate source commit. Refresh or intentionally reconcile the evidence
+source commits before cutting a release tag.
 
 Recorded host-helper status for the 2026-06-01 VM evidence run:
 

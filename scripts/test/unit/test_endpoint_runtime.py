@@ -8,10 +8,12 @@ from resource_manager.endpoint import endpoint
 class _FakeMachine:
     def __init__(self):
         self.commands = []
+        self.shell_values = []
+        self.cloud_controller = 0
 
     def process(self, _config, commands, ssh=None, shell=False):
         del ssh
-        del shell
+        self.shell_values.append(shell)
         if isinstance(commands, list) and commands and isinstance(commands[0], list):
             self.commands.extend(commands)
             return [(["started"], []) for _ in commands]
@@ -84,7 +86,34 @@ class EndpointRuntimeTests(unittest.TestCase):
         run_cmd = machine.commands[1]
         self.assertIn("--cpus=0.5", run_cmd)
         self.assertIn("--memory=1.5g", run_cmd)
-        self.assertIn("--env CPU_THREADS=1", run_cmd)
+        self.assertIn("--env", run_cmd)
+        self.assertIn("CPU_THREADS=1", run_cmd)
+        self.assertNotIn("--env CPU_THREADS=1", run_cmd)
+        self.assertFalse(machine.shell_values[-1])
+
+    def test_openfaas_endpoint_start_uses_shell_safe_ssh_command(self):
+        cfg = self._config()
+        cfg["mode"] = "cloud"
+        cfg["cloud_ips_internal"] = ["10.0.0.10"]
+        cfg["edge_ips_internal"] = []
+        cfg["control_ips"] = ["10.0.0.9"]
+        cfg["images"] = {"endpoint": "unused:image_classification_publisher_serverless"}
+        cfg["domains"]["software"]["modules"].append(
+            {
+                "id": "openfaas",
+                "type": "openfaas",
+                "assign_to": {"match": {"cluster": "cloud-1"}},
+                "config": {},
+            }
+        )
+
+        machine = _FakeMachine()
+        endpoint.start_endpoint_default(cfg, [machine])
+
+        self.assertTrue(machine.shell_values[-1])
+        run_cmd = machine.commands[1]
+        self.assertIn("sh", run_cmd)
+        self.assertIn(endpoint._SERVERLESS_PUBLISHER_RESPONSE_PATCH, run_cmd)
 
 
 if __name__ == "__main__":

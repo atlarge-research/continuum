@@ -13,6 +13,15 @@ from input.configuration import config_access
 _DOCKER_CONTAINER_STATUS_COMMAND = (
     'docker container ls -a --format "{{.ID}}: {{.Status}} {{.Names}}"'
 )
+_SERVERLESS_PUBLISHER_RESPONSE_PATCH = (
+    "sed -i '/return_line = response.split/ i\\"
+    "            lines = [line.strip() for line in response.splitlines() if line.strip()]' "
+    "/function/publisher.py && "
+    "sed -i 's/return_line = response.split(\"\\\\n\")\\[-2\\]/return_line = lines[-1]/' "
+    "/function/publisher.py && "
+    "sed -i 's/print(response.text)/print(response)/' /function/publisher.py && "
+    "exec python3 -u /function/publisher.py"
+)
 
 
 def _is_transient_ssh_error(lines):
@@ -59,6 +68,13 @@ def _docker_start_stderr_is_fatal(output, error):
     ]
     combined = "\n".join(error).lower()
     return any(marker in combined for marker in fatal_markers)
+
+
+def _endpoint_command_override(config):
+    """Return optional Docker command args for endpoint application containers."""
+    if config_access.has_addon(config, "openfaas"):
+        return ["sh", "-c", _SERVERLESS_PUBLISHER_RESPONSE_PATCH]
+    return []
 
 
 def _remove_existing_endpoint_containers(config, machines, container_names, sshs=None):
@@ -135,6 +151,14 @@ def _benchmark_env(config):
     ]
 
 
+def _docker_env_args(env):
+    """Return Docker argv entries for environment variables."""
+    args = []
+    for value in env:
+        args.extend(["--env", value])
+    return args
+
+
 def start_endpoint_default(config, machines):
     """Start running the endpoint containers using Docker.
 
@@ -209,8 +233,8 @@ def start_endpoint_default(config, machines):
                     "--memory=%sg" % (endpoint_memory_gb),
                     "--network=host",
                 ]
-                + ["--env %s" % (e) for e in env]
                 + [
+                    *_docker_env_args(env),
                     "--name",
                     cont_name,
                     os.path.join(
@@ -218,6 +242,7 @@ def start_endpoint_default(config, machines):
                         config["images"][image].split(":")[1],
                     ),
                 ]
+                + _endpoint_command_override(config)
             )
 
             commands.append(command)
@@ -225,7 +250,12 @@ def start_endpoint_default(config, machines):
             container_names.append(cont_name)
 
     _remove_existing_endpoint_containers(config, machines, container_names, sshs=sshs)
-    results = machines[0].process(config, commands, ssh=sshs)
+    results = machines[0].process(
+        config,
+        commands,
+        ssh=sshs,
+        shell=config_access.has_addon(config, "openfaas"),
+    )
 
     # Checkout process output
     for ssh, (output, error) in zip(sshs, results):
