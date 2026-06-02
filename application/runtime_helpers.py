@@ -43,6 +43,23 @@ def _docker_start_stderr_is_fatal(output, error):
     return any(marker in combined for marker in fatal_markers)
 
 
+def _is_transient_ssh_error(lines):
+    """Return whether SSH stderr output indicates a retryable transport failure."""
+    if not lines:
+        return False
+    combined = " ".join(lines).lower()
+    patterns = [
+        "timeout, server",
+        "not responding",
+        "connection timed out",
+        "connection reset by peer",
+        "broken pipe",
+        "no route to host",
+        "connection closed",
+    ]
+    return any(pattern in combined for pattern in patterns)
+
+
 def _safe_artifact_token(value):
     """Return a filesystem-safe token for benchmark artifact names."""
     token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value)).strip("._")
@@ -547,15 +564,31 @@ def start_worker_mist(config, machines, app_vars):
         ssh_targets.append(worker_ssh)
         container_names.append(container_name)
 
-    results = machines[0].process(config, commands, ssh=ssh_targets)
-    for ssh_target, (output, error) in zip(ssh_targets, results):
-        logging.debug("Check output of mist endpoint start in ssh [%s]", ssh_target)
-        if _docker_start_stderr_is_fatal(output, error):
-            logging.error("".join(error))
-            sys.exit(1)
-        if not output:
-            logging.error("No output from docker container")
-            sys.exit(1)
+    for ssh_target, command in zip(ssh_targets, commands):
+        attempts = 0
+        while True:
+            output, error = machines[0].process(config, command, ssh=ssh_target)[0]
+            logging.debug("Check output of mist endpoint start in ssh [%s]", ssh_target)
+            if _is_transient_ssh_error(error) and attempts < 8:
+                attempts += 1
+                backoff = min(30, 2**attempts)
+                logging.warning(
+                    "Transient SSH error while starting Mist worker on %s "
+                    "(attempt %s), retrying in %ss: %s",
+                    ssh_target.split("@")[0],
+                    attempts,
+                    backoff,
+                    " ".join(error),
+                )
+                time.sleep(backoff)
+                continue
+            if _docker_start_stderr_is_fatal(output, error):
+                logging.error("".join(error))
+                sys.exit(1)
+            if not output:
+                logging.error("No output from docker container")
+                sys.exit(1)
+            break
 
     logging.info("Wait for Mist applications to be deployed")
     _wait_for_docker_workers(

@@ -398,8 +398,8 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
 
         self.assertEqual(container_names, ["edge0"])
         first_call = machine.process.call_args_list[0]
-        self.assertEqual(first_call.kwargs["ssh"], ["edge0@10.0.0.2"])
-        issued_command = first_call.args[1][0]
+        self.assertEqual(first_call.kwargs["ssh"], "edge0@10.0.0.2")
+        issued_command = first_call.args[1]
         self.assertIn("--env MQTT_LOGS=True", issued_command)
         self.assertIn("--env MQTT_LOCAL_IP=10.0.0.2", issued_command)
         status_call = machine.process.call_args_list[1]
@@ -451,6 +451,46 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         )
 
         self.assertEqual(container_names, ["edge0"])
+
+    @mock.patch("application.runtime_helpers.time.sleep", autospec=True)
+    def test_start_worker_mist_retries_transient_ssh_startup_failure(self, mock_sleep):
+        config = {
+            "registry": "registry.local:5000",
+            "images": {"worker": "repo/worker:1.0"},
+            "domains": {
+                "benchmark": {
+                    "pipeline": [
+                        {
+                            "id": "img",
+                            "type": "image_classification",
+                            "config": {
+                                "application_worker_cpu": 0.5,
+                                "application_worker_memory": 1.5,
+                            },
+                        }
+                    ]
+                }
+            },
+            "edge_ssh": ["edge0@10.0.0.2"],
+            "infrastructure": {"provider": "qemu"},
+        }
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            [([], ["Timeout, server 10.0.0.2 not responding.\n"])],
+            [(["container-id"], [])],
+            [(["deadbeef: Up 2 seconds edge0"], [])],
+        ]
+
+        container_names = runtime_helpers.start_worker_mist(
+            config,
+            [machine],
+            ["MQTT_LOGS=True"],
+        )
+
+        self.assertEqual(container_names, ["edge0"])
+        self.assertEqual(machine.process.call_args_list[0].kwargs["ssh"], "edge0@10.0.0.2")
+        self.assertEqual(machine.process.call_args_list[1].kwargs["ssh"], "edge0@10.0.0.2")
+        mock_sleep.assert_any_call(2)
 
     def test_run_kubernetes_benchmark_playbook_uses_generated_path(self):
         config = self._planner_handoff_config()
