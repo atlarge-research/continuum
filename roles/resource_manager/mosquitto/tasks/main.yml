@@ -5,6 +5,10 @@
     state: present
     update_cache: true
     lock_timeout: "{{ rm_mosquitto_apt_lock_timeout }}"
+  register: rm_mosquitto_install
+  retries: 12
+  delay: 30
+  until: rm_mosquitto_install is succeeded
 
 - name: Ensure mosquitto service is enabled and running
   ansible.builtin.systemd:

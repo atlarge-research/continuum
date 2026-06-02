@@ -5,6 +5,10 @@
     state: present
     update_cache: true
     lock_timeout: "{{ rm_mosquitto_apt_lock_timeout | default(300) }}"
+  register: rm_kubeedge_edge_join_mosquitto_install
+  retries: 12
+  delay: 30
+  until: rm_kubeedge_edge_join_mosquitto_install is succeeded
 
 - name: Ensure host mosquitto service does not conflict with KubeEdge broker pod
   ansible.builtin.systemd:
