@@ -154,9 +154,9 @@ Local release-evidence artifact audit on the certification host:
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=1` |
 
 The current audit has one source-commit consistency issue because the Kubernetes
-image, KubeEdge image, endpoint software/image, OpenFaaS software, and OpenFaaS
-local application evidence were refreshed on later clean commits, while the
-earlier M1 and old-main QEMU evidence docs still name the previous
+image, KubeEdge software/image, endpoint software/image, OpenFaaS software, and
+OpenFaaS local application evidence were refreshed on later clean commits,
+while the earlier M1 and old-main QEMU evidence docs still name the previous
 release-candidate source commit. Refresh or intentionally reconcile the evidence
 source commits before cutting a release tag.
 

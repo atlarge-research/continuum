@@ -1,4 +1,4 @@
-# QEMU KubeEdge Software Evidence - 2026-06-01
+# QEMU KubeEdge Software Evidence - 2026-06-02
 
 ## Scope
 
@@ -17,9 +17,9 @@ that parent row is certified separately by
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-06-SW` |
-| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
+| Git commit | `805bbda1dff84b7272375cad541db26f9f98f4c4` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-06-01 |
+| Date | 2026-06-02 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, `install-wrapper dedicated`, and `verify` |
 | Config | `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` |
@@ -29,7 +29,7 @@ that parent row is certified separately by
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, and SSH access for KubeEdge software execution; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, KubeEdge software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/test_results/test_results_2026-06-01_20-15-50.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/test_results/test_results_2026-06-02_15-04-52.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/` |
 
 ## Result
@@ -39,7 +39,7 @@ hardening:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` | PASS | 1822.7s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
+| `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` | PASS | 1884.1s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
 Earlier 2026-05-31 runs passed while the certification harness was still being
 tightened. This evidence supersedes the older software-only evidence for release
