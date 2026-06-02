@@ -540,6 +540,10 @@ def start_worker_mist(config, machines, app_vars):
         worker_ip = worker_ssh.split("@")[1]
         env = list(app_vars) + ["MQTT_LOCAL_IP=%s" % (worker_ip,)]
 
+        env_args = []
+        for entry in env:
+            env_args.extend(["--env", entry])
+
         command = (
             [
                 "docker",
@@ -552,7 +556,7 @@ def start_worker_mist(config, machines, app_vars):
                 ),
                 "--network=host",
             ]
-            + ["--env %s" % (entry,) for entry in env]
+            + env_args
             + [
                 "--name",
                 container_name,

@@ -400,8 +400,14 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         first_call = machine.process.call_args_list[0]
         self.assertEqual(first_call.kwargs["ssh"], "edge0@10.0.0.2")
         issued_command = first_call.args[1]
-        self.assertIn("--env MQTT_LOGS=True", issued_command)
-        self.assertIn("--env MQTT_LOCAL_IP=10.0.0.2", issued_command)
+        self.assertIn("--env", issued_command)
+        self.assertEqual(
+            issued_command[issued_command.index("--env") + 1],
+            "MQTT_LOGS=True",
+        )
+        self.assertIn("MQTT_LOCAL_IP=10.0.0.2", issued_command)
+        self.assertNotIn("--env MQTT_LOGS=True", issued_command)
+        self.assertNotIn("--env MQTT_LOCAL_IP=10.0.0.2", issued_command)
         status_call = machine.process.call_args_list[1]
         self.assertEqual(
             status_call.args[1],
