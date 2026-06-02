@@ -1,4 +1,4 @@
-# QEMU OpenFaaS Software Evidence - 2026-06-01
+# QEMU OpenFaaS Software Evidence - 2026-06-02
 
 ## Scope
 
@@ -20,9 +20,9 @@ image-classification application benchmark from
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-10-SW-LOCAL` |
-| Git commit | `295a5eec7664f1fb95047704422ddc736bb05718` |
+| Git commit | `4c5b9bda5c398819e62ee5a1339eb38148de8fe0` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-06-01 |
+| Date | 2026-06-02 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, `install-wrapper dedicated`, and `verify` |
 | Config | `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` |
@@ -32,14 +32,14 @@ image-classification application benchmark from
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and enough local CPU capacity for the capped single-host OpenFaaS shape; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes node-ready and OpenFaaS software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-06-01_21-52-52.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-06-02_13-00-20.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1311.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
+| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1345.1s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
 The experiment lock records:
 
@@ -87,6 +87,7 @@ runner during the attempt saved at
 `/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-05-23_21-32-24.json`.
 
 The full `qemu_openfaas_image_parity` suite is ported but not certified. It now
-uses cache-backed image preflight, but it still requires a refreshed
-root-owned cache-priming helper, a primed local registry cache, and full
-retained VM/application evidence before parent row `P-QEMU-10` can be claimed.
+uses cache-backed image preflight, and the local registry cache has been primed
+on the certification host, but exact parent-row evidence still requires
+reachable external QEMU capacity or a larger local runner before parent row
+`P-QEMU-10` can be claimed.
