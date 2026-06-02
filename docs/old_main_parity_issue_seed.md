@@ -25,7 +25,7 @@ full old-main parity claims yet.
 
 | Row | Current Status | Issue Seed | Matrix Certification Action |
 | --- | --- | --- | --- |
-| `P-QEMU-10` | `ported-unverified` | Provide reachable capacity for the exact 26 requested VM cores, or a larger local runner, then rerun the exact OpenFaaS application suite and record retained VM/application evidence. | Full application suite is ported and uses cache-backed image preflight. On 2026-06-02 the cache was primed, but the exact 26-core legacy shape selected external host `matthijs@node3`, which was unreachable over SSH. Keep unclaimed until external QEMU capacity is available or a larger local runner can produce retained VM/application evidence for the exact shape. |
+| `P-QEMU-10` | `ported-unverified` | Provide reachable capacity for the exact 26 requested VM cores, or a larger local runner, then rerun the exact OpenFaaS application suite and record retained VM/application evidence. | Full application suite is ported and uses cache-backed image preflight. On 2026-06-02 `prime-registry-cache --check-only --suite qemu_openfaas_image_parity` passed, but the exact 26-core legacy shape still selected external host `matthijs@node3`; the retained run failed before provisioning with `No route to host` in `/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-06-02_15-36-18.json`. Keep unclaimed until external QEMU capacity is available or a larger local runner can produce retained VM/application evidence for the exact shape. |
 
 ## 3. Cloud Provider Parity
 

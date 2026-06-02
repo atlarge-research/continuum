@@ -227,10 +227,12 @@ The local OpenFaaS application evidence boundary has been resolved:
 `P-QEMU-10-APP-LOCAL` is certified by
 `docs/release_evidence_qemu_openfaas_image_local_2026-06-02.md`. The exact
 `P-QEMU-10` application config is still only ported. Its 26-core legacy shape
-selected external host `matthijs@node3` and failed before provisioning because
-SSH returned `No route to host`; keep parent row `P-QEMU-10` unclaimed until
-external QEMU capacity is reachable or a larger local runner can produce exact
-retained VM/application evidence.
+selected external host `matthijs@node3`. On 2026-06-02 the registry-cache
+preflight passed, but the exact suite failed before provisioning because SSH
+returned `No route to host`; retained result:
+`/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-06-02_15-36-18.json`.
+Keep parent row `P-QEMU-10` unclaimed until external QEMU capacity is reachable
+or a larger local runner can produce exact retained VM/application evidence.
 
 At this checkpoint the repo-generated hostctl interface is
 `2026-06-02-root-cache-priming`. If `/usr/local/bin/continuum-hostctl` still
