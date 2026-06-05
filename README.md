@@ -16,17 +16,15 @@ For this demo, each group gets access to a Kubernetes that runs on 2 virtual mac
 2. You will receive a username `cont-nX-Y` with X and Y as numbers, and an IP address in the form of `192.168.ZZZ.2`. Remember these.
 3. Access the cluster as follows:
     ```
-    # To access the head node of the cluster.
-    ssh -L 3000:192.168.ZZZ.2:3000 -i /path/to/your/ssh/key/key.pub cont-nX-Y@al02.anac.cs.vu.nl
-
-    # To access the machine that hosts your VMs
-    ssh -L 3000:192.168.ZZZ.2:3000 nodeX
-
-    # To access the VM that hosts your Kubernetes control plane
-    ssh -L 3000:192.168.ZZZ.2:3000 -i ~/.ssh/id_rsa_continuum cloud_controller_cont-nX-Y@192.168.ZZZ.2 
+    ssh -tt \
+      -o ExitOnForwardFailure=yes \
+      -L 3000:192.168.ZZZ.2:3000 \
+      -i /path/to/your/private_key \
+      cont-nX-Y@al02.anac.cs.vu.nl \
+      "ssh -tt nodeX 'ssh -tt -i ~/.ssh/id_rsa_continuum cloud_controller_cont-nX-Y@192.168.ZZZ.2'"
     ```
     Fill in the missing parts of the commands (e.g., X, Y, the path to your key).
-    For the first SSH command, you may need to pass your key with or without the .pub extension; this is operating systems-specific.
+    If this command does not work, try using your public key instead of the private key; this is operating systems-specific.
 
 ## Part 2: Inspect the Kubernetes Cluster
 In this part, you inspect the Kubernetes cluster running on 2 VMs to see what the cluster does under the hood. 
