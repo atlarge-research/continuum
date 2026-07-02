@@ -15,6 +15,9 @@ For the active schema and migration guidance, use:
 - `docs/configuration_reference.md`
 - `docs/migration_notes.md`
 
+The grouped backlog for remaining `.cfg` families is in
+`docs/migration_notes.md#legacy-configuration-backlog`.
+
 For new YAML users, start from:
 
 - `configs/experiments/template.yaml`

@@ -403,16 +403,17 @@ The installed wrapper supports only these values:
 15. `qemu_endpoint_image_parity`
 16. `qemu_openfaas_software_parity`
 17. `qemu_openfaas_image_parity`
-18. `benchmark_k8s_resume_infra`
-19. `benchmark_k8s_resume_software`
-20. `benchmark_k8s_resume_application`
-21. `benchmark_k8s_resume`
-22. `release-artifact-audit`
-23. `check-prereqs`
-24. `list-suites`
-25. `storage-report`
-26. `prune-scenario <scenario> --yes-delete-retained-state`
-27. `debug-playbook <scenario> <playbook> [ansible args...]`
+18. `qemu_openfaas_image_local_parity`
+19. `benchmark_k8s_resume_infra`
+20. `benchmark_k8s_resume_software`
+21. `benchmark_k8s_resume_application`
+22. `benchmark_k8s_resume`
+23. `release-artifact-audit`
+24. `check-prereqs`
+25. `list-suites`
+26. `storage-report`
+27. `prune-scenario <scenario> --yes-delete-retained-state`
+28. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 

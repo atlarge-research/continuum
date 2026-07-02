@@ -67,6 +67,17 @@ class HostRunnerScriptTests(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
 
+    def test_smoke_runner_isolation_contract_lists_local_openfaas_image_parity(self):
+        docs = (self.repo_root / "docs/smoke_runner_isolation.md").read_text(
+            encoding="utf-8"
+        )
+        wrapper_values = docs.split("## 6. Wrapper Contract", 1)[1].split(
+            "The wrapper contract is:", 1
+        )[0]
+
+        self.assertIn("`qemu_openfaas_image_parity`", wrapper_values)
+        self.assertIn("`qemu_openfaas_image_local_parity`", wrapper_values)
+
     def test_show_config_reports_present_sync_marker(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp_root = Path(tempdir)
