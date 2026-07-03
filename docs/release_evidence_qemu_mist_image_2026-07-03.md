@@ -1,0 +1,94 @@
+# QEMU Mist Image Evidence - 2026-07-03
+
+## Scope
+
+This evidence certifies old-main parity row `P-QEMU-07` in
+`docs/release_certification_matrix.md`.
+
+It proves that the rework stack can provision the legacy P-QEMU-07-style local
+QEMU edge/endpoint topology, complete the Mist software phase, run the
+image-classification application benchmark, verify teardown, and emit benchmark
+metric artifacts.
+
+## Source And Command
+
+| Field | Value |
+| --- | --- |
+| Matrix row ID | `P-QEMU-07` |
+| Git commit | `01c18b5dd26b561b5b81b2d83cdf28649267b1c2` |
+| Tree state | Clean source tree synced to the dedicated runner |
+| Date | 2026-07-03 |
+| Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` |
+| Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, local registry cache priming, retained failed-run diagnostics, Mist Docker startup/runtime-helper fixes, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
+| Config | `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` |
+| Suite | `qemu_mist_image_parity` |
+| Software profile | `configs/profiles/software/mist-endpoint-runtime.yaml` |
+| Provider profile | `configs/profiles/environment/local-qemu-cpupin-delete-on-exit.yaml` |
+| Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
+| Runtime targets | `infrastructure`, `software`, `application`, cleanup |
+| Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, application phase evidence, benchmark metrics manifest, teardown evidence |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-07-03_10-13-48.json` |
+| Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/` |
+
+## Result
+
+The final synced-tree run passed after fixing Mist Docker startup warning
+handling, the Mist worker readiness Docker status command, Mist worker SSH
+startup retries, Docker `--env` argv construction, Mosquitto apt-lock retries,
+and Ansible retry-noise success detection:
+
+| Config | Result | Duration | Success Reason |
+| --- | --- | --- | --- |
+| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 970.4s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found, benchmark metric artifacts found |
+
+Benchmark metric artifact:
+
+```text
+/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-03_09_58_18_classify-images_metrics_manifest.json
+```
+
+The passing run followed failed 2026-06-01 and 2026-07-03 attempts that exposed
+Mist application/runtime and host-readiness issues:
+
+1. Mist Docker worker startup treated nonfatal SSH/Docker warning stderr as
+   fatal even when Docker returned a container id.
+2. Mist worker readiness used over-escaped Docker status formatting, causing
+   `docker container ls` to reject the command.
+3. Retried per-edge Mist worker startup needed Docker `--env` arguments as
+   separate argv entries after moving from a batched command list to per-target
+   SSH retries.
+4. Fresh endpoint base-image rebuilds could race unattended-upgrades while
+   installing Mosquitto, so the Mosquitto apt task now waits and retries.
+5. Successful Ansible package retries can emit `FAILED - RETRYING`; the test
+   runner now treats that as retry noise instead of a final failure when the
+   run exits cleanly and all required artifacts are present.
+
+Commits through `57b18f44` fixed those issues before this passing evidence run.
+
+## What This Claims
+
+This row may be described as:
+
+1. QEMU can provision the P-QEMU-07-style topology of two edge nodes and four
+   endpoint nodes.
+2. The Mist software phase completes on that topology.
+3. The endpoint runtime module is present for endpoint resources in the same
+   software phase.
+4. The image-classification application runs on the Mist edge/endpoint topology
+   and emits benchmark metric artifacts.
+5. The runner observes the standard release artifacts: SSH output, experiment
+   lock, state file, `phase_completed = application`, matching resume contract,
+   teardown verification, and benchmark metrics manifest.
+
+## Limitations
+
+This evidence does not certify:
+
+1. GCP, AWS, or bare-metal Mist behavior,
+2. broad Mist version compatibility beyond the configured profile,
+3. full OpenFaaS application parity, which still needs root-helper cache
+   priming, exact-resource capacity resolution, and retained application
+   evidence,
+4. broader Mist applications beyond the image-classification path,
+5. the longer-term architecture cleanup needed to split Mist from the shared
+   KubeEdge base-install path.

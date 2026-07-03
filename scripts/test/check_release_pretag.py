@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - used when run as a script path
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE_NOTES_PATH = Path("docs/release_notes_m1_draft.md")
-M1_EVIDENCE_PATH = Path("docs/release_evidence_m1_2026-06-01.md")
+M1_EVIDENCE_PATH = Path("docs/release_evidence_m1_2026-07-02.md")
 RELEASE_EVIDENCE_DOC_RE = re.compile(r"`(docs/release_evidence_[^`]+\.md)`")
 CLOUD_AUDIT_REPORT_NAME_RE = re.compile(
     r"^cloud_static_audit_(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{6}Z)\.md$"
