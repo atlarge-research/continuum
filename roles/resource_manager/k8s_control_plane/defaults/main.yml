@@ -5,6 +5,10 @@ rm_k8s_control_plane_username: "{{ username | default(continuum_username | defau
 rm_k8s_control_plane_cloud_mode: "{{ cloud_mode | default(continuum_cloud_mode | default(1)) }}"
 rm_k8s_control_plane_kubeversion: "{{ kubeversion | default(continuum_kubeversion | default('1.27.0')) }}"
 rm_k8s_control_plane_registry_ip: "{{ registry_ip | default(continuum_registry_ip | default('')) }}"
+rm_k8s_control_plane_image_repository: >-
+  {{ rm_k8s_control_plane_registry_ip
+  if (continuum_resource_manager_type | default('')) in ['kubecontrol', 'kube_kata']
+  else '' }}
 rm_k8s_control_plane_continuum_home: "{{ continuum_home | default('/tmp') }}"
 rm_k8s_control_plane_ignore_preflight_errors: "{{ ignore_preflight_errors | default(false) }}"
 rm_k8s_control_plane_kubeadm_config_file: "{{ kubeadm_config_file | default('') }}"

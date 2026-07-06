@@ -77,9 +77,11 @@
 - name: Initialize Kubernetes cluster with default kubeadm options
   ansible.builtin.command: >-
     kubeadm init
+    --kubernetes-version=v{{ rm_k8s_control_plane_kubeversion }}
     --apiserver-advertise-address={{ rm_k8s_control_plane_cloud_ip }}
     --apiserver-cert-extra-sans={{ rm_k8s_control_plane_cloud_ip }}
     --node-name {{ ansible_hostname }}
+    {% if rm_k8s_control_plane_image_repository | length > 0 %}--image-repository={{ rm_k8s_control_plane_image_repository }}{% endif %}
     {% if rm_k8s_control_plane_ignore_preflight_errors %}--ignore-preflight-errors all{% endif %}
     --pod-network-cidr=10.244.0.0/16
   args:

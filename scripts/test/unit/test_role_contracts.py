@@ -175,7 +175,9 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
     def test_k8s_control_plane_waits_for_cri_before_kubeadm_init(self):
         repo_root = Path(__file__).resolve().parents[3]
         task_path = repo_root / "roles/resource_manager/k8s_control_plane/tasks/main.yml"
+        defaults_path = repo_root / "roles/resource_manager/k8s_control_plane/defaults/main.yml"
         tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
         task_names = [task.get("name") for task in tasks]
 
         cri_task = next(
@@ -187,6 +189,28 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
         self.assertLess(
             task_names.index("Wait for containerd CRI endpoint before kubeadm init"),
             task_names.index("Initialize Kubernetes cluster with default kubeadm options"),
+        )
+        default_init_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Initialize Kubernetes cluster with default kubeadm options"
+        )
+        default_init_command = default_init_task["ansible.builtin.command"]
+        self.assertIn(
+            "--kubernetes-version=v{{ rm_k8s_control_plane_kubeversion }}",
+            default_init_command,
+        )
+        self.assertIn(
+            "--image-repository={{ rm_k8s_control_plane_image_repository }}",
+            default_init_command,
+        )
+        self.assertIn(
+            "registry_ip | default(continuum_registry_ip | default(''))",
+            defaults["rm_k8s_control_plane_registry_ip"],
+        )
+        self.assertIn(
+            "continuum_resource_manager_type | default('')) in ['kubecontrol', 'kube_kata']",
+            defaults["rm_k8s_control_plane_image_repository"],
         )
 
     def test_k8s_worker_join_waits_for_cri_before_join(self):
