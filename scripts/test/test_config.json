@@ -769,6 +769,9 @@
                             "sh",
                             "scripts/test/setup_agent_host.sh",
                             "verify"
+                        ],
+                        "skip_when_env": [
+                            "CONTINUUM_SMOKE_BASE_ROOT"
                         ]
                     },
                     {

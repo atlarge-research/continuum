@@ -56,6 +56,12 @@ class RunTestsCliTests(unittest.TestCase):
             checks_by_name["Host helper interface"],
             ["sh", "scripts/test/setup_agent_host.sh", "verify"],
         )
+        helper_check = next(
+            check
+            for check in suite["prerequisites"]["checks"]
+            if check["name"] == "Host helper interface"
+        )
+        self.assertEqual(helper_check["skip_when_env"], ["CONTINUUM_SMOKE_BASE_ROOT"])
         self.assertIn("--check-only", checks_by_name["Local registry cache"])
 
     def test_main_accepts_dynamic_suite_from_loaded_config(self):
@@ -392,6 +398,49 @@ class RunTestsCliTests(unittest.TestCase):
                 for message in printed_messages
             )
         )
+
+    def test_prerequisite_check_can_be_skipped_when_env_is_set(self):
+        suite_config = {
+            "prerequisites": {
+                "checks": [
+                    {
+                        "name": "Operator-only check",
+                        "command": ["false"],
+                        "skip_when_env": ["CONTINUUM_SMOKE_BASE_ROOT"],
+                    }
+                ]
+            }
+        }
+
+        with mock.patch.dict(
+            run_tests_module.os.environ,
+            {"CONTINUUM_SMOKE_BASE_ROOT": "/tmp/smoke"},
+        ):
+            failures = run_tests_module.validate_suite_prerequisite_checks(
+                "app_parity",
+                suite_config,
+            )
+
+        self.assertEqual(failures, [])
+
+    def test_prerequisite_check_rejects_invalid_skip_env_config(self):
+        suite_config = {
+            "prerequisites": {
+                "checks": [
+                    {
+                        "name": "Operator-only check",
+                        "command": ["true"],
+                        "skip_when_env": "CONTINUUM_SMOKE_BASE_ROOT",
+                    }
+                ]
+            }
+        }
+
+        with self.assertRaisesRegex(ValueError, "skip_when_env must be a list"):
+            run_tests_module.validate_suite_prerequisite_checks(
+                "app_parity",
+                suite_config,
+            )
 
     def test_prerequisite_check_failure_prefers_actionable_stdout(self):
         failed_check = run_tests_module.subprocess.CompletedProcess(

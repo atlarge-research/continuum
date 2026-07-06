@@ -121,6 +121,7 @@ def validate_suite_prerequisite_checks(suite_name: str, suite_config: Dict) -> L
 
         name = check.get("name")
         command = check.get("command")
+        skip_when_env = check.get("skip_when_env")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("%s.name must be a non-empty string" % (prefix,))
         if (
@@ -129,6 +130,13 @@ def validate_suite_prerequisite_checks(suite_name: str, suite_config: Dict) -> L
             or any(not isinstance(part, str) or not part.strip() for part in command)
         ):
             raise ValueError("%s.command must be a non-empty list of strings" % (prefix,))
+        if skip_when_env is not None and (
+            not isinstance(skip_when_env, list)
+            or any(not isinstance(name, str) or not name.strip() for name in skip_when_env)
+        ):
+            raise ValueError("%s.skip_when_env must be a list of non-empty strings" % (prefix,))
+        if skip_when_env and any(os.environ.get(name) for name in skip_when_env):
+            continue
 
         try:
             result = subprocess.run(
