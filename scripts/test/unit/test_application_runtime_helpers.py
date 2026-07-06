@@ -1058,6 +1058,9 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         self.assertIn("kube-apiserver", machine.process.call_args_list[0].args[1])
         self.assertIn("kube-controller-manager", machine.process.call_args_list[0].args[1])
         self.assertIn("kube-scheduler", machine.process.call_args_list[0].args[1])
+        self.assertIn("\\$(crictl ps", machine.process.call_args_list[0].args[1])
+        self.assertIn("\\$name", machine.process.call_args_list[0].args[1])
+        self.assertIn("\\$cid", machine.process.call_args_list[0].args[1])
         self.assertFalse(machine.process.call_args_list[0].args[1].startswith('"'))
         self.assertEqual(
             machine.process.call_args_list[1].args[1],
