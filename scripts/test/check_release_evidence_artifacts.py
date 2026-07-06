@@ -53,6 +53,9 @@ RELEASE_MATRIX_TOTAL_RE = re.compile(r"TOTAL_RELEASE_MATRIX_ISSUES=(\d+)")
 ARTIFACT_AUDIT_TOTAL_RE = re.compile(r"TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=(\d+)")
 PRETAG_TOTAL_RE = re.compile(r"TOTAL_RELEASE_PRETAG_ISSUES=(\d+)")
 SUITE_PREREQ_RE = re.compile(r"--check-prereqs\s+--suite\s+([A-Za-z0-9_-]+)\b")
+SUITE_CACHE_PREREQ_RE = re.compile(
+    r"prime_local_registry_cache\.py\s+--suite\s+([A-Za-z0-9_-]+)\s+--check-only\b"
+)
 EVIDENCE_REQUIRED_STATUS_LABELS = {"core-ready", "certified"}
 REQUIRED_SUCCESS_REASON_TOKENS = (
     "exit_code=0",
@@ -126,6 +129,10 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
     "qemu_openfaas_software_parity": "QEMU OpenFaaS software parity suite prerequisites",
     "qemu_openfaas_image_local_parity": (
         "QEMU OpenFaaS local image parity suite prerequisites"
+    ),
+    "qemu_kubecontrol_empty_parity": "QEMU kubecontrol empty parity suite prerequisites",
+    "qemu_kubecontrol_empty_trace_parity": (
+        "QEMU kubecontrol empty trace parity suite prerequisites"
     ),
 }
 REQUIRED_EVIDENCE_CONTEXT_FIELDS = ("Git commit", "Tree state", "Date")
@@ -2684,7 +2691,7 @@ def _check_cloud_audit_ready_suite_prereqs(
                 )
             )
             continue
-        prereq_suites = set(SUITE_PREREQ_RE.findall(report_text))
+        prereq_suites = _cloud_audit_prereq_suites(report_text)
         prereq_statuses = _informational_check_statuses(report_text)
         for suite_name in suite_names:
             if suite_name not in prereq_suites:
@@ -2781,7 +2788,7 @@ def _check_cloud_audit_all_parity_suite_prereqs(
                 )
             )
             continue
-        prereq_suites = set(SUITE_PREREQ_RE.findall(report_text))
+        prereq_suites = _cloud_audit_prereq_suites(report_text)
         for suite_name in suite_names:
             if suite_name in prereq_suites:
                 continue
@@ -2793,6 +2800,13 @@ def _check_cloud_audit_all_parity_suite_prereqs(
                 )
             )
     return issues
+
+
+def _cloud_audit_prereq_suites(report_text: str) -> set[str]:
+    """Return suites with cloud-audit prerequisite or cache-preflight coverage."""
+    return set(SUITE_PREREQ_RE.findall(report_text)) | set(
+        SUITE_CACHE_PREREQ_RE.findall(report_text)
+    )
 
 
 def _check_cloud_audit_latest_report(

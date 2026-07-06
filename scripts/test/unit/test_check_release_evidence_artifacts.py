@@ -3678,6 +3678,61 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 ],
             )
 
+    def test_cloud_static_audit_accepts_registry_cache_preflight_for_parity_suite(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "docs").mkdir(parents=True)
+            (root / "docs" / "release_certification_matrix.md").write_text(
+                "| ID | Suite | Status | Certification Action |\n"
+                "| --- | --- | --- | --- |\n"
+                "| M2-QEMU-KUBECONTROL-EMPTY | suite `qemu_kubecontrol_empty_parity` | "
+                "`certified` | Evidence: `docs/release_evidence_example.md`. |\n",
+                encoding="utf-8",
+            )
+            (root / "scripts" / "test").mkdir(parents=True)
+            (root / "scripts" / "test" / "test_config.json").write_text(
+                json.dumps(
+                    {
+                        "test_suites": {
+                            "qemu_kubecontrol_empty_parity": {
+                                "directories": [
+                                    "configs/experiments/parity/qemu_kubecontrol_empty/"
+                                ]
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            artifact = root / "logs" / "cloud_static_audit_2026-05-23T000000Z.md"
+            artifact.parent.mkdir(parents=True)
+            readiness_text = self._release_readiness_text(
+                infra_prereq_status=None,
+            ).replace(
+                "## Output Excerpts\n",
+                "- QEMU kubecontrol empty parity suite prerequisites: OK\n\n"
+                "## Output Excerpts\n",
+            )
+            artifact.write_text(
+                self._required_gates_text()
+                + readiness_text
+                + "## Commands Executed\n"
+                "1. python3 -B scripts/test/prime_local_registry_cache.py "
+                "--suite qemu_kubecontrol_empty_parity --check-only\n",
+                encoding="utf-8",
+            )
+            (root / "docs" / "release_evidence_example.md").write_text(
+                self._evidence_text(
+                    "| Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity` |\n"
+                    "| Report | `%s` |\n" % (artifact,),
+                    matrix_row_id="M2-QEMU-KUBECONTROL-EMPTY",
+                    mentioned_config_path=None,
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_release_evidence_artifacts.find_artifact_issues(root), [])
+
     def test_cloud_static_audit_must_record_ready_suite_prereqs(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
