@@ -764,6 +764,14 @@
                 ],
                 "checks": [
                     {
+                        "name": "Host helper interface",
+                        "command": [
+                            "sh",
+                            "scripts/test/setup_agent_host.sh",
+                            "verify"
+                        ]
+                    },
+                    {
                         "name": "Local registry cache",
                         "command": [
                             "python3",

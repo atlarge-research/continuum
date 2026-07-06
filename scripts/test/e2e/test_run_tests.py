@@ -48,7 +48,15 @@ class RunTestsCliTests(unittest.TestCase):
         self.assertEqual(artifact_table["columns"], expected_columns)
         self.assertEqual(artifact_table["numeric_columns"], expected_columns)
         self.assertEqual(artifact_table["min_rows"], 1)
-        self.assertIn("--check-only", suite["prerequisites"]["checks"][0]["command"])
+        checks_by_name = {
+            check["name"]: check["command"]
+            for check in suite["prerequisites"]["checks"]
+        }
+        self.assertEqual(
+            checks_by_name["Host helper interface"],
+            ["sh", "scripts/test/setup_agent_host.sh", "verify"],
+        )
+        self.assertIn("--check-only", checks_by_name["Local registry cache"])
 
     def test_main_accepts_dynamic_suite_from_loaded_config(self):
         fake_test_config = {
