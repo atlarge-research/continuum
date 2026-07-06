@@ -80,6 +80,15 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("`qemu_kubecontrol_empty_parity`", wrapper_values)
         self.assertIn("`qemu_kubecontrol_empty_trace_parity`", wrapper_values)
 
+    def test_smoke_runner_isolation_contract_documents_sudo_health(self):
+        docs = (self.repo_root / "docs/smoke_runner_isolation.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("`sudo -n true`", docs)
+        self.assertIn("owned by `root:root` with the setuid bit set", docs)
+        self.assertIn("repair the host sudo installation first", docs)
+
     def test_show_config_reports_present_sync_marker(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp_root = Path(tempdir)

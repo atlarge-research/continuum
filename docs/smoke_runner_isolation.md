@@ -553,6 +553,14 @@ The dedicated smoke user should have:
 4. write access to the selected `base_path`,
 5. access to host commands used by the smoke path.
 
+The caller also needs a healthy system `sudo` binary before any wrapper command
+can be trusted. `sudo -n true` must work noninteractively, and `/usr/bin/sudo`
+must remain owned by `root:root` with the setuid bit set. If
+`sh scripts/test/setup_agent_host.sh verify` reports that noninteractive sudo
+is unavailable or misconfigured, repair the host sudo installation first; do
+not diagnose retained smoke roots, registry caches, or wrapper permissions
+until that check passes.
+
 The scripted host-prereq step currently installs:
 
 1. `acl`
