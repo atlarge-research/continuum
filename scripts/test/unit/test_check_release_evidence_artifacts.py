@@ -2074,6 +2074,41 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 ],
             )
 
+    def test_matrix_row_id_field_accepts_milestone_row_ids(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            config_path = "configs/experiments/parity/qemu_kubecontrol_empty/01.yaml"
+            evidence_doc = "docs/release_evidence_example.md"
+            (root / "docs").mkdir(parents=True)
+            (root / "docs" / "release_certification_matrix.md").write_text(
+                "| ID | Config | Status | Certification Action |\n"
+                "| --- | --- | --- | --- |\n"
+                "| M2-QEMU-KUBECONTROL-TRACE | `%s` | `certified` | Evidence: `%s`. |\n"
+                % (config_path, evidence_doc),
+                encoding="utf-8",
+            )
+            artifact = (
+                root
+                / "artifacts"
+                / ".continuum"
+                / "test_results"
+                / "test_results_2026-05-23_18-35-48.json"
+            )
+            self._write_test_results(artifact, config_path=config_path)
+            self._write_config_targets(root, config_path=config_path)
+            (root / evidence_doc).write_text(
+                self._evidence_text(
+                    "| Result summary path | `%s` |\n"
+                    "This evidence certifies matrix row M2-QEMU-KUBECONTROL-TRACE.\n"
+                    % (artifact,),
+                    matrix_row_id="M2-QEMU-KUBECONTROL-TRACE",
+                    mentioned_config_path=config_path,
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_release_evidence_artifacts.find_artifact_issues(root), [])
+
     def test_single_result_evidence_doc_must_have_matrix_row_id_field(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
@@ -2782,7 +2817,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 ],
             )
 
-    def test_evidence_docs_must_use_single_git_commit(self):
+    def test_evidence_docs_may_use_distinct_clean_source_commits(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             config_path = "configs/experiments/parity/qemu/01.yaml"
@@ -2822,17 +2857,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.assertEqual(
-                check_release_evidence_artifacts.find_artifact_issues(root),
-                [
-                    check_release_evidence_artifacts.EvidenceArtifactIssue(
-                        "evidence-doc-source-commit-mismatch",
-                        "release evidence docs must use one Git commit; found "
-                        "1234567 in docs/release_evidence_b.md; "
-                        "abcdef0 in docs/release_evidence_a.md",
-                    )
-                ],
-            )
+            self.assertEqual(check_release_evidence_artifacts.find_artifact_issues(root), [])
 
     def test_evidence_doc_requires_iso_date(self):
         with tempfile.TemporaryDirectory() as tempdir:

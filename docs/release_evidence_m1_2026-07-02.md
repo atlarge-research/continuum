@@ -132,12 +132,12 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-07-03T115215Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-07-06T112908Z.md` |
 | Required gates | PASS |
-| Unit unittest discovery | 623 tests OK |
-| E2E unittest discovery | 93 tests OK |
-| Combined unittest discovery | 716 tests OK |
-| Pytest mirror | 716 passed |
+| Unit unittest discovery | 637 tests OK |
+| E2E unittest discovery | 100 tests OK |
+| Combined unittest discovery | 737 tests OK |
+| Pytest mirror | 737 passed |
 | Marker debt scan | MATCHES FOUND (2) |
 | Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after committing this docs-only evidence refresh and rerunning the pre-tag check. |
 | Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility, including the OpenFaaS local image subset. Certified cache-backed image parity rows require a primed local registry cache; the exact full OpenFaaS image row still requires reachable external QEMU capacity or a larger local runner before certification. |
@@ -150,7 +150,7 @@ Local release-evidence artifact audit on the certification host:
 | Field | Value |
 | --- | --- |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` |
-| Primary artifacts checked | 26 |
+| Primary artifacts checked | 30 |
 | Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |
 
 The refreshed certification-host audit is expected to report zero release-evidence artifact issues once this docs-only evidence refresh is committed and the latest cloud-static audit report is recorded below.

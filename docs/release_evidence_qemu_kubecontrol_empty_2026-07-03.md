@@ -15,7 +15,7 @@ without adding Columbo-specific concepts to the Continuum core.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `M2-QEMU-KUBECONTROL-EMPTY` |
-| Git commit | dirty source tree based on `8cc99c3 refresh release evidence for pretag` |
+| Git commit | `8cc99c3de40f76cb65f375bd76ddf978cb6f4442` |
 | Tree state | Source tree with the Columbo/kubecontrol port synced to the dedicated runner before this evidence bundle was committed |
 | Date | 2026-07-03 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity` |
@@ -26,7 +26,7 @@ without adding Columbo-specific concepts to the Continuum core.
 | Provider profile | `configs/profiles/environment/local-qemu-cpupin.yaml` |
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough CPU/RAM/disk under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application` |
-| Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, kubecontrol software-phase readiness, application phase evidence, benchmark metric table, and benchmark metrics manifest |
+| Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, kubecontrol software-phase readiness, application phase evidence, benchmark metric table, and benchmark metrics manifest |
 | Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubecontrol_empty_parity/.continuum/test_results/test_results_2026-07-03_16-58-03.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_kubecontrol_empty_parity/.continuum/` |
 

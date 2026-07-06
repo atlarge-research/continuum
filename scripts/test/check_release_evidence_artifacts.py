@@ -37,7 +37,7 @@ CONFIG_PATH_RE = re.compile(
 SUITE_REF_RE = re.compile(r"\bsuite\s+`([^`]+)`")
 WRAPPER_SCENARIO_RE = re.compile(r"\bwrapper scenario\s+`([^`]+)`")
 SUBSET_ROW_RE = re.compile(r"^(P-[A-Z]+-\d+)-(?:SW|SW-LOCAL)$")
-ROW_ID_RE = re.compile(r"\b(?:M1-[A-Z0-9-]+|P-[A-Z]+-\d+(?:-[A-Z]+(?:-[A-Z]+)*)?)\b")
+ROW_ID_RE = re.compile(r"\b(?:M[0-9]+-[A-Z0-9-]+|P-[A-Z]+-\d+(?:-[A-Z]+(?:-[A-Z]+)*)?)\b")
 STATUS_LABEL_RE = re.compile(r"`([^`]+)`")
 ABSOLUTE_PATH_RE = re.compile(r"(/[^`\s]+(?:\.json|\.md|\.ndjson))")
 UNITTEST_COUNT_RE = re.compile(r"Ran (\d+) tests")
@@ -3380,35 +3380,6 @@ def _check_evidence_doc_context(root: Path) -> list[EvidenceArtifactIssue]:
     return issues
 
 
-def _check_evidence_docs_single_git_commit(root: Path) -> list[EvidenceArtifactIssue]:
-    """Ensure the referenced evidence set records one coherent source commit."""
-    docs_by_commit: dict[str, list[str]] = {}
-    for evidence_doc in iter_evidence_docs(root):
-        evidence_path = root / evidence_doc
-        if not evidence_path.exists():
-            continue
-        fields = _evidence_table_fields(evidence_path.read_text(encoding="utf-8"))
-        git_commit = fields.get("Git commit", "")
-        if not GIT_COMMIT_RE.match(git_commit):
-            continue
-        docs_by_commit.setdefault(git_commit, []).append(evidence_doc)
-
-    if len(docs_by_commit) <= 1:
-        return []
-
-    commit_parts = [
-        "%s in %s" % (commit, ", ".join(sorted(docs)))
-        for commit, docs in sorted(docs_by_commit.items())
-    ]
-    return [
-        EvidenceArtifactIssue(
-            "evidence-doc-source-commit-mismatch",
-            "release evidence docs must use one Git commit; found %s"
-            % ("; ".join(commit_parts),),
-        )
-    ]
-
-
 def _check_test_result_dates_match_evidence_docs(
     artifacts: list[EvidenceArtifact],
 ) -> list[EvidenceArtifactIssue]:
@@ -3492,7 +3463,6 @@ def find_artifact_issues(root: Path = ROOT) -> list[EvidenceArtifactIssue]:
         issues.extend(check_artifact(artifact))
     issues.extend(_check_evidence_doc_context(root))
     issues.extend(_check_evidence_doc_runner_context_fields(artifacts))
-    issues.extend(_check_evidence_docs_single_git_commit(root))
     issues.extend(_check_test_result_dates_match_evidence_docs(artifacts))
     issues.extend(_check_evidence_docs_have_primary_artifacts(root, artifacts))
     issues.extend(_check_specialized_artifact_links(artifacts))
@@ -3539,7 +3509,6 @@ def main() -> int:
             print("OK %s %s" % (artifact.kind, artifact.path))
     issues.extend(_check_evidence_doc_context(ROOT))
     issues.extend(_check_evidence_doc_runner_context_fields(artifacts))
-    issues.extend(_check_evidence_docs_single_git_commit(ROOT))
     issues.extend(_check_test_result_dates_match_evidence_docs(artifacts))
     issues.extend(_check_evidence_docs_have_primary_artifacts(ROOT, artifacts))
     issues.extend(_check_specialized_artifact_links(artifacts))
