@@ -165,15 +165,15 @@ def launch_kubernetes_with_starttime(config, machines):
     kube_deployment = kubernetes_deployment_mode(config)
     if kube_deployment == "file":
         target = "/home/%s/jobs" % (machines[0].cloud_controller_names[0])
-        command = "\"date +'%%s.%%N'; kubectl apply -f %s\"" % (target)
+        command = "date +'%%s.%%N'; kubectl apply -f %s" % (target)
     elif kube_deployment == "call":
         target = "/home/%s/jobs/*" % (machines[0].cloud_controller_names[0])
-        command = "\"date +'%%s.%%N'; for filename in %s; do kubectl apply -f $filename & done\"" % (
+        command = "date +'%%s.%%N'; for filename in %s; do kubectl apply -f $filename & done" % (
             target
         )
     else:
         target = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
-        command = "\"date +'%%s.%%N'; kubectl apply -f %s\"" % (target)
+        command = "date +'%%s.%%N'; kubectl apply -f %s" % (target)
 
     output, error = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])[0]
 
@@ -255,22 +255,20 @@ def run_kubernetes_benchmark_playbook(config, app_vars, runner=None):
 def resolve_benchmark_launch_playbook(config, runner=None):
     """Resolve the benchmark-launch playbook path for the active app/orchestrator.
 
-    Prefer a generated ``.continuum/launch_benchmark.yml`` for Kubernetes job
-    launch when present, but fall back to the checked-in application playbook so
-    resumed application-only runs do not depend on a missing generation step.
+    Prefer deployment-specific module playbooks when they exist, because those
+    encode benchmark-specific launch layouts. Otherwise prefer a generated
+    ``.continuum/launch_benchmark.yml`` for Kubernetes job launch when present,
+    then fall back to checked-in application playbooks.
     """
-    repo_root = getattr(runner, "repo_root", None) or os.path.abspath(config.get("base", "."))
+    runner_repo_root = getattr(runner, "repo_root", None)
+    if isinstance(runner_repo_root, (str, os.PathLike)):
+        repo_root = runner_repo_root
+    else:
+        repo_root = os.path.abspath(config.get("base", "."))
     benchmark_stage_type = config_access.benchmark_primary_stage_type(config)
     orchestrator_name = config_access.orchestrator_name(config)
     kube_deployment = config_access.orchestrator_value_optional(config, "kube_deployment")
     has_openfaas = config_access.has_addon(config, "openfaas")
-
-    if not has_openfaas:
-        generated_playbook = os.path.join(
-            config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"
-        )
-        if os.path.isfile(generated_playbook):
-            return generated_playbook
 
     orchestrator_tokens = []
     if has_openfaas:
@@ -284,16 +282,17 @@ def resolve_benchmark_launch_playbook(config, runner=None):
             orchestrator_tokens.append(token)
 
     candidates = []
+    deployment_candidates = []
     for token in orchestrator_tokens:
         if kube_deployment:
-            candidates.append(
-                os.path.join(
-                    repo_root,
-                    "application",
-                    benchmark_stage_type,
-                    "launch_benchmark_%s_%s.yml" % (token, kube_deployment),
-                )
+            deployment_candidate = os.path.join(
+                repo_root,
+                "application",
+                benchmark_stage_type,
+                "launch_benchmark_%s_%s.yml" % (token, kube_deployment),
             )
+            deployment_candidates.append(deployment_candidate)
+            candidates.append(deployment_candidate)
         candidates.append(
             os.path.join(
                 repo_root,
@@ -302,6 +301,16 @@ def resolve_benchmark_launch_playbook(config, runner=None):
                 "launch_benchmark_%s.yml" % (token),
             )
         )
+
+    generated_playbook = os.path.join(
+        config["infrastructure"]["base_path"], ".continuum/launch_benchmark.yml"
+    )
+    if not has_openfaas:
+        for candidate in deployment_candidates:
+            if os.path.isfile(candidate):
+                return candidate
+        if os.path.isfile(generated_playbook):
+            return generated_playbook
 
     for candidate in candidates:
         if os.path.isfile(candidate):
@@ -693,7 +702,6 @@ def cache_kubernetes_workers(config, machines, app_vars, runner=None):
         command = "for filename in /home/%s/jobs/*; do kubectl apply -f $filename & done" % (
             machines[0].cloud_controller_names[0]
         )
-        command = '"%s"' % (command)
     else:
         manifest_path = "/home/%s/job-template.yaml" % (machines[0].cloud_controller_names[0])
         command = "kubectl apply -f %s" % (manifest_path)
@@ -947,13 +955,17 @@ def get_kubernetes_control_output(config, machines, starttime, status):
     """Collect and parse Kubernetes control-plane benchmark logs for kubecontrol flows."""
     logging.info("Collect and parse output from Kubernetes controlplane components")
 
-    command = """\"cd /var/log && \
-        sudo su -c \\\"grep -ri --exclude continuum.txt '\\[continuum\\]' > continuum.txt\\\"\""""
+    command = (
+        "cd /var/log && "
+        "sudo sh -c \"grep -ri --exclude continuum.txt '\\[continuum\\]' > continuum.txt\""
+    )
     results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
 
     if len(config["cloud_ssh"]) > 1:
-        command = """\"sudo su -c \\\"journalctl -u kubelet | \
-            grep -i '\\[continuum\\]' > /var/log/continuum.txt\\\"\""""
+        command = (
+            "sudo sh -c "
+            "\"journalctl -u kubelet | grep -i '\\[continuum\\]' > /var/log/continuum.txt\""
+        )
         results += machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][1:])
 
     for _, error in results:
@@ -961,8 +973,7 @@ def get_kubernetes_control_output(config, machines, starttime, status):
             logging.error("".join(error))
             sys.exit(1)
 
-    command = """\"cd /var/log && \
-        sudo cp -r pods pods-continuum\""""
+    command = "cd /var/log && sudo cp -r pods pods-continuum"
     results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"])
     for _, error in results:
         if error:
@@ -1034,12 +1045,10 @@ def start_kubernetes_resource_metrics(config, machines):
         else:
             break
 
-    command = "\"bash -c 'nohup python3 -u resource_usage.py -v > resource_usage.txt 2>&1 &'\""
+    command = "bash -c 'nohup python3 -u resource_usage.py -v > resource_usage.txt 2>&1 &'"
     machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0], wait=False)
 
-    command = (
-        "\"bash -c 'nohup python3 -u resource_usage_os.py -v > resource_usage_os.txt 2>&1 &'\""
-    )
+    command = "bash -c 'nohup python3 -u resource_usage_os.py -v > resource_usage_os.txt 2>&1 &'"
     machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"], wait=False)
 
 

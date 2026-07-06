@@ -77,6 +77,7 @@ class HostRunnerScriptTests(unittest.TestCase):
 
         self.assertIn("`qemu_openfaas_image_parity`", wrapper_values)
         self.assertIn("`qemu_openfaas_image_local_parity`", wrapper_values)
+        self.assertIn("`qemu_kubecontrol_empty_parity`", wrapper_values)
 
     def test_show_config_reports_present_sync_marker(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -149,7 +150,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
         self.assertIn('relocate-smoke-root)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-06-02-root-cache-priming', result.stdout)
+        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-07-03-columbo-empty-cache', result.stdout)
         self.assertIn('umask 027', result.stdout)
         self.assertIn('PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', result.stdout)
         self.assertIn('validate_fixed_roots()', result.stdout)
@@ -157,6 +158,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('prime_registry_cache_as_root()', result.stdout)
         self.assertIn('docker pull "$source_ref"', result.stdout)
         self.assertIn('image_classification_publisher_serverless', result.stdout)
+        self.assertIn('redplanet00/kubeedge-applications:empty', result.stdout)
         self.assertIn('validate_smoke_base_root()', result.stdout)
         self.assertIn('prepare_base_root_path()', result.stdout)
         self.assertIn('relocate_smoke_root()', result.stdout)
@@ -253,7 +255,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-06-02-root-cache-priming",
+            "2026-07-03-columbo-empty-cache",
             result.stderr,
         )
 
@@ -264,7 +266,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-06-02-root-cache-priming\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-07-03-columbo-empty-cache\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -340,7 +342,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-06-02-root-cache-priming\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-07-03-columbo-empty-cache\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",

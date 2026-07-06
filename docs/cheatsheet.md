@@ -52,7 +52,7 @@ after the maintenance helper is refreshed.
 | `python3 scripts/test/run_tests.py --suite smoke --check-prereqs` | Check host readiness without provisioning |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity` | Prime the local registry cache for an `image_prefetch: "off"` image suite as a Docker-capable user |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity --check-only` | Verify that the local registry cache is ready without Docker access |
-| `sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity` | Prime the full OpenFaaS image parity cache after installing the `2026-06-02-root-cache-priming` helper |
+| `sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity` | Prime the full OpenFaaS image parity cache after installing the `2026-07-03-columbo-empty-cache` helper |
 | `scripts/test/run_cloud_static_audit.sh` | Run cloud-safe compile, tests, docs, lint, and suite metadata checks |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` | Validate retained release-evidence artifacts on the certification host |
 | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke phase_smoke_matrix` | Run the three phase-boundary host-backed smoke scenarios through the installed wrapper |

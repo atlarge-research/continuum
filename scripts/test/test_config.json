@@ -618,6 +618,63 @@
                 ]
             }
         },
+        "qemu_kubecontrol_empty_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_kubecontrol_empty/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "CLOUD OUTPUT",
+                    "started_application (s)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "CLOUD OUTPUT",
+                        "columns": [
+                            "started_application (s)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "CLOUD OUTPUT",
+                        "columns": [
+                            "started_application (s)"
+                        ],
+                        "numeric_columns": [
+                            "started_application (s)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "started_application (s)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access and enough CPU/RAM for the exact Columbo kubecontrol call_1 shape",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ]
+            }
+        },
         "benchmark_smoke": {
             "directories": [
                 "configs/experiments/benchmark_smoke/"

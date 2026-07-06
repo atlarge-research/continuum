@@ -1,2 +1,3 @@
 ---
 rm_k8s_metrics_server_manifest_path: /components.yaml
+rm_k8s_metrics_server_username: "{{ username | default(continuum_username | default('ubuntu')) }}"

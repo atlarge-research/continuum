@@ -509,3 +509,56 @@ class BenchmarkLaunchPlaybookTests(unittest.TestCase):
         self.assertEqual(arkade_install_task["delay"], "{{ rm_openfaas_install_retry_delay }}")
         self.assertEqual(arkade_install_task["until"], "openfaas_install_result.rc == 0")
         self.assertIn("--address {{ rm_openfaas_install_gateway_address }}", content)
+
+
+class K8sMetricsServerRoleTests(unittest.TestCase):
+    def test_metrics_role_stages_cluster_resource_collector_from_active_resource_manager(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        defaults_path = repo_root / "roles/resource_manager/k8s_metrics_server/defaults/main.yml"
+        tasks_path = repo_root / "roles/resource_manager/k8s_metrics_server/tasks/main.yml"
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            defaults["rm_k8s_metrics_server_username"],
+            "{{ username | default(continuum_username | default('ubuntu')) }}",
+        )
+
+        cluster_task = next(
+            task
+            for task in tasks
+            if task.get("name") == "Stage Kubernetes cluster resource collector"
+        )
+
+        self.assertEqual(
+            cluster_task["ansible.builtin.copy"]["src"],
+            "{{ continuum_repo_root }}/resource_manager/{{ continuum_resource_manager_type }}/cloud/resource_usage.py",
+        )
+        self.assertEqual(
+            cluster_task["ansible.builtin.copy"]["dest"],
+            "/home/{{ rm_k8s_metrics_server_username }}/resource_usage.py",
+        )
+        self.assertEqual(cluster_task["ansible.builtin.copy"]["mode"], "0755")
+
+    def test_metrics_playbook_stages_os_collector_on_all_cloud_nodes(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        playbook_path = repo_root / "playbooks/resource_manager/k8s_metrics.yml"
+        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+
+        os_play = next(
+            play
+            for play in playbook
+            if play.get("name") == "Stage operating-system resource collector on cloud nodes"
+        )
+        os_task = os_play["tasks"][0]
+
+        self.assertEqual(os_play["hosts"], "cloudcontroller:clouds")
+        self.assertEqual(
+            os_task["ansible.builtin.copy"]["src"],
+            "{{ continuum_repo_root }}/resource_manager/{{ continuum_resource_manager_type }}/cloud/resource_usage_os.py",
+        )
+        self.assertEqual(
+            os_task["ansible.builtin.copy"]["dest"],
+            "/home/{{ username }}/resource_usage_os.py",
+        )
+        self.assertEqual(os_task["ansible.builtin.copy"]["mode"], "0755")

@@ -157,7 +157,7 @@ validate_check_prereqs_args() {
 
 retained_scenario_path() {
   case "$1" in
-    infra_one_vm|software_k8s_two_vm|network_netperf_two_vm|benchmark_k8s_resume|network_validation|qemu_infra_parity|qemu_k8s_nobench_parity|qemu_k8s_image_parity|qemu_kubeedge_software_parity|qemu_kubeedge_image_parity|qemu_mist_software_parity|qemu_mist_image_parity|qemu_endpoint_software_parity|qemu_endpoint_image_parity|qemu_openfaas_software_parity|qemu_openfaas_image_parity|qemu_openfaas_image_local_parity|prereqs)
+    infra_one_vm|software_k8s_two_vm|network_netperf_two_vm|benchmark_k8s_resume|network_validation|qemu_infra_parity|qemu_k8s_nobench_parity|qemu_k8s_image_parity|qemu_kubeedge_software_parity|qemu_kubeedge_image_parity|qemu_mist_software_parity|qemu_mist_image_parity|qemu_endpoint_software_parity|qemu_endpoint_image_parity|qemu_openfaas_software_parity|qemu_openfaas_image_parity|qemu_openfaas_image_local_parity|qemu_kubecontrol_empty_parity|prereqs)
       printf '%s/%s\n' "$BASE_ROOT" "$1"
       ;;
     benchmark_k8s_resume_infra|benchmark_k8s_resume_software|benchmark_k8s_resume_application)
@@ -188,6 +188,7 @@ qemu_endpoint_image_parity
 qemu_openfaas_software_parity
 qemu_openfaas_image_parity
 qemu_openfaas_image_local_parity
+qemu_kubecontrol_empty_parity
 prereqs
 EOF
 }
@@ -394,6 +395,9 @@ case "$SCENARIO" in
   qemu_openfaas_image_local_parity)
     set_suite_scenario qemu_openfaas_image_local_parity qemu_openfaas_image_local_parity
     ;;
+  qemu_kubecontrol_empty_parity)
+    set_suite_scenario qemu_kubecontrol_empty_parity qemu_kubecontrol_empty_parity
+    ;;
   release-artifact-audit)
     BASE_PATH="$BASE_ROOT/prereqs"
     CONTINUUM_HOME="$BASE_PATH/.continuum"
@@ -488,7 +492,7 @@ case "$SCENARIO" in
     ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, qemu_openfaas_image_local_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, release-artifact-audit, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, prune-scenario" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, qemu_openfaas_image_local_parity, qemu_kubecontrol_empty_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, release-artifact-audit, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, prune-scenario" >&2
     exit 2
     ;;
 esac

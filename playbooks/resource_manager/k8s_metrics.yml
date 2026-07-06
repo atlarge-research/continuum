@@ -4,3 +4,15 @@
   become: true
   roles:
     - role: k8s_metrics_server
+
+- name: Stage operating-system resource collector on cloud nodes
+  hosts: cloudcontroller:clouds
+  become: true
+  tasks:
+    - name: Stage operating-system resource collector
+      ansible.builtin.copy:
+        src: "{{ continuum_repo_root }}/resource_manager/{{ continuum_resource_manager_type }}/cloud/resource_usage_os.py"
+        dest: "/home/{{ username }}/resource_usage_os.py"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"

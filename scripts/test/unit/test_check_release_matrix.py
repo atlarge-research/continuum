@@ -212,6 +212,20 @@ When converting this seed into issues:
 
             self.assertEqual(check_release_matrix.find_matrix_issues(root), [])
 
+    def test_m2_candidate_row_does_not_drift_m1_release_notes(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            matrix_text = self._passing_matrix() + """
+## 4.5 M2 Research Case-Study Candidate Rows
+
+| ID | Claim Boundary | Configs / Suites | Required Evidence | Current Status | Next Action |
+| --- | --- | --- | --- | --- | --- |
+| M2-QEMU-KUBECONTROL-EMPTY | Columbo kubecontrol plus empty benchmark | `configs/experiments/parity/qemu/01.yaml`; suite `qemu_infra_parity` | Retained VM-backed evidence | `certified-candidate` | Run retained VM-backed evidence before claiming support. |
+"""
+            self._write_repo(root, matrix_text)
+
+            self.assertEqual(check_release_matrix.find_matrix_issues(root), [])
+
     def test_evidence_template_must_list_checker_enforced_fields(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

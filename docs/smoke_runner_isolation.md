@@ -307,13 +307,30 @@ requires the local registry cache to be primed before starting VMs, and it is
 not release-certified until the exact resource/capacity boundary is resolved
 and retained VM/application evidence passes.
 
-After installing the `2026-06-02-root-cache-priming` hostctl interface, prime
+After installing the `2026-07-03-columbo-empty-cache` hostctl interface, prime
 the OpenFaaS application image cache with the reviewed root-owned helper:
 
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
   prime-registry-cache --check-only --suite qemu_openfaas_image_parity
+```
+
+To run the Columbo-style QEMU kubecontrol plus `empty` application suite, use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity
+```
+
+This suite uses the same cache-backed registry model for
+`redplanet00/kubeedge-applications:empty`. After installing the
+`2026-07-03-columbo-empty-cache` hostctl interface, prime and verify the cache
+before starting VMs:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kubecontrol_empty_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prime-registry-cache --check-only --suite qemu_kubecontrol_empty_parity
 ```
 
 To advance the retained benchmark state one phase at a time, use:
@@ -404,16 +421,17 @@ The installed wrapper supports only these values:
 16. `qemu_openfaas_software_parity`
 17. `qemu_openfaas_image_parity`
 18. `qemu_openfaas_image_local_parity`
-19. `benchmark_k8s_resume_infra`
-20. `benchmark_k8s_resume_software`
-21. `benchmark_k8s_resume_application`
-22. `benchmark_k8s_resume`
-23. `release-artifact-audit`
-24. `check-prereqs`
-25. `list-suites`
-26. `storage-report`
-27. `prune-scenario <scenario> --yes-delete-retained-state`
-28. `debug-playbook <scenario> <playbook> [ansible args...]`
+19. `qemu_kubecontrol_empty_parity`
+20. `benchmark_k8s_resume_infra`
+21. `benchmark_k8s_resume_software`
+22. `benchmark_k8s_resume_application`
+23. `benchmark_k8s_resume`
+24. `release-artifact-audit`
+25. `check-prereqs`
+26. `list-suites`
+27. `storage-report`
+28. `prune-scenario <scenario> --yes-delete-retained-state`
+29. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 

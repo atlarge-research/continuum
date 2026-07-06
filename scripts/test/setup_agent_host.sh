@@ -22,7 +22,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-06-02-root-cache-priming"
+HOSTCTL_INTERFACE_VERSION="2026-07-03-columbo-empty-cache"
 
 usage() {
   cat <<EOF
@@ -326,6 +326,11 @@ EOF_IMAGE_REQUIREMENTS
       cat <<'EOF_IMAGE_REQUIREMENTS'
 redplanet00/kubeedge-applications:image_classification_publisher_serverless|kubeedge-applications:image_classification_publisher_serverless
 redplanet00/kubeedge-applications:image_classification_subscriber_serverless|kubeedge-applications:image_classification_subscriber_serverless
+EOF_IMAGE_REQUIREMENTS
+      ;;
+    qemu_kubecontrol_empty_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kubeedge-applications:empty|kubeedge-applications:empty
 EOF_IMAGE_REQUIREMENTS
       ;;
     *)
@@ -706,6 +711,11 @@ EOF_IMAGE_REQUIREMENTS
       cat <<'EOF_IMAGE_REQUIREMENTS'
 redplanet00/kubeedge-applications:image_classification_publisher_serverless|kubeedge-applications:image_classification_publisher_serverless
 redplanet00/kubeedge-applications:image_classification_subscriber_serverless|kubeedge-applications:image_classification_subscriber_serverless
+EOF_IMAGE_REQUIREMENTS
+      ;;
+    qemu_kubecontrol_empty_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kubeedge-applications:empty|kubeedge-applications:empty
 EOF_IMAGE_REQUIREMENTS
       ;;
     *)

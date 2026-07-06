@@ -8,6 +8,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from application import runtime_helpers
 from input.configuration import config_access
 
 from . import plot
@@ -304,6 +305,7 @@ def check(
         is_controlplane = False
 
     i = 0
+    found_component_output = False
 
     # Investigate either the control plane node or all worker nodes
     for node, output in control.items():
@@ -312,9 +314,16 @@ def check(
         ):
             # Get output from a specific component you want to filter
             if component not in output:
-                logging.error("ERROR: component %s not a valid key", component)
-                sys.exit(1)
+                logging.warning(
+                    "Component %s did not provide Continuum trace output on node %s; "
+                    "leaving %s empty",
+                    component,
+                    node,
+                    tag,
+                )
+                continue
 
+            found_component_output = True
             out = output[component]
 
             # Filter output for tag first
@@ -395,6 +404,9 @@ def check(
                             if job in metric["pod"] and metric[tag] is None:
                                 metric[tag] = time_delta(t, starttime)
                                 i += 1
+
+    if not found_component_output:
+        return
 
     if i < len(worker_metrics):
         if (component == "apiserver" or tag == "5_pod_object_create") and i == 1:
@@ -576,12 +588,16 @@ def print_control(config, worker_metrics):
     logging.debug("Output in csv format\n%s", repr(df.to_csv()))
 
     # Save as csv file
+    log_dir = config_access.runtime_logs_dir(config)
+    os.makedirs(log_dir, exist_ok=True)
     df.to_csv(
-        os.path.join(
-            config_access.runtime_logs_dir(config), "%s_dataframe.csv" % (config["timestamp"])
-        ),
+        os.path.join(log_dir, "%s_dataframe.csv" % (config["timestamp"])),
         index=False,
         encoding="utf-8",
+    )
+    runtime_helpers.write_benchmark_metric_artifacts(
+        config,
+        [{"label": "%s OUTPUT" % (config["mode"].upper()), "dataframe": df}],
     )
 
     return df
@@ -598,7 +614,9 @@ def validate_data(df):
         first = col
         second = columns[i + 3]
 
-        diff = df.loc[(df[first] > df[second])]
+        first_values = pd.to_numeric(df[first], errors="coerce")
+        second_values = pd.to_numeric(df[second], errors="coerce")
+        diff = df.loc[(first_values > second_values)]
         if not diff.empty:
             logging.info("[WARNING]: %s < %s is not true for %i lines", first, second, len(diff))
 

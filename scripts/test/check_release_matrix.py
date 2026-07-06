@@ -327,11 +327,16 @@ def _claim_rows(text: str) -> Iterable[tuple[str, str, str]]:
 
 
 def _claim_table_rows(text: str) -> Iterable[list[str]]:
-    """Yield parsed markdown cells for concrete M1 and parity claim rows."""
+    """Yield parsed markdown cells for concrete milestone and parity claim rows."""
     for line in text.splitlines():
-        if not line.startswith("| M1-") and not line.startswith("| P-"):
+        if not re.match(r"^\| M\d+-", line) and not line.startswith("| P-"):
             continue
         yield _markdown_cells(line)
+
+
+def _m1_release_notes_row_id(row_id: str) -> bool:
+    """Return whether a matrix row participates in the M1 release-note draft."""
+    return row_id.startswith("M1-") or row_id.startswith("P-")
 
 
 def _suite_directories(root: Path) -> dict[str, list[str]]:
@@ -842,7 +847,7 @@ def _release_notes_issues(root: Path, matrix_text: str) -> list[MatrixIssue]:
     row_statuses = {
         row_id: status_label
         for row_id, status_label in all_row_statuses.items()
-        if status_label in ALLOWED_STATUS_LABELS
+        if _m1_release_notes_row_id(row_id) and status_label in ALLOWED_STATUS_LABELS
     }
     ready_rows = {
         row_id
@@ -850,7 +855,9 @@ def _release_notes_issues(root: Path, matrix_text: str) -> list[MatrixIssue]:
         if status_label in EVIDENCE_REQUIRED_STATUS_LABELS
     }
 
-    certified_note_rows = _row_ids_in_text(certification_section)
+    certified_note_rows = {
+        row_id for row_id in _row_ids_in_text(certification_section) if _m1_release_notes_row_id(row_id)
+    }
     for row_id in sorted(certified_note_rows - set(all_row_statuses)):
         issues.append(
             MatrixIssue(
@@ -880,7 +887,8 @@ def _release_notes_issues(root: Path, matrix_text: str) -> list[MatrixIssue]:
 
     ready_evidence_paths = {
         evidence_path
-        for _row_id, evidence_path in _claim_row_evidence_paths(matrix_text)
+        for row_id, evidence_path in _claim_row_evidence_paths(matrix_text)
+        if _m1_release_notes_row_id(row_id)
     }
     for evidence_path in sorted(ready_evidence_paths):
         if "`%s`" % (evidence_path,) in evidence_section:
@@ -901,7 +909,9 @@ def _release_notes_issues(root: Path, matrix_text: str) -> list[MatrixIssue]:
             )
         )
 
-    nonclaim_note_rows = _row_ids_in_text(nonclaim_section)
+    nonclaim_note_rows = {
+        row_id for row_id in _row_ids_in_text(nonclaim_section) if _m1_release_notes_row_id(row_id)
+    }
     nonready_rows = set(row_statuses) - ready_rows
     for row_id in sorted(nonclaim_note_rows & ready_rows):
         issues.append(
@@ -948,6 +958,8 @@ def _release_notes_issues(root: Path, matrix_text: str) -> list[MatrixIssue]:
         )
 
     for row_id, suite_name in _ready_row_suite_refs(matrix_text):
+        if not _m1_release_notes_row_id(row_id):
+            continue
         command = PRETAG_WRAPPER_COMMAND_BY_SUITE.get(suite_name)
         if command is None:
             issues.append(
@@ -969,6 +981,8 @@ def _release_notes_issues(root: Path, matrix_text: str) -> list[MatrixIssue]:
         )
 
     for row_id, suite_name in _nonready_row_suite_refs(matrix_text):
+        if not _m1_release_notes_row_id(row_id):
+            continue
         command = PRETAG_WRAPPER_COMMAND_BY_SUITE.get(suite_name)
         if (
             command is None

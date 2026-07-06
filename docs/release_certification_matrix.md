@@ -31,11 +31,12 @@ suite references resolve to current repository inventories, that every
 runtime-certified row names a concrete rework experiment config and runner
 suite, that the local `origin/main` ref is available, that every legacy test
 config under both the current worktree and the local `origin/main`
-`configuration/tests/` inventory has a matrix disposition, that the draft lists
-every ready row and every ready-row primary evidence document, and that
-non-ready rows stay in the nonclaim section. It also verifies that release notes
-list only ready-row primary evidence documents, that certified row references in
-the module backlog point only at ready matrix rows, and that
+`configuration/tests/` inventory has a matrix disposition, that the M1 draft
+lists every M1/old-main ready row and every M1/old-main ready-row primary
+evidence document, and that M1/old-main non-ready rows stay in the nonclaim
+section. It also verifies that release notes list only M1/old-main ready-row
+primary evidence documents, that certified row references in the module backlog
+point only at ready matrix rows, and that
 `docs/old_main_parity_issue_seed.md` mirrors every non-ready `P-*` row with a
 matching status and a concrete issue seed.
 
@@ -102,6 +103,17 @@ public-facing docs still point support claims to this matrix. They do not claim 
 as Continuum core, full main replacement, uncertified cloud support, or full
 application parity rows without evidence.
 
+## 3.5 M2 Research Case-Study Candidate Rows
+
+M2 candidates are post-M1 rows for demonstrating Continuum as a research and
+education platform. They do not participate in the M1 release-notes draft until
+they have their own publication path, and they must not be described as
+release-certified until retained VM-backed or cloud-backed evidence exists.
+
+| ID | Claim Boundary | Configs / Suites | Required Evidence | Current Status | Next Action |
+| --- | --- | --- | --- | --- | --- |
+| M2-QEMU-KUBECONTROL-EMPTY | Columbo-style local QEMU `kubecontrol` benchmark using the `empty` application and the per-call deployment mode from `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`. | `configs/experiments/parity/qemu_kubecontrol_empty/01_kubecontrol_empty_call.yaml`; suite `qemu_kubecontrol_empty_parity`; wrapper scenario `qemu_kubecontrol_empty_parity` | Retained VM-backed evidence shows `phase_completed = application`, experiment lock/state, kubecontrol cluster readiness, deployment CSV artifacts, benchmark metric manifest for `CLOUD OUTPUT`, and documented Columbo module boundaries in `docs/columbo_on_continuum.md`. The retained image exposes kubelet/app/resource traces but not legacy `apiserver`, `controller-manager`, or `scheduler` trace points. | `certified` | Evidence: `docs/release_evidence_qemu_kubecontrol_empty_2026-07-03.md`. |
+
 ## 4. Old-Main Provider And Topology Parity
 
 This table starts from the legacy test inventory under `configuration/tests/`.
@@ -155,11 +167,11 @@ evidence.
 | `openfaas` | YAML profile, suite, and single-host CPU-capped software/application variants have VM-backed evidence. | `certified` for `P-QEMU-10-SW-LOCAL` and `P-QEMU-10-APP-LOCAL` only | Exact parent-row evidence requires external QEMU capacity or a larger local runner. |
 | `endpoint_runtime` | YAML profiles, the M1 benchmark row, the QEMU Kubernetes image-classification row, the QEMU no-benchmark parity row, the full endpoint image/runtime row, and the KubeEdge/Mist/endpoint-only/OpenFaaS subset rows have VM-backed evidence. | `certified` for M1 benchmark row, `P-QEMU-05`, `P-QEMU-06-SW`, `P-QEMU-07-SW`, `P-QEMU-08`, `P-QEMU-08-SW`, `P-QEMU-09`, `P-QEMU-10-SW-LOCAL`, and `P-QEMU-10-APP-LOCAL` only | Fresh retained benchmark or software-phase evidence for additional claims. |
 | `observability` | YAML module and QEMU no-benchmark parity row have VM-backed evidence. | `certified` for `P-QEMU-09` only | Fresh evidence per additional Kubernetes/KubeControl/Kata topology before broader claims. |
-| `kubecontrol` | Resource-manager module, Kubernetes phase plan, control-plane image-prefetch metadata, and legacy QEMU/GCP control-plane benchmark cfgs exist. No current YAML profile, suite, or retained release evidence was identified. | `ported-unverified` | Keep unclaimed for M1. First certification target should be a local-QEMU YAML equivalent of a minimal legacy control-plane benchmark such as `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`, scoped to `kubecontrol` plus the `empty` benchmark, `cloud_nodes >= 2`, `edge_nodes = 0`, valid endpoint-to-worker distribution, documented control-plane image prefetch, and retained evidence for cluster readiness, metrics collection, application success, and artifacts; otherwise record a final historical/deprecation decision. |
+| `kubecontrol` | Resource-manager module, Kubernetes phase plan, control-plane image-prefetch metadata, legacy QEMU/GCP control-plane benchmark cfgs, and the M2 local-QEMU `kubecontrol` plus `empty` case-study row have evidence. | `certified` for `M2-QEMU-KUBECONTROL-EMPTY` only | Keep broader `kubecontrol` support unclaimed for M1. Future claims need fresh VM/cloud evidence per topology and must distinguish module/profile/suite integration from full legacy Columbo control-plane trace reproduction. |
 | `kube_kata` | Resource-manager module, Kata setup playbook, Kata runtime-class role, control-plane image-prefetch metadata, `empty_kata` application, and legacy Kata experiment cfgs exist. No current YAML profile, suite, host prerequisite doc, or retained release evidence was identified. | `ported-unverified` | Keep unclaimed for M1. First certification target should be a local-QEMU YAML equivalent of a minimal legacy Kata startup benchmark such as `configuration/experiment_kata/1_startup_performance/strong_scalability/node_1_kata_qemu_overlayfs.cfg`, scoped to `kube_kata` plus `empty_kata`, `cloud_nodes >= 2`, `edge_nodes = 0`, explicit `runtime` and `runtime_filesystem`, host prerequisites for nested virtualization/containerd/Kata support, documented `kata-fc` plus `overlayfs` exclusion, control-plane image prefetch, and retained evidence for cluster readiness, Kata runtime-class installation, application success, Kata trace/artifact output, and cleanup; otherwise record a final historical/deprecation decision. |
 | `image_classification` | M1 benchmark-smoke path and the full QEMU Kubernetes, KubeEdge, Mist, and endpoint image/runtime parity rows have VM-backed evidence and metric artifacts. | `certified` for M1 benchmark row, `P-QEMU-05`, `P-QEMU-06`, `P-QEMU-07`, and `P-QEMU-08` only | Fresh retained benchmark evidence and metric artifact summary for additional claims. |
 | `text_translation` | Application module exists, rejects `kubecontrol`, requires at least one endpoint, and uses MQTT publisher/subscriber images. No current YAML config, suite, success-detector contract, or retained release evidence was identified. | `ported-unverified` | Keep unclaimed for M1. To certify later, add a supported-orchestrator YAML config with endpoint resources, document success/artifact checks for publisher/subscriber behavior, capture VM-backed evidence, or record a final historical/deprecation decision. |
-| `empty` | Application module exists and is restricted to `kubecontrol`; legacy kubecontrol benchmark cfgs exist, but no current YAML suite or retained release evidence was identified. | `ported-unverified` | Keep unclaimed for M1 except as part of the future kubecontrol certification path. First claim requires the kubecontrol YAML/evidence task to prove `empty` application success and artifacts, or a final historical/deprecation decision. |
+| `empty` | Application module exists and is restricted to `kubecontrol`; legacy kubecontrol benchmark cfgs exist, and the M2 local-QEMU `kubecontrol` plus `empty` case-study row proves application success and benchmark artifacts for the per-call deployment slice. | `certified` for `M2-QEMU-KUBECONTROL-EMPTY` only | Keep broader `empty`/`kubecontrol` benchmark support unclaimed for M1. Future claims need fresh evidence for each deployment mode, topology, or full legacy control-plane trace contract. |
 | `empty_kata` | Application module exists and is restricted to `kube_kata`; legacy Kata startup cfgs exist, but no current YAML suite, host prerequisite doc, or retained release evidence was identified. | `ported-unverified` | Keep unclaimed for M1 except as part of the future kube_kata certification path. First claim requires the kube_kata YAML/evidence task to prove `empty_kata` success, Kata trace/artifact output, and cleanup, or a final historical/deprecation decision. |
 | `stress` | Application module exists and current validation restricts it to `kubecontrol`; legacy resource-usage cfgs also reference Kata variants, so final orchestrator scope is unresolved. No current YAML suite, success-detector/resource-artifact contract, or retained release evidence was identified. | `ported-unverified` | Keep unclaimed for M1. Decide whether `stress` is kubecontrol-only or needs a separate Kata-compatible implementation path; then add a minimal YAML config, resource/success artifact checks, VM-backed evidence, or a final historical/deprecation decision. |
 | `mem_usage` | Application module exists and current validation restricts it to `kubecontrol`; legacy resource-usage cfgs also reference Kata variants, so final orchestrator scope is unresolved. No current YAML suite, memory-measurement artifact contract, or retained release evidence was identified. | `ported-unverified` | Keep unclaimed for M1. Decide whether `mem_usage` is kubecontrol-only or needs a separate Kata-compatible implementation path; then add a minimal YAML config, memory/success artifact checks, VM-backed evidence, or a final historical/deprecation decision. |

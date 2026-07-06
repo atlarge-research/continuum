@@ -24,3 +24,11 @@
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false
+
+- name: Stage Kubernetes cluster resource collector
+  ansible.builtin.copy:
+    src: "{{ continuum_repo_root }}/resource_manager/{{ continuum_resource_manager_type }}/cloud/resource_usage.py"
+    dest: "/home/{{ rm_k8s_metrics_server_username }}/resource_usage.py"
+    owner: "{{ rm_k8s_metrics_server_username }}"
+    group: "{{ rm_k8s_metrics_server_username }}"
+    mode: "0755"

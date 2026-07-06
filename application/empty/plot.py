@@ -5,6 +5,7 @@ import math
 import os
 
 import numpy as np
+import pandas as pd
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -154,17 +155,20 @@ def plot_control(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, 
 
     bar_height = 1.1
 
-    df_plot = df.copy(deep=True)
-    df_plot = df_plot[
-        [
-            "controller_read_workload (s)",
-            "controller_unpacked_workload (s)",
-            "scheduler_read_pod (s)",
-            "kubelet_pod_received (s)",
-            "kubelet_applied_sandbox (s)",
-            "started_application (s)",
-        ]
+    required_columns = [
+        "controller_read_workload (s)",
+        "controller_unpacked_workload (s)",
+        "scheduler_read_pod (s)",
+        "kubelet_pod_received (s)",
+        "kubelet_applied_sandbox (s)",
+        "started_application (s)",
     ]
+    df_plot = df.copy(deep=True)[required_columns]
+    df_plot = df_plot.apply(pd.to_numeric, errors="coerce").dropna()
+    if df_plot.empty:
+        logging.warning("Skip full control-plane plot: no complete control-plane trace rows")
+        plt.close(fig)
+        return
     y = [*range(len(df_plot["started_application (s)"]))]
 
     left = [0 for _ in range(len(y))]

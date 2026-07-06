@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 from application import runtime_helpers
+from application.empty import empty as empty_app
 
 
 class ApplicationRuntimeHelpersTests(unittest.TestCase):
@@ -49,6 +50,125 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
             self.assertEqual(manifest["tables"][0]["rows"], 1)
             self.assertIn("latency_avg (ms)", manifest["tables"][0]["columns"])
             self.assertTrue(os.path.isfile(manifest["tables"][0]["path"]))
+
+    def test_empty_print_control_persists_benchmark_metric_artifact(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = {
+                "mode": "cloud",
+                "timestamp": "2026-07-03_12:00:00",
+                "infrastructure": {"base_path": tempdir},
+                "domains": {
+                    "benchmark": {
+                        "pipeline": [
+                            {
+                                "id": "empty-call",
+                                "type": "empty",
+                                "config": {},
+                            }
+                        ]
+                    }
+                },
+            }
+            worker_metrics = [
+                {
+                    "pod": "empty-1",
+                    "container": "empty-1",
+                    "1_kubectl_start": 0.0,
+                    "2_kubectl_send": 0.1,
+                    "3_api_receive_job": 0.2,
+                    "4_jobcontroller_start": 0.3,
+                    "5_pod_object_create": 0.4,
+                    "6_api_receive_pod": 0.5,
+                    "7_scheduler_start": 0.6,
+                    "8_api_receive_pod": 0.7,
+                    "9_kubelet_start": 0.8,
+                    "10_volume_mount": 0.9,
+                    "11_sandbox_start": 1.0,
+                    "12_create_container": 1.1,
+                    "13_start_container": 1.2,
+                    "14_app_start": 1.3,
+                }
+            ]
+
+            empty_app.print_control(config, worker_metrics)
+
+            manifest_path = os.path.join(
+                tempdir,
+                ".continuum",
+                "logs",
+                "benchmark",
+                "2026-07-03_12_00_00_empty-call_metrics_manifest.json",
+            )
+            self.assertTrue(os.path.isfile(manifest_path))
+            with open(manifest_path, "r", encoding="utf-8") as filep:
+                manifest = json.load(filep)
+            self.assertEqual(manifest["stage_id"], "empty-call")
+            self.assertEqual(manifest["stage_type"], "empty")
+            self.assertEqual(manifest["tables"][0]["label"], "CLOUD OUTPUT")
+            self.assertIn("started_application (s)", manifest["tables"][0]["columns"])
+
+    def test_empty_check_leaves_missing_component_trace_empty(self):
+        config = {"infrastructure": {"provider": "qemu"}}
+        worker_metrics = [
+            {
+                "pod": "empty-1-abc",
+                "container": "empty-1",
+                "3_api_receive_job": None,
+            }
+        ]
+        control = {"cloudcontroller": {"kubelet": [[10.0, "0500 pod=default/empty-1-abc"]]}}
+
+        empty_app.check(
+            config,
+            control,
+            starttime=9.0,
+            worker_metrics=worker_metrics,
+            component="apiserver",
+            sub_string="0200",
+            tag="3_api_receive_job",
+        )
+
+        self.assertIsNone(worker_metrics[0]["3_api_receive_job"])
+
+    def test_empty_validate_data_accepts_missing_trace_columns(self):
+        dataframe = runtime_helpers.pd.DataFrame(
+            [
+                {
+                    "pod": "empty-1-abc",
+                    "container": "empty-1",
+                    "kubectl_start (s)": 0.1,
+                    "kubectl_parsed (s)": 0.2,
+                    "api_workload_arrived (s)": None,
+                    "controller_read_workload (s)": None,
+                    "started_application (s)": 1.0,
+                }
+            ]
+        )
+
+        empty_app.validate_data(dataframe)
+
+    def test_empty_control_plot_skips_when_control_plane_traces_are_missing(self):
+        dataframe = runtime_helpers.pd.DataFrame(
+            [
+                {
+                    "controller_read_workload (s)": None,
+                    "controller_unpacked_workload (s)": None,
+                    "scheduler_read_pod (s)": None,
+                    "kubelet_pod_received (s)": 2.0,
+                    "kubelet_applied_sandbox (s)": 3.0,
+                    "started_application (s)": 4.0,
+                }
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            empty_app.plot.plot_control(dataframe, "2026-07-03_12:00:00", output_dir=tempdir)
+
+            self.assertFalse(
+                os.path.exists(
+                    os.path.join(tempdir, "2026-07-03_12:00:00_breakdown_intern.pdf")
+                )
+            )
 
     def test_batched_kubernetes_command_leaves_semicolons_for_remote_shell(self):
         command = runtime_helpers._batched_kubernetes_command(
@@ -501,7 +621,11 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
     def test_run_kubernetes_benchmark_playbook_uses_generated_path(self):
         config = self._planner_handoff_config()
         runner = mock.Mock()
-        with mock.patch("application.runtime_helpers.os.path.isfile", return_value=True):
+
+        def fake_isfile(path):
+            return path == "/tmp/continuum-run/.continuum/launch_benchmark.yml"
+
+        with mock.patch("application.runtime_helpers.os.path.isfile", side_effect=fake_isfile):
             runtime_helpers.run_kubernetes_benchmark_playbook(
                 config,
                 {"key": "value"},
@@ -512,6 +636,32 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
             "/tmp/continuum-run/.continuum/launch_benchmark.yml",
             inventory="vms",
             extra_vars={"key": "value"},
+        )
+
+    def test_resolve_benchmark_launch_playbook_prefers_deployment_specific_module_playbook(self):
+        config = self._planner_handoff_config()
+        config["base"] = "/tmp/continuum-repo"
+        config["domains"]["software"]["modules"][0]["type"] = "kubecontrol"
+        config["domains"]["software"]["modules"][0]["config"]["kube_deployment"] = "call"
+        config["domains"]["benchmark"]["pipeline"][0]["type"] = "empty"
+        runner = mock.Mock()
+        runner.repo_root = "/repo-root"
+
+        def fake_isfile(path):
+            return path in {
+                "/tmp/continuum-run/.continuum/launch_benchmark.yml",
+                "/repo-root/application/empty/launch_benchmark_kubecontrol_call.yml",
+            }
+
+        with mock.patch("application.runtime_helpers.os.path.isfile", side_effect=fake_isfile):
+            playbook = runtime_helpers.resolve_benchmark_launch_playbook(
+                config,
+                runner=runner,
+            )
+
+        self.assertEqual(
+            playbook,
+            "/repo-root/application/empty/launch_benchmark_kubecontrol_call.yml",
         )
 
     def test_resolve_benchmark_launch_playbook_prefers_openfaas_addon_playbook(self):
@@ -800,6 +950,49 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         )
         self.assertEqual(mock_sleep.call_count, 2)
 
+    def test_cache_kubernetes_workers_preserves_call_mode_filename_variable(self):
+        config = self._planner_handoff_config()
+        config["mode"] = "cloud"
+        config["cloud_ssh"] = ["cloudcontroller@10.0.0.1"]
+        config["infrastructure"].update(
+            {
+                "cloud_nodes": 2,
+                "cloud_cores": 8,
+            }
+        )
+        config["domains"]["software"]["modules"][0]["config"]["kube_deployment"] = "call"
+
+        machine = mock.Mock()
+        machine.cloud_controller_names = ["cloudcontroller"]
+        machine.process.side_effect = [
+            [(["job.batch/demo created\n"], [])],
+            [(["NAME STATUS\n", "job-0 Succeeded\n"], [])],
+            [(["job.batch/demo deleted\n"], [])],
+        ]
+
+        with mock.patch.object(
+            runtime_helpers,
+            "run_kubernetes_benchmark_playbook",
+        ), mock.patch(
+            "application.runtime_helpers.time.sleep",
+            autospec=True,
+        ):
+            runtime_helpers.cache_kubernetes_workers(
+                config,
+                [machine],
+                {"custom": "value"},
+            )
+
+        self.assertIn(
+            "kubectl apply -f $filename",
+            machine.process.call_args_list[0].args[1],
+        )
+        self.assertFalse(machine.process.call_args_list[0].args[1].startswith('"'))
+        self.assertEqual(
+            machine.process.call_args_list[2].args[1],
+            ["kubectl", "delete", "-f", "/home/cloudcontroller/jobs"],
+        )
+
     def test_start_kubernetes_resource_metrics_waits_then_launches_collectors(self):
         config = {
             "cloud_ssh": ["cloudcontroller@10.0.0.1", "cloud0@10.0.0.2"],
@@ -817,7 +1010,17 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
 
         self.assertEqual(machine.process.call_args_list[0].args[1], ["kubectl", "top", "nodes"])
         self.assertEqual(machine.process.call_args_list[0].kwargs["ssh"], "cloudcontroller@10.0.0.1")
+        self.assertEqual(
+            machine.process.call_args_list[2].args[1],
+            "bash -c 'nohup python3 -u resource_usage.py -v > resource_usage.txt 2>&1 &'",
+        )
+        self.assertFalse(machine.process.call_args_list[2].args[1].startswith('"'))
         self.assertEqual(machine.process.call_args_list[2].kwargs["wait"], False)
+        self.assertEqual(
+            machine.process.call_args_list[3].args[1],
+            "bash -c 'nohup python3 -u resource_usage_os.py -v > resource_usage_os.txt 2>&1 &'",
+        )
+        self.assertFalse(machine.process.call_args_list[3].args[1].startswith('"'))
         self.assertEqual(machine.process.call_args_list[3].kwargs["wait"], False)
         self.assertEqual(machine.process.call_args_list[3].kwargs["ssh"], config["cloud_ssh"])
         self.assertEqual(mock_sleep.call_count, 1)
@@ -847,6 +1050,16 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
             status=[{"time_orig": 103.0}],
         )
 
+        self.assertEqual(
+            machine.process.call_args_list[0].args[1],
+            "cd /var/log && sudo sh -c \"grep -ri --exclude continuum.txt '\\[continuum\\]' > continuum.txt\"",
+        )
+        self.assertFalse(machine.process.call_args_list[0].args[1].startswith('"'))
+        self.assertEqual(
+            machine.process.call_args_list[1].args[1],
+            "cd /var/log && sudo cp -r pods pods-continuum",
+        )
+        self.assertFalse(machine.process.call_args_list[1].args[1].startswith('"'))
         self.assertEqual(endtime, 103.0)
         self.assertEqual(control_output["cloudcontroller"]["kubelet"], [[101.0, "0401 worker"]])
         self.assertEqual(control_output["cloudcontroller"]["scheduler"], [[102.0, "0402 done"]])
@@ -989,6 +1202,42 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
                 [102.0, "0402 job=test"],
             ],
         )
+
+    def test_launch_kubernetes_with_starttime_preserves_call_mode_filename_variable(self):
+        config = {
+            "domains": {
+                "software": {
+                    "modules": [
+                        {
+                            "id": "kubecontrol-main",
+                            "type": "kubecontrol",
+                            "config": {"kube_deployment": "call"},
+                        }
+                    ]
+                }
+            },
+            "cloud_ssh": ["cloud0@10.0.0.1"],
+        }
+        machine = mock.Mock()
+        machine.cloud_controller_names = ["cloud0"]
+        machine.process.return_value = [
+            (
+                ["100.0\n", "job.batch/test created\n"],
+                [
+                    "I ... %!s(int64=100000000000) [CONTINUUM] 0400\n",
+                    "I ... %!s(int64=101000000000) [CONTINUUM] 0401 job=test\n",
+                    "I ... %!s(int64=102000000000) [CONTINUUM] 0402\n",
+                ],
+            )
+        ]
+
+        runtime_helpers.launch_kubernetes_with_starttime(config, [machine])
+
+        self.assertIn(
+            "kubectl apply -f $filename",
+            machine.process.call_args.args[1],
+        )
+        self.assertFalse(machine.process.call_args.args[1].startswith('"'))
 
 
 if __name__ == "__main__":
