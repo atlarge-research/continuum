@@ -159,6 +159,10 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('prime_registry_cache_as_root()', result.stdout)
         self.assertIn('docker pull "$source_ref"', result.stdout)
         self.assertIn('image_classification_publisher_serverless', result.stdout)
+        self.assertIn(
+            'qemu_kubecontrol_empty_parity|qemu_kubecontrol_empty_trace_parity',
+            result.stdout,
+        )
         self.assertIn('redplanet00/kube-apiserver:v1.27.0', result.stdout)
         self.assertIn('redplanet00/coredns:v1.10.1', result.stdout)
         self.assertIn('redplanet00/kubeedge-applications:empty', result.stdout)
@@ -261,6 +265,11 @@ class HostRunnerScriptTests(unittest.TestCase):
             "2026-07-06-kubecontrol-trace-cache",
             result.stderr,
         )
+        self.assertIn(
+            f"sh {self.repo_root}/scripts/test/setup_agent_host.sh print-hostctl-script",
+            result.stderr,
+        )
+        self.assertIn("sudo -n", result.stderr)
 
     def test_verify_reports_installed_hostctl_without_registry_cache_command(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -288,6 +297,11 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper does not expose prime-registry-cache",
+            result.stderr,
+        )
+        self.assertIn(
+            f"Reviewed helper source: sh {self.repo_root}/scripts/test/setup_agent_host.sh "
+            "print-hostctl-script",
             result.stderr,
         )
 

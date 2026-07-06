@@ -1117,6 +1117,7 @@ verify_hostctl_interface() {
   if [ "\$installed_version" != "\$source_version" ]; then
     log "Installed maintenance helper is stale: interface \$installed_version, expected \$source_version" >&2
     log "Replace \$HOSTCTL_PATH only through a manual reviewed operator update, then rerun:" >&2
+    log "  sh \$LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh print-hostctl-script" >&2
     log "  sudo -n \$HOSTCTL_PATH verify" >&2
     exit 1
   fi
@@ -1124,6 +1125,7 @@ verify_hostctl_interface() {
   if ! grep -q 'prime-registry-cache)' "\$HOSTCTL_PATH"; then
     log "Installed maintenance helper does not expose prime-registry-cache" >&2
     log "Replace \$HOSTCTL_PATH only through a manual reviewed operator update." >&2
+    log "Reviewed helper source: sh \$LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh print-hostctl-script" >&2
     exit 1
   fi
 }
@@ -1603,6 +1605,7 @@ verify_hostctl_interface() {
   if [ "$installed_version" != "$source_version" ]; then
     log "Installed maintenance helper is stale: interface $installed_version, expected $source_version" >&2
     log "Replace $HOSTCTL_PATH only through a manual reviewed operator update, then rerun:" >&2
+    log "  sh $LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh print-hostctl-script" >&2
     log "  sudo -n $HOSTCTL_PATH verify" >&2
     exit 1
   fi
@@ -1610,6 +1613,7 @@ verify_hostctl_interface() {
   if ! grep -q 'prime-registry-cache)' "$HOSTCTL_PATH"; then
     log "Installed maintenance helper does not expose prime-registry-cache" >&2
     log "Replace $HOSTCTL_PATH only through a manual reviewed operator update." >&2
+    log "Reviewed helper source: sh $LIVE_REPO_ROOT/scripts/test/setup_agent_host.sh print-hostctl-script" >&2
     exit 1
   fi
 }
