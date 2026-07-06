@@ -1052,8 +1052,12 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
 
         self.assertEqual(
             machine.process.call_args_list[0].args[1],
-            "cd /var/log && sudo sh -c \"grep -ri --exclude continuum.txt '\\[continuum\\]' > continuum.txt\"",
+            runtime_helpers.kubecontrol_control_plane_trace_command(),
         )
+        self.assertIn("crictl ps -a --name", machine.process.call_args_list[0].args[1])
+        self.assertIn("kube-apiserver", machine.process.call_args_list[0].args[1])
+        self.assertIn("kube-controller-manager", machine.process.call_args_list[0].args[1])
+        self.assertIn("kube-scheduler", machine.process.call_args_list[0].args[1])
         self.assertFalse(machine.process.call_args_list[0].args[1].startswith('"'))
         self.assertEqual(
             machine.process.call_args_list[1].args[1],

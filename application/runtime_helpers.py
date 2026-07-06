@@ -951,14 +951,26 @@ def start_worker(config, machines, app_vars, get_starttime=False, runner=None):
     return starttime, kubectl_output, status
 
 
+def kubecontrol_control_plane_trace_command():
+    """Return the shell command that gathers control-plane Continuum trace lines."""
+    return (
+        "cd /var/log && sudo sh -c \""
+        "grep -ri --exclude continuum.txt '\\[continuum\\]' . > continuum.txt || true; "
+        "if command -v crictl >/dev/null 2>&1; then "
+        "for name in kube-apiserver kube-controller-manager kube-scheduler; do "
+        "for cid in $(crictl ps -a --name \\\"$name\\\" -q 2>/dev/null); do "
+        "crictl logs \\\"$cid\\\" 2>/dev/null | grep -i '\\[continuum\\]' || true; "
+        "done; "
+        "done >> continuum.txt; "
+        "fi\""
+    )
+
+
 def get_kubernetes_control_output(config, machines, starttime, status):
     """Collect and parse Kubernetes control-plane benchmark logs for kubecontrol flows."""
     logging.info("Collect and parse output from Kubernetes controlplane components")
 
-    command = (
-        "cd /var/log && "
-        "sudo sh -c \"grep -ri --exclude continuum.txt '\\[continuum\\]' > continuum.txt\""
-    )
+    command = kubecontrol_control_plane_trace_command()
     results = machines[0].process(config, command, shell=True, ssh=config["cloud_ssh"][0])
 
     if len(config["cloud_ssh"]) > 1:
