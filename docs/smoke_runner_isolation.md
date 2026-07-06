@@ -333,6 +333,20 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
   prime-registry-cache --check-only --suite qemu_kubecontrol_empty_parity
 ```
 
+To validate full control-plane trace reproduction for the same experiment, use
+the stricter trace parity scenario:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_trace_parity
+```
+
+This scenario requires the same registry cache contents as
+`qemu_kubecontrol_empty_parity`, but it additionally requires populated
+controller, scheduler, kubelet, and application metric columns in retained
+stdout and benchmark artifacts. Keep `qemu_kubecontrol_empty_parity` as the
+certified module/profile/suite integration run until the stricter scenario has
+retained VM-backed evidence.
+
 To advance the retained benchmark state one phase at a time, use:
 
 ```bash
@@ -422,16 +436,17 @@ The installed wrapper supports only these values:
 17. `qemu_openfaas_image_parity`
 18. `qemu_openfaas_image_local_parity`
 19. `qemu_kubecontrol_empty_parity`
-20. `benchmark_k8s_resume_infra`
-21. `benchmark_k8s_resume_software`
-22. `benchmark_k8s_resume_application`
-23. `benchmark_k8s_resume`
-24. `release-artifact-audit`
-25. `check-prereqs`
-26. `list-suites`
-27. `storage-report`
-28. `prune-scenario <scenario> --yes-delete-retained-state`
-29. `debug-playbook <scenario> <playbook> [ansible args...]`
+20. `qemu_kubecontrol_empty_trace_parity`
+21. `benchmark_k8s_resume_infra`
+22. `benchmark_k8s_resume_software`
+23. `benchmark_k8s_resume_application`
+24. `benchmark_k8s_resume`
+25. `release-artifact-audit`
+26. `check-prereqs`
+27. `list-suites`
+28. `storage-report`
+29. `prune-scenario <scenario> --yes-delete-retained-state`
+30. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 

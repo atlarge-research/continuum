@@ -687,6 +687,95 @@
                 ]
             }
         },
+        "qemu_kubecontrol_empty_trace_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_kubecontrol_empty/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "CLOUD OUTPUT",
+                    "controller_read_workload (s)",
+                    "controller_unpacked_workload (s)",
+                    "scheduler_read_pod (s)",
+                    "kubelet_pod_received (s)",
+                    "kubelet_applied_sandbox (s)",
+                    "started_application (s)"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "CLOUD OUTPUT",
+                        "columns": [
+                            "controller_read_workload (s)",
+                            "controller_unpacked_workload (s)",
+                            "scheduler_read_pod (s)",
+                            "kubelet_pod_received (s)",
+                            "kubelet_applied_sandbox (s)",
+                            "started_application (s)"
+                        ],
+                        "min_rows": 1
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "CLOUD OUTPUT",
+                        "columns": [
+                            "controller_read_workload (s)",
+                            "controller_unpacked_workload (s)",
+                            "scheduler_read_pod (s)",
+                            "kubelet_pod_received (s)",
+                            "kubelet_applied_sandbox (s)",
+                            "started_application (s)"
+                        ],
+                        "numeric_columns": [
+                            "controller_read_workload (s)",
+                            "controller_unpacked_workload (s)",
+                            "scheduler_read_pod (s)",
+                            "kubelet_pod_received (s)",
+                            "kubelet_applied_sandbox (s)",
+                            "started_application (s)"
+                        ],
+                        "min_rows": 1,
+                        "stat_assertions": [
+                            {
+                                "column": "started_application (s)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with SSH access, a primed local registry cache, and enough CPU/RAM for full Columbo control-plane trace validation",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Local registry cache",
+                        "command": [
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_kubecontrol_empty_trace_parity",
+                            "--check-only"
+                        ]
+                    }
+                ]
+            }
+        },
         "benchmark_smoke": {
             "directories": [
                 "configs/experiments/benchmark_smoke/"

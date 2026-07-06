@@ -78,6 +78,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("`qemu_openfaas_image_parity`", wrapper_values)
         self.assertIn("`qemu_openfaas_image_local_parity`", wrapper_values)
         self.assertIn("`qemu_kubecontrol_empty_parity`", wrapper_values)
+        self.assertIn("`qemu_kubecontrol_empty_trace_parity`", wrapper_values)
 
     def test_show_config_reports_present_sync_marker(self):
         with tempfile.TemporaryDirectory() as tempdir:

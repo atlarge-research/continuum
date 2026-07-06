@@ -97,6 +97,14 @@ certifies the Continuum module/profile/suite integration and retained evidence
 contract for the Columbo-style workflow, not a reproduction of every
 instrumented control-plane event used in the paper.
 
+The stricter `qemu_kubecontrol_empty_trace_parity` suite is reserved for full
+trace evidence. It uses the same experiment directory and cache model as
+`qemu_kubecontrol_empty_parity`, but its success criteria require populated
+control-plane, kubelet, and application timing columns in both `CLOUD OUTPUT`
+and the benchmark metrics manifest. That suite is the next VM-backed gate for
+claiming paper-level trace reproduction; the July 3 retained evidence above
+remains the certified module/profile/suite integration slice.
+
 ## Reusing The Pattern
 
 A future paper-specific Continuum integration should follow the same shape:

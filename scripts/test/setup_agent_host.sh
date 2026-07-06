@@ -328,7 +328,7 @@ redplanet00/kubeedge-applications:image_classification_publisher_serverless|kube
 redplanet00/kubeedge-applications:image_classification_subscriber_serverless|kubeedge-applications:image_classification_subscriber_serverless
 EOF_IMAGE_REQUIREMENTS
       ;;
-    qemu_kubecontrol_empty_parity)
+    qemu_kubecontrol_empty_parity|qemu_kubecontrol_empty_trace_parity)
       cat <<'EOF_IMAGE_REQUIREMENTS'
 redplanet00/kube-apiserver:v1.27.0|kube-apiserver:v1.27.0
 redplanet00/kube-controller-manager:v1.27.0|kube-controller-manager:v1.27.0
@@ -720,7 +720,7 @@ redplanet00/kubeedge-applications:image_classification_publisher_serverless|kube
 redplanet00/kubeedge-applications:image_classification_subscriber_serverless|kubeedge-applications:image_classification_subscriber_serverless
 EOF_IMAGE_REQUIREMENTS
       ;;
-    qemu_kubecontrol_empty_parity)
+    qemu_kubecontrol_empty_parity|qemu_kubecontrol_empty_trace_parity)
       cat <<'EOF_IMAGE_REQUIREMENTS'
 redplanet00/kube-apiserver:v1.27.0|kube-apiserver:v1.27.0
 redplanet00/kube-controller-manager:v1.27.0|kube-controller-manager:v1.27.0

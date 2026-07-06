@@ -25,6 +25,31 @@ class RunTestsCliTests(unittest.TestCase):
             (Path(__file__).resolve().parents[1] / "test_config.json").resolve()
         )
 
+    def test_kubecontrol_trace_suite_requires_full_metric_evidence(self):
+        config = run_tests_module.load_test_config(self.test_config_path)
+        suite = config["test_suites"]["qemu_kubecontrol_empty_trace_parity"]
+        success_detection = suite["success_detection"]
+        expected_columns = [
+            "controller_read_workload (s)",
+            "controller_unpacked_workload (s)",
+            "scheduler_read_pod (s)",
+            "kubelet_pod_received (s)",
+            "kubelet_applied_sandbox (s)",
+            "started_application (s)",
+        ]
+
+        stdout_table = success_detection["required_stdout_metric_tables"][0]
+        artifact_table = success_detection["required_benchmark_metric_artifacts"][0]
+
+        self.assertEqual(stdout_table["label"], "CLOUD OUTPUT")
+        self.assertEqual(stdout_table["columns"], expected_columns)
+        self.assertEqual(stdout_table["min_rows"], 1)
+        self.assertEqual(artifact_table["label"], "CLOUD OUTPUT")
+        self.assertEqual(artifact_table["columns"], expected_columns)
+        self.assertEqual(artifact_table["numeric_columns"], expected_columns)
+        self.assertEqual(artifact_table["min_rows"], 1)
+        self.assertIn("--check-only", suite["prerequisites"]["checks"][0]["command"])
+
     def test_main_accepts_dynamic_suite_from_loaded_config(self):
         fake_test_config = {
             "test_suites": {

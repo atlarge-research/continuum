@@ -203,6 +203,9 @@ run_capture prereq_qemu_openfaas_image_local_parity "QEMU OpenFaaS local image p
 run_capture prereq_qemu_kubecontrol_empty_parity "QEMU kubecontrol empty parity suite prerequisites" optional \
     "$PYTHON" -B scripts/test/prime_local_registry_cache.py \
         --suite qemu_kubecontrol_empty_parity --check-only
+run_capture prereq_qemu_kubecontrol_empty_trace_parity "QEMU kubecontrol empty trace parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/prime_local_registry_cache.py \
+        --suite qemu_kubecontrol_empty_trace_parity --check-only
 
 forced_prefetch_notice() {
     cat <<'EOF'
