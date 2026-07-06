@@ -144,11 +144,25 @@ def validate_suite_prerequisite_checks(suite_name: str, suite_config: Dict) -> L
             continue
 
         if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "").strip().splitlines()
-            reason = detail[0] if detail else "exit code %s" % (result.returncode,)
+            reason = _prerequisite_check_failure_reason(result)
             failures.append("%s: %s" % (name.strip(), reason))
 
     return failures
+
+
+def _prerequisite_check_failure_reason(result: subprocess.CompletedProcess) -> str:
+    """Return the most actionable one-line reason from a failed prerequisite check."""
+    stdout_lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    stderr_lines = [line.strip() for line in (result.stderr or "").splitlines() if line.strip()]
+
+    for line in stdout_lines + stderr_lines:
+        if line.startswith(("MISSING ", "ERROR ", "FAILED ", "FAIL ")):
+            return line
+
+    detail = stderr_lines or stdout_lines
+    if detail:
+        return detail[0]
+    return "exit code %s" % (result.returncode,)
 
 
 def suite_prerequisite_summary(suite_name: str, suite_config: Dict) -> Optional[str]:

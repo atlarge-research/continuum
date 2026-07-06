@@ -672,6 +672,18 @@
                     "qemu-img",
                     "cloud-localds",
                     "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Local registry cache",
+                        "command": [
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_kubecontrol_empty_parity",
+                            "--check-only"
+                        ]
+                    }
                 ]
             }
         },

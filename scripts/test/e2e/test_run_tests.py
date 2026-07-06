@@ -360,6 +360,21 @@ class RunTestsCliTests(unittest.TestCase):
             )
         )
 
+    def test_prerequisite_check_failure_prefers_actionable_stdout(self):
+        failed_check = run_tests_module.subprocess.CompletedProcess(
+            args=["python3", "scripts/test/prime_local_registry_cache.py"],
+            returncode=1,
+            stdout="MISSING config.yaml: 8 of 8 image(s) absent from 127.0.0.1:5000\n",
+            stderr="Matplotlib created a temporary cache directory at /tmp/mpl\n",
+        )
+
+        reason = run_tests_module._prerequisite_check_failure_reason(failed_check)
+
+        self.assertEqual(
+            reason,
+            "MISSING config.yaml: 8 of 8 image(s) absent from 127.0.0.1:5000",
+        )
+
     def test_main_lists_configured_suites(self):
         fake_test_config = {
             "test_suites": {
