@@ -101,9 +101,23 @@ The stricter `qemu_kubecontrol_empty_trace_parity` suite is reserved for full
 trace evidence. It uses the same experiment directory and cache model as
 `qemu_kubecontrol_empty_parity`, but its success criteria require populated
 control-plane, kubelet, and application timing columns in both `CLOUD OUTPUT`
-and the benchmark metrics manifest. That suite is the next VM-backed gate for
-claiming paper-level trace reproduction; the July 3 retained evidence above
-remains the certified module/profile/suite integration slice.
+and the benchmark metrics manifest.
+
+Retained trace evidence now exists for the exact local-QEMU trace profile:
+
+| Field | Value |
+| --- | --- |
+| Date | 2026-07-06 |
+| Result | PASS |
+| Duration | 742.9s |
+| Result summary | `/mnt/sdc/continuum_smoke/qemu_kubecontrol_empty_trace_parity/.continuum/test_results/test_results_2026-07-06_10-19-09.json` |
+| Benchmark manifest | `/mnt/sdc/continuum_smoke/qemu_kubecontrol_empty_trace_parity/.continuum/logs/benchmark/2026-07-06_10_06_48_empty-call_metrics_manifest.json` |
+| Evidence note | `docs/release_evidence_qemu_kubecontrol_trace_2026-07-06.md` |
+
+That row certifies the minimal local-QEMU `call_1` control-plane trace
+reproduction through Continuum modules, profiles, suites, and generic benchmark
+evidence contracts. It still does not certify every Columbo paper figure,
+parameter sweep, or non-QEMU provider topology.
 
 ## Reusing The Pattern
 

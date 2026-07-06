@@ -208,6 +208,14 @@ PRETAG_WRAPPER_COMMAND_BY_SUITE = {
         "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
         "qemu_openfaas_image_parity"
     ),
+    "qemu_kubecontrol_empty_parity": (
+        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "qemu_kubecontrol_empty_parity"
+    ),
+    "qemu_kubecontrol_empty_trace_parity": (
+        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "qemu_kubecontrol_empty_trace_parity"
+    ),
 }
 
 
