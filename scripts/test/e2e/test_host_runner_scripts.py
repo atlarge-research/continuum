@@ -150,7 +150,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
         self.assertIn('relocate-smoke-root)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-07-03-columbo-empty-cache', result.stdout)
+        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-07-06-kubecontrol-trace-cache', result.stdout)
         self.assertIn('umask 027', result.stdout)
         self.assertIn('PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', result.stdout)
         self.assertIn('validate_fixed_roots()', result.stdout)
@@ -158,6 +158,8 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('prime_registry_cache_as_root()', result.stdout)
         self.assertIn('docker pull "$source_ref"', result.stdout)
         self.assertIn('image_classification_publisher_serverless', result.stdout)
+        self.assertIn('redplanet00/kube-apiserver:v1.27.0', result.stdout)
+        self.assertIn('redplanet00/coredns:v1.10.1', result.stdout)
         self.assertIn('redplanet00/kubeedge-applications:empty', result.stdout)
         self.assertIn('validate_smoke_base_root()', result.stdout)
         self.assertIn('prepare_base_root_path()', result.stdout)
@@ -255,7 +257,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-07-03-columbo-empty-cache",
+            "2026-07-06-kubecontrol-trace-cache",
             result.stderr,
         )
 
@@ -266,7 +268,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-07-03-columbo-empty-cache\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-07-06-kubecontrol-trace-cache\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -342,7 +344,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-07-03-columbo-empty-cache\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-07-06-kubecontrol-trace-cache\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",

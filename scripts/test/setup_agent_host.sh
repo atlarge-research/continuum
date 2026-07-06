@@ -22,7 +22,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-07-03-columbo-empty-cache"
+HOSTCTL_INTERFACE_VERSION="2026-07-06-kubecontrol-trace-cache"
 
 usage() {
   cat <<EOF
@@ -330,6 +330,13 @@ EOF_IMAGE_REQUIREMENTS
       ;;
     qemu_kubecontrol_empty_parity)
       cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kube-apiserver:v1.27.0|kube-apiserver:v1.27.0
+redplanet00/kube-controller-manager:v1.27.0|kube-controller-manager:v1.27.0
+redplanet00/kube-proxy:v1.27.0|kube-proxy:v1.27.0
+redplanet00/kube-scheduler:v1.27.0|kube-scheduler:v1.27.0
+redplanet00/etcd:3.5.7-0|etcd:3.5.7-0
+redplanet00/coredns:v1.10.1|coredns:v1.10.1
+redplanet00/pause:3.9|pause:3.9
 redplanet00/kubeedge-applications:empty|kubeedge-applications:empty
 EOF_IMAGE_REQUIREMENTS
       ;;
@@ -715,6 +722,13 @@ EOF_IMAGE_REQUIREMENTS
       ;;
     qemu_kubecontrol_empty_parity)
       cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kube-apiserver:v1.27.0|kube-apiserver:v1.27.0
+redplanet00/kube-controller-manager:v1.27.0|kube-controller-manager:v1.27.0
+redplanet00/kube-proxy:v1.27.0|kube-proxy:v1.27.0
+redplanet00/kube-scheduler:v1.27.0|kube-scheduler:v1.27.0
+redplanet00/etcd:3.5.7-0|etcd:3.5.7-0
+redplanet00/coredns:v1.10.1|coredns:v1.10.1
+redplanet00/pause:3.9|pause:3.9
 redplanet00/kubeedge-applications:empty|kubeedge-applications:empty
 EOF_IMAGE_REQUIREMENTS
       ;;

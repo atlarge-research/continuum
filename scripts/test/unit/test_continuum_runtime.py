@@ -1591,10 +1591,11 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         }
 
         requirements = image_registry_module.resolve_prefetch_requirements(config)
-        self.assertEqual(len(requirements), 6)
+        self.assertEqual(len(requirements), 7)
         sources = [entry["source_ref"] for entry in requirements]
         self.assertIn("redplanet00/kube-apiserver:v1.24.0", sources)
         self.assertIn("redplanet00/etcd:3.5.3-0", sources)
+        self.assertIn("redplanet00/coredns:v1.8.6", sources)
         self.assertIn("redplanet00/pause:3.7", sources)
         for entry in requirements:
             self.assertEqual(entry["owners"], ["software.module:kubecontrol-main"])

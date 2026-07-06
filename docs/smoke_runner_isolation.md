@@ -307,7 +307,7 @@ requires the local registry cache to be primed before starting VMs, and it is
 not release-certified until the exact resource/capacity boundary is resolved
 and retained VM/application evidence passes.
 
-After installing the `2026-07-03-columbo-empty-cache` hostctl interface, prime
+After installing the `2026-07-06-kubecontrol-trace-cache` hostctl interface, prime
 the OpenFaaS application image cache with the reviewed root-owned helper:
 
 ```bash
@@ -322,10 +322,10 @@ To run the Columbo-style QEMU kubecontrol plus `empty` application suite, use:
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity
 ```
 
-This suite uses the same cache-backed registry model for
-`redplanet00/kubeedge-applications:empty`. After installing the
-`2026-07-03-columbo-empty-cache` hostctl interface, prime and verify the cache
-before starting VMs:
+This suite uses the same cache-backed registry model for the `empty`
+application image and the kubecontrol control-plane images declared by the
+software profile. After installing the `2026-07-06-kubecontrol-trace-cache`
+hostctl interface, prime and verify the cache before starting VMs:
 
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kubecontrol_empty_parity

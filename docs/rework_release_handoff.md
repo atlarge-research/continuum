@@ -235,7 +235,7 @@ Keep parent row `P-QEMU-10` unclaimed until external QEMU capacity is reachable
 or a larger local runner can produce exact retained VM/application evidence.
 
 At this checkpoint the repo-generated hostctl interface is
-`2026-07-03-columbo-empty-cache`. If `/usr/local/bin/continuum-hostctl` still
+`2026-07-06-kubecontrol-trace-cache`. If `/usr/local/bin/continuum-hostctl` still
 reports `2026-06-01-release-artifact-audit-root`, replace it only through the
 manual reviewed helper install flow documented in `docs/smoke_runner_isolation.md`.
 Then run:

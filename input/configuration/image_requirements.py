@@ -15,12 +15,12 @@ _STAGE_IMAGE_CATALOG: dict[str, tuple[str, ...]] = {
     "image_classification": ("app.image_classification",),
     "text_translation": ("app.text_translation",),
 }
-_KUBE_ETCD_PAUSE_BY_VERSION: dict[str, tuple[str, str]] = {
-    "v1.27.0": ("3.5.7-0", "3.9"),
-    "v1.26.0": ("3.5.6-0", "3.9"),
-    "v1.25.0": ("3.5.4-0", "3.8"),
-    "v1.24.0": ("3.5.3-0", "3.7"),
-    "v1.23.0": ("3.5.1-0", "3.6"),
+_KUBE_ETCD_COREDNS_PAUSE_BY_VERSION: dict[str, tuple[str, str, str]] = {
+    "v1.27.0": ("3.5.7-0", "v1.10.1", "3.9"),
+    "v1.26.0": ("3.5.6-0", "v1.9.3", "3.9"),
+    "v1.25.0": ("3.5.4-0", "v1.9.3", "3.8"),
+    "v1.24.0": ("3.5.3-0", "v1.8.6", "3.7"),
+    "v1.23.0": ("3.5.1-0", "v1.8.6", "3.6"),
 }
 
 
@@ -50,19 +50,21 @@ def _kube_control_plane_images(owner_record: dict | None, _config: dict | None) 
             "Missing required kube_version for image prefetch on module '%s'" % (module_id,)
         )
     kube_version = raw_version.strip()
-    version_tuple = _KUBE_ETCD_PAUSE_BY_VERSION.get(kube_version)
+    version_tuple = _KUBE_ETCD_COREDNS_PAUSE_BY_VERSION.get(kube_version)
     if version_tuple is None:
         raise ValueError(
             "Unsupported Kubernetes version '%s' for image prefetch "
-            "(supported: %s)" % (kube_version, ", ".join(sorted(_KUBE_ETCD_PAUSE_BY_VERSION)))
+            "(supported: %s)"
+            % (kube_version, ", ".join(sorted(_KUBE_ETCD_COREDNS_PAUSE_BY_VERSION)))
         )
-    etcd_version, pause_version = version_tuple
+    etcd_version, coredns_version, pause_version = version_tuple
     return (
         "redplanet00/kube-proxy:%s" % (kube_version),
         "redplanet00/kube-controller-manager:%s" % (kube_version),
         "redplanet00/kube-scheduler:%s" % (kube_version),
         "redplanet00/kube-apiserver:%s" % (kube_version),
         "redplanet00/etcd:%s" % (etcd_version),
+        "redplanet00/coredns:%s" % (coredns_version),
         "redplanet00/pause:%s" % (pause_version),
     )
 
