@@ -8,6 +8,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts.test import check_release_evidence_artifacts
 
@@ -353,6 +354,25 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
             return Path(*path.parts[: continuum_index + 1]).as_posix()
         return ""
 
+    def _write_benchmark_manifest(self, root: Path, columns, row):
+        table = root / "artifacts" / "control_plane_metrics.csv"
+        table.parent.mkdir(parents=True, exist_ok=True)
+        table.write_text(
+            ",".join(columns) + "\n" + ",".join(row) + "\n",
+            encoding="utf-8",
+        )
+        manifest = root / "artifacts" / "control_plane_metrics_manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "kind": "ContinuumBenchmarkMetrics",
+                    "tables": [{"path": str(table), "rows": 1}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return manifest
+
     def test_passing_test_results_artifact(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
@@ -375,6 +395,27 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
             self.assertEqual(
                 check_release_evidence_artifacts.find_artifact_issues(root),
                 [],
+            )
+
+    def test_check_artifact_reports_permission_denied(self):
+        artifact = check_release_evidence_artifacts.EvidenceArtifact(
+            evidence_doc="docs/release_evidence_example.md",
+            evidence_path=Path("docs/release_evidence_example.md"),
+            path=Path("/retained/metrics_manifest.json"),
+            kind="benchmark-metrics-manifest",
+            line=12,
+        )
+
+        with mock.patch.object(Path, "exists", side_effect=PermissionError("denied")):
+            self.assertEqual(
+                check_release_evidence_artifacts.check_artifact(artifact),
+                [
+                    check_release_evidence_artifacts.EvidenceArtifactIssue(
+                        "artifact-access-failed",
+                        "docs/release_evidence_example.md:12 cannot access "
+                        "/retained/metrics_manifest.json: denied",
+                    )
+                ],
             )
 
     def test_test_results_state_phase_must_match_config_run_targets(self):
@@ -798,6 +839,158 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 self._evidence_text(
                     "| Result summary path | `%s` |\n"
                     "Benchmark metric artifact: `%s`\n" % (artifact, manifest),
+                    runtime_targets="`application`",
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_release_evidence_artifacts.find_artifact_issues(root), [])
+
+    def test_full_control_plane_trace_claim_requires_complete_metric_row(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            config_path = "configs/experiments/parity/qemu/01.yaml"
+            self._write_matrix(root, config_path=config_path)
+            self._write_config_targets(
+                root,
+                config_path=config_path,
+                targets="[application]",
+                benchmark_pipeline=True,
+            )
+            artifact = (
+                root
+                / "artifacts"
+                / ".continuum"
+                / "test_results"
+                / "test_results_2026-05-23_18-35-48.json"
+            )
+            manifest = self._write_benchmark_manifest(
+                root,
+                ["started_application (s)"],
+                ["1.0"],
+            )
+            self._write_test_results(
+                artifact,
+                success_reason=(
+                    "Success: exit_code=0, experiment_lock_written, "
+                    "state_file_written, state_phase=application, "
+                    "resume_contract_match, benchmark_evidence_found, "
+                    "benchmark_metric_tables_found, benchmark_metric_artifacts=%s"
+                    % (manifest,)
+                ),
+            )
+            (root / "docs" / "release_evidence_example.md").write_text(
+                self._evidence_text(
+                    "| Result summary path | `%s` |\n"
+                    "Benchmark metric artifact: `%s`\n"
+                    "This certifies full control-plane trace reproduction.\n"
+                    % (artifact, manifest),
+                    runtime_targets="`application`",
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                check_release_evidence_artifacts.find_artifact_issues(root),
+                [
+                    check_release_evidence_artifacts.EvidenceArtifactIssue(
+                        "control-plane-trace-claim-unverified",
+                        "docs/release_evidence_example.md claims full control-plane "
+                        "trace reproduction but retained benchmark metrics tables lack "
+                        "a complete row for: controller_read_workload (s), "
+                        "controller_unpacked_workload (s), scheduler_read_pod (s), "
+                        "kubelet_pod_received (s), kubelet_applied_sandbox (s), "
+                        "started_application (s)",
+                    )
+                ],
+            )
+
+    def test_full_control_plane_trace_claim_accepts_complete_metric_row(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            config_path = "configs/experiments/parity/qemu/01.yaml"
+            self._write_matrix(root, config_path=config_path)
+            self._write_config_targets(
+                root,
+                config_path=config_path,
+                targets="[application]",
+                benchmark_pipeline=True,
+            )
+            artifact = (
+                root
+                / "artifacts"
+                / ".continuum"
+                / "test_results"
+                / "test_results_2026-05-23_18-35-48.json"
+            )
+            columns = check_release_evidence_artifacts.CONTROL_PLANE_TRACE_COLUMNS
+            manifest = self._write_benchmark_manifest(
+                root,
+                columns,
+                ["1.0", "2.0", "3.0", "4.0", "5.0", "6.0"],
+            )
+            self._write_test_results(
+                artifact,
+                success_reason=(
+                    "Success: exit_code=0, experiment_lock_written, "
+                    "state_file_written, state_phase=application, "
+                    "resume_contract_match, benchmark_evidence_found, "
+                    "benchmark_metric_tables_found, benchmark_metric_artifacts=%s"
+                    % (manifest,)
+                ),
+            )
+            (root / "docs" / "release_evidence_example.md").write_text(
+                self._evidence_text(
+                    "| Result summary path | `%s` |\n"
+                    "Benchmark metric artifact: `%s`\n"
+                    "This certifies full control-plane trace reproduction.\n"
+                    % (artifact, manifest),
+                    runtime_targets="`application`",
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_release_evidence_artifacts.find_artifact_issues(root), [])
+
+    def test_control_plane_trace_limitation_is_not_treated_as_full_claim(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            config_path = "configs/experiments/parity/qemu/01.yaml"
+            self._write_matrix(root, config_path=config_path)
+            self._write_config_targets(
+                root,
+                config_path=config_path,
+                targets="[application]",
+                benchmark_pipeline=True,
+            )
+            artifact = (
+                root
+                / "artifacts"
+                / ".continuum"
+                / "test_results"
+                / "test_results_2026-05-23_18-35-48.json"
+            )
+            manifest = self._write_benchmark_manifest(
+                root,
+                ["started_application (s)"],
+                ["1.0"],
+            )
+            self._write_test_results(
+                artifact,
+                success_reason=(
+                    "Success: exit_code=0, experiment_lock_written, "
+                    "state_file_written, state_phase=application, "
+                    "resume_contract_match, benchmark_evidence_found, "
+                    "benchmark_metric_tables_found, benchmark_metric_artifacts=%s"
+                    % (manifest,)
+                ),
+            )
+            (root / "docs" / "release_evidence_example.md").write_text(
+                self._evidence_text(
+                    "| Result summary path | `%s` |\n"
+                    "Benchmark metric artifact: `%s`\n"
+                    "This evidence does not certify full control-plane trace reproduction.\n"
+                    % (artifact, manifest),
                     runtime_targets="`application`",
                 ),
                 encoding="utf-8",

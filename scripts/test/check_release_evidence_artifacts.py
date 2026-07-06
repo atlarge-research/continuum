@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 import json
 import os
@@ -100,6 +101,14 @@ CLAIMED_STDOUT_MARKERS = (
         re.compile(r"\bkubernetes\s+node-ready\s+runtime\s+check\b", re.IGNORECASE),
         ("All nodes are Ready",),
     ),
+)
+CONTROL_PLANE_TRACE_COLUMNS = (
+    "controller_read_workload (s)",
+    "controller_unpacked_workload (s)",
+    "scheduler_read_pod (s)",
+    "kubelet_pod_received (s)",
+    "kubelet_applied_sandbox (s)",
+    "started_application (s)",
 )
 CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
     "smoke": "smoke suite prerequisites",
@@ -2326,20 +2335,29 @@ def _check_network_ndjson(artifact: EvidenceArtifact) -> list[EvidenceArtifactIs
 
 def check_artifact(artifact: EvidenceArtifact) -> list[EvidenceArtifactIssue]:
     """Validate one local evidence artifact."""
-    if not artifact.path.exists():
+    try:
+        if not artifact.path.exists():
+            return [
+                EvidenceArtifactIssue(
+                    "artifact-missing",
+                    "%s:%s references missing %s"
+                    % (artifact.evidence_doc, artifact.line, artifact.path),
+                )
+            ]
+        if not artifact.path.is_file():
+            return [
+                EvidenceArtifactIssue(
+                    "artifact-not-file",
+                    "%s:%s references non-file %s"
+                    % (artifact.evidence_doc, artifact.line, artifact.path),
+                )
+            ]
+    except OSError as exc:
         return [
             EvidenceArtifactIssue(
-                "artifact-missing",
-                "%s:%s references missing %s"
-                % (artifact.evidence_doc, artifact.line, artifact.path),
-            )
-        ]
-    if not artifact.path.is_file():
-        return [
-            EvidenceArtifactIssue(
-                "artifact-not-file",
-                "%s:%s references non-file %s"
-                % (artifact.evidence_doc, artifact.line, artifact.path),
+                "artifact-access-failed",
+                "%s:%s cannot access %s: %s"
+                % (artifact.evidence_doc, artifact.line, artifact.path, exc),
             )
         ]
 
@@ -2460,6 +2478,120 @@ def _check_claimed_stdout_markers(
                     % (evidence_doc, claim_id, ", ".join(required_markers)),
                 )
             )
+    return issues
+
+
+def _claims_full_control_plane_trace(evidence_text: str) -> bool:
+    """Return whether an evidence doc claims complete control-plane trace coverage."""
+    for line in evidence_text.splitlines():
+        normalized = line.lower()
+        if not all(token in normalized for token in ("full", "trace")):
+            continue
+        if "control-plane" not in normalized and "control plane" not in normalized:
+            continue
+        if any(
+            exclusion in normalized
+            for exclusion in (
+                "does not",
+                "do not",
+                "not certify",
+                "not a reproduction",
+                "not claim",
+                "not full",
+            )
+        ):
+            continue
+        return True
+    return False
+
+
+def _benchmark_manifest_table_paths(artifact: EvidenceArtifact) -> list[Path]:
+    """Return table paths referenced by a benchmark metrics manifest."""
+    try:
+        payload = _load_json(artifact.path)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    paths = []
+    tables = payload.get("tables")
+    if not isinstance(tables, list):
+        return paths
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        table_path = table.get("path")
+        if isinstance(table_path, str) and table_path.strip():
+            paths.append(Path(table_path))
+    return paths
+
+
+def _csv_has_complete_control_plane_trace(table_path: Path) -> bool:
+    """Return whether a CSV table has a complete numeric control-plane trace row."""
+    try:
+        with table_path.open("r", encoding="utf-8", newline="") as table_file:
+            reader = csv.DictReader(table_file)
+            if reader.fieldnames is None:
+                return False
+            if any(column not in reader.fieldnames for column in CONTROL_PLANE_TRACE_COLUMNS):
+                return False
+            for row in reader:
+                complete = True
+                for column in CONTROL_PLANE_TRACE_COLUMNS:
+                    value = (row.get(column) or "").strip()
+                    if not value:
+                        complete = False
+                        break
+                    try:
+                        float(value)
+                    except ValueError:
+                        complete = False
+                        break
+                if complete:
+                    return True
+    except OSError:
+        return False
+    return False
+
+
+def _benchmark_manifest_has_complete_control_plane_trace(artifact: EvidenceArtifact) -> bool:
+    """Return whether a benchmark manifest points to a complete control-plane trace table."""
+    return any(
+        _csv_has_complete_control_plane_trace(table_path)
+        for table_path in _benchmark_manifest_table_paths(artifact)
+    )
+
+
+def _check_full_control_plane_trace_claims(
+    root: Path,
+    artifacts: list[EvidenceArtifact],
+) -> list[EvidenceArtifactIssue]:
+    """Ensure complete control-plane trace claims are backed by retained data."""
+    manifests_by_doc: dict[str, list[EvidenceArtifact]] = {}
+    for artifact in artifacts:
+        if artifact.kind == "benchmark-metrics-manifest":
+            manifests_by_doc.setdefault(artifact.evidence_doc, []).append(artifact)
+
+    issues = []
+    for evidence_doc in iter_evidence_docs(root):
+        evidence_path = root / evidence_doc
+        if not evidence_path.exists():
+            continue
+        evidence_text = evidence_path.read_text(encoding="utf-8")
+        if not _claims_full_control_plane_trace(evidence_text):
+            continue
+        if any(
+            _benchmark_manifest_has_complete_control_plane_trace(manifest)
+            for manifest in manifests_by_doc.get(evidence_doc, [])
+        ):
+            continue
+        issues.append(
+            EvidenceArtifactIssue(
+                "control-plane-trace-claim-unverified",
+                "%s claims full control-plane trace reproduction but retained "
+                "benchmark metrics tables lack a complete row for: %s"
+                % (evidence_doc, ", ".join(CONTROL_PLANE_TRACE_COLUMNS)),
+            )
+        )
     return issues
 
 
@@ -3384,6 +3516,7 @@ def find_artifact_issues(root: Path = ROOT) -> list[EvidenceArtifactIssue]:
     issues.extend(_check_benchmark_application_evidence(root, artifacts))
     issues.extend(_check_network_emulation_evidence(root, artifacts))
     issues.extend(_check_claimed_stdout_markers(root, artifacts))
+    issues.extend(_check_full_control_plane_trace_claims(root, artifacts))
     issues.extend(_check_evidence_doc_provider_prereqs_match_configs(root))
     issues.extend(_check_evidence_doc_cleanup_claims(root, artifacts))
     issues.extend(_check_evidence_doc_commands(root))
@@ -3430,6 +3563,7 @@ def main() -> int:
     issues.extend(_check_benchmark_application_evidence(ROOT, artifacts))
     issues.extend(_check_network_emulation_evidence(ROOT, artifacts))
     issues.extend(_check_claimed_stdout_markers(ROOT, artifacts))
+    issues.extend(_check_full_control_plane_trace_claims(ROOT, artifacts))
     issues.extend(_check_evidence_doc_provider_prereqs_match_configs(ROOT))
     issues.extend(_check_evidence_doc_cleanup_claims(ROOT, artifacts))
     issues.extend(_check_evidence_doc_commands(ROOT))

@@ -31,10 +31,12 @@ run_capture() {
     local command_display
     printf -v command_display "%q " "$@"
 
-    set +e
-    "$@" >"$output_file" 2>&1
-    local rc=$?
-    set -e
+    local rc
+    if "$@" >"$output_file" 2>&1; then
+        rc=0
+    else
+        rc=$?
+    fi
 
     keys+=("$key")
     titles+=("$title")
@@ -199,7 +201,8 @@ run_capture prereq_qemu_openfaas_software_parity "QEMU OpenFaaS software parity 
 run_capture prereq_qemu_openfaas_image_local_parity "QEMU OpenFaaS local image parity suite prerequisites" optional \
     "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_openfaas_image_local_parity
 run_capture prereq_qemu_kubecontrol_empty_parity "QEMU kubecontrol empty parity suite prerequisites" optional \
-    "$PYTHON" -B scripts/test/run_tests.py --check-prereqs --suite qemu_kubecontrol_empty_parity
+    "$PYTHON" -B scripts/test/prime_local_registry_cache.py \
+        --suite qemu_kubecontrol_empty_parity --check-only
 
 forced_prefetch_notice() {
     cat <<'EOF'

@@ -85,9 +85,14 @@ class CloudStaticAuditScriptTests(unittest.TestCase):
         )
 
         for suite_name in parity_suites:
-            self.assertIn(
-                "--check-prereqs --suite %s" % (suite_name,),
-                script_text,
+            has_runner_check = "--check-prereqs --suite %s" % (suite_name,) in script_text
+            has_cache_check = (
+                "prime_local_registry_cache.py" in script_text
+                and "--suite %s" % (suite_name,) in script_text
+                and "--check-only" in script_text
+            )
+            self.assertTrue(
+                has_runner_check or has_cache_check,
                 msg="%s should have an optional cloud-safe prerequisite check" % (suite_name,),
             )
 
