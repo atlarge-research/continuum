@@ -347,6 +347,15 @@ stdout and benchmark artifacts. Keep `qemu_kubecontrol_empty_parity` as the
 certified module/profile/suite integration run until the stricter scenario has
 retained VM-backed evidence.
 
+Use the trace suite name for the final preflight before running that stricter
+scenario:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kubecontrol_empty_trace_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prime-registry-cache --check-only --suite qemu_kubecontrol_empty_trace_parity
+```
+
 To advance the retained benchmark state one phase at a time, use:
 
 ```bash

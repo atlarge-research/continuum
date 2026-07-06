@@ -1213,3 +1213,36 @@ class HostRunnerScriptTests(unittest.TestCase):
                 result.stdout,
             )
             self.assertIn(str(smoke_base_root / "qemu_openfaas_image_local_parity"), result.stdout)
+
+    def test_run_smoke_qemu_kubecontrol_empty_trace_parity_uses_suite_runner(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            runner_home = temp_root / "runner-home"
+            runner_home.mkdir()
+            venv_bin = temp_root / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            fake_python = venv_bin / "python3"
+            fake_python.write_text(
+                "#!/bin/sh\n"
+                "printf 'PYARGS:%s\\n' \"$*\"\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            smoke_base_root = temp_root / "smoke-base"
+
+            result = self._run_smoke_script(
+                "qemu_kubecontrol_empty_trace_parity",
+                extra_env={
+                    "HOME": str(runner_home),
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(fake_python),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                },
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                "PYARGS:scripts/test/run_tests.py --suite qemu_kubecontrol_empty_trace_parity --base-path",
+                result.stdout,
+            )
+            self.assertIn(str(smoke_base_root / "qemu_kubecontrol_empty_trace_parity"), result.stdout)
