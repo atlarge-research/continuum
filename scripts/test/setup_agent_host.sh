@@ -103,6 +103,17 @@ run_root_noninteractive() {
   fi
 }
 
+verify_sudo_health() {
+  if [ "$(id -u)" -eq 0 ]; then
+    return 0
+  fi
+  if ! output=$(sudo -n true 2>&1); then
+    log "Noninteractive sudo is unavailable or misconfigured: $output" >&2
+    log "Repair sudo before verifying or running retained smoke scenarios." >&2
+    exit 1
+  fi
+}
+
 runner_exec() {
   require_cmd sudo
   sudo -n -u "$RUNNER_USER" "$@"
@@ -1624,6 +1635,7 @@ verify() {
 
   require_cmd sudo
   require_cmd virsh
+  verify_sudo_health
 
   log "Verifying maintenance helper interface"
   verify_hostctl_interface

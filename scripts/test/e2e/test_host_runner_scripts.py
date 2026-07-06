@@ -395,6 +395,42 @@ class HostRunnerScriptTests(unittest.TestCase):
             any(call.startswith(f"-n cksum {dedicated_repo_path}") for call in logged_sudo_calls)
         )
 
+    def test_verify_fails_early_when_sudo_is_misconfigured(self):
+        if os.geteuid() == 0:
+            self.skipTest("sudo health check is only exercised for non-root callers")
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            fake_bin = temp_root / "bin"
+            fake_bin.mkdir()
+            fake_sudo = fake_bin / "sudo"
+            fake_sudo.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' 'sudo: /usr/bin/sudo must be owned by uid 0 and have the setuid bit set' >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            fake_sudo.chmod(0o755)
+            fake_virsh = fake_bin / "virsh"
+            fake_virsh.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_virsh.chmod(0o755)
+
+            result = self._run_setup_script(
+                "verify",
+                extra_env={
+                    "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                    "HOSTCTL_PATH": str(temp_root / "continuum-hostctl"),
+                },
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "Noninteractive sudo is unavailable or misconfigured",
+            result.stderr,
+        )
+        self.assertIn("must be owned by uid 0", result.stderr)
+        self.assertNotIn("Verifying maintenance helper interface", result.stdout)
+
     def test_debug_run_command_playbook_accepts_debug_host_pattern_alias(self):
         playbook_content = (
             self.repo_root / "playbooks/debug/run_command.yml"
