@@ -1,4 +1,4 @@
-# QEMU Endpoint Runtime Evidence - 2026-07-03
+# QEMU Endpoint Runtime Evidence - 2026-07-06
 
 ## Scope
 
@@ -15,9 +15,9 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-08-SW` |
-| Git commit | `01c18b5dd26b561b5b81b2d83cdf28649267b1c2` |
+| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-03 |
+| Date | 2026-07-06 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo` and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` |
@@ -27,7 +27,7 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and tc support for endpoint network emulation and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, endpoint-runtime software-phase evidence, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-07-03_10-16-57.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-07-06_17-28-02.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/` |
 
 ## Result
@@ -64,4 +64,4 @@ This evidence does not certify:
 
 This software-only evidence does not certify parent row `P-QEMU-08`. The full
 endpoint image/runtime parent row is certified separately by
-`docs/release_evidence_qemu_endpoint_image_2026-07-03.md`.
+`docs/release_evidence_qemu_endpoint_image_2026-07-06.md`.

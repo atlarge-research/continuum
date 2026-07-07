@@ -1,4 +1,4 @@
-# QEMU KubeEdge Software Evidence - 2026-07-02
+# QEMU KubeEdge Software Evidence - 2026-07-06
 
 ## Scope
 
@@ -10,16 +10,16 @@ QEMU topology and complete the KubeEdge software phase with endpoint runtime
 present for endpoint resources. It does not certify the full
 image-classification application benchmark from `configuration/tests/qemu/06_kubeedge-img.cfg`;
 that parent row is certified separately by
-`docs/release_evidence_qemu_kubeedge_image_2026-07-02.md`.
+`docs/release_evidence_qemu_kubeedge_image_2026-07-06.md`.
 
 ## Source And Command
 
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-06-SW` |
-| Git commit | `01c18b5dd26b561b5b81b2d83cdf28649267b1c2` |
+| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-02 |
+| Date | 2026-07-06 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, `install-wrapper dedicated`, and `verify` |
 | Config | `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` |
@@ -29,7 +29,7 @@ that parent row is certified separately by
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, and SSH access for KubeEdge software execution; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, KubeEdge software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/test_results/test_results_2026-07-02_15-02-32.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/test_results/test_results_2026-07-06_16-13-55.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/` |
 
 ## Result

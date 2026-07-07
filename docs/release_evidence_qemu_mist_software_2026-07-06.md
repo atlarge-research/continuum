@@ -1,4 +1,4 @@
-# QEMU Mist Software Evidence - 2026-07-03
+# QEMU Mist Software Evidence - 2026-07-06
 
 ## Scope
 
@@ -9,16 +9,16 @@ It proves that the rework stack can provision the legacy P-QEMU-07-style local
 QEMU topology and complete the Mist software phase with endpoint runtime present
 for endpoint resources. It does not certify the full image-classification
 application benchmark from `configuration/tests/qemu/07_mist-img.cfg`; that
-parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-03.md`.
+parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-06.md`.
 
 ## Source And Command
 
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07-SW` |
-| Git commit | `01c18b5dd26b561b5b81b2d83cdf28649267b1c2` |
+| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-03 |
+| Date | 2026-07-06 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` |
@@ -28,7 +28,7 @@ parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-03.md`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, and SSH access for Mist software execution and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-07-03_09-58-06.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-07-06_17-05-58.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/` |
 
 ## Result

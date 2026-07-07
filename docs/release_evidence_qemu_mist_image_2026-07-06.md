@@ -1,4 +1,4 @@
-# QEMU Mist Image Evidence - 2026-07-03
+# QEMU Mist Image Evidence - 2026-07-06
 
 ## Scope
 
@@ -15,9 +15,9 @@ metric artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07` |
-| Git commit | `01c18b5dd26b561b5b81b2d83cdf28649267b1c2` |
+| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-03 |
+| Date | 2026-07-06 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, local registry cache priming, retained failed-run diagnostics, Mist Docker startup/runtime-helper fixes, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` |
@@ -27,7 +27,7 @@ metric artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, application phase evidence, benchmark metrics manifest, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-07-03_10-13-48.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-07-06_17-25-22.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/` |
 
 ## Result
@@ -44,7 +44,7 @@ and Ansible retry-noise success detection:
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-03_09_58_18_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-06_17_06_06_classify-images_metrics_manifest.json
 ```
 
 The passing run followed failed 2026-06-01 and 2026-07-03 attempts that exposed
