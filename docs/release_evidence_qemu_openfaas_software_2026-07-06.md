@@ -20,9 +20,9 @@ image-classification application benchmark from
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-10-SW-LOCAL` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, `install-wrapper dedicated`, and `verify` |
 | Config | `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` |
@@ -32,14 +32,14 @@ image-classification application benchmark from
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and enough local CPU capacity for the capped single-host OpenFaaS shape; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes node-ready and OpenFaaS software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-07-06_17-58-59.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-07-07_12-05-50.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1345.1s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
+| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1473.4s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
 The experiment lock records:
 

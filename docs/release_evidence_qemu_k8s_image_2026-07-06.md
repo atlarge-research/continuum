@@ -16,9 +16,9 @@ artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-05` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`; suite uses cache-backed local registry preflight rather than Docker daemon access for `continuum-smoke` |
 | Config | `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml` |
@@ -28,7 +28,7 @@ artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, `tc`/netperf support, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes software-phase evidence, endpoint-runtime evidence, application phase evidence, benchmark metrics manifest, and network NDJSON artifact |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/test_results/test_results_2026-07-06_15-16-05.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/test_results/test_results_2026-07-07_09-24-14.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/` |
 
 ## Result
@@ -39,18 +39,18 @@ release-evidence source line:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml` | PASS | 1190.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, network-validation results found, benchmark evidence found, benchmark metric tables found |
+| `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml` | PASS | 1253.7s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, network-validation results found, benchmark evidence found, benchmark metric tables found |
 
 Network-validation artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/network_validation/netperf_results_2026-07-06_14:55:29.ndjson
+/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/network_validation/netperf_results_2026-07-07_09:03:21.ndjson
 ```
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/benchmark/2026-07-06_14_55_29_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_k8s_image_parity/.continuum/logs/benchmark/2026-07-07_09_03_21_classify-images_metrics_manifest.json
 ```
 
 ## What This Claims

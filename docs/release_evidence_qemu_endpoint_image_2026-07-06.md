@@ -15,9 +15,9 @@ benchmark metric artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-08` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`; suite uses cache-backed local registry preflight rather than Docker daemon access for `continuum-smoke` |
 | Config | `configs/experiments/parity/qemu_endpoint_image/08_endpoint_image_classification.yaml` |
@@ -27,7 +27,7 @@ benchmark metric artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, `tc` support, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, endpoint-runtime software phase evidence, application phase evidence, benchmark metrics manifest, and teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/test_results/test_results_2026-07-06_17-36-16.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/test_results/test_results_2026-07-07_11-41-10.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/` |
 
 ## Result
@@ -38,12 +38,12 @@ release-evidence source line:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_endpoint_image/08_endpoint_image_classification.yaml` | PASS | 1393.5s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found |
+| `configs/experiments/parity/qemu_endpoint_image/08_endpoint_image_classification.yaml` | PASS | 478.0s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found |
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/logs/benchmark/2026-07-06_17_28_10_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_endpoint_image_parity/.continuum/logs/benchmark/2026-07-07_11_33_13_classify-images_metrics_manifest.json
 ```
 
 ## What This Claims

@@ -16,9 +16,9 @@ parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-06.md`.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07-SW` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` |
@@ -28,14 +28,14 @@ parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-06.md`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, and SSH access for Mist software execution and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-07-06_17-05-58.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-07-07_11-13-50.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` | PASS | 1310.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
+| `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` | PASS | 524.8s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
 
 The run exercised two edge VMs and four endpoint VMs with CPU pinning enabled,
 matching the legacy Mist topology shape from

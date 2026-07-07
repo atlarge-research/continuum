@@ -17,7 +17,7 @@ Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |
@@ -29,11 +29,11 @@ Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and tc support for parity network setup; no cloud credentials. |
 | Runtime targets | `infrastructure` |
 | Profile IDs | Environment profiles: `local-qemu`, `local-qemu-cpupin`, `local-qemu-delete-on-exit`; software profiles: `none`, `none-edge`, `none-endpoint` |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity` |
 | Suite | `qemu_infra_parity` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-07-06_14-55-21.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-07-07_09-03-08.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/` |
 
 Before execution, the dedicated repo was synced from the live checkout and
@@ -73,15 +73,15 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity
 Result summary:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-07-06_14-55-21.json
+/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-07-07_09-03-08.json
 ```
 
 | Matrix Row | YAML Config | Result | Evidence |
 | --- | --- | --- | --- |
-| `P-QEMU-01` | `configs/experiments/parity/qemu/01_infraonly_cloud.yaml` | PASS, 62.9s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
-| `P-QEMU-02` | `configs/experiments/parity/qemu/02_infraonly_edge.yaml` | PASS, 84.5s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
-| `P-QEMU-03` | `configs/experiments/parity/qemu/03_infraonly_endpoint.yaml` | PASS, 143.7s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
-| `P-QEMU-04` | `configs/experiments/parity/qemu/04_infraonly_all.yaml` | PASS, 169.6s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-01` | `configs/experiments/parity/qemu/01_infraonly_cloud.yaml` | PASS, 63.0s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-02` | `configs/experiments/parity/qemu/02_infraonly_edge.yaml` | PASS, 88.7s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-03` | `configs/experiments/parity/qemu/03_infraonly_endpoint.yaml` | PASS, 149.7s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
+| `P-QEMU-04` | `configs/experiments/parity/qemu/04_infraonly_all.yaml` | PASS, 216.7s | `exit_code=0`, `experiment_lock_written`, `state_file_written`, `state_phase=infrastructure`, `resume_contract_match` |
 
 Total suite time: 510.3s.
 

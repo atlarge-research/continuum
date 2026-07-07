@@ -15,9 +15,9 @@ metric artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, local registry cache priming, retained failed-run diagnostics, Mist Docker startup/runtime-helper fixes, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` |
@@ -27,7 +27,7 @@ metric artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, application phase evidence, benchmark metrics manifest, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-07-06_17-25-22.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-07-07_11-30-36.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/` |
 
 ## Result
@@ -39,12 +39,12 @@ and Ansible retry-noise success detection:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 970.4s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found, benchmark metric artifacts found |
+| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 999.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found, benchmark metric artifacts found |
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-06_17_06_06_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-07_11_13_57_classify-images_metrics_manifest.json
 ```
 
 The passing run followed failed 2026-06-01 and 2026-07-03 attempts that exposed

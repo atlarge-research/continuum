@@ -15,9 +15,9 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-08-SW` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo` and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` |
@@ -27,14 +27,14 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and tc support for endpoint network emulation and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, endpoint-runtime software-phase evidence, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-07-06_17-28-02.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/test_results/test_results_2026-07-07_11-33-02.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_endpoint_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` | PASS | 1030.4s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
+| `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` | PASS | 140.6s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
 
 The run exercised two endpoint VMs with network emulation enabled, matching the
 legacy endpoint-only topology shape from `configuration/tests/qemu/08_endpoint_img.cfg`.

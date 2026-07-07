@@ -15,9 +15,9 @@ benchmark to metric-artifact completion.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-06` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo` and local registry cache priming; refreshed after later Mist runtime-helper changes made the earlier P-QEMU-06 evidence stale for pre-tag purposes |
 | Config | `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml` |
@@ -27,7 +27,7 @@ benchmark to metric-artifact completion.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, KubeEdge software-phase evidence, application phase evidence, benchmark metrics manifest |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_image_parity/.continuum/test_results/test_results_2026-07-06_16-54-59.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_image_parity/.continuum/test_results/test_results_2026-07-07_11-04-58.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_kubeedge_image_parity/.continuum/` |
 
 ## Result
@@ -37,12 +37,12 @@ the KubeEdge runtime-prerequisite fixes and later Mist runtime-helper fixes:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml` | PASS | 2679.0s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, benchmark evidence found, benchmark metric tables found |
+| `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml` | PASS | 2702.7s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, benchmark evidence found, benchmark metric tables found |
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/benchmark/2026-07-06_16_14_10_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/benchmark/2026-07-07_10_19_56_classify-images_metrics_manifest.json
 ```
 
 The passing run followed an earlier failed 2026-06-01 attempt that exposed two

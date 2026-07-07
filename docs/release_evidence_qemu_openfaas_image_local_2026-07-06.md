@@ -20,9 +20,9 @@ It does not certify the exact legacy CPU shape or parent row `P-QEMU-10` from
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-10-APP-LOCAL` |
-| Git commit | `c6a7bd8db167833593d110cbd45b89d7a2afd86c` |
+| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
 | Tree state | Clean source tree synced to the dedicated runner. |
-| Date | 2026-07-06 |
+| Date | 2026-07-07 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo` and `verify`; retained state root `/mnt/sdc/continuum_smoke`. |
 | Config | `configs/experiments/parity/qemu_openfaas_image_local/10_openfaas_image_classification_local.yaml` |
@@ -32,15 +32,15 @@ It does not certify the exact legacy CPU shape or parent row `P-QEMU-10` from
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, enough local CPU capacity for the capped single-host OpenFaaS shape, a primed local registry cache for OpenFaaS application images, and no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, software phase evidence, Kubernetes readiness, OpenFaaS function deployment, endpoint publisher output, benchmark metric artifacts, and benchmark metrics manifest. |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_image_local_parity/.continuum/test_results/test_results_2026-07-06_18-28-12.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_image_local_parity/.continuum/test_results/test_results_2026-07-07_12-37-00.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_openfaas_image_local_parity/.continuum/` |
-| Benchmark metric manifest | `/mnt/sdc/continuum_smoke/qemu_openfaas_image_local_parity/.continuum/logs/benchmark/2026-07-06_17_59_10_classify-images_metrics_manifest.json` |
+| Benchmark metric manifest | `/mnt/sdc/continuum_smoke/qemu_openfaas_image_local_parity/.continuum/logs/benchmark/2026-07-07_12_05_59_classify-images_metrics_manifest.json` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_openfaas_image_local/10_openfaas_image_classification_local.yaml` | PASS | 1576.1s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, benchmark evidence found, benchmark metric tables found |
+| `configs/experiments/parity/qemu_openfaas_image_local/10_openfaas_image_classification_local.yaml` | PASS | 1862.1s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, benchmark evidence found, benchmark metric tables found |
 
 The retained runner summary records:
 
