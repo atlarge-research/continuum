@@ -123,10 +123,11 @@ The exact parent row remains `ported-unverified` because its 26-core legacy
 resource shape needs reachable external QEMU capacity that the dedicated
 runner can authenticate to, or a larger local runner. The latest retained
 failed run from 2026-07-07 selected legacy external host `matthijs@node1` and
-failed before provisioning because `continuum-smoke` could not authenticate:
+failed before provisioning because `continuum-smoke` could not authenticate to
+that host for the hardware preflight command `ssh ... matthijs@node1 lscpu`:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_08-11-02.json
+/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_12-52-32.json
 ```
 
 That run followed a small runtime fix so remote physical-machine hardware

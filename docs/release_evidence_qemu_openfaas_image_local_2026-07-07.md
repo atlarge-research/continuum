@@ -80,7 +80,9 @@ This evidence does not certify:
 
 The latest exact legacy application attempt selected legacy external host
 `matthijs@node1` on 2026-07-07 and failed before provisioning because the
-dedicated `continuum-smoke` runner could not authenticate to that host. Keep
-parent row `P-QEMU-10` unclaimed until authenticated external QEMU capacity or
-a larger local runner can produce retained VM/application evidence for the
-exact shape.
+dedicated `continuum-smoke` runner could not authenticate for
+`ssh ... matthijs@node1 lscpu`; see
+`/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_12-52-32.json`.
+Keep parent row `P-QEMU-10` unclaimed until authenticated external QEMU
+capacity or a larger local runner can produce retained VM/application evidence
+for the exact shape.

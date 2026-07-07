@@ -85,6 +85,8 @@ The full `qemu_openfaas_image_parity` suite is ported but not certified. It now
 uses cache-backed image preflight, and the local registry cache has been primed
 on the certification host. The latest exact parent-row attempt selected legacy
 external host `matthijs@node1` on 2026-07-07 and failed before provisioning
-because the dedicated `continuum-smoke` runner could not authenticate to that
-host. Exact parent-row evidence still requires authenticated external QEMU
-capacity or a larger local runner before parent row `P-QEMU-10` can be claimed.
+because the dedicated `continuum-smoke` runner could not authenticate for
+`ssh ... matthijs@node1 lscpu`; see
+`/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_12-52-32.json`.
+Exact parent-row evidence still requires authenticated external QEMU capacity
+or a larger local runner before parent row `P-QEMU-10` can be claimed.

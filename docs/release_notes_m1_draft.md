@@ -187,7 +187,8 @@ not.
    a larger local runner, then run exact `P-QEMU-10` OpenFaaS application
    evidence. The latest retained attempt on 2026-07-07 passed the local
    registry cache preflight but failed before provisioning because
-   `continuum-smoke` could not authenticate to legacy host `matthijs@node1`.
+   `continuum-smoke` could not authenticate for `ssh ... matthijs@node1 lscpu`;
+   see `/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_12-52-32.json`.
 2. Decide exact-resource versus practical-runner claims for any future broader
    OpenFaaS application claim.
 3. Port or explicitly demote GCP/AWS historical rows.
