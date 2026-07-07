@@ -2,283 +2,233 @@
 
 ## Purpose
 
-This file is the restart point for the paused release-readiness goal. It records
-the current execution state so a future agent can resume without reconstructing
-the goal from chat history.
+This file is the restart point for the next agent. It records the current
+verified state and the recommended next slice without requiring chat-history
+reconstruction.
 
 Policy authority remains in `docs/rework_milestone_release_plan.md` and
 `docs/release_certification_matrix.md`. This document is a checkpoint and
 handoff only.
 
-## Active Goal
+## Current Verified State
 
-Prepare the reworked Continuum branch for an intermediate M1 milestone release,
-then continue toward a final replacement release only after old-main parity is
-certified or explicitly deprecated.
+Start in `/home/matthijs/continuum` on branch `pr-23-curated`.
 
-The release direction is:
+Latest committed checkpoint:
 
-1. keep Continuum core limited to structured planning, validation, selector and
-   scope resolution, module contracts, runtime handoff, state, and evidence
-   contracts,
-2. treat providers, resource managers, addons, execution helpers, and
-   applications as modules or module families,
-3. describe `qemu` as an infrastructure provider module, not Continuum core,
-4. publish M1 only as an intermediate milestone or pre-release,
-5. claim only rows marked `core-ready` or `certified` in
-   `docs/release_certification_matrix.md`,
-6. require fresh VM-backed or cloud-backed evidence before any runtime support
-   claim is broadened,
-7. keep the final `main` replacement blocked until old public functionality is
-   certified or intentionally deprecated with migration guidance.
+```text
+0d5f8f2 refresh release evidence for july 6 runs
+```
 
-## Current Checkpoint
+At that checkpoint, the worktree was clean and these gates passed:
 
-The branch contains the M1 release plan, certification matrix, release-note
-draft, release evidence docs, old-main parity issue seed, post-release roadmap,
-release-claim checkers, release-matrix drift checks, release-evidence artifact
-checks, and M1 pre-tag checks.
+1. `python3 scripts/test/check_release_pretag.py`
+   - `TOTAL_RELEASE_PRETAG_ISSUES=0`
+2. `python3 scripts/test/check_release_matrix.py`
+   - `TOTAL_RELEASE_MATRIX_ISSUES=0`
+3. `python3 scripts/test/check_release_claims.py`
+   - `TOTAL_RELEASE_CLAIM_ISSUES=0`
+4. `python3 scripts/test/check_docs_paths.py`
+   - `TOTAL_MISSING_REFERENCES=0`
+5. `python3 -m unittest scripts.test.unit.test_check_release_pretag scripts.test.unit.test_check_release_evidence_artifacts`
+   - 143 tests OK
+6. `git diff --check`
+   - clean
+7. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
+   - synced `/home/matthijs/continuum` to `/srv/continuum/repo`
+8. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit`
+   - `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0`
 
-The current M1 cloud-safe evidence table points to:
+The current M1 evidence snapshot is:
 
-`/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T220439Z.md`
+```text
+docs/release_evidence_m1_2026-07-06.md
+```
 
-That audit recorded:
+It records VM-backed evidence from source commit
+`c6a7bd8db167833593d110cbd45b89d7a2afd86c` and the latest cloud-safe audit
+report:
 
-1. required cloud-safe gates: PASS,
-2. unit unittest discovery: 619 tests OK,
-3. e2e unittest discovery: 89 tests OK,
-4. combined unittest discovery: 708 tests OK,
-5. pytest mirror: 708 passed,
-6. release claim issues: 0,
-7. release matrix issues: 0,
-8. docs path missing references: 0,
-9. release evidence artifact issues: 0,
-10. pre-tag issues: 0 at the current repo-side checkpoint after the guarded
-    release-artifact audit wrapper addition and resume-state artifact checker
-    fix.
+```text
+logs/cloud_static_audit/cloud_static_audit_2026-07-06T140907Z.md
+```
 
-Current host-runner and VM-evidence state:
+That audit recorded required gates passing, 639 unit unittest tests, 100 local
+e2e unittest tests, 739 combined unittest tests, and a 739-test pytest mirror.
+Generated `logs/cloud_static_audit/*.md` reports stay uncommitted unless a
+maintainer explicitly asks for a dated audit snapshot.
 
-1. VM evidence source commit: `295a5eec7664f1fb95047704422ddc736bb05718`,
-2. dedicated runner repo: resynced from `/home/matthijs/continuum` with
-   `sudo -n /usr/local/bin/continuum-hostctl sync-repo`,
-3. installed wrapper: refreshed with
-   `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke`,
-4. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS,
-5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
-   check-prereqs`: PASS.
+## Certified Scope
 
-At the current checkpoint, the dedicated runner is no longer blocked by repo
-drift, helper-interface drift, or release-artifact-audit availability. All
-currently claimed VM-backed wrapper scenarios listed in
-`docs/release_notes_m1_draft.md` passed on 2026-06-01 from the clean evidence
-source commit `295a5eec7664f1fb95047704422ddc736bb05718`.
+Claim only what is marked `core-ready` or `certified` in
+`docs/release_certification_matrix.md`.
 
-On this post-hardening checkpoint series:
+Current certified/core-ready highlights:
 
-1. `python3 scripts/test/check_release_claims.py`: 0 issues,
-2. `python3 scripts/test/check_release_matrix.py`: 0 issues,
-3. `python3 scripts/test/check_docs_paths.py`: 0 missing references,
-4. `scripts/test/run_cloud_static_audit.sh`: required gates PASS, report
-   `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-06-01T220439Z.md`,
-5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
-   release-artifact-audit`: 0 issues,
-6. `python3 scripts/test/check_release_pretag.py`: 0 issues,
-7. `sudo -n /usr/local/bin/continuum-hostctl verify`: PASS with the hardened
-   root-owned helper and read-only `/srv/continuum/repo`.
+1. M1 cloud-safe core checks and local QEMU/libvirt vertical slices.
+2. QEMU old-main rows `P-QEMU-01` through `P-QEMU-09`.
+3. Software-only subset rows `P-QEMU-06-SW`, `P-QEMU-07-SW`,
+   `P-QEMU-08-SW`, and `P-QEMU-10-SW-LOCAL`.
+4. Local CPU-capped OpenFaaS application subset `P-QEMU-10-APP-LOCAL`.
+5. Research case-study rows:
+   - `M2-QEMU-KUBECONTROL-EMPTY`
+   - `M2-QEMU-KUBECONTROL-TRACE`
 
-The cloud-safe audit recorded 619 unit tests, 89 local e2e tests, 708 combined
-unittest tests, and 708 combined pytest tests.
+The Columbo/kubecontrol distinction matters:
 
-After commit `412e682`, the only post-evidence wrapper changes are the exact
-guarded `release-artifact-audit` scenario addition, the corresponding
-`CONTINUUM_RELEASE_AUDIT_ROOT` wrapper environment, and the helper-interface
-bump. Commit `545cd17` then fixed the release-artifact checker so resumed
-multi-phase evidence may validate a shared final `state.json` without
-weakening per-entry `state_phase` checks. These changes are release guardrail
-changes, not new VM runtime evidence scope. Any other change to
-`scripts/test/run_smoke_host.sh` or `scripts/test/setup_agent_host.sh` still
-requires fresh affected VM evidence.
+1. `M2-QEMU-KUBECONTROL-EMPTY` certifies the Continuum
+   module/profile/suite/docs integration for the Columbo-style workflow. Its
+   retained July 3 evidence exposes kubelet, application, and resource evidence,
+   but not every legacy control-plane trace point.
+2. `M2-QEMU-KUBECONTROL-TRACE` certifies full control-plane trace reproduction
+   for the minimal local-QEMU `empty` per-call profile. Its July 6 retained
+   evidence requires populated controller, scheduler, kubelet, and application
+   timing columns in both `CLOUD OUTPUT` and benchmark metric artifacts.
+3. Neither row certifies every Columbo paper figure, parameter sweep, cloud
+   provider, non-QEMU topology, `empty_kata`, `kube_kata`, or broader
+   kubecontrol application coverage.
 
-The current M1 evidence doc records the installed helper as verified. The
-installed wrapper base root is
-`/mnt/sdc/continuum_smoke`, and the retained root symlink remains in place.
-The installed `/usr/local/bin/continuum-hostctl` was manually refreshed from
-the reviewed repo-generated helper, then `sync-repo`, `install-wrapper
-dedicated /mnt/sdc/continuum_smoke`, and `verify` passed. If the helper
-interface changes again, the replacement must again be a manual reviewed
-operator action as documented in `docs/agent_sudo_boundaries.md`; do not add a
-refresh helper or temporary sudoers rule.
+The implementation claim is architectural: the paper workflow is represented
+through Continuum modules, profiles, experiments, suites, and docs. Do not add
+Columbo-specific concepts to Continuum core. Any shared/core changes must be
+treated as generic gaps and documented that way.
 
-The hardened helper no longer runs `git` against the mutable live checkout as
-root, so commit/tree-state evidence should be recorded from the normal user
-shell or cloud-safe audit output.
+## Known Remaining Blocker
 
-The previous sandbox problems were resolved for the earlier session:
+The next unclaimed QEMU parent row is:
 
-1. Git staging and committing work.
-2. `sudo -n /usr/local/bin/continuum-hostctl verify` passes with the current
-   installed helper.
-3. Agent sudo policy is documented in `docs/agent_sudo_boundaries.md`.
+```text
+P-QEMU-10
+```
 
-Generic sudo may still differ between the operator shell and an agent sandbox.
-Do not broaden sudoers to compensate; use the root-owned wrapper pattern in
-`docs/agent_sudo_boundaries.md`.
+It corresponds to:
 
-Post-M1 parity progress after this checkpoint:
+```text
+configuration/tests/qemu/10_kubernetes-openfaas.cfg
+configs/experiments/parity/qemu_openfaas_image/10_openfaas_image_classification.yaml
+suite qemu_openfaas_image_parity
+```
 
-1. The host-side local registry cache was primed for
-   `qemu_kubeedge_image_parity` and `qemu_mist_image_parity` with
-   `sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite ...`.
-2. Direct registry probes from the agent sandbox cannot reach
-   `192.168.1.104:5000`, so use the host helper result as the authoritative
-   cache-readiness signal.
-3. Multiple full `qemu_kubeedge_image_parity` wrapper runs were attempted. An
-   earlier retained evidence source commit
-   `67f49fa4f7af3b4f54912dabc8993ac923c8abdd` exposed the edge flannel
-   `CrashLoopBackOff`; follow-up code now injects an explicit flannel
-   kubeconfig and aligns KubeEdge/containerd runtime setup.
-4. A later post-fix wrapper attempt reached the application phase, then failed
-   under host disk pressure while endpoint Docker was pulling the
-   image-classification publisher image. The runner also failed to save its JSON
-   summary with `OSError: [Errno 28] No space left on device`.
-5. The retained smoke root was relocated on 2026-05-30. Current evidence:
-   `/home/continuum-smoke/continuum_smoke` is a symlink to
-   `/mnt/sdc/continuum_smoke`; `run-continuum-smoke storage-report` reports 74G
-   retained state under `/mnt/sdc/continuum_smoke`; and `/` has 84G free instead
-   of the previous 22G.
-6. The first 2026-06-01 rerun reached application startup but failed because
-   edge1 flannel could not create a VXLAN device and the host mosquitto service
-   conflicted with the KubeEdge broker pod on port 1883.
-7. Commit `c4f034715459d5a7199bac1789b5115699848afb` fixed those runtime
-   prerequisites by loading/persisting `vxlan` for KubeEdge base images and
-   stopping/disabling the host mosquitto service on edge nodes.
-8. After pruning the retained `qemu_kubeedge_image_parity` scenario to rebuild
-   base images, the full wrapper run passed in 4138.3s on 2026-06-01. Evidence:
-   `docs/release_evidence_qemu_kubeedge_image_2026-06-02.md`.
-9. The installed wrapper base root is `/mnt/sdc/continuum_smoke`. The
-   maintenance helper still reports its configured `SMOKE_BASE_ROOT` as
-   `/home/continuum-smoke/continuum_smoke`, which is now the compatibility
-   symlink. Do not remove that symlink unless all retained-evidence references
-   and helper defaults are updated together.
-10. The old checksum-pinned bootstrap refresh helper and its sudoers file have
-   been removed from the host. Do not reintroduce them. Updating
-   `/usr/local/bin/continuum-hostctl` is a manual reviewed operator action;
-   the agent workflow starts from the already-installed root-owned helper.
+`P-QEMU-10-SW-LOCAL` and `P-QEMU-10-APP-LOCAL` are certified only as local
+single-host, CPU-capped subset rows. They must not be used to claim exact
+parent-row parity.
 
-`P-QEMU-06` is now certified. `P-QEMU-07` is also certified after commit
-`44ed14bcb2cffb224352ba219b9ade5b62b24e6a` fixed Mist Docker startup warning
-handling and the Mist worker readiness Docker status command. Evidence:
-`docs/release_evidence_qemu_mist_image_2026-06-02.md`.
+The exact parent row remains `ported-unverified` because its 26-core legacy
+resource shape needs reachable/larger QEMU capacity. The retained failed run
+from 2026-06-02 selected external host `matthijs@node3` and failed before
+provisioning with `No route to host`:
 
-## Current Certified Scope
+```text
+/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-06-02_15-36-18.json
+```
 
-The certified or core-ready scope is exactly the set named in
-`docs/release_certification_matrix.md` and summarized in
-`docs/release_notes_m1_draft.md`:
+Do not reduce CPU or node shape and then certify `P-QEMU-10`. A reduced-shape
+run is another subset row unless the matrix explicitly says otherwise.
 
-1. M1 cloud-safe core checks,
-2. local QEMU/libvirt M1 smoke rows,
-3. the M1 network-validation row,
-4. the resumed Kubernetes image-classification benchmark smoke row,
-5. QEMU old-main infrastructure-only parity rows `P-QEMU-01` through
-   `P-QEMU-04`,
-6. QEMU Kubernetes no-benchmark row `P-QEMU-09`,
-7. full KubeEdge image-classification row `P-QEMU-06`,
-8. full Mist image-classification row `P-QEMU-07`,
-9. software-only subset rows `P-QEMU-06-SW`, `P-QEMU-07-SW`,
-   `P-QEMU-08-SW`, and `P-QEMU-10-SW-LOCAL`,
-10. the single-host CPU-capped OpenFaaS application subset
-   `P-QEMU-10-APP-LOCAL`.
+## Next Recommended Slice
 
-Do not claim full old-main parity, cloud-provider support, full QEMU
-application parity, or exact parent-row OpenFaaS application parity from this
-checkpoint. KubeEdge application parity is certified only for `P-QEMU-06`; Mist
-application parity is certified only for `P-QEMU-07`; the OpenFaaS
-image-classification row `P-QEMU-10-APP-LOCAL` is certified only as a local
-CPU-capped subset.
+First fix any new release gate, docs, or checker issue that appears in the
+current tree. If the tree is still clean and release gates pass, move to
+capacity/topology enablement for exact `P-QEMU-10`.
 
-## Known Blockers
+Recommended start:
 
-There is no known host-helper blocker at this checkpoint. The installed helper
-verifies, and the dedicated repo is synced and read-only for
-`continuum-smoke`.
+```bash
+cd /home/matthijs/continuum
+cat AGENTS.md
+git status --short
+git log --oneline -5
+python3 scripts/test/check_release_pretag.py
+python3 scripts/test/check_release_matrix.py
+python3 scripts/test/check_release_claims.py
+python3 scripts/test/check_docs_paths.py
+```
 
-There is no known release-artifact/pretag blocker at this checkpoint. The
-primary M1 and old-main QEMU evidence docs now name the same release-candidate
-runtime source commit. The full P-QEMU-05 and P-QEMU-08 image parity rows have
-been promoted from candidate evidence to release evidence, and the
-wrapper-based artifact audit validates the retained artifacts with
-`TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0`.
+Then inspect the exact parent-row inputs:
 
-M1 still needs the normal final publication discipline: rerun the pre-tag
-sequence from `docs/release_notes_m1_draft.md` on the exact source tree that
-will be tagged. If any runtime, runner, verifier, profile, playbook, or config
-code changes, rerun the affected VM-backed wrapper scenarios and refresh the
-evidence before tagging.
+```bash
+sed -n '130,145p' docs/release_certification_matrix.md
+sed -n '150,175p' docs/release_certification_matrix.md
+sed -n '280,325p' docs/smoke_runner_isolation.md
+python3 scripts/test/run_tests.py --check-prereqs --suite qemu_openfaas_image_parity
+```
 
-Remaining blockers for a final replacement release are the non-certified
-old-main parity rows in `docs/release_certification_matrix.md`, especially
-the remaining exact full QEMU OpenFaaS application parity row, cloud-provider
-rows, bare-metal scope, and unverified software/application modules.
-
-The local OpenFaaS application evidence boundary has been resolved:
-`P-QEMU-10-APP-LOCAL` is certified by
-`docs/release_evidence_qemu_openfaas_image_local_2026-06-02.md`. The exact
-`P-QEMU-10` application config is still only ported. Its 26-core legacy shape
-selected external host `matthijs@node3`. On 2026-06-02 the registry-cache
-preflight passed, but the exact suite failed before provisioning because SSH
-returned `No route to host`; retained result:
-`/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-06-02_15-36-18.json`.
-Keep parent row `P-QEMU-10` unclaimed until external QEMU capacity is reachable
-or a larger local runner can produce exact retained VM/application evidence.
-
-At this checkpoint the repo-generated hostctl interface is
-`2026-07-06-kubecontrol-trace-cache`. If `/usr/local/bin/continuum-hostctl` still
-reports `2026-06-01-release-artifact-audit-root`, replace it only through the
-manual reviewed helper install flow documented in `docs/smoke_runner_isolation.md`.
-Then run:
+Before any VM-backed run, verify the dedicated host wrapper and cache state:
 
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
-sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated /mnt/sdc/continuum_smoke
 sudo -n /usr/local/bin/continuum-hostctl verify
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
-  prime-registry-cache --check-only --suite qemu_openfaas_image_local_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
+  prime-registry-cache --check-only --suite qemu_openfaas_image_parity
 ```
 
-## Next Agent Checklist
+Run the exact suite only after host capacity is available and the operator has
+agreed to spend the VM time:
 
-1. Review the latest worktree with `git status --short` and `git log --oneline
-   -5`.
-2. Run the cloud-safe checks before making release claims:
-   - `python3 scripts/test/check_release_claims.py`
-   - `python3 scripts/test/check_release_matrix.py`
-   - `python3 scripts/test/check_docs_paths.py`
-   - `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
-     release-artifact-audit`
-   - `python3 scripts/test/check_release_pretag.py`
-3. If source changed after the current checkpoint, run
-   `scripts/test/run_cloud_static_audit.sh` and update
-   `docs/release_evidence_m1_2026-06-01.md` with the new report path and
-   counts.
-4. Keep generated `logs/cloud_static_audit/*.md` files uncommitted unless a
-   maintainer explicitly asks for a dated audit snapshot.
-5. Before tagging M1 on the certification host, verify the installed host
-   helper and run the pre-tag command sequence in
-   `docs/release_notes_m1_draft.md`. Manually review and replace
-   `/usr/local/bin/continuum-hostctl` only if the repo-generated helper changed
-   or verification reports helper-interface drift.
-6. Rerun affected VM-backed rows after any runtime, runner, verifier, profile,
-   or playbook changes.
-7. Only after `check_release_pretag.py` reports zero issues should M1 be tagged
-   or published.
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity
+```
+
+If the exact suite passes, add a new evidence doc for the parent row, for
+example:
+
+```text
+docs/release_evidence_qemu_openfaas_image_YYYY-MM-DD.md
+```
+
+Then update:
+
+1. `docs/release_certification_matrix.md`
+   - promote `P-QEMU-10` only if exact resource parity passed,
+   - update the `qemu`, `kubernetes`, `openfaas`, and `endpoint_runtime`
+     backlog rows if their claim boundaries broaden.
+2. `docs/release_notes_m1_draft.md`
+   - include the new ready row and evidence only if it is meant to be part of
+     the current milestone publication.
+3. `docs/old_main_parity_issue_seed.md`
+   - remove or close the non-ready seed for `P-QEMU-10` once the matrix row is
+     certified, or keep it synchronized if the row remains unclaimed.
+4. `scripts/test/test_config.json` and checker tests only if the success
+   detection or suite contract changes.
+
+After evidence docs are updated, rerun:
+
+```bash
+python3 scripts/test/check_release_matrix.py
+python3 scripts/test/check_release_claims.py
+python3 scripts/test/check_docs_paths.py
+sudo -n /usr/local/bin/continuum-hostctl sync-repo
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
+python3 scripts/test/check_release_pretag.py
+git diff --check
+```
+
+If capacity for exact `P-QEMU-10` is not available, keep the row unclaimed and
+either document the capacity blocker or choose a different unclaimed module row.
+Good fallback candidates are the explicit module-backlog rows such as
+`kube_kata`/`empty_kata`, but they require new YAML profiles, host prerequisite
+documentation, retained VM evidence, and careful scope wording.
+
+## Operational Boundaries
+
+Use only the reviewed host wrappers for retained smoke work:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl ...
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke ...
+```
+
+Do not use arbitrary `sudo`. Do not commit generated logs, VM artifacts,
+credentials, service keys, local `.tmp` files, or machine-specific overrides.
+
+VM-backed suites can consume substantial CPU/RAM/time and mutate retained state.
+Do not start them unless the task explicitly calls for that run and host
+capacity is available.
 
 ## Suggested Commit Grouping
 
-For future release-readiness commits, keep docs/checker-only changes separate
-from runtime/config/profile/playbook changes when practical. Runtime-affecting
-commits after the evidence source commit must name which VM-backed wrapper
-scenarios were rerun, or explicitly state that the row remains unclaimed.
+Keep docs/checker-only changes separate from runtime/config/profile/playbook
+changes when practical. Runtime-affecting commits after the evidence source
+commit must name which VM-backed wrapper scenarios were rerun, or explicitly
+state that the affected row remains unclaimed.
