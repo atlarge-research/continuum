@@ -183,10 +183,11 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Provide reachable external QEMU capacity or a larger local runner, then run
-   exact `P-QEMU-10` OpenFaaS application evidence. The latest retained
-   attempt on 2026-06-02 passed the local registry cache preflight but failed
-   before provisioning because `matthijs@node3` returned `No route to host`.
+1. Provide dedicated-runner SSH access to reachable external QEMU capacity, or
+   a larger local runner, then run exact `P-QEMU-10` OpenFaaS application
+   evidence. The latest retained attempt on 2026-07-07 passed the local
+   registry cache preflight but failed before provisioning because
+   `continuum-smoke` could not authenticate to legacy host `matthijs@node1`.
 2. Decide exact-resource versus practical-runner claims for any future broader
    OpenFaaS application claim.
 3. Port or explicitly demote GCP/AWS historical rows.

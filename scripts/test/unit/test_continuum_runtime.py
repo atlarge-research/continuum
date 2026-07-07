@@ -191,6 +191,50 @@ class QemuInfrastructureResumeTopologyTests(unittest.TestCase):
 
 
 class MachineProcessDiagnosticsTests(unittest.TestCase):
+    def test_check_hardware_uses_local_lscpu_directly(self):
+        machine = Machine("local", True)
+        machine.process = mock.Mock(
+            return_value=[
+                (
+                    ["CPU(s):              8", "Thread(s) per core:  2"],
+                    [],
+                )
+            ]
+        )
+
+        machine.check_hardware({"infrastructure": {"provider": "qemu"}})
+
+        machine.process.assert_called_once_with(
+            {"infrastructure": {"provider": "qemu"}},
+            ["lscpu"],
+        )
+        self.assertEqual(machine.cores, 4)
+
+    def test_check_hardware_uses_managed_ssh_for_external_machine(self):
+        machine = Machine("matthijs@node3", False)
+        config = {
+            "infrastructure": {"provider": "qemu"},
+            "ssh_known_hosts_file": "/tmp/continuum-known-hosts",
+        }
+        machine.process = mock.Mock(
+            return_value=[
+                (
+                    ["CPU(s):              32", "Thread(s) per core:  2"],
+                    [],
+                )
+            ]
+        )
+
+        machine.check_hardware(config)
+
+        machine.process.assert_called_once_with(
+            config,
+            ["lscpu"],
+            ssh="matthijs@node3",
+            ssh_key=False,
+        )
+        self.assertEqual(machine.cores, 16)
+
     def test_process_surfaces_silent_nonzero_return_code(self):
         machine = Machine("local", True)
 

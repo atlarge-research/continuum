@@ -636,11 +636,9 @@ BASE_NAMES                  %s""" % (
         cmd = "lscpu"
 
         if self.is_local:
-            command = [cmd]
+            output, error = self.process(config, [cmd])[0]
         else:
-            command = ["ssh", self.name, cmd]
-
-        output, error = self.process(config, command)[0]
+            output, error = self.process(config, [cmd], ssh=self.name, ssh_key=False)[0]
 
         if not output:
             logging.error("".join(error))

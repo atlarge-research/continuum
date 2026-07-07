@@ -114,13 +114,20 @@ single-host, CPU-capped subset rows. They must not be used to claim exact
 parent-row parity.
 
 The exact parent row remains `ported-unverified` because its 26-core legacy
-resource shape needs reachable/larger QEMU capacity. The retained failed run
-from 2026-06-02 selected external host `matthijs@node3` and failed before
-provisioning with `No route to host`:
+resource shape needs reachable external QEMU capacity that the dedicated
+runner can authenticate to, or a larger local runner. The latest retained
+failed run from 2026-07-07 selected legacy external host `matthijs@node1` and
+failed before provisioning because `continuum-smoke` could not authenticate:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-06-02_15-36-18.json
+/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_08-11-02.json
 ```
+
+That run followed a small runtime fix so remote physical-machine hardware
+checks use Continuum's managed SSH path instead of bypassing its known-hosts
+handling. Before that fix, `matthijs@node3` failed earlier with host-key
+verification; after the fix, both `matthijs@node3` and `matthijs@node1`
+reached SSH authentication and failed with `Permission denied`.
 
 Do not reduce CPU or node shape and then certify `P-QEMU-10`. A reduced-shape
 run is another subset row unless the matrix explicitly says otherwise.
@@ -129,7 +136,8 @@ run is another subset row unless the matrix explicitly says otherwise.
 
 First fix any new release gate, docs, or checker issue that appears in the
 current tree. If the tree is still clean and release gates pass, move to
-capacity/topology enablement for exact `P-QEMU-10`.
+dedicated-runner external-host authentication for exact `P-QEMU-10`, or use a
+larger local runner.
 
 Recommended start:
 
@@ -163,7 +171,8 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
   prime-registry-cache --check-only --suite qemu_openfaas_image_parity
 ```
 
-Run the exact suite only after host capacity is available and the operator has
+Run the exact suite only after the dedicated runner can authenticate to the
+external host, or a larger local runner is available, and the operator has
 agreed to spend the VM time:
 
 ```bash
@@ -204,8 +213,9 @@ python3 scripts/test/check_release_pretag.py
 git diff --check
 ```
 
-If capacity for exact `P-QEMU-10` is not available, keep the row unclaimed and
-either document the capacity blocker or choose a different unclaimed module row.
+If authenticated capacity for exact `P-QEMU-10` is not available, keep the row
+unclaimed and either document the capacity/access blocker or choose a different
+unclaimed module row.
 Good fallback candidates are the explicit module-backlog rows such as
 `kube_kata`/`empty_kata`, but they require new YAML profiles, host prerequisite
 documentation, retained VM evidence, and careful scope wording.

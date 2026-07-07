@@ -78,8 +78,9 @@ This evidence does not certify:
 4. cloud-provider OpenFaaS behavior,
 5. OpenFaaS behavior without the primed local registry cache.
 
-The exact legacy application shape selected external host `matthijs@node3` on
-2026-07-03 and failed before provisioning because SSH returned `No route to
-host`. Keep parent row `P-QEMU-10` unclaimed until reachable external QEMU
-capacity or a larger local runner can produce retained VM/application evidence
-for the exact shape.
+The latest exact legacy application attempt selected legacy external host
+`matthijs@node1` on 2026-07-07 and failed before provisioning because the
+dedicated `continuum-smoke` runner could not authenticate to that host. Keep
+parent row `P-QEMU-10` unclaimed until authenticated external QEMU capacity or
+a larger local runner can produce retained VM/application evidence for the
+exact shape.

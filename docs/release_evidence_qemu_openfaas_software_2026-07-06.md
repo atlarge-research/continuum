@@ -81,13 +81,10 @@ This evidence does not certify:
 
 This software-only evidence does not certify parent row `P-QEMU-10`.
 
-The exact legacy software shape exceeded the dedicated runner's single-host
-capacity and auto-selected `matthijs@node3`; that host was unreachable from the
-runner during the attempt saved at
-`/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-05-23_21-32-24.json`.
-
 The full `qemu_openfaas_image_parity` suite is ported but not certified. It now
 uses cache-backed image preflight, and the local registry cache has been primed
-on the certification host, but exact parent-row evidence still requires
-reachable external QEMU capacity or a larger local runner before parent row
-`P-QEMU-10` can be claimed.
+on the certification host. The latest exact parent-row attempt selected legacy
+external host `matthijs@node1` on 2026-07-07 and failed before provisioning
+because the dedicated `continuum-smoke` runner could not authenticate to that
+host. Exact parent-row evidence still requires authenticated external QEMU
+capacity or a larger local runner before parent row `P-QEMU-10` can be claimed.
