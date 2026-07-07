@@ -64,4 +64,4 @@ This evidence does not certify:
 
 This software-only evidence does not certify parent row `P-QEMU-08`. The full
 endpoint image/runtime parent row is certified separately by
-`docs/release_evidence_qemu_endpoint_image_2026-07-06.md`.
+`docs/release_evidence_qemu_endpoint_image_2026-07-07.md`.

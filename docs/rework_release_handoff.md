@@ -42,7 +42,7 @@ At that checkpoint, the worktree was clean and these gates passed:
 The current M1 evidence snapshot is:
 
 ```text
-docs/release_evidence_m1_2026-07-06.md
+docs/release_evidence_m1_2026-07-07.md
 ```
 
 It records VM-backed evidence from source commit

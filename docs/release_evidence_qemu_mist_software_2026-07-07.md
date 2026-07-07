@@ -9,7 +9,7 @@ It proves that the rework stack can provision the legacy P-QEMU-07-style local
 QEMU topology and complete the Mist software phase with endpoint runtime present
 for endpoint resources. It does not certify the full image-classification
 application benchmark from `configuration/tests/qemu/07_mist-img.cfg`; that
-parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-06.md`.
+parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-07.md`.
 
 ## Source And Command
 

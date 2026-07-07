@@ -10,7 +10,7 @@ QEMU topology and complete the KubeEdge software phase with endpoint runtime
 present for endpoint resources. It does not certify the full
 image-classification application benchmark from `configuration/tests/qemu/06_kubeedge-img.cfg`;
 that parent row is certified separately by
-`docs/release_evidence_qemu_kubeedge_image_2026-07-06.md`.
+`docs/release_evidence_qemu_kubeedge_image_2026-07-07.md`.
 
 ## Source And Command
 
