@@ -14,10 +14,10 @@ handoff only.
 
 Start in `/home/matthijs/continuum` on branch `pr-23-curated`.
 
-Latest committed checkpoint:
+Latest evidence checkpoint:
 
 ```text
-0d5f8f2 refresh release evidence for july 6 runs
+04730cc refresh release evidence after ssh preflight fix
 ```
 
 At that checkpoint, the worktree was clean and these gates passed:
@@ -46,17 +46,23 @@ docs/release_evidence_m1_2026-07-06.md
 ```
 
 It records VM-backed evidence from source commit
-`c6a7bd8db167833593d110cbd45b89d7a2afd86c` and the latest cloud-safe audit
+`dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` and the latest cloud-safe audit
 report:
 
 ```text
-logs/cloud_static_audit/cloud_static_audit_2026-07-06T140907Z.md
+logs/cloud_static_audit/cloud_static_audit_2026-07-07T081438Z.md
 ```
 
-That audit recorded required gates passing, 639 unit unittest tests, 100 local
-e2e unittest tests, 739 combined unittest tests, and a 739-test pytest mirror.
+That audit recorded required gates passing, 641 unit unittest tests, 100 local
+e2e unittest tests, 741 combined unittest tests, and a 741-test pytest mirror.
 Generated `logs/cloud_static_audit/*.md` reports stay uncommitted unless a
 maintainer explicitly asks for a dated audit snapshot.
+
+The July 7 refresh reran the M1 and old-main QEMU certified wrapper scenarios
+on source commit `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` after fixing the
+external physical-machine hardware preflight path. The exact parent
+`qemu_openfaas_image_parity` suite was also attempted and remains unclaimed
+because external-host authentication failed before provisioning.
 
 ## Certified Scope
 
