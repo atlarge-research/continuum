@@ -63,6 +63,17 @@
   args:
     creates: "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
 
+- name: Set base qcow2 mode for libvirt access
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
+    mode: "0664"
+
+- name: Grant kvm group ACL on base qcow2 image
+  ansible.builtin.command: >
+    setfacl -m g:kvm:rw
+    {{ base_path }}/.continuum/images/{{ image_name }}.qcow2
+  changed_when: false
+
 - name: Create cloud-init disk for base image
   ansible.builtin.command: >
     cloud-localds
@@ -70,3 +81,14 @@
     {{ base_path }}/.continuum/user_data_{{ image_name }}.yml
   args:
     creates: "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"
+
+- name: Set base cloud-init disk mode for libvirt access
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"
+    mode: "0664"
+
+- name: Grant kvm group ACL on base cloud-init disk
+  ansible.builtin.command: >
+    setfacl -m g:kvm:rw
+    {{ base_path }}/.continuum/images/user_data_{{ image_name }}.img
+  changed_when: false

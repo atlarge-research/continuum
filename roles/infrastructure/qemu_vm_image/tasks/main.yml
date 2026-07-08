@@ -36,6 +36,23 @@
   loop_control:
     label: "{{ item }}"
 
+- name: Set VM qcow2 modes for libvirt access
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images/{{ item }}.qcow2"
+    mode: "0664"
+  loop: "{{ vm_nodes }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Grant kvm group ACL on VM qcow2 images
+  ansible.builtin.command: >
+    setfacl -m g:kvm:rw
+    {{ base_path }}/.continuum/images/{{ item }}.qcow2
+  changed_when: false
+  loop: "{{ vm_nodes }}"
+  loop_control:
+    label: "{{ item }}"
+
 - name: Create cloud-init disks for VM nodes
   ansible.builtin.command: >
     cloud-localds
@@ -43,6 +60,23 @@
     {{ base_path }}/.continuum/user_data_{{ item }}.yml
   args:
     creates: "{{ base_path }}/.continuum/images/user_data_{{ item }}.img"
+  loop: "{{ vm_nodes }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Set VM cloud-init disk modes for libvirt access
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images/user_data_{{ item }}.img"
+    mode: "0664"
+  loop: "{{ vm_nodes }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Grant kvm group ACL on VM cloud-init disks
+  ansible.builtin.command: >
+    setfacl -m g:kvm:rw
+    {{ base_path }}/.continuum/images/user_data_{{ item }}.img
+  changed_when: false
   loop: "{{ vm_nodes }}"
   loop_control:
     label: "{{ item }}"

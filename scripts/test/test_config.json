@@ -3,7 +3,7 @@
     "test_timeout_minutes": 90,
     "stop_on_failure": false,
     "physical_machine_cores": 20,
-    "external_physical_machine": "matthijs@node1",
+    "external_physical_machine": "continuum-smoke@node3",
     "success_detection": {
         "require_ssh_output": true,
         "require_exit_code_zero": true,

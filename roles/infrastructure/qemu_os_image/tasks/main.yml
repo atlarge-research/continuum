@@ -45,6 +45,17 @@
   args:
     creates: "{{ base_path }}/.continuum/images/{{ qemu_os_image_qcow2_name }}"
 
+- name: Set Ubuntu qcow2 mode for libvirt access
+  ansible.builtin.file:
+    path: "{{ base_path }}/.continuum/images/{{ qemu_os_image_qcow2_name }}"
+    mode: "0664"
+
+- name: Grant kvm group ACL on Ubuntu qcow2 image
+  ansible.builtin.command: >
+    setfacl -m g:kvm:rw
+    {{ base_path }}/.continuum/images/{{ qemu_os_image_qcow2_name }}
+  changed_when: false
+
 - name: Remove downloaded source image
   ansible.builtin.file:
     path: "{{ base_path }}/.continuum/images/{{ qemu_os_image_download_name }}"

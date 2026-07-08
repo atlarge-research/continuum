@@ -5,6 +5,41 @@ import unittest
 import yaml
 
 
+class QemuImageRoleTests(unittest.TestCase):
+    def _load_tasks(self, role_name):
+        repo_root = Path(__file__).resolve().parents[3]
+        task_path = repo_root / "roles/infrastructure" / role_name / "tasks/main.yml"
+        return yaml.safe_load(task_path.read_text(encoding="utf-8"))
+
+    def _task_names(self, tasks):
+        return [task.get("name") for task in tasks]
+
+    def test_qemu_os_image_grants_libvirt_access_to_generated_qcow2(self):
+        tasks = self._load_tasks("qemu_os_image")
+        names = self._task_names(tasks)
+
+        self.assertIn("Set Ubuntu qcow2 mode for libvirt access", names)
+        self.assertIn("Grant kvm group ACL on Ubuntu qcow2 image", names)
+
+    def test_qemu_base_image_grants_libvirt_access_to_generated_disks(self):
+        tasks = self._load_tasks("qemu_base_image")
+        names = self._task_names(tasks)
+
+        self.assertIn("Set base qcow2 mode for libvirt access", names)
+        self.assertIn("Grant kvm group ACL on base qcow2 image", names)
+        self.assertIn("Set base cloud-init disk mode for libvirt access", names)
+        self.assertIn("Grant kvm group ACL on base cloud-init disk", names)
+
+    def test_qemu_vm_image_grants_libvirt_access_to_generated_disks(self):
+        tasks = self._load_tasks("qemu_vm_image")
+        names = self._task_names(tasks)
+
+        self.assertIn("Set VM qcow2 modes for libvirt access", names)
+        self.assertIn("Grant kvm group ACL on VM qcow2 images", names)
+        self.assertIn("Set VM cloud-init disk modes for libvirt access", names)
+        self.assertIn("Grant kvm group ACL on VM cloud-init disks", names)
+
+
 class DockerSetupRoleTests(unittest.TestCase):
     def test_docker_setup_selects_engine_family_from_package_state(self):
         repo_root = Path(__file__).resolve().parents[3]
