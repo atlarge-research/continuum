@@ -1,4 +1,4 @@
-# QEMU Mist Image Evidence - 2026-07-06
+# QEMU Mist Image Evidence - 2026-07-08
 
 ## Scope
 
@@ -15,9 +15,9 @@ metric artifacts.
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07` |
-| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
+| Git commit | `f9ab4217c40604dc145692664667a13e8cc2a994` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-07 |
+| Date | 2026-07-08 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, local registry cache priming, retained failed-run diagnostics, Mist Docker startup/runtime-helper fixes, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` |
@@ -27,7 +27,7 @@ metric artifacts.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, local registry cache primed for the suite, and enough disk space under `/mnt/sdc/continuum_smoke`; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, `application`, cleanup |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, application phase evidence, benchmark metrics manifest, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-07-07_11-30-36.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/test_results/test_results_2026-07-08_19-50-25.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/` |
 
 ## Result
@@ -39,12 +39,12 @@ and Ansible retry-noise success detection:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 999.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found, benchmark metric artifacts found |
+| `configs/experiments/parity/qemu_mist_image/07_mist_image_classification.yaml` | PASS | 1074.7s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, teardown verified, benchmark evidence found, benchmark metric tables found, benchmark metric artifacts found |
 
 Benchmark metric artifact:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-07_11_13_57_classify-images_metrics_manifest.json
+/mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-08_19_32_31_classify-images_metrics_manifest.json
 ```
 
 The passing run followed failed 2026-06-01 and 2026-07-03 attempts that exposed
@@ -86,9 +86,7 @@ This evidence does not certify:
 
 1. GCP, AWS, or bare-metal Mist behavior,
 2. broad Mist version compatibility beyond the configured profile,
-3. full OpenFaaS application parity, which still needs root-helper cache
-   priming, exact-resource capacity resolution, and retained application
-   evidence,
+3. OpenFaaS behavior outside the separately certified QEMU P-QEMU-10 row,
 4. broader Mist applications beyond the image-classification path,
 5. the longer-term architecture cleanup needed to split Mist from the shared
    KubeEdge base-install path.

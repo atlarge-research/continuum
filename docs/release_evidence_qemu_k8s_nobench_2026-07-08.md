@@ -1,4 +1,4 @@
-# QEMU Kubernetes No-Benchmark Parity Evidence - 2026-07-06
+# QEMU Kubernetes No-Benchmark Parity Evidence - 2026-07-08
 
 ## 1. Scope
 
@@ -19,7 +19,7 @@ KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
 | Field | Value |
 | --- | --- |
 | Live checkout | `/home/matthijs/continuum` |
-| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
+| Git commit | `f9ab4217c40604dc145692664667a13e8cc2a994` |
 | Tree state | Clean source tree synced to the dedicated runner |
 | Dedicated repo | `/srv/continuum/repo` |
 | Runner user | `continuum-smoke` |
@@ -32,12 +32,12 @@ KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
 | Runtime targets | `infrastructure`, `software` |
 | Provider profile | `configs/profiles/environment/local-qemu.yaml` |
 | Software profile | `configs/profiles/software/k8s-observability-endpoint-runtime.yaml` |
-| Date | 2026-07-07 |
+| Date | 2026-07-08 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity` |
 | Config | `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml` |
 | Suite | `qemu_k8s_nobench_parity` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes node-ready and observability software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-07-07_09-49-37.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-07-08_17-49-59.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/` |
 
 Before the final passing execution, the dedicated repo was synced from the live
@@ -89,12 +89,12 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_p
 Result summary:
 
 ```text
-/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-07-07_09-49-37.json
+/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-07-08_17-49-59.json
 ```
 
 | Matrix Row | YAML Config | Result | Evidence |
 | --- | --- | --- | --- |
-| `P-QEMU-09` | `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml` | PASS, 1516.0s | `exit_code=0`, `ssh_output_found`, `experiment_lock_written`, `state_file_written`, `state_phase=software`, `resume_contract_match` |
+| `P-QEMU-09` | `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml` | PASS, 1557.0s | `exit_code=0`, `ssh_output_found`, `experiment_lock_written`, `state_file_written`, `state_phase=software`, `resume_contract_match` |
 
 ## 6. Certification Result
 

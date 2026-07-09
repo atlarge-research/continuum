@@ -1,4 +1,4 @@
-# QEMU Mist Software Evidence - 2026-07-06
+# QEMU Mist Software Evidence - 2026-07-08
 
 ## Scope
 
@@ -9,16 +9,16 @@ It proves that the rework stack can provision the legacy P-QEMU-07-style local
 QEMU topology and complete the Mist software phase with endpoint runtime present
 for endpoint resources. It does not certify the full image-classification
 application benchmark from `configuration/tests/qemu/07_mist-img.cfg`; that
-parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-07.md`.
+parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-08.md`.
 
 ## Source And Command
 
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-07-SW` |
-| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
+| Git commit | `f9ab4217c40604dc145692664667a13e8cc2a994` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-07 |
+| Date | 2026-07-08 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, Mosquitto apt-lock retry hardening, and corrected Ansible retry-noise success detection |
 | Config | `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` |
@@ -28,14 +28,14 @@ parent row is tracked in `docs/release_evidence_qemu_mist_image_2026-07-07.md`.
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, and SSH access for Mist software execution and teardown; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software`, teardown |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Mist software-phase evidence, teardown evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-07-07_11-13-50.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/test_results/test_results_2026-07-08_19-32-25.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_mist_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` | PASS | 524.8s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
+| `configs/experiments/parity/qemu_mist_software/07_mist_software.yaml` | PASS | 544.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
 
 The run exercised two edge VMs and four endpoint VMs with CPU pinning enabled,
 matching the legacy Mist topology shape from

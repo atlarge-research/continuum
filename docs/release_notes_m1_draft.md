@@ -16,18 +16,19 @@ marked `certified` or `core-ready` in
 Use these documents as the release evidence set:
 
 1. `docs/release_certification_matrix.md`
-2. `docs/release_evidence_m1_2026-07-07.md`
-3. `docs/release_evidence_qemu_infra_parity_2026-07-07.md`
-4. `docs/release_evidence_qemu_k8s_image_2026-07-07.md`
-5. `docs/release_evidence_qemu_k8s_nobench_2026-07-07.md`
-6. `docs/release_evidence_qemu_kubeedge_software_2026-07-07.md`
-7. `docs/release_evidence_qemu_kubeedge_image_2026-07-07.md`
-8. `docs/release_evidence_qemu_mist_software_2026-07-07.md`
-9. `docs/release_evidence_qemu_mist_image_2026-07-07.md`
-10. `docs/release_evidence_qemu_endpoint_software_2026-07-07.md`
-11. `docs/release_evidence_qemu_endpoint_image_2026-07-07.md`
-12. `docs/release_evidence_qemu_openfaas_software_2026-07-07.md`
-13. `docs/release_evidence_qemu_openfaas_image_local_2026-07-07.md`
+2. `docs/release_evidence_m1_2026-07-08.md`
+3. `docs/release_evidence_qemu_infra_parity_2026-07-08.md`
+4. `docs/release_evidence_qemu_k8s_image_2026-07-08.md`
+5. `docs/release_evidence_qemu_k8s_nobench_2026-07-08.md`
+6. `docs/release_evidence_qemu_kubeedge_software_2026-07-08.md`
+7. `docs/release_evidence_qemu_kubeedge_image_2026-07-08.md`
+8. `docs/release_evidence_qemu_mist_software_2026-07-08.md`
+9. `docs/release_evidence_qemu_mist_image_2026-07-08.md`
+10. `docs/release_evidence_qemu_endpoint_software_2026-07-08.md`
+11. `docs/release_evidence_qemu_endpoint_image_2026-07-08.md`
+12. `docs/release_evidence_qemu_openfaas_software_2026-07-08.md`
+13. `docs/release_evidence_qemu_openfaas_image_local_2026-07-08.md`
+14. `docs/release_evidence_qemu_openfaas_image_2026-07-08.md`
 
 Before tagging, rerun the commands in section 7. VM-backed evidence may name a
 clean runtime source commit that precedes final release-documentation commits,
@@ -73,6 +74,7 @@ This milestone certifies the following local QEMU/libvirt rows:
 | `P-QEMU-08` | Full endpoint image/runtime application parity row |
 | `P-QEMU-10-SW-LOCAL` | Single-host CPU-capped OpenFaaS software-only subset of old-main P-QEMU-10 |
 | `P-QEMU-10-APP-LOCAL` | Single-host CPU-capped OpenFaaS image-classification application subset of old-main P-QEMU-10 |
+| `P-QEMU-10` | Exact old-main QEMU OpenFaaS image-classification application parity row |
 
 These rows are certified only for the exact configs, profiles, host context,
 runtime targets, and limitations recorded in the evidence documents.
@@ -83,16 +85,14 @@ Do not describe this milestone as full old-main parity.
 
 The following rows remain unclaimed:
 
-1. full QEMU OpenFaaS application parity row `P-QEMU-10`,
-2. exact legacy P-QEMU-10 resource shape with three 6-core cloud VMs,
-3. GCP rows `P-GCP-01` through `P-GCP-10`,
-4. AWS row `P-AWS-01`,
-5. bare-metal provider support,
-6. broader `kubecontrol`, `kube_kata`, `text_translation`, `stress`,
+1. GCP rows `P-GCP-01` through `P-GCP-10`,
+2. AWS row `P-AWS-01`,
+3. bare-metal provider support,
+4. broader `kubecontrol`, `kube_kata`, `text_translation`, `stress`,
    `mem_usage`, `empty`, and `empty_kata` runtime support,
-7. a visual frontend,
-8. structured experiment database support,
-9. a reproducibility-package catalog.
+5. a visual frontend,
+6. structured experiment database support,
+7. a reproducibility-package catalog.
 
 These may be ported, certified, preserved as historical, or deprecated in later
 milestones.
@@ -101,21 +101,23 @@ milestones.
 
 1. QEMU is a provider module, not Continuum core.
 2. Full Kubernetes image-classification parity is certified for `P-QEMU-05`;
-   the exact evidence is `docs/release_evidence_qemu_k8s_image_2026-07-07.md`.
+   the exact evidence is `docs/release_evidence_qemu_k8s_image_2026-07-08.md`.
    Full endpoint image/runtime parity is certified for `P-QEMU-08`; the exact
-   evidence is `docs/release_evidence_qemu_endpoint_image_2026-07-07.md`.
+   evidence is `docs/release_evidence_qemu_endpoint_image_2026-07-08.md`.
 3. Full KubeEdge application parity is certified only for `P-QEMU-06`; the
-   exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-07-07.md`.
+   exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-07-08.md`.
    Full Mist application parity is certified only for `P-QEMU-07`; the exact
-   evidence is `docs/release_evidence_qemu_mist_image_2026-07-07.md`.
+   evidence is `docs/release_evidence_qemu_mist_image_2026-07-08.md`.
 4. Evidence for `P-QEMU-10-APP-LOCAL` covers only the single-host CPU-capped
-   OpenFaaS subset; exact parent row `P-QEMU-10` still needs exact legacy
-   resource-shape evidence or a larger/external QEMU runner.
+   OpenFaaS subset; exact parent row `P-QEMU-10` is certified separately in
+   `docs/release_evidence_qemu_openfaas_image_2026-07-08.md`.
 5. Cloud-provider rows need YAML profiles, credential/cost documentation, and
    cloud-backed evidence before they can be release-supported.
 6. Cache-backed full application parity rows require an explicitly primed local
    registry cache for certification. Host-side cache priming is exposed through
    the allowlisted `continuum-hostctl prime-registry-cache` helper.
+7. Broader QEMU/OpenFaaS claims beyond the certified exact `P-QEMU-10` config
+   still need their own resource-shape/capacity review and retained evidence.
 
 ## 6. User-Facing Wording
 
@@ -131,7 +133,7 @@ Avoid wording like:
 1. "Continuum rework fully replaces main",
 2. "Continuum supports GCP/AWS on this release",
 3. "QEMU core",
-4. "OpenFaaS application parity is certified",
+4. "All OpenFaaS application parity is certified",
 5. "Full QEMU parity is certified",
 6. "M1 is the final/full release",
 7. "All shipped YAML examples are release-supported".
@@ -164,6 +166,7 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_soft
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity
 ```
 
 Keep this order. Updating `/usr/local/bin/continuum-hostctl` is a manual
@@ -183,14 +186,8 @@ not.
 
 ## 8. Suggested Next Milestones
 
-1. Provide dedicated-runner SSH access to reachable external QEMU capacity, or
-   a larger local runner, then run exact `P-QEMU-10` OpenFaaS application
-   evidence. The latest retained attempt on 2026-07-07 passed the local
-   registry cache preflight but failed before provisioning because
-   `continuum-smoke` could not authenticate for `ssh ... matthijs@node1 lscpu`;
-   see `/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_12-52-32.json`.
-2. Decide exact-resource versus practical-runner claims for any future broader
+1. Decide exact-resource versus practical-runner claims for any future broader
    OpenFaaS application claim.
-3. Port or explicitly demote GCP/AWS historical rows.
-4. Convert the remaining parity matrix into issues grouped by provider and
+2. Port or explicitly demote GCP/AWS historical rows.
+3. Convert the remaining parity matrix into issues grouped by provider and
    module family.

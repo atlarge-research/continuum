@@ -130,6 +130,9 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
     "qemu_openfaas_image_local_parity": (
         "QEMU OpenFaaS local image parity suite prerequisites"
     ),
+    "qemu_openfaas_image_parity": (
+        "QEMU OpenFaaS image parity registry-cache prerequisites"
+    ),
     "qemu_kubecontrol_empty_parity": "QEMU kubecontrol empty parity suite prerequisites",
     "qemu_kubecontrol_empty_trace_parity": (
         "QEMU kubecontrol empty trace parity suite prerequisites"

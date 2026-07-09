@@ -123,12 +123,17 @@ sh scripts/test/setup_agent_host.sh verify
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity
 ```
 """
 
@@ -1607,12 +1612,12 @@ When converting this seed into issues:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             extra_config = (
-                "configs/experiments/parity/qemu_kubeedge_image/"
-                "06_kubeedge_image_classification.yaml"
+                "configs/experiments/parity/qemu_kubecontrol_empty/"
+                "01_kubecontrol_empty_call.yaml"
             )
             extra_row = (
                 "| M1-QEMU-IMAGE | application parity | `%s`; "
-                "suite `qemu_kubeedge_image_parity` | VM evidence | `certified` | "
+                "suite `qemu_kubecontrol_empty_parity` | VM evidence | `certified` | "
                 "Evidence: `docs/release_evidence_example.md`. |\n"
             ) % (extra_config,)
             matrix_text = self._passing_matrix().replace(
@@ -1641,9 +1646,9 @@ When converting this seed into issues:
                             "qemu_infra_parity": {
                                 "directories": ["configs/experiments/parity/qemu/"]
                             },
-                            "qemu_kubeedge_image_parity": {
+                            "qemu_kubecontrol_empty_parity": {
                                 "directories": [
-                                    "configs/experiments/parity/qemu_kubeedge_image/"
+                                    "configs/experiments/parity/qemu_kubecontrol_empty/"
                                 ]
                             },
                         }
@@ -1657,9 +1662,9 @@ When converting this seed into issues:
                 [
                     check_release_matrix.MatrixIssue(
                         "release-notes-ready-suite-command-missing",
-                        "M1-QEMU-IMAGE uses ready suite qemu_kubeedge_image_parity "
+                        "M1-QEMU-IMAGE uses ready suite qemu_kubecontrol_empty_parity "
                         "but section 7 is missing 'sudo -n -u continuum-smoke "
-                        "/usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity'",
+                        "/usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity'",
                     )
                 ],
             )
@@ -1725,7 +1730,7 @@ When converting this seed into issues:
             matrix_text = self._passing_matrix().replace(
                 "\n## 5. Module Certification Backlog",
                 "\n| P-QEMU-02 | legacy | surface | no yaml; "
-                "suite `qemu_kubeedge_image_parity` | `ported-unverified` | "
+                "suite `qemu_kubecontrol_empty_parity` | `ported-unverified` | "
                 "Run fresh VM evidence before claiming support. |\n\n"
                 "## 5. Module Certification Backlog",
             )
@@ -1738,10 +1743,10 @@ When converting this seed into issues:
                 "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
                 "qemu_openfaas_software_parity\n"
                 "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
-                "qemu_kubeedge_image_parity\n",
+                "qemu_kubecontrol_empty_parity\n",
             )
             self._write_repo(root, matrix_text, release_notes_text=release_notes)
-            (root / "configs" / "experiments" / "parity" / "qemu_kubeedge_image").mkdir(
+            (root / "configs" / "experiments" / "parity" / "qemu_kubecontrol_empty").mkdir(
                 parents=True
             )
             (root / "scripts" / "test" / "test_config.json").write_text(
@@ -1751,9 +1756,9 @@ When converting this seed into issues:
                             "qemu_infra_parity": {
                                 "directories": ["configs/experiments/parity/qemu/"]
                             },
-                            "qemu_kubeedge_image_parity": {
+                            "qemu_kubecontrol_empty_parity": {
                                 "directories": [
-                                    "configs/experiments/parity/qemu_kubeedge_image/"
+                                    "configs/experiments/parity/qemu_kubecontrol_empty/"
                                 ]
                             },
                         }
@@ -1774,9 +1779,9 @@ When converting this seed into issues:
                 [
                     check_release_matrix.MatrixIssue(
                         "release-notes-nonready-suite-command-listed",
-                        "P-QEMU-02 uses non-ready suite qemu_kubeedge_image_parity "
+                        "P-QEMU-02 uses non-ready suite qemu_kubecontrol_empty_parity "
                         "but section 7 lists 'sudo -n -u continuum-smoke "
-                        "/usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity'",
+                        "/usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity'",
                     )
                 ],
             )

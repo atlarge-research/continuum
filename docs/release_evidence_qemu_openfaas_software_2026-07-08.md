@@ -1,4 +1,4 @@
-# QEMU OpenFaaS Software Evidence - 2026-07-06
+# QEMU OpenFaaS Software Evidence - 2026-07-08
 
 ## Scope
 
@@ -20,9 +20,9 @@ image-classification application benchmark from
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-10-SW-LOCAL` |
-| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
+| Git commit | `f9ab4217c40604dc145692664667a13e8cc2a994` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-07 |
+| Date | 2026-07-08 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, `install-wrapper dedicated`, and `verify` |
 | Config | `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` |
@@ -31,15 +31,15 @@ image-classification application benchmark from
 | Provider profile | `configs/profiles/environment/local-qemu-cpupin.yaml` |
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, SSH access, and enough local CPU capacity for the capped single-host OpenFaaS shape; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
-| Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes node-ready and OpenFaaS software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-07-07_12-05-50.json` |
+| Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, Kubernetes and OpenFaaS software-phase evidence |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-07-08_20-24-00.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_openfaas_software_parity/.continuum/` |
 
 ## Result
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1473.4s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
+| `configs/experiments/parity/qemu_openfaas_software/10_openfaas_software.yaml` | PASS | 1304.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
 The experiment lock records:
 
@@ -52,8 +52,8 @@ The experiment lock records:
 The retained runner summary records `exit_code=0`, `ssh_output_found`,
 `experiment_lock_written`, `state_file_written`, `state_phase=software`, and
 `resume_contract_match`. The retained stdout records the Kubernetes, OpenFaaS,
-and endpoint-runtime playbook sequence and the Kubernetes node-ready runtime
-check. It does not retain a gateway-specific OpenFaaS readiness snapshot.
+and endpoint-runtime playbook sequence. It does not retain a gateway-specific
+OpenFaaS readiness snapshot.
 
 ## What This Claims
 
@@ -79,14 +79,6 @@ This evidence does not certify:
 6. cloud-provider OpenFaaS behavior,
 7. gateway-specific OpenFaaS readiness beyond software-phase completion.
 
-This software-only evidence does not certify parent row `P-QEMU-10`.
-
-The full `qemu_openfaas_image_parity` suite is ported but not certified. It now
-uses cache-backed image preflight, and the local registry cache has been primed
-on the certification host. The latest exact parent-row attempt selected legacy
-external host `matthijs@node1` on 2026-07-07 and failed before provisioning
-because the dedicated `continuum-smoke` runner could not authenticate for
-`ssh ... matthijs@node1 lscpu`; see
-`/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_12-52-32.json`.
-Exact parent-row evidence still requires authenticated external QEMU capacity
-or a larger local runner before parent row `P-QEMU-10` can be claimed.
+This software-only evidence does not certify parent row P-QEMU-10. The exact
+parent row is certified separately by
+`docs/release_evidence_qemu_openfaas_image_2026-07-08.md`.

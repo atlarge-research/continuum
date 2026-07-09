@@ -209,12 +209,12 @@ run_capture prereq_qemu_kubecontrol_empty_trace_parity "QEMU kubecontrol empty t
 
 forced_prefetch_notice() {
     cat <<'EOF'
-OpenFaaS application parity row P-QEMU-10 is not certified by this cloud-safe
-audit. Cache readiness is only a prerequisite signal for that row;
-certification still requires the dedicated smoke-user wrapper context plus
-retained VM/application evidence on the documented resource shape. Cache-backed
-P-QEMU-05 and P-QEMU-08 are certified separately by retained wrapper evidence.
-See docs/release_certification_matrix.md for the active blockers.
+Cloud-safe cache readiness is only a prerequisite signal for cache-backed
+application parity rows. Certification still requires the dedicated smoke-user
+wrapper context plus retained VM/application evidence on the documented
+resource shape. Cache-backed P-QEMU-05, P-QEMU-08, and exact P-QEMU-10 are
+certified separately by retained wrapper evidence.
+See docs/release_certification_matrix.md for the active claim boundaries.
 EOF
 }
 

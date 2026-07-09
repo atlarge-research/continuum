@@ -1,4 +1,4 @@
-# QEMU KubeEdge Software Evidence - 2026-07-06
+# QEMU KubeEdge Software Evidence - 2026-07-08
 
 ## Scope
 
@@ -10,16 +10,16 @@ QEMU topology and complete the KubeEdge software phase with endpoint runtime
 present for endpoint resources. It does not certify the full
 image-classification application benchmark from `configuration/tests/qemu/06_kubeedge-img.cfg`;
 that parent row is certified separately by
-`docs/release_evidence_qemu_kubeedge_image_2026-07-07.md`.
+`docs/release_evidence_qemu_kubeedge_image_2026-07-08.md`.
 
 ## Source And Command
 
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `P-QEMU-06-SW` |
-| Git commit | `dfa3f6bb5a8faaf0c3955bb48e053fb8a5a1b102` |
+| Git commit | `f9ab4217c40604dc145692664667a13e8cc2a994` |
 | Tree state | Clean source tree synced to the dedicated runner |
-| Date | 2026-07-07 |
+| Date | 2026-07-08 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, `install-wrapper dedicated`, and `verify` |
 | Config | `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` |
@@ -29,7 +29,7 @@ that parent row is certified separately by
 | Provider / host prerequisites | Local QEMU/libvirt/KVM host with libvirt access, `/dev/kvm` access, and SSH access for KubeEdge software execution; no cloud credentials. |
 | Runtime targets | `infrastructure`, `software` |
 | Required artifacts checked | Test-results summary, experiment lock, state file, stdout/stderr/metadata artifacts, infrastructure phase evidence, KubeEdge software-phase evidence |
-| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/test_results/test_results_2026-07-07_10-19-45.json` |
+| Result summary path | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/test_results/test_results_2026-07-08_18-41-03.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_kubeedge_software_parity/.continuum/` |
 
 ## Result
@@ -39,7 +39,7 @@ hardening:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
-| `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` | PASS | 1802.3s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
+| `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` | PASS | 1720.2s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
 Earlier 2026-05-31 runs passed while the certification harness was still being
 tightened. This evidence supersedes the older software-only evidence for release

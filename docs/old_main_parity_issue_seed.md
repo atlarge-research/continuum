@@ -20,12 +20,9 @@ issue-creation rules needed to keep future parity work evidence-bound.
 
 ## 2. QEMU Application Parity
 
-These rows are ported or partly ported on the rework stack, but they are not
-full old-main parity claims yet.
-
-| Row | Current Status | Issue Seed | Matrix Certification Action |
-| --- | --- | --- | --- |
-| `P-QEMU-10` | `ported-unverified` | Provide dedicated-runner SSH access to reachable capacity for the exact 26 requested VM cores, or a larger local runner, then rerun the exact OpenFaaS application suite and record retained VM/application evidence. | Full application suite is ported and uses cache-backed image preflight. On 2026-07-07 `prime-registry-cache --check-only --suite qemu_openfaas_image_parity` passed, but the exact 26-core legacy shape still needs an external physical host because the local runner is capped at 20 cores. The latest retained run selected legacy host `matthijs@node1` and failed before provisioning because `continuum-smoke` could not authenticate for `ssh ... matthijs@node1 lscpu`: `/mnt/sdc/continuum_smoke/qemu_openfaas_image_parity/.continuum/test_results/test_results_2026-07-07_12-52-32.json`. Keep unclaimed until the dedicated runner can authenticate to reachable external QEMU capacity, or a larger local runner can produce retained VM/application evidence for the exact shape. |
+No non-ready QEMU application parity rows remain in this seed. `P-QEMU-10` left
+this document after exact retained VM/application evidence certified it in
+`docs/release_certification_matrix.md`.
 
 ## 3. Cloud Provider Parity
 
