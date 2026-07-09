@@ -14,13 +14,20 @@ handoff only.
 
 Start in `/home/matthijs/continuum` on branch `pr-23-curated`.
 
-Latest evidence checkpoint:
+Release evidence refresh checkpoint:
+
+```text
+58802ab refresh release evidence for exact openfaas parity
+```
+
+VM-backed evidence source checkpoint:
 
 ```text
 f9ab421 fix qemu image permissions for external host
 ```
 
-At that checkpoint, the worktree was clean and these gates passed:
+After the July 8 release-documentation refresh, the worktree was clean and
+these gates passed:
 
 1. `python3 scripts/test/check_release_pretag.py`
    - `TOTAL_RELEASE_PRETAG_ISSUES=0`
@@ -50,7 +57,7 @@ It records VM-backed evidence from source commit
 report:
 
 ```text
-logs/cloud_static_audit/cloud_static_audit_2026-07-08T163426Z.md
+logs/cloud_static_audit/cloud_static_audit_2026-07-08T211159Z.md
 ```
 
 That audit recorded required gates passing, 644 unit unittest tests, 100 local
