@@ -14,8 +14,8 @@ benchmark shape on local QEMU with `kube_kata`, `empty_kata`, `kata-qemu`, and
 | Field | Value |
 | --- | --- |
 | Matrix row ID | `M2-QEMU-KUBE-KATA-EMPTY` |
-| Git commit | `2f66a6aaac465afb3520e1599954446204033b68` |
-| Tree state | Working tree with the `kube_kata`/`empty_kata` candidate implementation synced to the dedicated runner. |
+| Git commit | `2f78df31af51b8fff67356c0888a865505dddf2b` |
+| Tree state | Clean committed source tree matching the `kube_kata`/`empty_kata` implementation synced to the dedicated runner. |
 | Date | 2026-07-09 |
 | Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kube_kata_empty_startup_parity` |
 | Runner context | Dedicated `continuum-smoke` wrapper after `continuum-hostctl sync-repo`, `continuum-hostctl verify`, local registry cache priming, and suite prerequisite checks. |

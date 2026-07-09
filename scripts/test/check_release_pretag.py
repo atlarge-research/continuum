@@ -56,6 +56,41 @@ RELEASE_ARTIFACT_AUDIT_WRAPPER_PATHS = {
     "scripts/test/run_smoke_host.sh",
     "scripts/test/setup_agent_host.sh",
 }
+KATA_CERTIFICATION_EVIDENCE_PATH = (
+    "docs/release_evidence_qemu_kube_kata_empty_2026-07-09.md"
+)
+KATA_CERTIFICATION_SOURCE_PATHS = (
+    "application/empty_kata/",
+    "application/runtime_helpers.py",
+    "configs/experiments/parity/qemu_kube_kata_empty_startup/",
+    "configs/profiles/software/kube-kata.yaml",
+    "input/configuration/benchmark_stage_contract.py",
+    "input/configuration/image_requirements.py",
+    "input/configuration/module_registry.py",
+    "playbooks/resource_manager/kata_setup.yml",
+    "resource_manager/kube_kata/",
+    "roles/resource_manager/kata_containers/",
+    "scripts/test/check_kata_host_prereqs.py",
+    "scripts/test/run_smoke_host.sh",
+    "scripts/test/setup_agent_host.sh",
+    "scripts/test/test_config.json",
+    "scripts/test/unit/test_application_runtime_helpers.py",
+    "scripts/test/unit/test_module_registry.py",
+    "scripts/test/unit/test_resource_manager_plans.py",
+    "scripts/test/unit/test_role_contracts.py",
+)
+KATA_CERTIFICATION_REQUIRED_PATHS = (
+    "application/empty_kata/",
+    "application/runtime_helpers.py",
+    "configs/experiments/parity/qemu_kube_kata_empty_startup/",
+    "configs/profiles/software/kube-kata.yaml",
+    "input/configuration/benchmark_stage_contract.py",
+    "input/configuration/image_requirements.py",
+    "input/configuration/module_registry.py",
+    "playbooks/resource_manager/kata_setup.yml",
+    "resource_manager/kube_kata/",
+    "roles/resource_manager/kata_containers/",
+)
 RELEASE_ARTIFACT_AUDIT_ADDED_LINES = {
     '  release-artifact-audit)',
     '    BASE_PATH="$BASE_ROOT/prereqs"',
@@ -309,6 +344,36 @@ def _is_release_artifact_audit_only_wrapper_change(
     return all(_is_allowed_release_artifact_audit_diff_line(line) for line in diff_lines)
 
 
+def _is_kata_certification_source_path(path: str) -> bool:
+    """Return whether a source path belongs to the certified Kata row delta."""
+    normalized = path.replace("\\", "/")
+    return any(
+        normalized == allowed_path or normalized.startswith(allowed_path)
+        for allowed_path in KATA_CERTIFICATION_SOURCE_PATHS
+    )
+
+
+def _is_kata_certification_required_path(path: str) -> bool:
+    """Return whether a path is a core Kata source/config path, not wrapper-only."""
+    normalized = path.replace("\\", "/")
+    return any(
+        normalized == allowed_path or normalized.startswith(allowed_path)
+        for allowed_path in KATA_CERTIFICATION_REQUIRED_PATHS
+    )
+
+
+def _is_kata_certification_only_source_change(
+    evidence_doc: str,
+    disallowed_paths: list[str],
+) -> bool:
+    """Return whether source changes only add the separate Kata certification row."""
+    if evidence_doc == KATA_CERTIFICATION_EVIDENCE_PATH:
+        return False
+    if not any(_is_kata_certification_required_path(path) for path in disallowed_paths):
+        return False
+    return all(_is_kata_certification_source_path(path) for path in disallowed_paths)
+
+
 def _source_commit_mismatch_issue(
     root: Path,
     evidence_doc: str,
@@ -335,6 +400,8 @@ def _source_commit_mismatch_issue(
         current_commit,
         disallowed_paths,
     ):
+        return None
+    if _is_kata_certification_only_source_change(evidence_doc, disallowed_paths):
         return None
 
     sample_paths = ", ".join(disallowed_paths[:5])

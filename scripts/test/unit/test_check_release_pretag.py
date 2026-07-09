@@ -706,6 +706,76 @@ class CheckReleasePretagTests(unittest.TestCase):
                     ],
                 )
 
+    def test_existing_evidence_may_precede_separate_kata_certification_delta(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self._write_release_notes(root)
+            self._write_evidence(root, git_commit="abcdef0")
+
+            with mock.patch.object(
+                check_release_pretag,
+                "_changed_paths_between_commits",
+                return_value=[
+                    "docs/release_certification_matrix.md",
+                    "application/empty_kata/empty_kata.py",
+                    "application/runtime_helpers.py",
+                    "configs/experiments/parity/qemu_kube_kata_empty_startup/"
+                    "01_kube_kata_empty_pod.yaml",
+                    "configs/profiles/software/kube-kata.yaml",
+                    "input/configuration/benchmark_stage_contract.py",
+                    "input/configuration/image_requirements.py",
+                    "input/configuration/module_registry.py",
+                    "playbooks/resource_manager/kata_setup.yml",
+                    "resource_manager/kube_kata/kube_kata.py",
+                    "roles/resource_manager/kata_containers/tasks/main.yml",
+                    "scripts/test/check_kata_host_prereqs.py",
+                    "scripts/test/run_smoke_host.sh",
+                    "scripts/test/setup_agent_host.sh",
+                    "scripts/test/test_config.json",
+                    "scripts/test/unit/test_application_runtime_helpers.py",
+                    "scripts/test/unit/test_module_registry.py",
+                    "scripts/test/unit/test_resource_manager_plans.py",
+                    "scripts/test/unit/test_role_contracts.py",
+                ],
+            ):
+                self.assertEqual(
+                    self._find_pretag_issues(root, current_commit="1234567"),
+                    [],
+                )
+
+    def test_kata_evidence_must_not_precede_its_own_certification_delta(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            kata_doc = check_release_pretag.KATA_CERTIFICATION_EVIDENCE_PATH
+            self._write_release_notes(root, extra_evidence_docs=[kata_doc])
+            self._write_evidence(root)
+            self._write_extra_evidence(root, kata_doc, git_commit="abcdef0")
+
+            changed_paths = [
+                "application/empty_kata/empty_kata.py",
+                "resource_manager/kube_kata/kube_kata.py",
+            ]
+            with mock.patch.object(
+                check_release_pretag,
+                "_changed_paths_between_commits",
+                side_effect=lambda _root, base, _head: (
+                    changed_paths if base == "abcdef0" else []
+                ),
+            ):
+                self.assertEqual(
+                    self._find_pretag_issues(root, current_commit="1234567"),
+                    [
+                        check_release_pretag.PretagIssue(
+                            "pretag-source-commit-mismatch",
+                            "%s Git commit='abcdef0' differs from current HEAD "
+                            "'1234567'; runtime-affecting paths changed since "
+                            "evidence commit: application/empty_kata/empty_kata.py, "
+                            "resource_manager/kube_kata/kube_kata.py"
+                            % (kata_doc,),
+                        )
+                    ],
+                )
+
     def test_evidence_commit_mismatch_reports_runtime_path_changes(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
