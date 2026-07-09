@@ -227,6 +227,9 @@ that moves to `certified`.
    commit.
 8. Keep `P-QEMU-10-APP-LOCAL` scoped as a single-host CPU-capped subset; do not
    use it to claim exact parent-row parity.
-9. Convert the parity table into issues after M1, grouped by provider and
-   software family.
-10. For each historical row, choose port, preserve-as-historical, or deprecate.
+9. Keep remaining GCP/AWS rows historical until a maintainer nominates exact
+   scope, credentials, cost guardrails, YAML/profile targets, suites, and
+   evidence requirements.
+10. Convert the parity table into issues after M1, grouped by provider and
+    software family, with repo docs remaining the first authoritative artifact.
+11. For each historical row, choose port, preserve-as-historical, or deprecate.

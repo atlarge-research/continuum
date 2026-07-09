@@ -14,6 +14,28 @@ handoff only.
 
 Start in `/home/matthijs/continuum` on branch `pr-23-curated`.
 
+Current HEAD begins with:
+
+```text
+c253035 scope pretag source checks for kata row
+2f78df3 certify qemu kube kata empty path
+```
+
+The current worktree is expected to be dirty only because of docs-only follow-up
+planning changes:
+
+```text
+docs/migration_notes.md
+docs/old_main_parity_issue_seed.md
+docs/rework_release_handoff.md
+```
+
+Those changes group remaining historical/non-QEMU parity issue seeds by provider
+and module family, update the Kata migration note to reflect the certified
+`M2-QEMU-KUBE-KATA-EMPTY` row, and refresh this handoff for the next agent.
+Before continuing, inspect the diff and preserve those changes unless a
+maintainer explicitly asks to revise them.
+
 Release evidence refresh checkpoint:
 
 ```text
@@ -86,6 +108,7 @@ Current certified/core-ready highlights:
 5. Research case-study rows:
    - `M2-QEMU-KUBECONTROL-EMPTY`
    - `M2-QEMU-KUBECONTROL-TRACE`
+   - `M2-QEMU-KUBE-KATA-EMPTY`
 
 The Columbo/kubecontrol distinction matters:
 
@@ -141,57 +164,47 @@ single-host runner behavior.
 ## Next Recommended Slice
 
 First fix any new release gate, docs, or checker issue that appears in the
-current tree. If the tree is still clean and release gates pass, the next work
-is the remaining `kube_kata`/`empty_kata` certification blocker or
-non-QEMU/historical parity disposition; do not rework the already certified
-Columbo trace or exact OpenFaaS row unless a new requirement appears.
+current tree. If the only `check_release_pretag.py` issue is the expected dirty
+docs-only worktree state, continue with planning rather than VM-backed work.
 
-The first `kube_kata`/`empty_kata` candidate slice is now certified for the
-exact local-QEMU `kata-qemu` plus `overlayfs` row. Earlier retained 2026-07-09
-results narrowed the blockers:
+The next agent should construct a plan before making changes. The next
+substantive slice is larger rework follow-up planning for remaining
+historical/non-QEMU parity. Use `docs/release_notes_m1_draft.md` section
+"Suggested Next Milestones", `docs/release_certification_matrix.md` section
+"Immediate Next Steps", and `docs/old_main_parity_issue_seed.md` as the source
+of truth.
 
-```text
-/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_14-55-06.json
-/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_19-35-42.json
-/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_20-09-09.json
-/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_20-46-27.json
-```
+The immediate planning target is:
 
-show cluster readiness, RuntimeClass installation, guest Kata runtime setup, and
-benchmark completion for the exact 100-pod legacy shape after adding
-`worker_ready_timeout_seconds: 2400`. Jaeger support has since been ported from
-the legacy Kata role, using `jaegertracing/all-in-one:1.47`, local registry
-image resolution as `all-in-one:1.47`, the legacy collector/query ports, and a
-software-phase post-hook that fails if
-`http://<worker-ip>:16686/api/services` is not reachable. The retained
-`20-46-27` run proved the Jaeger path could collect 100 complete Kata timestamp
-rows after bounded retries:
+1. decide whether GCP rows `P-GCP-01` through `P-GCP-10` should be ported,
+   preserved as historical, demoted/deprecated, or converted into tracked
+   issues grouped by provider and module family,
+2. decide the same for AWS row `P-AWS-01`,
+3. include non-row module-family follow-up for `baremetal`,
+   `text_translation`, `stress`, and `mem_usage`,
+4. keep the release boundary clear: these rows and modules are not
+   release-supported until the matrix says `certified` and fresh cloud-backed,
+   VM-backed, or host-backed evidence exists as required.
 
-```text
-Collected 100 complete Kata timestamp row(s), expected 100
-```
+The accepted default is docs-first disposition: keep GCP/AWS rows historical
+until maintainers nominate exact scope, credentials, cost guardrails,
+YAML/profile targets, suites, and evidence requirements. Do not create issue
+tracker items or start runtime porting before that repo-doc-backed backlog is
+settled.
 
-The retained passing result is:
-
-```text
-/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_21-25-22.json
-```
-
-Benchmark metric manifest:
-
-```text
-/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/logs/benchmark/2026-07-09_20_51_51_empty-kata-pod_metrics_manifest.json
-```
-
-Evidence document:
+Do not rework Columbo/kubecontrol, exact OpenFaaS, QEMU certified rows, or the
+certified Kata row unless a new requirement appears. The current `kube_kata`
+claim is narrow: `M2-QEMU-KUBE-KATA-EMPTY` certifies only local QEMU,
+`kata-qemu`, `overlayfs`, the documented two-cloud-VM startup shape, and the
+retained evidence in:
 
 ```text
 docs/release_evidence_qemu_kube_kata_empty_2026-07-09.md
 ```
 
-Keep the claim narrow: this certifies only `M2-QEMU-KUBE-KATA-EMPTY`, not every
-Kata runtime, filesystem, topology, provider, parameter sweep, or resource-usage
-application.
+It does not certify `kata-fc`, devmapper, non-QEMU providers, multi-host
+physical capacity, resource-usage sweeps, every legacy Kata parameter sweep, or
+broader `empty_kata` support.
 
 Recommended start:
 
@@ -199,56 +212,43 @@ Recommended start:
 cd /home/matthijs/continuum
 cat AGENTS.md
 git status --short
-git log --oneline -5
+git log --oneline -6
 python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_matrix.py
 python3 scripts/test/check_release_claims.py
 python3 scripts/test/check_docs_paths.py
 ```
 
-Then inspect the updated release boundary:
+Then inspect the active planning boundary and construct a plan before editing:
 
 ```bash
-sed -n '130,145p' docs/release_certification_matrix.md
-sed -n '150,175p' docs/release_certification_matrix.md
-sed -n '280,325p' docs/smoke_runner_isolation.md
+sed -n '108,235p' docs/release_certification_matrix.md
+sed -n '1,120p' docs/old_main_parity_issue_seed.md
+sed -n '205,218p' docs/migration_notes.md
+sed -n '185,195p' docs/release_notes_m1_draft.md
 ```
 
-Before any VM-backed run, verify the dedicated host wrapper and cache state:
+For docs/checker-only changes, rerun:
+
+```bash
+python3 scripts/test/check_release_matrix.py
+python3 scripts/test/check_release_claims.py
+python3 scripts/test/check_docs_paths.py
+git diff --check
+```
+
+Also run `python3 scripts/test/check_release_pretag.py` as an audit. It should
+report only dirty-worktree issues until the docs changes are committed or the
+tree is otherwise made clean.
+
+Before any future VM-backed run, verify the dedicated host wrapper and cache
+state for the exact suite being run:
 
 ```bash
 sudo -n /usr/local/bin/continuum-hostctl sync-repo
 sudo -n /usr/local/bin/continuum-hostctl verify
-sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
-  prime-registry-cache --check-only --suite qemu_openfaas_image_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke check-prereqs --suite <suite>
 ```
-
-After evidence docs are updated, rerun:
-
-```bash
-python3 scripts/test/check_release_matrix.py
-python3 scripts/test/check_release_claims.py
-python3 scripts/test/check_docs_paths.py
-sudo -n /usr/local/bin/continuum-hostctl sync-repo
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
-python3 scripts/test/check_release_pretag.py
-git diff --check
-```
-
-The first non-QEMU-parent-row slice is certified as row
-`M2-QEMU-KUBE-KATA-EMPTY`. Before any future rerun, refresh the host helper if
-needed, sync the dedicated repo, prime the suite cache, and run:
-
-```bash
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
-  check-prereqs --suite qemu_kube_kata_empty_startup_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
-  qemu_kube_kata_empty_startup_parity
-```
-
-Do not use that row to claim `kata-fc`, devmapper, non-QEMU providers,
-multi-host Kata topologies, or broader `empty_kata`/Kata parameter sweeps.
 
 ## Operational Boundaries
 

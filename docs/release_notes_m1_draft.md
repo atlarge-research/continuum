@@ -188,6 +188,8 @@ not.
 
 1. Decide exact-resource versus practical-runner claims for any future broader
    OpenFaaS application claim.
-2. Port or explicitly demote GCP/AWS historical rows.
-3. Convert the remaining parity matrix into issues grouped by provider and
-   module family.
+2. Keep GCP/AWS historical rows unclaimed until maintainers nominate exact
+   provider scope, credentials, budget/capacity guardrails, YAML/profile
+   targets, suites, and evidence requirements.
+3. Convert the remaining parity matrix into repo-doc-backed issues grouped by
+   provider and module family.
