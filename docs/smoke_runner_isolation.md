@@ -307,7 +307,7 @@ requires the local registry cache to be primed before starting VMs, and it is
 not release-certified until the exact resource/capacity boundary is resolved
 and retained VM/application evidence passes.
 
-After installing the `2026-07-06-kubecontrol-trace-cache` hostctl interface, prime
+After installing the `2026-07-09-kube-kata-jaeger-local-name` hostctl interface, prime
 the OpenFaaS application image cache with the reviewed root-owned helper:
 
 ```bash
@@ -324,7 +324,7 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_e
 
 This suite uses the same cache-backed registry model for the `empty`
 application image and the kubecontrol control-plane images declared by the
-software profile. After installing the `2026-07-06-kubecontrol-trace-cache`
+software profile. After installing the `2026-07-09-kube-kata-jaeger-local-name`
 hostctl interface, prime and verify the cache before starting VMs:
 
 ```bash
@@ -354,6 +354,35 @@ scenario:
 sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kubecontrol_empty_trace_parity
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
   prime-registry-cache --check-only --suite qemu_kubecontrol_empty_trace_parity
+```
+
+To run the local-QEMU `kube_kata` plus `empty_kata` startup candidate suite,
+use:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kube_kata_empty_startup_parity
+```
+
+This scenario maps the minimal legacy Kata startup benchmark
+`configuration/experiment_kata/1_startup_performance/strong_scalability/node_1_kata_qemu_overlayfs.cfg`
+to structured YAML. It requires local QEMU/libvirt/KVM, `/dev/kvm` access for
+the runner, nested KVM enabled on the host, host-passthrough CPU exposure to the
+guests, enough local CPU/RAM/disk for two 8-core / 64 GiB guests, control-plane
+images, `ansk/empty:empty`, and `jaegertracing/all-in-one:1.47` in the local
+registry cache, and guest network access for the Kata static release download
+unless that dependency is cached separately. The suite remains a candidate until retained evidence proves
+cluster readiness, RuntimeClass installation, Kata/containerd guest setup,
+`empty_kata` success, `CLOUD OUTPUT` and `KATA OUTPUT` benchmark artifacts, and
+cleanup.
+
+Prime and verify the cache and host prerequisites before starting VMs:
+
+```bash
+sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kube_kata_empty_startup_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  prime-registry-cache --check-only --suite qemu_kube_kata_empty_startup_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  check-prereqs --suite qemu_kube_kata_empty_startup_parity
 ```
 
 To advance the retained benchmark state one phase at a time, use:
@@ -446,16 +475,19 @@ The installed wrapper supports only these values:
 18. `qemu_openfaas_image_local_parity`
 19. `qemu_kubecontrol_empty_parity`
 20. `qemu_kubecontrol_empty_trace_parity`
-21. `benchmark_k8s_resume_infra`
-22. `benchmark_k8s_resume_software`
-23. `benchmark_k8s_resume_application`
-24. `benchmark_k8s_resume`
-25. `release-artifact-audit`
-26. `check-prereqs`
-27. `list-suites`
-28. `storage-report`
-29. `prune-scenario <scenario> --yes-delete-retained-state`
-30. `debug-playbook <scenario> <playbook> [ansible args...]`
+21. `qemu_kube_kata_empty_startup_parity`
+22. `benchmark_k8s_resume_infra`
+23. `benchmark_k8s_resume_software`
+24. `benchmark_k8s_resume_application`
+25. `benchmark_k8s_resume`
+26. `release-artifact-audit`
+27. `check-prereqs`
+28. `list-suites`
+29. `storage-report`
+30. `latest-result-summary <scenario>`
+31. `latest-result-tail <scenario> [stdout|stderr|metadata]`
+32. `prune-scenario <scenario> --yes-delete-retained-state`
+33. `debug-playbook <scenario> <playbook> [ansible args...]`
 
 The wrapper contract is:
 
@@ -473,8 +505,8 @@ The wrapper contract is:
 9. writes runtime logs, matplotlib state, and test artifacts under
    `<base_path>/.continuum/...`,
 10. runs with `umask 027` and explicit chmods for generated runtime paths.
-11. exposes `storage-report` and `prune-scenario` as unprivileged retained-state
-    maintenance commands,
+11. exposes `storage-report`, `latest-result-summary`, `latest-result-tail`,
+    and `prune-scenario` as unprivileged retained-state maintenance commands,
 12. `debug-playbook` is for bounded replay only; it should not become a shell
     escape hatch.
 
@@ -497,6 +529,22 @@ Use the unprivileged wrapper to inspect retained storage:
 
 ```bash
 sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke storage-report
+```
+
+Use the bounded result-summary view to inspect the latest retained JSON without
+reading arbitrary smoke-owned files:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  latest-result-summary qemu_kube_kata_empty_startup_parity
+```
+
+Use the bounded tail view to inspect the latest retained stdout, stderr, or
+metadata artifact for a scenario:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  latest-result-tail qemu_kube_kata_empty_startup_parity stderr
 ```
 
 Use explicit scenario pruning after evidence has been recorded or a failure has

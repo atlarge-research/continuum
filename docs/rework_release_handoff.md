@@ -142,9 +142,56 @@ single-host runner behavior.
 
 First fix any new release gate, docs, or checker issue that appears in the
 current tree. If the tree is still clean and release gates pass, the next work
-is non-QEMU/historical parity disposition or module-backlog certification; do
-not rework the already certified Columbo trace or exact OpenFaaS row unless a
-new requirement appears.
+is the remaining `kube_kata`/`empty_kata` certification blocker or
+non-QEMU/historical parity disposition; do not rework the already certified
+Columbo trace or exact OpenFaaS row unless a new requirement appears.
+
+The first `kube_kata`/`empty_kata` candidate slice is now certified for the
+exact local-QEMU `kata-qemu` plus `overlayfs` row. Earlier retained 2026-07-09
+results narrowed the blockers:
+
+```text
+/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_14-55-06.json
+/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_19-35-42.json
+/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_20-09-09.json
+/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_20-46-27.json
+```
+
+show cluster readiness, RuntimeClass installation, guest Kata runtime setup, and
+benchmark completion for the exact 100-pod legacy shape after adding
+`worker_ready_timeout_seconds: 2400`. Jaeger support has since been ported from
+the legacy Kata role, using `jaegertracing/all-in-one:1.47`, local registry
+image resolution as `all-in-one:1.47`, the legacy collector/query ports, and a
+software-phase post-hook that fails if
+`http://<worker-ip>:16686/api/services` is not reachable. The retained
+`20-46-27` run proved the Jaeger path could collect 100 complete Kata timestamp
+rows after bounded retries:
+
+```text
+Collected 100 complete Kata timestamp row(s), expected 100
+```
+
+The retained passing result is:
+
+```text
+/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/test_results/test_results_2026-07-09_21-25-22.json
+```
+
+Benchmark metric manifest:
+
+```text
+/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/logs/benchmark/2026-07-09_20_51_51_empty-kata-pod_metrics_manifest.json
+```
+
+Evidence document:
+
+```text
+docs/release_evidence_qemu_kube_kata_empty_2026-07-09.md
+```
+
+Keep the claim narrow: this certifies only `M2-QEMU-KUBE-KATA-EMPTY`, not every
+Kata runtime, filesystem, topology, provider, parameter sweep, or resource-usage
+application.
 
 Recommended start:
 
@@ -189,9 +236,19 @@ python3 scripts/test/check_release_pretag.py
 git diff --check
 ```
 
-Good fallback candidates are the explicit module-backlog rows such as
-`kube_kata`/`empty_kata`, but they require new YAML profiles, host prerequisite
-documentation, retained VM evidence, and careful scope wording.
+The first non-QEMU-parent-row slice is certified as row
+`M2-QEMU-KUBE-KATA-EMPTY`. Before any future rerun, refresh the host helper if
+needed, sync the dedicated repo, prime the suite cache, and run:
+
+```bash
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  check-prereqs --suite qemu_kube_kata_empty_startup_parity
+sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+  qemu_kube_kata_empty_startup_parity
+```
+
+Do not use that row to claim `kata-fc`, devmapper, non-QEMU providers,
+multi-host Kata topologies, or broader `empty_kata`/Kata parameter sweeps.
 
 ## Operational Boundaries
 

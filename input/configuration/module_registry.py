@@ -44,7 +44,7 @@ MODULE_REGISTRY: dict[str, ModuleSpec] = {
         scope="orchestrator",
         provides=("orchestrator.kube_kata", "capability.observability_host"),
         exclusive_provides=("slot.orchestrator",),
-        image_catalog_refs=("kube.control_plane",),
+        image_catalog_refs=("kube.control_plane", "kube.kata_jaeger"),
     ),
     "mist": ModuleSpec(
         scope="orchestrator",

@@ -331,6 +331,176 @@ class SoftwarePhasePlanTests(unittest.TestCase):
             [mock.call(runner) for _rm_module in rm_modules],
         )
 
+    def test_kube_kata_post_phase_hook_verifies_runtime_classes_and_guest_runtime(self):
+        config = {
+            "cloud_ssh": ["ubuntu@10.0.0.1", "ubuntu@10.0.0.2"],
+            "domains": {
+                "software": {
+                    "modules": [
+                        {
+                            "id": "kube-kata-main",
+                            "type": "kube_kata",
+                            "config": {"runtime": "kata-qemu"},
+                        }
+                    ]
+                }
+            },
+        }
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            [(
+                [
+                    "runtimeclass.node.k8s.io/kata-qemu\n",
+                    "runtimeclass.node.k8s.io/kata-fc\n",
+                    "runtimeclass.node.k8s.io/runc\n",
+                ],
+                ["I0709 kubectl.go:32] [CONTINUUM] 0400\n"],
+            )],
+            [(["kata-runtime 3.1.3\n"], [])],
+        ]
+        runner = SimpleNamespace(config=config, machines=[machine])
+
+        with mock.patch(
+            "resource_manager.kube_kata.kube_kata.kubernetes.verify_running_cluster"
+        ) as verify_cluster, mock.patch(
+            "resource_manager.kube_kata.kube_kata.requests.get"
+        ) as mock_requests_get:
+            mock_requests_get.return_value.raise_for_status.return_value = None
+            kube_kata.post_phase_hook(runner)
+
+        verify_cluster.assert_called_once_with(config, [machine])
+        mock_requests_get.assert_called_once_with("http://10.0.0.2:16686/api/services", timeout=10)
+        self.assertEqual(machine.process.call_count, 2)
+        self.assertIn(
+            "kubectl get runtimeclass kata-qemu kata-fc runc -o name",
+            machine.process.call_args_list[0].args[1],
+        )
+        self.assertIn("/opt/kata/bin/kata-runtime --version", machine.process.call_args_list[1].args[1])
+        self.assertIn("http://127.0.0.1:16686/api/services", machine.process.call_args_list[1].args[1])
+        self.assertEqual(machine.process.call_args_list[1].kwargs["ssh"], "ubuntu@10.0.0.2")
+
+    def test_kube_kata_post_phase_hook_fails_fast_when_jaeger_is_unreachable(self):
+        config = {
+            "cloud_ssh": ["ubuntu@10.0.0.1", "ubuntu@10.0.0.2"],
+            "domains": {
+                "software": {
+                    "modules": [
+                        {
+                            "id": "kube-kata-main",
+                            "type": "kube_kata",
+                            "config": {"runtime": "kata-qemu"},
+                        }
+                    ]
+                }
+            },
+        }
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            [(["runtimeclass.node.k8s.io/kata-qemu\n", "runtimeclass.node.k8s.io/runc\n"], [])],
+            [(["kata-runtime 3.1.3\n"], [])],
+        ]
+        runner = SimpleNamespace(config=config, machines=[machine])
+
+        with mock.patch(
+            "resource_manager.kube_kata.kube_kata.kubernetes.verify_running_cluster"
+        ), mock.patch(
+            "resource_manager.kube_kata.kube_kata.requests.get",
+            side_effect=kube_kata.requests.ConnectionError("connection refused"),
+        ):
+            with self.assertRaises(RuntimeError) as exc:
+                kube_kata.post_phase_hook(runner)
+
+        self.assertIn("Kata Jaeger query API is not reachable", str(exc.exception))
+        self.assertIn("http://10.0.0.2:16686/api/services", str(exc.exception))
+
+    def test_kube_kata_timestamps_skip_incomplete_jaeger_traces(self):
+        complete_trace = [
+            {"operationName": "rootSpan", "startTime": 100, "duration": 1},
+            {"operationName": "StartVM", "startTime": 110, "duration": 20},
+            {"operationName": "connect", "startTime": 140, "duration": 5},
+            {"operationName": "ttrpc.StartContainer", "startTime": 150, "duration": 2},
+            {"operationName": "ttrpc.StartContainer", "startTime": 160, "duration": 3},
+        ]
+        incomplete_trace = [
+            {"operationName": "rootSpan", "startTime": 200, "duration": 1},
+            {"operationName": "StartVM", "startTime": 210, "duration": 20},
+            {"operationName": "connect", "startTime": 240, "duration": 5},
+        ]
+
+        with self.assertLogs(level="WARNING") as logs:
+            timestamps = kube_kata.get_kata_period_timestamps([incomplete_trace, complete_trace])
+
+        self.assertEqual(timestamps, [[100, 110, 130, 145, 163]])
+        self.assertIn("Skipped 1 incomplete Kata trace", "\n".join(logs.output))
+
+    def test_kube_kata_timestamps_fail_when_no_complete_jaeger_trace_exists(self):
+        traces = [
+            [
+                {"operationName": "rootSpan", "startTime": 100, "duration": 1},
+                {"operationName": "connect", "startTime": 140, "duration": 5},
+            ]
+        ]
+
+        with self.assertRaises(RuntimeError) as exc:
+            kube_kata.get_kata_period_timestamps(traces)
+
+        self.assertIn("No complete Kata traces", str(exc.exception))
+
+    def test_kube_kata_timestamps_retry_until_expected_rows_are_available(self):
+        config = {
+            "mode": "cloud",
+            "cloud_ssh": ["ubuntu@10.0.0.1", "ubuntu@10.0.0.2"],
+            "infrastructure": {"cloud_nodes": 2, "edge_nodes": 0},
+            "domains": {
+                "benchmark": {
+                    "pipeline": [
+                        {
+                            "id": "empty-kata-pod",
+                            "type": "empty_kata",
+                            "config": {"applications_per_worker": 2},
+                        }
+                    ]
+                }
+            },
+        }
+        incomplete_trace = [
+            {"operationName": "rootSpan", "startTime": 50, "duration": 1},
+            {"operationName": "StartVM", "startTime": 60, "duration": 5},
+        ]
+        complete_trace_1 = [
+            {"operationName": "rootSpan", "startTime": 100, "duration": 1},
+            {"operationName": "StartVM", "startTime": 110, "duration": 20},
+            {"operationName": "connect", "startTime": 140, "duration": 5},
+            {"operationName": "ttrpc.StartContainer", "startTime": 150, "duration": 2},
+            {"operationName": "ttrpc.StartContainer", "startTime": 160, "duration": 3},
+        ]
+        complete_trace_2 = [
+            {"operationName": "rootSpan", "startTime": 200, "duration": 1},
+            {"operationName": "StartVM", "startTime": 210, "duration": 20},
+            {"operationName": "connect", "startTime": 240, "duration": 5},
+            {"operationName": "ttrpc.StartContainer", "startTime": 250, "duration": 2},
+            {"operationName": "ttrpc.StartContainer", "startTime": 260, "duration": 3},
+        ]
+
+        with mock.patch(
+            "resource_manager.kube_kata.kube_kata._gather_kata_traces",
+            side_effect=[
+                [incomplete_trace, complete_trace_1],
+                [incomplete_trace, complete_trace_1, complete_trace_2],
+            ],
+        ) as gather, mock.patch("resource_manager.kube_kata.kube_kata.time.sleep") as sleep:
+            timestamps = kube_kata.get_kata_timestamps(config, _worker_output=None)
+
+        self.assertEqual(
+            timestamps,
+            [
+                [100, 110, 130, 145, 163],
+                [200, 210, 230, 245, 263],
+            ],
+        )
+        self.assertEqual(gather.call_count, 2)
+        sleep.assert_called_once_with(15)
+
     def test_build_software_phase_entries_skips_endpoint_install_when_runtime_absent(self):
         config = _config(resource_manager=None, endpoint_nodes=0)
         _add_planner_snapshot(config)

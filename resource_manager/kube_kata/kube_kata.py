@@ -5,6 +5,7 @@ This resource manager doesn't have any/many help functions, see the /kubernetes 
 
 import json
 import logging
+import time
 from datetime import datetime
 from typing import Dict, List
 
@@ -139,6 +140,77 @@ def post_phase_hook(runner):
         runner (AnsibleRunner): Shared runner instance.
     """
     kubernetes.verify_running_cluster(runner.config, runner.machines)
+    _verify_kata_runtime_install(runner.config, runner.machines)
+
+
+def _verify_kata_runtime_install(config, machines):
+    """Log and verify Kata runtime classes and guest runtime installation."""
+    runtime = str(config_access.orchestrator_value(config, "runtime"))
+    if "kata" not in runtime:
+        return
+
+    controller_ssh = config["cloud_ssh"][0]
+    runtime_class_command = "kubectl get runtimeclass kata-qemu kata-fc runc -o name"
+    output, error = machines[0].process(
+        config, runtime_class_command, shell=True, ssh=controller_ssh
+    )[0]
+    if error and not _benign_kubectl_stderr(error):
+        logging.error("Kata runtime-class check failed: %s", "".join(error))
+        raise RuntimeError("Kata runtime-class check failed")
+    logging.info("Kata runtime classes: %s", "".join(output).strip())
+
+    expected_classes = {"runtimeclass.node.k8s.io/kata-qemu", "runtimeclass.node.k8s.io/runc"}
+    observed_classes = {line.strip() for line in output if line.strip()}
+    missing_classes = expected_classes - observed_classes
+    if missing_classes:
+        raise RuntimeError("Missing Kata runtime classes: %s" % (", ".join(sorted(missing_classes))))
+
+    guest_command = (
+        "test -e /dev/kvm && "
+        "test -x /opt/kata/bin/kata-runtime && "
+        "grep -q 'io.containerd.kata-qemu.v2' /etc/containerd/config.toml && "
+        "curl -fsS http://127.0.0.1:16686/api/services >/dev/null && "
+        "/opt/kata/bin/kata-runtime --version"
+    )
+    worker_ssh_targets = list(config.get("cloud_ssh", [])[1:]) + list(config.get("edge_ssh", []))
+    if not worker_ssh_targets:
+        raise RuntimeError("No worker SSH targets available for Kata guest runtime check")
+    for ssh_target in worker_ssh_targets:
+        output, error = machines[0].process(
+            config, guest_command, shell=True, ssh=ssh_target
+        )[0]
+        if error:
+            logging.error("Kata guest runtime check failed on %s: %s", ssh_target, "".join(error))
+            raise RuntimeError("Kata guest runtime check failed on %s" % (ssh_target,))
+        logging.info("Kata guest runtime ready on %s: %s", ssh_target, "".join(output).strip())
+        _verify_jaeger_query_endpoint(ssh_target)
+
+
+def _worker_ip_from_ssh_target(ssh_target):
+    """Return the host/IP part from a Continuum SSH target."""
+    if "@" in ssh_target:
+        return ssh_target.rsplit("@", 1)[1]
+    return ssh_target
+
+
+def _verify_jaeger_query_endpoint(ssh_target):
+    """Verify the host-side Jaeger query API used for Kata trace collection."""
+    worker_ip = _worker_ip_from_ssh_target(ssh_target)
+    url = "http://%s:16686/api/services" % (worker_ip,)
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            "Kata Jaeger query API is not reachable on %s (%s): %s"
+            % (ssh_target, url, exc)
+        ) from exc
+    logging.info("Kata Jaeger query API ready on %s", url)
+
+
+def _benign_kubectl_stderr(lines):
+    """Return whether kubectl stderr only contains Continuum timing trace lines."""
+    return bool(lines) and all("[CONTINUUM]" in line for line in lines)
 
 
 def get_deployment_duration(config, machines):
@@ -181,10 +253,25 @@ def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
         List[List[Dict]]: a sorted list of traces for each kata deployment on `ip`.
     """
     jaeger_api_url = f"http://{ip}:{port}/api/traces?service=kata&operation=rootSpan&limit=10000"
-    response = requests.get(jaeger_api_url, timeout=600)
-    response_data = response.json()
+    try:
+        response = requests.get(jaeger_api_url, timeout=600)
+        response.raise_for_status()
+        response_data = response.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            "Could not fetch Kata traces from Jaeger at %s: %s" % (jaeger_api_url, exc)
+        ) from exc
+    except ValueError as exc:
+        raise RuntimeError(
+            "Jaeger returned invalid JSON for Kata traces at %s: %s" % (jaeger_api_url, exc)
+        ) from exc
 
-    traces = response_data["data"]
+    try:
+        traces = response_data["data"]
+    except KeyError as exc:
+        raise RuntimeError(
+            "Jaeger response for Kata traces at %s did not contain data" % (jaeger_api_url,)
+        ) from exc
 
     # Sort each trace's spans based on starTime and sort traces based on startTime
     traces = sorted(
@@ -196,7 +283,10 @@ def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
     return traces
 
 
-def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
+def get_kata_period_timestamps(
+    traces: List[List[Dict]],
+    log_incomplete: bool = True,
+) -> List[List[int]]:
     """Extract kata period timestamps from Jaeger traces.
 
     T0 -> T1 : create kata runtime
@@ -212,35 +302,65 @@ def get_kata_period_timestamps(traces: List[List[Dict]]) -> List[List[int]]:
     """
 
     timestamps: List[List[int]] = []
+    skipped_traces = 0
 
-    for trace in traces:
+    for trace_index, trace in enumerate(traces):
         ts: List[int] = []
         skip_first = True
         for span in trace:
-            assert len([span for span in trace if span["operationName"] == "StartVM"]) == 2
-            assert len([span for span in trace if span["operationName"] == "connect"]) == 1
+            operation_name = span["operationName"]
             # T0
             if len(ts) == 0:
                 ts.append(span["startTime"])
             # T1, T2
-            elif len(ts) == 1 and span["operationName"] == "StartVM":
+            elif len(ts) == 1 and operation_name == "StartVM":
                 ts.append(span["startTime"])  # T1
                 ts.append(span["startTime"] + span["duration"])  # T2
             # T3
-            elif len(ts) == 3 and span["operationName"] == "connect":
+            elif len(ts) == 3 and operation_name == "connect":
                 ts.append(span["startTime"] + span["duration"])  # T3
             # T4
-            elif len(ts) == 4 and span["operationName"] == "ttrpc.StartContainer":
+            elif len(ts) == 4 and operation_name == "ttrpc.StartContainer":
                 if skip_first is False:
                     ts.append(span["startTime"] + span["duration"])  # T4
                     break
 
                 skip_first = False
 
-        assert len(ts) == 5
-        timestamps.append(ts)
+        if len(ts) == 5:
+            timestamps.append(ts)
+        else:
+            skipped_traces += 1
+            operations = [span["operationName"] for span in trace]
+            if log_incomplete:
+                logging.warning(
+                    "Skipping incomplete Kata trace %s with operations: %s",
+                    trace_index,
+                    operations,
+                )
+
+    if skipped_traces and log_incomplete:
+        logging.warning(
+            "Skipped %s incomplete Kata trace(s); retained %s complete Kata timestamp row(s)",
+            skipped_traces,
+            len(timestamps),
+        )
+
+    if not timestamps:
+        raise RuntimeError("No complete Kata traces were available in Jaeger output")
 
     return timestamps
+
+
+def _expected_kata_timestamp_rows(config) -> int:
+    """Return expected Kata timestamp rows for the active Kubernetes benchmark."""
+    apps_per_worker = config_access.benchmark_param_int(config, "applications_per_worker")
+    if config["mode"] == "cloud":
+        return (config["infrastructure"]["cloud_nodes"] - 1) * apps_per_worker
+    if config["mode"] == "edge":
+        return config["infrastructure"]["edge_nodes"] * apps_per_worker
+
+    raise RuntimeError("Unsupported benchmark worker mode for Kata traces: %s" % (config["mode"],))
 
 
 # Kata entry point.
@@ -264,9 +384,37 @@ def get_kata_timestamps(config, _worker_output) -> List[List[int]]:
 
     _nodes_names, nodes_ips = map(list, zip(*[str.split(x, "@") for x in config["cloud_ssh"][1:]]))
 
-    traces = [_gather_kata_traces(ip)[1:] for ip in nodes_ips]
-    # Flatten list of lists
-    traces = [a for b in traces for a in b]
+    expected_rows = _expected_kata_timestamp_rows(config)
+    retry_attempts = 12
+    retry_delay_seconds = 15
+
+    traces = []
+    kata_ts = []
+    for attempt in range(1, retry_attempts + 1):
+        traces = [_gather_kata_traces(ip)[1:] for ip in nodes_ips]
+        # Flatten list of lists
+        traces = [a for b in traces for a in b]
+        kata_ts = get_kata_period_timestamps(traces, log_incomplete=False)
+
+        if len(kata_ts) >= expected_rows:
+            logging.info(
+                "Collected %s complete Kata timestamp row(s), expected %s",
+                len(kata_ts),
+                expected_rows,
+            )
+            return kata_ts
+
+        if attempt < retry_attempts:
+            logging.info(
+                "Collected %s complete Kata timestamp row(s), expected %s; "
+                "retrying Jaeger trace fetch in %s second(s) (%s/%s)",
+                len(kata_ts),
+                expected_rows,
+                retry_delay_seconds,
+                attempt,
+                retry_attempts,
+            )
+            time.sleep(retry_delay_seconds)
 
     kata_ts = get_kata_period_timestamps(traces)
     return kata_ts

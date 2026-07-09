@@ -278,6 +278,69 @@ class KubernetesControlPlaneRoleTests(unittest.TestCase):
         worker_play = next(play for play in playbook if play.get("name") == "Join Kubernetes worker nodes")
         self.assertEqual(worker_play["serial"], 1)
 
+    def test_kata_setup_installs_runtime_on_workers_and_runtimeclasses_on_controller(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        playbook_path = repo_root / "playbooks/resource_manager/kata_setup.yml"
+        playbook = yaml.safe_load(playbook_path.read_text(encoding="utf-8"))
+
+        install_play = next(
+            play for play in playbook if play.get("name") == "Install Kata runtime components"
+        )
+        runtimeclass_play = next(
+            play for play in playbook if play.get("name") == "Register Kata runtime classes"
+        )
+
+        self.assertEqual(install_play["hosts"], "clouds:edges")
+        self.assertEqual(
+            [role["role"] for role in install_play["roles"]],
+            ["kata_containers"],
+        )
+        self.assertEqual(runtimeclass_play["hosts"], "cloudcontroller")
+        self.assertEqual(
+            [role["role"] for role in runtimeclass_play["roles"]],
+            ["kata_runtime_classes"],
+        )
+
+    def test_kata_containers_role_starts_legacy_jaeger_all_in_one(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        defaults_path = repo_root / "roles/resource_manager/kata_containers/defaults/main.yml"
+        task_path = repo_root / "roles/resource_manager/kata_containers/tasks/main.yml"
+        defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+        tasks = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(defaults["rm_kata_containers_jaeger_image"], "jaegertracing/all-in-one:1.47")
+
+        include_docker = next(
+            task for task in tasks if task.get("name") == "Include Docker setup for Jaeger tracing"
+        )
+        self.assertEqual(include_docker["ansible.builtin.include_role"]["name"], "docker_setup")
+
+        resolve_task = next(task for task in tasks if task.get("name") == "Resolve Jaeger image reference")
+        image_ref_expr = resolve_task["ansible.builtin.set_fact"]["rm_kata_containers_jaeger_image_ref"]
+        self.assertIn("regex_replace('^[^/]+/', '')", image_ref_expr)
+
+        run_task = next(task for task in tasks if task.get("name") == "Start Jaeger tracing container")
+        argv = run_task["ansible.builtin.command"]["argv"]
+        self.assertIn("COLLECTOR_ZIPKIN_HOST_PORT=:9411", argv)
+        self.assertIn("COLLECTOR_OTLP_ENABLED=true", argv)
+        for port in (
+            "6831:6831/udp",
+            "6832:6832/udp",
+            "5778:5778",
+            "16686:16686",
+            "4317:4317",
+            "4318:4318",
+            "14250:14250",
+            "14268:14268",
+            "14269:14269",
+            "9411:9411",
+        ):
+            self.assertIn(port, argv)
+        self.assertIn("--query.max-clock-skew-adjustment=20s", argv)
+
+        wait_task = next(task for task in tasks if task.get("name") == "Wait for Jaeger query API")
+        self.assertEqual(wait_task["ansible.builtin.uri"]["url"], "http://127.0.0.1:16686/api/services")
+
 
 class KubeEdgeRoleTests(unittest.TestCase):
     def test_kubeedge_prereqs_follow_profile_kubernetes_major_version(self):

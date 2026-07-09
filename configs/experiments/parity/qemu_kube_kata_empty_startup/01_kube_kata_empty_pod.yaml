@@ -1,0 +1,46 @@
+---
+schema_version: 1
+kind: ContinuumExperiment
+
+use:
+  environment: local-qemu-cpupin-delete-on-exit
+  software: kube-kata
+
+run:
+  targets: [infrastructure, software, application]
+  image_prefetch: "off"
+  dry_run: false
+  clean: false
+
+infrastructure:
+  clusters:
+    - id: cloud-1
+      tier: cloud
+      resources:
+        vms:
+          count: 2
+          spec:
+            cores: 8
+            memory_gb: 64
+            cpu_quota: 1.0
+  network:
+    emulation: false
+    wireless_preset: 4g
+    overrides: {}
+
+benchmark:
+  pipeline:
+    - id: empty-kata-pod
+      type: empty_kata
+      assign_to:
+        match:
+          cluster: cloud-1
+      tags:
+        benchmark.role: kata-startup
+        legacy.config: node_1_kata_qemu_overlayfs
+      config:
+        sleep_time: 180
+        applications_per_worker: 100
+        worker_ready_timeout_seconds: 2400
+        application_worker_cpu: 0.05
+        application_worker_memory: 0.5

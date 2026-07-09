@@ -137,6 +137,9 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
     "qemu_kubecontrol_empty_trace_parity": (
         "QEMU kubecontrol empty trace parity suite prerequisites"
     ),
+    "qemu_kube_kata_empty_startup_parity": (
+        "QEMU kube_kata empty startup parity suite prerequisites"
+    ),
 }
 REQUIRED_EVIDENCE_CONTEXT_FIELDS = ("Git commit", "Tree state", "Date")
 ARTIFACT_AUDIT_SUMMARY_MARKER = "local release-evidence artifact audit"

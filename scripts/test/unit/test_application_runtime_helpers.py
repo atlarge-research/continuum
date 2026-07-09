@@ -8,6 +8,7 @@ from unittest import mock
 
 from application import runtime_helpers
 from application.empty import empty as empty_app
+from application.empty_kata import empty_kata as empty_kata_app
 
 
 class ApplicationRuntimeHelpersTests(unittest.TestCase):
@@ -107,6 +108,206 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
             self.assertEqual(manifest["tables"][0]["label"], "CLOUD OUTPUT")
             self.assertIn("started_application (s)", manifest["tables"][0]["columns"])
 
+    def test_empty_kata_format_output_persists_cloud_and_kata_metric_artifacts(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = {
+                "mode": "cloud",
+                "timestamp": "2026-07-09_12:00:00",
+                "username": "ubuntu",
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "provider": "qemu",
+                },
+                "domains": {
+                    "benchmark": {
+                        "pipeline": [
+                            {
+                                "id": "empty-kata-pod",
+                                "type": "empty_kata",
+                                "config": {},
+                            }
+                        ]
+                    }
+                },
+            }
+            worker_metrics = [
+                {
+                    "pod": "empty-1-abc",
+                    "container": "empty-kata",
+                    "1_kubectl_start": 0.0,
+                    "2_kubectl_send": 0.1,
+                    "3_api_receive_job": 0.2,
+                    "4_jobcontroller_start": 0.3,
+                    "5_pod_object_create": 0.4,
+                    "6_api_receive_pod": 0.5,
+                    "7_scheduler_start": 0.6,
+                    "8_api_receive_pod": 0.7,
+                    "9_kubelet_start": 0.8,
+                    "10_volume_mount": 0.9,
+                    "11_sandbox_start": 1.0,
+                    "12_create_container": 1.1,
+                    "13_start_container": 1.2,
+                    "14_app_start": 1.3,
+                }
+            ]
+            status = [[0.0, "empty-1-abc", "Pending"], [1.3, "empty-1-abc", "Succeeded"]]
+            resource_output = [
+                runtime_helpers.pd.DataFrame([{"timestamp": 0.0, "controller_cpu": 1}]),
+                runtime_helpers.pd.DataFrame([{"Time (s)": 0.0, "cpu": 1}]),
+            ]
+            kata_ts = [[0, 100000, 200000, 300000, 400000]]
+
+            with (
+                mock.patch.object(empty_kata_app, "fill_control", return_value=worker_metrics),
+                mock.patch.object(empty_kata_app.plot, "plot_status"),
+                mock.patch.object(empty_kata_app.plot, "plot_control"),
+                mock.patch.object(empty_kata_app.plot, "plot_p56"),
+                mock.patch.object(empty_kata_app.plot, "plot_resources"),
+                mock.patch.object(empty_kata_app.plot, "plot_p56_kata"),
+            ):
+                empty_kata_app.format_output(
+                    config,
+                    None,
+                    status=status,
+                    control={"cloudcontroller": {}},
+                    starttime=0.0,
+                    worker_output=[],
+                    worker_description=[],
+                    resource_output=resource_output,
+                    endtime=1.3,
+                    kata_ts=kata_ts,
+                )
+
+            manifest_path = os.path.join(
+                tempdir,
+                ".continuum",
+                "logs",
+                "benchmark",
+                "2026-07-09_12_00_00_empty-kata-pod_metrics_manifest.json",
+            )
+            self.assertTrue(os.path.isfile(manifest_path))
+            with open(manifest_path, "r", encoding="utf-8") as filep:
+                manifest = json.load(filep)
+            self.assertEqual(manifest["stage_id"], "empty-kata-pod")
+            self.assertEqual(manifest["stage_type"], "empty_kata")
+            tables = {table["label"]: table for table in manifest["tables"]}
+            self.assertIn("CLOUD OUTPUT", tables)
+            self.assertIn("KATA OUTPUT", tables)
+            self.assertIn("kata_create_vm (s)", tables["KATA OUTPUT"]["columns"])
+            self.assertTrue(
+                os.path.isfile(
+                    os.path.join(
+                        tempdir,
+                        ".continuum",
+                        "logs",
+                        "2026-07-09_12:00:00_dataframe_kata.csv",
+                    )
+                )
+            )
+
+    def test_empty_kata_format_output_persists_artifacts_with_partial_control_metrics(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = {
+                "mode": "cloud",
+                "timestamp": "2026-07-09_12:00:00",
+                "username": "ubuntu",
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "provider": "qemu",
+                },
+                "domains": {
+                    "benchmark": {
+                        "pipeline": [
+                            {
+                                "id": "empty-kata-pod",
+                                "type": "empty_kata",
+                                "config": {},
+                            }
+                        ]
+                    }
+                },
+            }
+            worker_metrics = [
+                {
+                    "pod": "empty-1-abc",
+                    "container": "empty-kata",
+                    "1_kubectl_start": 0.0,
+                    "2_kubectl_send": 0.1,
+                    "3_api_receive_job": 0.2,
+                    "4_jobcontroller_start": 0.3,
+                    "5_pod_object_create": 0.4,
+                    "6_api_receive_pod": 0.5,
+                    "7_scheduler_start": 0.6,
+                    "8_api_receive_pod": None,
+                    "9_kubelet_start": None,
+                    "10_volume_mount": None,
+                    "11_sandbox_start": None,
+                    "12_create_container": None,
+                    "13_start_container": None,
+                    "14_app_start": None,
+                },
+                {
+                    "pod": "empty-2-abc",
+                    "container": "empty-kata",
+                    "1_kubectl_start": 0.0,
+                    "2_kubectl_send": 0.1,
+                    "3_api_receive_job": 0.2,
+                    "4_jobcontroller_start": 0.3,
+                    "5_pod_object_create": 0.4,
+                    "6_api_receive_pod": 0.5,
+                    "7_scheduler_start": 0.6,
+                    "8_api_receive_pod": 0.7,
+                    "9_kubelet_start": 0.8,
+                    "10_volume_mount": 0.9,
+                    "11_sandbox_start": 1.0,
+                    "12_create_container": 1.1,
+                    "13_start_container": 1.2,
+                    "14_app_start": 1.3,
+                },
+            ]
+            resource_output = [
+                runtime_helpers.pd.DataFrame([{"timestamp": 0.0, "controller_cpu": 1}]),
+                runtime_helpers.pd.DataFrame([{"Time (s)": 0.0, "cpu": 1}]),
+            ]
+            kata_ts = [
+                [0, 100000, 200000, 300000, 400000],
+                [0, 110000, 210000, 310000, 410000],
+            ]
+
+            with (
+                mock.patch.object(empty_kata_app, "fill_control", return_value=worker_metrics),
+                mock.patch.object(empty_kata_app.plot, "plot_status"),
+                mock.patch.object(empty_kata_app.plot, "plot_resources"),
+            ):
+                empty_kata_app.format_output(
+                    config,
+                    None,
+                    status=[],
+                    control={"cloudcontroller": {}},
+                    starttime=0.0,
+                    worker_output=[],
+                    worker_description=[],
+                    resource_output=resource_output,
+                    endtime=1.3,
+                    kata_ts=kata_ts,
+                )
+
+            manifest_path = os.path.join(
+                tempdir,
+                ".continuum",
+                "logs",
+                "benchmark",
+                "2026-07-09_12_00_00_empty-kata-pod_metrics_manifest.json",
+            )
+            self.assertTrue(os.path.isfile(manifest_path))
+            with open(manifest_path, "r", encoding="utf-8") as filep:
+                manifest = json.load(filep)
+
+            tables = {table["label"]: table for table in manifest["tables"]}
+            self.assertEqual(tables["CLOUD OUTPUT"]["rows"], 2)
+            self.assertEqual(tables["KATA OUTPUT"]["rows"], 2)
+            self.assertIn("kata_create_vm (s)", tables["KATA OUTPUT"]["columns"])
+
     def test_empty_check_leaves_missing_component_trace_empty(self):
         config = {"infrastructure": {"provider": "qemu"}}
         worker_metrics = [
@@ -129,6 +330,31 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         )
 
         self.assertIsNone(worker_metrics[0]["3_api_receive_job"])
+
+    def test_empty_kata_check_leaves_missing_optional_trace_empty(self):
+        config = {"infrastructure": {"provider": "qemu"}}
+        worker_metrics = [
+            {
+                "pod": "empty-1-abc",
+                "container": "empty-kata",
+                "7_scheduler_start": 2.0,
+                "8_api_receive_pod": None,
+            }
+        ]
+        control = {"cloudcontroller": {"apiserver": [[10.0, "0204 pod=default/unmatched"]]}}
+
+        empty_kata_app.check(
+            config,
+            control,
+            starttime=9.0,
+            worker_metrics=worker_metrics,
+            component="apiserver",
+            sub_string="0204",
+            tag="8_api_receive_pod",
+            compare_tag="7_scheduler_start",
+        )
+
+        self.assertIsNone(worker_metrics[0]["8_api_receive_pod"])
 
     def test_empty_validate_data_accepts_missing_trace_columns(self):
         dataframe = runtime_helpers.pd.DataFrame(
@@ -805,6 +1031,57 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         command = machine.process.call_args.args[1]
         self.assertTrue(command.startswith("date +'%s.%N'; kubectl get pods "))
         self.assertFalse(command.startswith("\""))
+
+    @mock.patch("application.runtime_helpers.time.sleep", autospec=True)
+    @mock.patch("application.runtime_helpers.time.time", autospec=True)
+    def test_wait_kubernetes_workers_ready_uses_configured_timeout(
+        self, mock_time, _mock_sleep
+    ):
+        config = self._planner_handoff_config()
+        config["mode"] = "cloud"
+        config["cloud_ssh"] = ["cloudcontroller@10.0.0.1"]
+        config["domains"]["benchmark"]["pipeline"][0]["config"][
+            "worker_ready_timeout_seconds"
+        ] = 1200
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            [
+                (
+                    [
+                        "100.0\n",
+                        "NAME STATUS\n",
+                        "worker-a Pending\n",
+                        "worker-b Running\n",
+                        "worker-c Running\n",
+                        "worker-d Running\n",
+                    ],
+                    [],
+                )
+            ],
+            [
+                (
+                    [
+                        "1100.0\n",
+                        "NAME STATUS\n",
+                        "worker-a Running\n",
+                        "worker-b Running\n",
+                        "worker-c Running\n",
+                        "worker-d Running\n",
+                    ],
+                    [],
+                )
+            ],
+        ]
+        mock_time.side_effect = [0.0, 901.0]
+
+        status = runtime_helpers.wait_kubernetes_workers_ready(
+            config,
+            [machine],
+            get_starttime=True,
+        )
+
+        self.assertEqual(len(status), 2)
+        self.assertEqual(status[-1]["Running"], 4)
 
     def test_wait_kubernetes_workers_ready_exits_on_empty_status_output(self):
         config = self._planner_handoff_config()

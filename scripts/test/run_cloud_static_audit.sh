@@ -206,6 +206,9 @@ run_capture prereq_qemu_kubecontrol_empty_parity "QEMU kubecontrol empty parity 
 run_capture prereq_qemu_kubecontrol_empty_trace_parity "QEMU kubecontrol empty trace parity suite prerequisites" optional \
     "$PYTHON" -B scripts/test/prime_local_registry_cache.py \
         --suite qemu_kubecontrol_empty_trace_parity --check-only
+run_capture prereq_qemu_kube_kata_empty_startup_parity "QEMU kube_kata empty startup parity suite prerequisites" optional \
+    "$PYTHON" -B scripts/test/prime_local_registry_cache.py \
+        --suite qemu_kube_kata_empty_startup_parity --check-only
 
 forced_prefetch_notice() {
     cat <<'EOF'

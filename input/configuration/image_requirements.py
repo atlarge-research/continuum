@@ -91,6 +91,7 @@ _IMAGE_CATALOG: dict[
     str | tuple[str, ...] | Callable[[dict | None, dict | None], str | tuple[str, ...]],
 ] = {
     "kube.control_plane": _kube_control_plane_images,
+    "kube.kata_jaeger": "jaegertracing/all-in-one:1.47",
     "app.empty": "redplanet00/kubeedge-applications:empty",
     "app.empty_kata": "ansk/empty:empty",
     "app.mem_usage": "redplanet00/kubeedge-applications:empty",

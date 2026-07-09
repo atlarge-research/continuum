@@ -75,6 +75,84 @@
       regexp: "^#(enable_tracing = true)$"
       replace: "\\1"
 
+- name: Include Docker setup for Jaeger tracing
+  ansible.builtin.include_role:
+    name: docker_setup
+  vars:
+    rm_docker_setup_registry_ip: "{{ rm_kata_containers_registry_ip }}"
+    rm_docker_setup_username: "{{ rm_kata_containers_username }}"
+
+- name: Resolve Jaeger image reference
+  ansible.builtin.set_fact:
+    rm_kata_containers_jaeger_image_ref: >-
+      {{
+        (
+          rm_kata_containers_registry_ip ~ '/'
+          ~ (rm_kata_containers_jaeger_image | regex_replace('^[^/]+/', ''))
+        )
+        if (rm_kata_containers_registry_ip | length > 0)
+        else rm_kata_containers_jaeger_image
+      }}
+
+- name: Pull Jaeger all-in-one image
+  ansible.builtin.command:
+    cmd: "docker pull {{ rm_kata_containers_jaeger_image_ref }}"
+  changed_when: false
+
+- name: Remove existing Jaeger tracing container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ rm_kata_containers_jaeger_container_name }}"
+  register: rm_kata_containers_jaeger_remove
+  changed_when: rm_kata_containers_jaeger_remove.rc == 0
+  failed_when:
+    - rm_kata_containers_jaeger_remove.rc != 0
+    - "'No such container' not in rm_kata_containers_jaeger_remove.stderr"
+
+- name: Start Jaeger tracing container
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - -d
+      - --name
+      - "{{ rm_kata_containers_jaeger_container_name }}"
+      - -e
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - -e
+      - COLLECTOR_OTLP_ENABLED=true
+      - -p
+      - 6831:6831/udp
+      - -p
+      - 6832:6832/udp
+      - -p
+      - "5778:5778"
+      - -p
+      - "16686:16686"
+      - -p
+      - "4317:4317"
+      - -p
+      - "4318:4318"
+      - -p
+      - "14250:14250"
+      - -p
+      - "14268:14268"
+      - -p
+      - "14269:14269"
+      - -p
+      - "9411:9411"
+      - "{{ rm_kata_containers_jaeger_image_ref }}"
+      - --query.max-clock-skew-adjustment=20s
+  changed_when: true
+
+- name: Wait for Jaeger query API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:16686/api/services"
+    status_code: 200
+  register: rm_kata_containers_jaeger_api
+  retries: 20
+  delay: 3
+  until: rm_kata_containers_jaeger_api.status == 200
+
 - name: Restart containerd after Kata configuration
   ansible.builtin.systemd:
     name: containerd

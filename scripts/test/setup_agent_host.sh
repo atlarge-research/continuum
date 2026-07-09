@@ -22,7 +22,7 @@ QEMU_BRIDGE_NAME="${QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${QEMU_BRIDGE_GATEWAY:-}"
 SYNC_MARKER_NAME="${SYNC_MARKER_NAME:-.continuum-smoke-sync}"
 SYNC_PROBE_FILES="${SYNC_PROBE_FILES:-continuum.py infrastructure/ansible.py infrastructure/qemu/qemu.py input/configuration/runtime_module_loader.py scripts/test/run_smoke_host.sh scripts/test/setup_agent_host.sh scripts/test/prime_local_registry_cache.py scripts/test/test_config.json}"
-HOSTCTL_INTERFACE_VERSION="2026-07-06-kubecontrol-trace-cache"
+HOSTCTL_INTERFACE_VERSION="2026-07-09-kube-kata-jaeger-local-name"
 
 usage() {
   cat <<EOF
@@ -351,6 +351,19 @@ redplanet00/pause:3.9|pause:3.9
 redplanet00/kubeedge-applications:empty|kubeedge-applications:empty
 EOF_IMAGE_REQUIREMENTS
       ;;
+    qemu_kube_kata_empty_startup_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kube-apiserver:v1.27.0|kube-apiserver:v1.27.0
+redplanet00/kube-controller-manager:v1.27.0|kube-controller-manager:v1.27.0
+redplanet00/kube-proxy:v1.27.0|kube-proxy:v1.27.0
+redplanet00/kube-scheduler:v1.27.0|kube-scheduler:v1.27.0
+redplanet00/etcd:3.5.7-0|etcd:3.5.7-0
+redplanet00/coredns:v1.10.1|coredns:v1.10.1
+redplanet00/pause:3.9|pause:3.9
+ansk/empty:empty|empty:empty
+jaegertracing/all-in-one:1.47|all-in-one:1.47
+EOF_IMAGE_REQUIREMENTS
+      ;;
     *)
       return 1
       ;;
@@ -384,7 +397,8 @@ registry_has_image() {
   if [ "$repo_name" = "$local_name" ] || [ -z "$tag_name" ]; then
     return 1
   fi
-  curl -fsS "http://$registry/v2/$repo_name/tags/list" 2>/dev/null | grep -q "\"$tag_name\""
+  payload=$(curl -fsS "http://$registry/v2/$repo_name/tags/list" 2>/dev/null) || return 1
+  printf '%s\n' "$payload" | grep -q '"tags"[[:space:]]*:[[:space:]]*\[[^]]*"'"$tag_name"'"'
 }
 
 prime_registry_cache_as_root() {
@@ -743,6 +757,19 @@ redplanet00/pause:3.9|pause:3.9
 redplanet00/kubeedge-applications:empty|kubeedge-applications:empty
 EOF_IMAGE_REQUIREMENTS
       ;;
+    qemu_kube_kata_empty_startup_parity)
+      cat <<'EOF_IMAGE_REQUIREMENTS'
+redplanet00/kube-apiserver:v1.27.0|kube-apiserver:v1.27.0
+redplanet00/kube-controller-manager:v1.27.0|kube-controller-manager:v1.27.0
+redplanet00/kube-proxy:v1.27.0|kube-proxy:v1.27.0
+redplanet00/kube-scheduler:v1.27.0|kube-scheduler:v1.27.0
+redplanet00/etcd:3.5.7-0|etcd:3.5.7-0
+redplanet00/coredns:v1.10.1|coredns:v1.10.1
+redplanet00/pause:3.9|pause:3.9
+ansk/empty:empty|empty:empty
+jaegertracing/all-in-one:1.47|all-in-one:1.47
+EOF_IMAGE_REQUIREMENTS
+      ;;
     *)
       return 1
       ;;
@@ -776,7 +803,8 @@ registry_has_image() {
   if [ "\$repo_name" = "\$local_name" ] || [ -z "\$tag_name" ]; then
     return 1
   fi
-  curl -fsS "http://\$registry/v2/\$repo_name/tags/list" 2>/dev/null | grep -q "\"\$tag_name\""
+  payload=\$(curl -fsS "http://\$registry/v2/\$repo_name/tags/list" 2>/dev/null) || return 1
+  printf '%s\\n' "\$payload" | grep -q '"tags"[[:space:]]*:[[:space:]]*\\[[^]]*"'\$tag_name'"'
 }
 
 prime_registry_cache_as_root() {

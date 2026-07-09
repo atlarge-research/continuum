@@ -51,6 +51,7 @@ BENCHMARK_STAGE_CONFIG_RULES = {
     "empty_kata": {
         "sleep_time": _BENCHMARK_STAGE_KEY_INT_POSITIVE,
         "applications_per_worker": _BENCHMARK_STAGE_KEY_INT_POSITIVE,
+        "worker_ready_timeout_seconds": _BENCHMARK_STAGE_KEY_INT_POSITIVE,
         "application_worker_cpu": _BENCHMARK_STAGE_KEY_NUMBER_POSITIVE,
         "application_worker_memory": _BENCHMARK_STAGE_KEY_NUMBER_POSITIVE,
     },

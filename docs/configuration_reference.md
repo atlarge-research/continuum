@@ -283,6 +283,7 @@ Runnable experiment examples:
 - `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml`
 - `configs/experiments/parity/qemu_k8s_image/05_kubernetes_image_classification.yaml`
 - `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml`
+- `configs/experiments/parity/qemu_kube_kata_empty_startup/01_kube_kata_empty_pod.yaml`
 - `configs/experiments/parity/qemu_kubecontrol_empty/01_kubecontrol_empty_call.yaml`
 - `configs/experiments/parity/qemu_kubeedge_image/06_kubeedge_image_classification.yaml`
 - `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml`
@@ -310,6 +311,7 @@ Shipped environment and software profiles:
 - `configs/profiles/software/k8s-observability-endpoint-runtime.yaml`
 - `configs/profiles/software/k8s-openfaas.yaml`
 - `configs/profiles/software/k8s.yaml`
+- `configs/profiles/software/kube-kata.yaml`
 - `configs/profiles/software/kubecontrol.yaml`
 - `configs/profiles/software/kubeedge-endpoint-runtime.yaml`
 - `configs/profiles/software/kubeedge.yaml`

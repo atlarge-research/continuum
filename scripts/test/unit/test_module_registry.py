@@ -47,6 +47,7 @@ class ModuleRegistryTests(unittest.TestCase):
         self.assertIsNotNone(kube_kata)
         self.assertIn("kube.control_plane", kubecontrol.image_catalog_refs)
         self.assertIn("kube.control_plane", kube_kata.image_catalog_refs)
+        self.assertIn("kube.kata_jaeger", kube_kata.image_catalog_refs)
 
 
 if __name__ == "__main__":

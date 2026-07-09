@@ -787,6 +787,122 @@
                 ]
             }
         },
+        "qemu_kube_kata_empty_startup_parity": {
+            "directories": [
+                "configs/experiments/parity/qemu_kube_kata_empty_startup/"
+            ],
+            "use_cache": true,
+            "rebuild_base_images": false,
+            "stop_on_failure": true,
+            "success_detection": {
+                "require_teardown": true,
+                "required_stdout_markers": [
+                    "Benchmark has been finished, prepare results",
+                    "CLOUD OUTPUT",
+                    "started_application (s)",
+                    "Wrote benchmark metric artifact manifest"
+                ],
+                "required_stdout_metric_tables": [
+                    {
+                        "label": "CLOUD OUTPUT",
+                        "columns": [
+                            "kubelet_pod_received (s)",
+                            "kubelet_applied_sandbox (s)",
+                            "started_application (s)"
+                        ],
+                        "min_rows": 100
+                    }
+                ],
+                "required_benchmark_metric_artifacts": [
+                    {
+                        "label": "CLOUD OUTPUT",
+                        "columns": [
+                            "kubelet_pod_received (s)",
+                            "kubelet_applied_sandbox (s)",
+                            "started_application (s)"
+                        ],
+                        "numeric_columns": [
+                            "kubelet_pod_received (s)",
+                            "kubelet_applied_sandbox (s)",
+                            "started_application (s)"
+                        ],
+                        "min_rows": 100,
+                        "stat_assertions": [
+                            {
+                                "column": "started_application (s)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    },
+                    {
+                        "label": "KATA OUTPUT",
+                        "columns": [
+                            "kata_create_runtime (s)",
+                            "kata_create_vm (s)",
+                            "kata_connect_to_vm (s)",
+                            "kata_create_container_and_launch (s)",
+                            "started_application (s)"
+                        ],
+                        "numeric_columns": [
+                            "kata_create_runtime (s)",
+                            "kata_create_vm (s)",
+                            "kata_connect_to_vm (s)",
+                            "kata_create_container_and_launch (s)",
+                            "started_application (s)"
+                        ],
+                        "min_rows": 100,
+                        "stat_assertions": [
+                            {
+                                "column": "started_application (s)",
+                                "min": 0.0,
+                                "max": 600000.0,
+                                "mean_min": 0.0,
+                                "mean_max": 600000.0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "prerequisites": {
+                "summary": "Requires a local QEMU/libvirt host with nested KVM, containerd/Kata guest support, a primed local registry cache, and enough CPU/RAM for two 8-core/64 GiB Kata guests",
+                "commands": [
+                    "virsh",
+                    "ssh",
+                    "setfacl",
+                    "curl",
+                    "qemu-img",
+                    "cloud-localds",
+                    "ansible-playbook"
+                ],
+                "checks": [
+                    {
+                        "name": "Kata host prerequisites",
+                        "command": [
+                            "python3",
+                            "scripts/test/check_kata_host_prereqs.py",
+                            "--min-cores",
+                            "16",
+                            "--min-memory-gb",
+                            "160",
+                            "--require-nested-kvm"
+                        ]
+                    },
+                    {
+                        "name": "Local registry cache",
+                        "command": [
+                            "python3",
+                            "scripts/test/prime_local_registry_cache.py",
+                            "--suite",
+                            "qemu_kube_kata_empty_startup_parity",
+                            "--check-only"
+                        ]
+                    }
+                ]
+            }
+        },
         "benchmark_smoke": {
             "directories": [
                 "configs/experiments/benchmark_smoke/"

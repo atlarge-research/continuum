@@ -157,7 +157,7 @@ validate_check_prereqs_args() {
 
 retained_scenario_path() {
   case "$1" in
-    infra_one_vm|software_k8s_two_vm|network_netperf_two_vm|benchmark_k8s_resume|network_validation|qemu_infra_parity|qemu_k8s_nobench_parity|qemu_k8s_image_parity|qemu_kubeedge_software_parity|qemu_kubeedge_image_parity|qemu_mist_software_parity|qemu_mist_image_parity|qemu_endpoint_software_parity|qemu_endpoint_image_parity|qemu_openfaas_software_parity|qemu_openfaas_image_parity|qemu_openfaas_image_local_parity|qemu_kubecontrol_empty_parity|qemu_kubecontrol_empty_trace_parity|prereqs)
+    infra_one_vm|software_k8s_two_vm|network_netperf_two_vm|benchmark_k8s_resume|network_validation|qemu_infra_parity|qemu_k8s_nobench_parity|qemu_k8s_image_parity|qemu_kubeedge_software_parity|qemu_kubeedge_image_parity|qemu_mist_software_parity|qemu_mist_image_parity|qemu_endpoint_software_parity|qemu_endpoint_image_parity|qemu_openfaas_software_parity|qemu_openfaas_image_parity|qemu_openfaas_image_local_parity|qemu_kubecontrol_empty_parity|qemu_kubecontrol_empty_trace_parity|qemu_kube_kata_empty_startup_parity|prereqs)
       printf '%s/%s\n' "$BASE_ROOT" "$1"
       ;;
     benchmark_k8s_resume_infra|benchmark_k8s_resume_software|benchmark_k8s_resume_application)
@@ -190,6 +190,7 @@ qemu_openfaas_image_parity
 qemu_openfaas_image_local_parity
 qemu_kubecontrol_empty_parity
 qemu_kubecontrol_empty_trace_parity
+qemu_kube_kata_empty_startup_parity
 prereqs
 EOF
 }
@@ -272,6 +273,145 @@ validate_scenario_name "$SCENARIO"
 if [ "$SCENARIO" = "storage-report" ]; then
   storage_report
   exit 0
+fi
+
+if [ "$SCENARIO" = "latest-result-summary" ]; then
+  target_scenario="${2:-}"
+  if [ -z "$target_scenario" ]; then
+    echo "Usage: $0 latest-result-summary <scenario>" >&2
+    echo "Known retained scenarios:" >&2
+    print_retained_scenarios >&2
+    exit 2
+  fi
+  validate_scenario_name "$target_scenario" || exit $?
+  if ! scenario_path=$(retained_scenario_path "$target_scenario"); then
+    echo "Unsupported retained scenario for result summary: $target_scenario" >&2
+    echo "Known retained scenarios:" >&2
+    print_retained_scenarios >&2
+    exit 2
+  fi
+  results_dir="$scenario_path/.continuum/test_results"
+  if [ ! -d "$results_dir" ]; then
+    echo "No test-results directory for scenario: $target_scenario" >&2
+    echo "Path: $results_dir" >&2
+    exit 1
+  fi
+  latest_result=$(
+    find "$results_dir" -maxdepth 1 -type f -name 'test_results_*.json' \
+      -printf '%T@ %p\n' | sort -n | tail -n 1 | sed 's/^[^ ]* //'
+  )
+  if [ -z "$latest_result" ]; then
+    echo "No retained test result found for scenario: $target_scenario" >&2
+    echo "Path: $results_dir" >&2
+    exit 1
+  fi
+  export LATEST_RESULT_PATH="$latest_result"
+  "$PYTHON_BIN" - <<'PY'
+import json
+import os
+
+path = os.environ["LATEST_RESULT_PATH"]
+with open(path, "r", encoding="utf-8") as filep:
+    payload = json.load(filep)
+
+print("LATEST_RESULT=%s" % path)
+for key in ("timestamp", "total_tests", "passed", "failed", "artifacts_dir"):
+    if key in payload:
+        print("%s=%s" % (key.upper(), payload[key]))
+
+for index, result in enumerate(payload.get("results", []), 1):
+    prefix = "RESULT_%02d" % index
+    for key in (
+        "config_path",
+        "success",
+        "exit_code",
+        "success_reason",
+        "failure_class",
+        "execution_time",
+        "timed_out",
+        "stdout_artifact",
+        "stderr_artifact",
+        "metadata_artifact",
+    ):
+        if key in result:
+            value = str(result[key]).replace("\n", "\\n")
+            if len(value) > 1000:
+                value = value[:1000] + "...<truncated>"
+            print("%s_%s=%s" % (prefix, key.upper(), value))
+PY
+  exit $?
+fi
+
+if [ "$SCENARIO" = "latest-result-tail" ]; then
+  target_scenario="${2:-}"
+  artifact_kind="${3:-stdout}"
+  case "$artifact_kind" in
+    stdout|stderr|metadata)
+      ;;
+    *)
+      echo "Usage: $0 latest-result-tail <scenario> [stdout|stderr|metadata]" >&2
+      exit 2
+      ;;
+  esac
+  if [ -z "$target_scenario" ]; then
+    echo "Usage: $0 latest-result-tail <scenario> [stdout|stderr|metadata]" >&2
+    echo "Known retained scenarios:" >&2
+    print_retained_scenarios >&2
+    exit 2
+  fi
+  validate_scenario_name "$target_scenario" || exit $?
+  if ! scenario_path=$(retained_scenario_path "$target_scenario"); then
+    echo "Unsupported retained scenario for result tail: $target_scenario" >&2
+    echo "Known retained scenarios:" >&2
+    print_retained_scenarios >&2
+    exit 2
+  fi
+  results_dir="$scenario_path/.continuum/test_results"
+  if [ ! -d "$results_dir" ]; then
+    echo "No test-results directory for scenario: $target_scenario" >&2
+    echo "Path: $results_dir" >&2
+    exit 1
+  fi
+  latest_result=$(
+    find "$results_dir" -maxdepth 1 -type f -name 'test_results_*.json' \
+      -printf '%T@ %p\n' | sort -n | tail -n 1 | sed 's/^[^ ]* //'
+  )
+  if [ -z "$latest_result" ]; then
+    echo "No retained test result found for scenario: $target_scenario" >&2
+    echo "Path: $results_dir" >&2
+    exit 1
+  fi
+  artifact_path=$(
+    LATEST_RESULT_PATH="$latest_result" ARTIFACT_KIND="$artifact_kind" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+
+field = "%s_artifact" % os.environ["ARTIFACT_KIND"]
+if os.environ["ARTIFACT_KIND"] == "metadata":
+    field = "metadata_artifact"
+with open(os.environ["LATEST_RESULT_PATH"], "r", encoding="utf-8") as filep:
+    payload = json.load(filep)
+results = payload.get("results", [])
+if results:
+    print(results[0].get(field, ""))
+PY
+  )
+  case "$artifact_path" in
+    "$results_dir"/*)
+      ;;
+    *)
+      echo "Refusing result artifact outside retained results directory: $artifact_path" >&2
+      exit 1
+      ;;
+  esac
+  if [ ! -r "$artifact_path" ]; then
+    echo "Result artifact is not readable: $artifact_path" >&2
+    exit 1
+  fi
+  printf 'LATEST_RESULT=%s\n' "$latest_result"
+  printf 'ARTIFACT=%s\n' "$artifact_path"
+  tail -n 120 -- "$artifact_path"
+  exit $?
 fi
 
 if [ "$SCENARIO" = "prune-scenario" ]; then
@@ -402,6 +542,9 @@ case "$SCENARIO" in
   qemu_kubecontrol_empty_trace_parity)
     set_suite_scenario qemu_kubecontrol_empty_trace_parity qemu_kubecontrol_empty_trace_parity
     ;;
+  qemu_kube_kata_empty_startup_parity)
+    set_suite_scenario qemu_kube_kata_empty_startup_parity qemu_kube_kata_empty_startup_parity
+    ;;
   release-artifact-audit)
     BASE_PATH="$BASE_ROOT/prereqs"
     CONTINUUM_HOME="$BASE_PATH/.continuum"
@@ -496,7 +639,7 @@ case "$SCENARIO" in
     ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, qemu_openfaas_image_local_parity, qemu_kubecontrol_empty_parity, qemu_kubecontrol_empty_trace_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, release-artifact-audit, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, prune-scenario" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, qemu_openfaas_image_local_parity, qemu_kubecontrol_empty_parity, qemu_kubecontrol_empty_trace_parity, qemu_kube_kata_empty_startup_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, release-artifact-audit, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, latest-result-summary, latest-result-tail, prune-scenario" >&2
     exit 2
     ;;
 esac

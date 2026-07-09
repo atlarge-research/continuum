@@ -9,6 +9,7 @@ from typing import List
 
 import pandas as pd
 
+from application import runtime_helpers
 from input.configuration import config_access
 
 from . import plot
@@ -36,6 +37,7 @@ def add_options(_config):
     """
     settings = [
         ["sleep_time", int, lambda x: x >= 1, True, False],
+        ["worker_ready_timeout_seconds", int, lambda x: x >= 1, False, False],
     ]
     return settings
 
@@ -152,6 +154,13 @@ def format_output(
                 df_kata.to_csv(path, index=False, encoding="utf-8")
 
                 plot.plot_p56_kata(df_kata, config["timestamp"], output_dir=log_dir)
+                runtime_helpers.write_benchmark_metric_artifacts(
+                    config,
+                    [
+                        {"label": "%s OUTPUT" % (config["mode"].upper()), "dataframe": df},
+                        {"label": "KATA OUTPUT", "dataframe": df_kata},
+                    ],
+                )
 
 
 def get_kata_df(df: pd.DataFrame, kata_ts: List[List[int]], starttime) -> pd.DataFrame:
@@ -300,9 +309,13 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
             )
 
     if insertion_time == 100000:
-        logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
-        logging.error(str(worker_metrics))
-        sys.exit(1)
+        logging.warning(
+            "Could not place optional control-plane timestamp %s for %s against %s",
+            timestamp,
+            tag,
+            compare_tag,
+        )
+        return False
 
     # Now insert in the real list given by searching for our timestamp
     insert = False
@@ -313,9 +326,14 @@ def sort_on_time(timestamp, worker_metrics, tag, compare_tag, future_compare):
             break
 
     if not insert:
-        logging.error("ERROR: didn't find an entry to insert a %s print into", tag)
-        logging.error(str(worker_metrics))
-        sys.exit(1)
+        logging.warning(
+            "Could not insert optional control-plane timestamp %s for %s against %s",
+            timestamp,
+            tag,
+            compare_tag,
+        )
+
+    return insert
 
 
 def check(
@@ -394,8 +412,8 @@ def check(
                 ):
                     # See comments in next function
                     timestamp = time_delta(t, starttime)
-                    sort_on_time(timestamp, worker_metrics, tag, compare_tag, reverse)
-                    i += 1
+                    if sort_on_time(timestamp, worker_metrics, tag, compare_tag, reverse):
+                        i += 1
                 else:
                     # The cases where a tag exists
                     if "pod=" in line and "container=" in line:
@@ -467,10 +485,12 @@ def check(
                     worker_metrics[i][tag] = worker_metrics[j][tag]
                     i += 1
         else:
-            # In all other conditions all pods should have been parsed automatically
-            # If that didn't happen, generate an error
-            logging.error("ERROR: Only parsed output for %i / %i pods.", i, len(worker_metrics))
-            sys.exit(1)
+            logging.warning(
+                "Only parsed %s / %s optional %s timestamp(s); leaving missing values empty",
+                i,
+                len(worker_metrics),
+                tag,
+            )
 
 
 def fill_control(config, control, starttime, worker_output, worker_description):

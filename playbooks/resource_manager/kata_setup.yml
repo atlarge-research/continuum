@@ -4,4 +4,9 @@
   become: true
   roles:
     - role: kata_containers
+
+- name: Register Kata runtime classes
+  hosts: cloudcontroller
+  become: true
+  roles:
     - role: kata_runtime_classes

@@ -15,6 +15,26 @@ def _output_path(output_dir, filename):
     return os.path.join(output_dir, filename)
 
 
+def _has_complete_columns(df, columns, plot_name):
+    """Return whether all columns needed by a plot are present and populated."""
+    missing_columns = [column for column in columns if column not in df.columns]
+    if missing_columns:
+        logging.warning("Skip %s plot; missing column(s): %s", plot_name, missing_columns)
+        return False
+
+    missing_values = df[columns].isna().sum()
+    missing_values = missing_values[missing_values > 0]
+    if not missing_values.empty:
+        logging.warning(
+            "Skip %s plot; missing value counts: %s",
+            plot_name,
+            missing_values.to_dict(),
+        )
+        return False
+
+    return True
+
+
 def plot_status(status, timestamp, output_dir="logs"):
     """Print and plot controlplane data from external observations
 
@@ -153,17 +173,19 @@ def plot_control(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, 
 
     bar_height = 1.1
 
-    df_plot = df.copy(deep=True)
-    df_plot = df_plot[
-        [
-            "controller_read_workload (s)",
-            "controller_unpacked_workload (s)",
-            "scheduler_read_pod (s)",
-            "kubelet_pod_received (s)",
-            "kubelet_applied_sandbox (s)",
-            "started_application (s)",
-        ]
+    columns = [
+        "controller_read_workload (s)",
+        "controller_unpacked_workload (s)",
+        "scheduler_read_pod (s)",
+        "kubelet_pod_received (s)",
+        "kubelet_applied_sandbox (s)",
+        "started_application (s)",
     ]
+    if not _has_complete_columns(df, columns, "control"):
+        return
+
+    df_plot = df.copy(deep=True)
+    df_plot = df_plot[columns]
     y = [*range(len(df_plot["started_application (s)"]))]
 
     left = [0 for _ in range(len(y))]
@@ -266,17 +288,19 @@ def plot_p56(df, timestamp, xmax=None, ymax=None, xinter=None, yinter=None, outp
 
     bar_height = 1.1
 
-    df_plot = df.copy(deep=True)
-    df_plot = df_plot[
-        [
-            "kubelet_pod_received (s)",
-            "kubelet_created_cgroup (s)",
-            "kubelet_mounted_volume (s)",
-            "kubelet_applied_sandbox (s)",
-            "kubelet_created_container (s)",
-            "started_application (s)",
-        ]
+    columns = [
+        "kubelet_pod_received (s)",
+        "kubelet_created_cgroup (s)",
+        "kubelet_mounted_volume (s)",
+        "kubelet_applied_sandbox (s)",
+        "kubelet_created_container (s)",
+        "started_application (s)",
     ]
+    if not _has_complete_columns(df, columns, "p56"):
+        return
+
+    df_plot = df.copy(deep=True)
+    df_plot = df_plot[columns]
 
     df_plot = df_plot.sort_values(by=["started_application (s)"])
 
@@ -366,8 +390,21 @@ def plot_p56_kata(df, timestamp, xmax=None, _ymax=None, xinter=None, yinter=None
 
     bar_height = 1.1
 
-    df_plot = df.copy(deep=True)
+    columns = [
+        "kubelet_pod_received (s)",
+        "kubelet_created_cgroup (s)",
+        "kubelet_mounted_volume (s)",
+        "kata_create_runtime (s)",
+        "kata_create_vm (s)",
+        "kata_connect_to_vm (s)",
+        "kata_create_container_and_launch (s)",
+        "started_application (s)",
+    ]
+    if not _has_complete_columns(df, columns, "p56_kata"):
+        return
 
+    df_plot = df.copy(deep=True)
+    df_plot = df_plot[columns]
     df_plot = df_plot.sort_values(by=["started_application (s)"])
 
     y = [*range(len(df_plot["started_application (s)"]))]

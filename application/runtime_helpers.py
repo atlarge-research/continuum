@@ -779,7 +779,16 @@ def wait_kubernetes_workers_ready(config, machines, get_starttime):
         worker_apps = kubernetes_worker_app_count(config)
 
     status = []
-    timeout_seconds = 900
+    try:
+        timeout_seconds = config_access.benchmark_param_int(
+            config, "worker_ready_timeout_seconds"
+        )
+    except ValueError as exc:
+        if "Missing required config path" not in str(exc):
+            raise
+        timeout_seconds = 900
+    if timeout_seconds < 1:
+        raise ValueError("worker_ready_timeout_seconds must be >= 1")
     loop_start_t = time.time()
 
     while True:

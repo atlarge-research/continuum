@@ -64,6 +64,53 @@ class RunTestsCliTests(unittest.TestCase):
         self.assertEqual(helper_check["skip_when_env"], ["CONTINUUM_SMOKE_BASE_ROOT"])
         self.assertIn("--check-only", checks_by_name["Local registry cache"])
 
+    def test_kube_kata_empty_startup_suite_requires_kata_artifact_evidence(self):
+        config = run_tests_module.load_test_config(self.test_config_path)
+        suite = config["test_suites"]["qemu_kube_kata_empty_startup_parity"]
+        success_detection = suite["success_detection"]
+
+        self.assertTrue(success_detection["require_teardown"])
+        self.assertIn(
+            "configs/experiments/parity/qemu_kube_kata_empty_startup/",
+            suite["directories"],
+        )
+        self.assertIn(
+            "Wrote benchmark metric artifact manifest",
+            success_detection["required_stdout_markers"],
+        )
+
+        stdout_table = success_detection["required_stdout_metric_tables"][0]
+        self.assertEqual(stdout_table["label"], "CLOUD OUTPUT")
+        self.assertEqual(stdout_table["min_rows"], 100)
+
+        artifact_tables = {
+            table["label"]: table
+            for table in success_detection["required_benchmark_metric_artifacts"]
+        }
+        self.assertEqual(artifact_tables["CLOUD OUTPUT"]["min_rows"], 100)
+        self.assertEqual(artifact_tables["KATA OUTPUT"]["min_rows"], 100)
+        self.assertIn(
+            "kata_create_vm (s)",
+            artifact_tables["KATA OUTPUT"]["columns"],
+        )
+        checks_by_name = {
+            check["name"]: check["command"]
+            for check in suite["prerequisites"]["checks"]
+        }
+        self.assertEqual(
+            checks_by_name["Kata host prerequisites"],
+            [
+                "python3",
+                "scripts/test/check_kata_host_prereqs.py",
+                "--min-cores",
+                "16",
+                "--min-memory-gb",
+                "160",
+                "--require-nested-kvm",
+            ],
+        )
+        self.assertIn("--check-only", checks_by_name["Local registry cache"])
+
     def test_main_accepts_dynamic_suite_from_loaded_config(self):
         fake_test_config = {
             "test_suites": {

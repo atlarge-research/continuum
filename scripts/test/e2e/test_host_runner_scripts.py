@@ -3,6 +3,7 @@
 # pylint: disable=missing-class-docstring,missing-function-docstring,line-too-long
 # pylint: disable=too-many-public-methods
 
+import json
 import os
 import shutil
 import subprocess
@@ -79,6 +80,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("`qemu_openfaas_image_local_parity`", wrapper_values)
         self.assertIn("`qemu_kubecontrol_empty_parity`", wrapper_values)
         self.assertIn("`qemu_kubecontrol_empty_trace_parity`", wrapper_values)
+        self.assertIn("`qemu_kube_kata_empty_startup_parity`", wrapper_values)
 
     def test_smoke_runner_isolation_contract_documents_sudo_health(self):
         docs = (self.repo_root / "docs/smoke_runner_isolation.md").read_text(
@@ -160,7 +162,10 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn('verify)', result.stdout)
         self.assertIn('prime-registry-cache)', result.stdout)
         self.assertIn('relocate-smoke-root)', result.stdout)
-        self.assertIn('HOSTCTL_INTERFACE_VERSION=2026-07-06-kubecontrol-trace-cache', result.stdout)
+        self.assertIn(
+            'HOSTCTL_INTERFACE_VERSION=2026-07-09-kube-kata-jaeger-local-name',
+            result.stdout,
+        )
         self.assertIn('umask 027', result.stdout)
         self.assertIn('PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', result.stdout)
         self.assertIn('validate_fixed_roots()', result.stdout)
@@ -172,9 +177,13 @@ class HostRunnerScriptTests(unittest.TestCase):
             'qemu_kubecontrol_empty_parity|qemu_kubecontrol_empty_trace_parity',
             result.stdout,
         )
+        self.assertIn('qemu_kube_kata_empty_startup_parity)', result.stdout)
         self.assertIn('redplanet00/kube-apiserver:v1.27.0', result.stdout)
         self.assertIn('redplanet00/coredns:v1.10.1', result.stdout)
         self.assertIn('redplanet00/kubeedge-applications:empty', result.stdout)
+        self.assertIn('ansk/empty:empty', result.stdout)
+        self.assertIn('jaegertracing/all-in-one:1.47', result.stdout)
+        self.assertIn('all-in-one:1.47', result.stdout)
         self.assertIn('validate_smoke_base_root()', result.stdout)
         self.assertIn('prepare_base_root_path()', result.stdout)
         self.assertIn('relocate_smoke_root()', result.stdout)
@@ -271,7 +280,7 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Verifying maintenance helper interface", result.stdout)
         self.assertIn(
             "Installed maintenance helper is stale: interface older-interface, expected "
-            "2026-07-06-kubecontrol-trace-cache",
+            "2026-07-09-kube-kata-jaeger-local-name",
             result.stderr,
         )
         self.assertIn(
@@ -287,7 +296,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-07-06-kubecontrol-trace-cache\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-07-09-kube-kata-jaeger-local-name\n"
                 "case \"$1\" in\n"
                 "  verify) ;;\n"
                 "esac\n",
@@ -368,7 +377,7 @@ class HostRunnerScriptTests(unittest.TestCase):
             fake_hostctl = temp_root / "continuum-hostctl"
             fake_hostctl.write_text(
                 "#!/bin/sh\n"
-                "HOSTCTL_INTERFACE_VERSION=2026-07-06-kubecontrol-trace-cache\n"
+                "HOSTCTL_INTERFACE_VERSION=2026-07-09-kube-kata-jaeger-local-name\n"
                 "case \"$1\" in\n"
                 "  prime-registry-cache) ;;\n"
                 "esac\n",
@@ -623,6 +632,60 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertIn("Retained scenario sizes:", result.stdout)
         self.assertIn("qemu_kubeedge_image_parity", result.stdout)
         self.assertIn("Total retained smoke state:", result.stdout)
+
+    def test_run_smoke_latest_result_summary_prints_bounded_retained_json(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            smoke_base_root = temp_root / "smoke-base"
+            results_dir = (
+                smoke_base_root
+                / "qemu_kube_kata_empty_startup_parity"
+                / ".continuum"
+                / "test_results"
+            )
+            results_dir.mkdir(parents=True)
+            result_path = results_dir / "test_results_2026-07-09_13-47-58.json"
+            result_path.write_text(
+                json.dumps(
+                    {
+                        "timestamp": "2026-07-09_13-47-58",
+                        "total_tests": 1,
+                        "passed": 1,
+                        "failed": 0,
+                        "artifacts_dir": str(results_dir / "test_results_2026-07-09_13-47-58"),
+                        "results": [
+                            {
+                                "config_path": "configs/experiments/parity/qemu_kube_kata_empty_startup/01_kube_kata_empty_pod.yaml",
+                                "success": True,
+                                "exit_code": 0,
+                                "success_reason": "exit_code=0",
+                                "failure_class": "passed",
+                                "execution_time": 12.3,
+                                "timed_out": False,
+                                "stdout_artifact": str(results_dir / "stdout.txt"),
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = self._run_smoke_script(
+                "latest-result-summary",
+                "qemu_kube_kata_empty_startup_parity",
+                extra_env={
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                    "CONTINUUM_SMOKE_PYTHON": shutil.which("python3") or "/usr/bin/python3",
+                },
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"LATEST_RESULT={result_path}", result.stdout)
+        self.assertIn("PASSED=1", result.stdout)
+        self.assertIn("FAILED=0", result.stdout)
+        self.assertIn("RESULT_01_SUCCESS=True", result.stdout)
+        self.assertIn("RESULT_01_EXIT_CODE=0", result.stdout)
 
     def test_run_smoke_rejects_malformed_scenario_names(self):
         for scenario in ("../evil", "/tmp/evil", "x;id"):
@@ -1305,3 +1368,39 @@ class HostRunnerScriptTests(unittest.TestCase):
                 result.stdout,
             )
             self.assertIn(str(smoke_base_root / "qemu_kubecontrol_empty_trace_parity"), result.stdout)
+
+    def test_run_smoke_qemu_kube_kata_empty_startup_parity_uses_suite_runner(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_root = Path(tempdir)
+            runner_home = temp_root / "runner-home"
+            runner_home.mkdir()
+            venv_bin = temp_root / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            fake_python = venv_bin / "python3"
+            fake_python.write_text(
+                "#!/bin/sh\n"
+                "printf 'PYARGS:%s\\n' \"$*\"\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            smoke_base_root = temp_root / "smoke-base"
+
+            result = self._run_smoke_script(
+                "qemu_kube_kata_empty_startup_parity",
+                extra_env={
+                    "HOME": str(runner_home),
+                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(fake_python),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                },
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                "PYARGS:scripts/test/run_tests.py --suite qemu_kube_kata_empty_startup_parity --base-path",
+                result.stdout,
+            )
+            self.assertIn(
+                str(smoke_base_root / "qemu_kube_kata_empty_startup_parity"),
+                result.stdout,
+            )

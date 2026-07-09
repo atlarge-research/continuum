@@ -1,0 +1,17 @@
+---
+schema_version: 1
+kind: ContinuumSoftware
+
+software:
+  modules:
+    - id: kube-kata-main
+      type: kube_kata
+      assign_to:
+        match:
+          cluster: cloud-1
+      config:
+        kube_version: "v1.27.0"
+        kube_deployment: pod
+        runtime: kata-qemu
+        runtime_filesystem: overlayfs
+        cache_worker: true
