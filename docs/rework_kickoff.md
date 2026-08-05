@@ -34,11 +34,12 @@ ungated and role-owned, Phase-E resume/state integrity is landed, and Phase-F
 test architecture closure is landed. Remaining active-rework work should be
 treated as stabilization, certification, and documentation/audit alignment.
 These closures do not make the branch a final replacement for old `main` by
-themselves. The release path is milestone-based and gated by VM-backed evidence
-for each claimed module set, as defined in
-`docs/rework_milestone_release_plan.md` and tracked row by row in
-`docs/release_certification_matrix.md`. Phase-G lifecycle/reproducibility
-hardening is deferred behind a future RFC/ADR.
+themselves. The release path is milestone-based and gated by VM-backed,
+cloud-backed, or host-backed runtime evidence appropriate to each exact claim,
+as defined in `docs/rework_milestone_release_plan.md`.
+`docs/release_certification_matrix.md` is the sole authority for current row
+status, claim boundaries, and primary evidence. Phase-G
+lifecycle/reproducibility hardening is deferred behind a future RFC/ADR.
 
 Any future implementation must stay aligned with:
 
@@ -49,7 +50,8 @@ Any future implementation must stay aligned with:
 5. hard-cutover and fail-fast policy,
 6. explicit retained-resume intent via `run.prepare_for_resume`.
 7. release certification policy: provider/software/application stacks are
-   modules that need their own evidence; `qemu` is not part of the core.
+   modules that need provider-appropriate runtime evidence; `qemu` is not part
+   of the core.
 
 ## 3. Locked Decisions (Do Not Drift)
 
@@ -122,8 +124,11 @@ Software semantic details (including constraint-scope model) live in:
 2. Implement against the locked decisions above.
 3. Update tests/examples in the same PR when semantics change.
 4. If the change affects support claims, update release-certification wording
-   and VM evidence expectations before finalizing the PR.
-5. Synchronize sibling planning docs before finalizing the PR.
+   and provider-appropriate VM-backed, cloud-backed, or host-backed evidence
+   expectations before finalizing the PR.
+5. Keep current row status, claim boundaries, and primary evidence only in
+   `docs/release_certification_matrix.md`.
+6. Synchronize sibling planning docs before finalizing the PR.
 
 ## 7. Historical PR-2 Code Touchpoints
 

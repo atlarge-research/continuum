@@ -132,12 +132,12 @@ audit section:
 | Field | Value |
 | --- | --- |
 | Command | `scripts/test/run_cloud_static_audit.sh` |
-| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-07-09T212943Z.md` |
+| Report | `/home/matthijs/continuum/logs/cloud_static_audit/cloud_static_audit_2026-08-05T152606Z.md` |
 | Required gates | PASS |
-| Unit unittest discovery | 655 tests OK |
+| Unit unittest discovery | 657 tests OK |
 | E2E unittest discovery | 103 tests OK |
-| Combined unittest discovery | 758 tests OK |
-| Pytest mirror | 758 passed |
+| Combined unittest discovery | 760 tests OK |
+| Pytest mirror | 760 passed |
 | Marker debt scan | MATCHES FOUND (2) |
 | Pre-tag readiness | `TOTAL_RELEASE_PRETAG_ISSUES=0` after committing this docs-only evidence refresh and rerunning the pre-tag check. |
 | Informational prereq findings | Every configured parity suite has cloud-safe prerequisite visibility, including the exact OpenFaaS image row, the local OpenFaaS image subset, and the certified M2 `qemu_kube_kata_empty_startup_parity` row. Certified cache-backed image parity rows require a primed local registry cache. |

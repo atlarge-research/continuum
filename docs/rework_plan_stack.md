@@ -97,15 +97,22 @@ certification matrix.
      applications are modules or module families,
    - `qemu` is an infrastructure provider module and must not be described as
      core.
-16. Release claims require runtime evidence:
+16. Runtime claims require VM-backed or cloud-backed evidence, or host-backed
+    evidence when appropriate:
    - static, unit, parser, and runner tests are required but not sufficient for
      public runtime support claims,
    - each claimed provider/software/application combination needs fresh
-     VM-backed or cloud-backed evidence for the release that names it.
-17. Final replacement release requires old-main parity:
+     VM-backed, cloud-backed, or host-backed evidence appropriate to the release
+     claim.
+17. Final replacement release requires old-main parity under the current
+    checked status model:
    - intermediate rework milestones may certify smaller module sets,
-   - the final `main` replacement must either certify old public functionality or
-     explicitly deprecate unsupported rows with migration guidance.
+   - `historical` is non-terminal and remains in the parity seed,
+   - an explicit deprecation closure is not currently representable as a
+     checked terminal status,
+   - closing an unsupported row without certification requires a separate
+     atomic change adding an explicit checked terminal disposition across the
+     matrix checker, certification matrix, and parity seed.
 
 ## 5. Execution Dependency Chain
 
@@ -147,8 +154,8 @@ certification matrix.
 | D14 | Hydra/Pydantic migration is post-rework only (deferred policy) | `docs/rework_plan_stack.md` | planning stack (`docs/rework_plan_stack.md`, `docs/ansible_restructuring_design.md`) | post-rework RFC/ADR gate |
 | D15 | Parser decomposition guardrail (`yaml_parser` orchestration-only) | `docs/rework_plan_stack.md` | `input/configuration/yaml_parser.py`, `input/configuration/software_domain_validation.py`, `input/configuration/benchmark_domain_validation.py`, `input/configuration/selector_assignment_validation.py`, `input/configuration/run_schema_validation.py`, `input/configuration/infrastructure_schema_validation.py`, `input/configuration/provider_schema_validation.py` | parser decomposition regression tests |
 | D16 | Provider/software/application stacks are modules, not core | `docs/rework_milestone_release_plan.md` | module registry, provider/resource-manager/application modules | docs review + module-set certification |
-| D17 | Public runtime claims require VM-backed or cloud-backed evidence | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `scripts/test/run_tests.py`, `scripts/test/test_config.json`, smoke host wrapper | release certification matrix + saved artifacts |
-| D18 | Final `main` replacement requires old-main parity or explicit deprecation | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `configuration/tests/`, `configs/experiments/`, migration docs | old-main parity checklist |
+| D17 | Public runtime claims require provider-appropriate runtime evidence | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `scripts/test/run_tests.py`, `scripts/test/test_config.json`, smoke host wrapper | release certification matrix + saved artifacts |
+| D18 | Final `main` replacement requires old-main parity under current statuses; unsupported terminal closure requires a future atomic checked-disposition change | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `configuration/tests/`, `configs/experiments/`, migration docs | old-main parity checklist |
 
 ## 8. Synchronization Gate (Per PR)
 
@@ -170,7 +177,12 @@ Before merge:
 2. Canonical selector normalization and `selector_id` strategy locked.
 3. Canonical structured scope identity format locked for `vm`, `cluster`, and `selector`.
 
-## 11. Current Snapshot (Updated May 22, 2026)
+## 11. Historical Implementation Snapshot (Frozen May 22, 2026)
+
+The numbered ledger below records the completed implementation baseline and is
+frozen. It does not own current certification status, evidence, branch state, or
+next actions; use `docs/release_certification_matrix.md` and
+`docs/rework_release_handoff.md` for those facts.
 
 1. PR-1 implementation landed with strict modules-only parser/runtime access (no orchestrator/addons projection path).
 2. Config examples and parser/runtime test fixtures are migrated to canonical `clusters[]` + `modules[]` schema.
@@ -286,7 +298,8 @@ Before merge:
     not a core component.
 100. Intermediate rework releases should be treated as subreleases or
     pre-releases until old-main provider/software/application parity is closed
-    or explicitly deprecated.
+    under the current checked model; closing an unsupported row without
+    certification first requires a separate atomic checked-disposition change.
 101. The first old-main QEMU infrastructure parity rows now have dedicated YAML
     configs, a `qemu_infra_parity` suite, and VM-backed evidence separate from
     the M1 vertical smoke claim.

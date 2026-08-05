@@ -14,8 +14,9 @@ Continuum offers the following features:
 
 This branch contains the structured YAML/planning-engine rework. Infrastructure
 providers such as QEMU, GCP, and AWS are modules that plug into the core rather
-than being part of the core itself. Current release-readiness and VM-backed
-certification status are tracked in `docs/rework_milestone_release_plan.md`;
+than being part of the core itself. Current certification status is tracked in
+`docs/release_certification_matrix.md`, while release-readiness policy is
+defined in `docs/rework_milestone_release_plan.md`;
 until old-main parity is closed, rework outputs should be treated as milestone
 or pre-release artifacts rather than a full replacement for `main`.
 

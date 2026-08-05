@@ -1,6 +1,11 @@
 # Contributing
 This file describes which technologies are used in this project and provides pointers to learn more about these technologies. It describes all technologies used in all different versions of the benchmark. Reading this file is not required when only using the benchmark but may deepen your understanding of the benchmark. It is advised to read this file if you want to contribute to this project.
 
+This is a cross-version technology overview, not a current support matrix. On
+the structured rework branch, treat Terraform/GCP instructions and other legacy
+paths as historical unless their exact combination is marked `certified` in
+`docs/release_certification_matrix.md`.
+
 Please read the other documentation files as well. These contain important information such as software versions, installation guides, and common issues.
 
 ## General information

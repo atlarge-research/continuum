@@ -47,20 +47,23 @@ Release certification uses these rules:
    mandatory for every release candidate;
 2. those tests do not certify provider, resource-manager, addon, application, or
    benchmark runtime claims by themselves;
-3. every runtime support claim needs a full VM-backed or cloud-backed run for
-   the exact provider, topology, software modules, benchmark/application stage,
-   and runtime targets being claimed;
+3. every runtime support claim needs a full VM-backed, cloud-backed, or
+   host-backed run appropriate to the exact provider, topology, software
+   modules, benchmark/application stage, and runtime targets being claimed;
 4. QEMU/libvirt is the first local provider certification target because it is
    practical for host-backed smoke testing, but `qemu` remains an infrastructure
    provider module rather than part of the Continuum core;
 5. intermediate rework milestones may certify only a small module set, but must
    say so clearly;
 6. the final replacement release for old `main` must certify the old public
-   feature surface or explicitly deprecate unsupported rows.
+   feature surface under the current checked model; closing an unsupported row
+   without certification first requires a separate atomic change introducing
+   an explicit checked terminal disposition.
 
 The release plan and certification labels are defined in
-`docs/rework_milestone_release_plan.md`. The row-by-row checklist is
-`docs/release_certification_matrix.md`.
+`docs/rework_milestone_release_plan.md`.
+`docs/release_certification_matrix.md` is the sole authority for current row
+status, claim boundaries, and primary evidence.
 
 ## 3. Runtime Phases To Test
 

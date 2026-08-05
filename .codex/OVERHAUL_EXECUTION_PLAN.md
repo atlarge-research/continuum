@@ -1,5 +1,12 @@
 # Continuum Overhaul Execution Plan
 
+> [!IMPORTANT]
+> **COMPLETED HISTORICAL EXECUTION RECORD — DO NOT USE TO SELECT NEW WORK.**
+>
+> This file preserves completed overhaul tasks and their historical handoffs.
+> Current next-step authority is `docs/rework_release_handoff.md`; certification
+> status authority is `docs/release_certification_matrix.md`.
+
 ## Current Branch Snapshot
 
 - Branch: `pr-23-curated`
