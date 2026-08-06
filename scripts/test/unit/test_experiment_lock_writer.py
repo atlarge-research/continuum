@@ -1,9 +1,12 @@
 """Unit tests for experiment lock writing helpers."""
 
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import yaml
 
@@ -127,6 +130,58 @@ class ExperimentLockWriterTests(unittest.TestCase):
             self.assertIn("software_profile_sha256", hashes)
             self.assertIn("resume_contract", payload)
             self.assertTrue(payload["resume_contract"]["hash"].startswith("sha256:"))
+
+    def test_creates_lock_with_mode_0600_under_umask_022(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            previous_umask = os.umask(0o022)
+            try:
+                lock_path = experiment_lock_writer.write_experiment_lock(
+                    self._minimal_config(root)
+                )
+            finally:
+                os.umask(previous_umask)
+
+            mode = stat.S_IMODE(Path(lock_path).stat().st_mode)
+            self.assertEqual(mode, 0o600)
+
+    def test_replacing_existing_lock_resets_mode_to_0600(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            lock_path = root / ".continuum" / "experiment_lock.yaml"
+            lock_path.parent.mkdir(parents=True)
+            lock_path.write_text("old lock\n", encoding="utf-8")
+            lock_path.chmod(0o644)
+
+            written_path = experiment_lock_writer.write_experiment_lock(
+                self._minimal_config(root)
+            )
+
+            self.assertEqual(Path(written_path), lock_path)
+            self.assertEqual(stat.S_IMODE(lock_path.stat().st_mode), 0o600)
+            payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["kind"], "ContinuumExperimentLock")
+
+    def test_replace_failure_removes_temporary_file(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            lock_path = root / ".continuum" / "experiment_lock.yaml"
+            lock_path.parent.mkdir(parents=True)
+            lock_path.write_text("old lock\n", encoding="utf-8")
+
+            with mock.patch.object(
+                experiment_lock_writer.os,
+                "replace",
+                side_effect=OSError("replace failed"),
+            ):
+                with self.assertRaisesRegex(OSError, "replace failed"):
+                    experiment_lock_writer.write_experiment_lock(self._minimal_config(root))
+
+            self.assertEqual(lock_path.read_text(encoding="utf-8"), "old lock\n")
+            self.assertEqual(
+                list(lock_path.parent.glob(".experiment_lock.yaml.*.tmp")),
+                [],
+            )
 
     def test_writes_planner_snapshot_when_domains_are_available(self):
         with tempfile.TemporaryDirectory() as tempdir:

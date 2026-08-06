@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 from datetime import datetime, timezone
+import os
 from pathlib import Path
+import tempfile
 
 import yaml
 
@@ -80,6 +82,25 @@ def write_experiment_lock(config):
     if planner_snapshot is not None:
         lock_data["planner_snapshot"] = planner_snapshot
 
-    with lock_path.open("w", encoding="utf-8") as filep:
-        yaml.safe_dump(lock_data, filep, sort_keys=False)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=lock_path.parent,
+            prefix=".%s." % lock_path.name,
+            suffix=".tmp",
+            delete=False,
+        ) as filep:
+            temporary_path = Path(filep.name)
+            os.fchmod(filep.fileno(), 0o600)
+            yaml.safe_dump(lock_data, filep, sort_keys=False)
+            filep.flush()
+            os.fsync(filep.fileno())
+
+        os.replace(temporary_path, lock_path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
     return str(lock_path)
