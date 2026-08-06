@@ -26,8 +26,27 @@ def _should_load_resource_manager(config):
     return config_access.prepare_for_resume_enabled(config)
 
 
+def _reject_unsupported_multi_stage_pipeline(parser, config):
+    """Reject application pipelines that the runtime cannot execute completely."""
+    try:
+        if not config_access.runs_application(config):
+            return
+        pipeline = config_access.benchmark_pipeline(config)
+    except ValueError as exc:
+        parser.error("ERROR: %s" % (exc,))
+
+    if len(pipeline) > 1:
+        parser.error(
+            "ERROR: domains.benchmark.pipeline must contain exactly one executable stage; "
+            "ordered multi-stage execution is not supported (found %s stages)"
+            % (len(pipeline),)
+        )
+
+
 def dynamic_import(parser, config):
     """Find implementation modules for provider, orchestrator, and application."""
+    _reject_unsupported_multi_stage_pipeline(parser, config)
+
     sys.path.append(os.path.abspath(".."))
 
     config["module"] = {

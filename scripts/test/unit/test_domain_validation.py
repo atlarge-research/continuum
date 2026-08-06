@@ -36,6 +36,54 @@ class DomainValidationTests(unittest.TestCase):
         self.assertIn("normalized_config.benchmark", str(exc.exception))
         self.assertIn("must be omitted when run.targets does not include application", str(exc.exception))
 
+    def test_validate_phase_domains_preserves_empty_pipeline_diagnostic(self):
+        with self.assertRaises(ValueError) as exc:
+            benchmark_domain_validation.validate_phase_domains(
+                {"benchmark": {"pipeline": []}},
+                ["application"],
+                self.path,
+                "normalized_config",
+            )
+
+        self.assertIn("normalized_config.benchmark.pipeline", str(exc.exception))
+        self.assertIn("must be a non-empty list", str(exc.exception))
+        self.assertNotIn("exactly one executable stage", str(exc.exception))
+
+    def test_validate_phase_domains_rejects_multiple_executable_stages(self):
+        container = {
+            "benchmark": {
+                "pipeline": [
+                    {
+                        "id": "stage-1",
+                        "type": "custom-stage",
+                        "assign_to": {"match": {"cluster": "cloud-1"}},
+                        "tags": {},
+                        "config": {},
+                    },
+                    {
+                        "id": "stage-2",
+                        "type": "custom-stage",
+                        "assign_to": {"match": {"cluster": "cloud-1"}},
+                        "tags": {},
+                        "config": {},
+                    },
+                ]
+            }
+        }
+
+        with self.assertRaises(ValueError) as exc:
+            benchmark_domain_validation.validate_phase_domains(
+                container,
+                ["application"],
+                self.path,
+                "normalized_config",
+            )
+
+        self.assertIn("normalized_config.benchmark.pipeline", str(exc.exception))
+        self.assertIn("exactly one executable stage", str(exc.exception))
+        self.assertIn("ordered multi-stage execution is not supported", str(exc.exception))
+        self.assertIn("found 2 stages", str(exc.exception))
+
     def test_validate_software_rejects_unknown_module_type(self):
         software = {
             "modules": [

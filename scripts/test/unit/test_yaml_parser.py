@@ -1,6 +1,7 @@
 """Regression tests for YAML parser PR-3 hard-cutover contracts."""
 
 import argparse
+import copy
 import contextlib
 import io
 import tempfile
@@ -442,20 +443,20 @@ class YamlParserTests(unittest.TestCase):
             self.assertIn("benchmark.pipeline[0].tags.role", stderr)
             self.assertIn("reserved benchmark tag key 'role' cannot be overwritten", stderr)
 
-    def test_duplicate_benchmark_stage_ids_are_rejected(self):
+    def test_multiple_benchmark_stages_are_rejected_before_runtime_projection(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             benchmark = {
                 "pipeline": [
                     {
-                        "id": "dup",
+                        "id": "generate",
                         "type": "generator",
                         "assign_to": {"match": {"cluster": "cloud-1"}},
                         "tags": {},
                         "config": {},
                     },
                     {
-                        "id": "dup",
+                        "id": "process",
                         "type": "processor",
                         "assign_to": {"match": {"cluster": "cloud-1"}},
                         "tags": {},
@@ -471,9 +472,26 @@ class YamlParserTests(unittest.TestCase):
                 modules=self._image_classification_modules(),
                 benchmark=benchmark,
             )
-            stderr = self._parse_error(exp_path)
-            self.assertIn("benchmark.pipeline[1].id", stderr)
-            self.assertIn("duplicate benchmark stage id", stderr)
+            with (
+                mock.patch(
+                    "input.configuration.yaml_parser.legacy_projection.to_legacy_config"
+                ) as project,
+                mock.patch(
+                    "input.configuration.yaml_parser.runtime_module_loader.dynamic_import"
+                ) as dynamic_import,
+                mock.patch(
+                    "input.configuration.yaml_parser.plans.build_planner_snapshot"
+                ) as build_snapshot,
+            ):
+                stderr = self._parse_error(exp_path)
+
+            self.assertIn("benchmark.pipeline", stderr)
+            self.assertIn("exactly one executable stage", stderr)
+            self.assertIn("ordered multi-stage execution is not supported", stderr)
+            self.assertIn("found 2 stages", stderr)
+            project.assert_not_called()
+            dynamic_import.assert_not_called()
+            build_snapshot.assert_not_called()
 
     def test_selector_resolution_failure_reports_pipeline_path(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1164,6 +1182,66 @@ class YamlParserTests(unittest.TestCase):
                 cfg_lock["planner_snapshot"]["benchmark_stage_assignments"][0]["id"],
                 "generate",
             )
+
+    def test_lock_replay_rejects_mutated_multi_stage_pipeline_before_runtime_projection(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            benchmark = {
+                "pipeline": [
+                    {
+                        "id": "generate",
+                        "type": "publisher",
+                        "assign_to": {"match": {"cluster": "cloud-1"}},
+                        "tags": {"benchmark.role": "generator"},
+                        "config": {},
+                    }
+                ]
+            }
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["infrastructure", "software", "application"],
+                clusters=self._image_classification_clusters(),
+                modules=self._image_classification_modules(),
+                benchmark=benchmark,
+            )
+            parser = argparse.ArgumentParser()
+            cfg = input_module.start(parser, str(exp_path))
+            from input.configuration import yaml_parser
+
+            lock_path = Path(yaml_parser.write_experiment_lock(cfg))
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            second_stage = copy.deepcopy(
+                lock_payload["normalized_config"]["benchmark"]["pipeline"][0]
+            )
+            second_stage["id"] = "process"
+            lock_payload["normalized_config"]["benchmark"]["pipeline"].append(second_stage)
+            self._write(lock_path, lock_payload)
+
+            with (
+                mock.patch(
+                    "input.configuration.yaml_parser.legacy_projection.to_legacy_config"
+                ) as project,
+                mock.patch(
+                    "input.configuration.yaml_parser.runtime_module_loader.dynamic_import"
+                ) as dynamic_import,
+                mock.patch(
+                    "input.configuration.yaml_parser.plans.build_planner_snapshot"
+                ) as build_snapshot,
+                mock.patch(
+                    "input.configuration.yaml_parser.plans.validate_planner_snapshot"
+                ) as validate_snapshot,
+            ):
+                stderr = self._parse_error(lock_path)
+
+            self.assertIn("normalized_config.benchmark.pipeline", stderr)
+            self.assertIn("exactly one executable stage", stderr)
+            self.assertIn("ordered multi-stage execution is not supported", stderr)
+            self.assertIn("found 2 stages", stderr)
+            project.assert_not_called()
+            dynamic_import.assert_not_called()
+            build_snapshot.assert_not_called()
+            validate_snapshot.assert_not_called()
 
     def test_lock_roundtrip_rejects_planner_snapshot_mismatch(self):
         with tempfile.TemporaryDirectory() as tempdir:

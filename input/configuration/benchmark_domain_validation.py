@@ -143,6 +143,13 @@ def _validate_benchmark(
     pipeline = benchmark.get("pipeline")
     if not isinstance(pipeline, list) or not pipeline:
         _fail(path, "%s.pipeline" % (prefix), "must be a non-empty list")
+    if len(pipeline) > 1:
+        _fail(
+            path,
+            "%s.pipeline" % (prefix),
+            "must contain exactly one executable stage; ordered multi-stage execution "
+            "is not supported (found %s stages)" % (len(pipeline),),
+        )
 
     stage_ids = set()
     normalized_pipeline = []

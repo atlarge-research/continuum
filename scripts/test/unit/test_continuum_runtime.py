@@ -901,6 +901,34 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             "redplanet00/kubeedge-applications:image_classification_publisher",
         )
 
+    def test_dynamic_import_rejects_multi_stage_pipeline_before_config_mutation_or_import(self):
+        parser = argparse.ArgumentParser(prog="dynamic-import-multi-stage")
+        config = {
+            "infrastructure": {"provider": "qemu"},
+            "domains": {
+                "run": {"targets": ["application"]},
+                "benchmark": {
+                    "pipeline": [
+                        {"id": "stage-1", "type": "publisher", "config": {}},
+                        {"id": "stage-2", "type": "publisher", "config": {}},
+                    ]
+                },
+            },
+        }
+
+        stderr = io.StringIO()
+        with mock.patch.object(runtime_module_loader.importlib, "import_module") as import_module:
+            with contextlib.redirect_stderr(stderr):
+                with self.assertRaises(SystemExit):
+                    runtime_module_loader.dynamic_import(parser, config)
+
+        self.assertIn("domains.benchmark.pipeline", stderr.getvalue())
+        self.assertIn("exactly one executable stage", stderr.getvalue())
+        self.assertIn("ordered multi-stage execution is not supported", stderr.getvalue())
+        self.assertIn("found 2 stages", stderr.getvalue())
+        self.assertNotIn("module", config)
+        import_module.assert_not_called()
+
     def test_dynamic_import_tolerates_non_runtime_benchmark_stage_without_application_module(self):
         parser = argparse.ArgumentParser(prog="dynamic-import-application-optional")
         config = {

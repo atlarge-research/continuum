@@ -239,7 +239,11 @@ Top-level keys:
 
 | Key | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `pipeline` | list | yes when benchmark is present | Non-empty |
+| `pipeline` | list | yes when benchmark is present | Exactly one stage currently |
+
+The pipeline-shaped schema is retained for future ordered multi-stage execution. The current
+execution boundary supports exactly one executable stage, so configurations and experiment locks
+containing two or more stages fail validation instead of silently executing only the first stage.
 
 ### `benchmark.pipeline[]`
 

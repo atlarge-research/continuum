@@ -192,8 +192,13 @@ Cluster-level infra intent is normalized to concrete resource records with base 
 1. If `application` is selected, benchmark execution intent must be present (`benchmark.pipeline` minimum).
 2. If `application` is not selected, `benchmark` must be omitted.
 3. Benchmark stages use selector assignment and participate in the same deterministic placement model.
-4. Runtime application execution now consumes canonical `benchmark.pipeline` intent directly; parser/normalization contracts remain authoritative.
-5. Runtime config wiring must not project legacy `domains.workload.*`; application option wiring/verification runs against canonical `benchmark.pipeline[*].config`.
+4. The pipeline-shaped schema and ordered handoff metadata are retained for future ordered
+   execution, but the current executable cardinality is exactly one stage; multiple stages fail
+   canonical validation.
+5. Runtime application execution now consumes canonical `benchmark.pipeline` intent directly;
+   parser/normalization contracts remain authoritative.
+6. Runtime config wiring must not project legacy `domains.workload.*`; application
+   option wiring/verification runs against canonical `benchmark.pipeline[*].config`.
 
 ## 6.4 Infrastructure Clusters/Resources
 
