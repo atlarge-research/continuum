@@ -69,7 +69,9 @@ def verify_options(parser, config):
 
     sec = "infrastructure"
     if len(config[sec]["gcp_credentials"]) > 0 and config[sec]["gcp_credentials"][-1] == "/":
-        config[sec]["gcp_credentials"] = config[sec]["base_pgcp_credentialsth"][:-1]
+        parser.error(
+            "Invalid gcp_credentials: must point to a file and must not end with '/'"
+        )
 
 
 def set_ip_names(_config, machines, nodes_per_machine):

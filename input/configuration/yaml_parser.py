@@ -343,13 +343,17 @@ def start(parser, arg):
         _NETWORK_OVERRIDE_KEYS_IN_ORDER,
     )
     runtime_module_loader.dynamic_import(parser, bootstrap_config)
-    runtime_option_validation.apply_module_options(parser, bootstrap_config)
+    validated_provider_config_keys = runtime_option_validation.apply_module_options(
+        parser,
+        bootstrap_config,
+    )
 
     # Rebuild runtime config from canonical normalized domains after option normalization.
     config = legacy_projection.to_legacy_config(
         bootstrap_config["normalized"],
         _ALLOWED_TIERS,
         _NETWORK_OVERRIDE_KEYS_IN_ORDER,
+        validated_provider_config_keys,
     )
     runtime_module_loader.dynamic_import(parser, config)
     runtime_module_loader.add_constants(parser, config)

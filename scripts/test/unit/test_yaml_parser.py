@@ -54,6 +54,7 @@ class YamlParserTests(unittest.TestCase):
         modules=None,
         benchmark=None,
         include_workload: bool = False,
+        provider=None,
     ):
         run_targets = run_targets or ["infrastructure", "software"]
         clusters = clusters or [
@@ -72,10 +73,8 @@ class YamlParserTests(unittest.TestCase):
             }
         ]
 
-        env = {
-            "schema_version": 1,
-            "kind": "ContinuumEnvironment",
-            "provider": {
+        if provider is None:
+            provider = {
                 "name": "qemu",
                 "config": {
                     "base_path": base_path,
@@ -85,7 +84,12 @@ class YamlParserTests(unittest.TestCase):
                     "netperf": False,
                     "delete_on_exit": False,
                 },
-            },
+            }
+
+        env = {
+            "schema_version": 1,
+            "kind": "ContinuumEnvironment",
+            "provider": provider,
         }
         sw = {
             "schema_version": 1,
@@ -183,6 +187,167 @@ class YamlParserTests(unittest.TestCase):
                 "config": {},
             },
         ]
+
+    def _provider_clusters(self):
+        return [
+            {
+                "id": "cloud-1",
+                "tier": "cloud",
+                "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 4}}},
+            },
+            {
+                "id": "edge-1",
+                "tier": "edge",
+                "resources": {"vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 2}}},
+            },
+            {
+                "id": "endpoint-1",
+                "tier": "endpoint",
+                "resources": {"vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 2}}},
+            },
+        ]
+
+    def _provider(self, name, root, provider_options):
+        return {
+            "name": name,
+            "config": {
+                "base_path": str(root),
+                "cpu_pin": False,
+                "external_physical_machines": [],
+                "ip": {"prefix": "192.168", "middle": 100, "middle_base": 90},
+                "netperf": False,
+                "delete_on_exit": False,
+                **provider_options,
+            },
+        }
+
+    def test_full_parser_projects_validated_aws_provider_options(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            provider_options = {
+                "aws_cloud": "m6i.large",
+                "aws_edge": "m6i.medium",
+                "aws_endpoint": "t3.small",
+                "aws_region": "eu-west-1",
+                "aws_zone": "eu-west-1a",
+                "aws_access_keys": "dummy-access-key",
+                "aws_secret_access_keys": "dummy-secret-key",
+                "aws_ami": "ami-dummy",
+            }
+            exp_path, _ = self._build_triplet(
+                root,
+                str(root),
+                clusters=self._provider_clusters(),
+                modules=self._image_classification_modules(),
+                provider=self._provider("aws", root, provider_options),
+            )
+            from infrastructure.aws import aws
+
+            parser = argparse.ArgumentParser()
+            with mock.patch.object(aws, "verify_options", wraps=aws.verify_options) as verify:
+                config = input_module.start(parser, str(exp_path))
+
+            verify.assert_called_once()
+            for key, value in provider_options.items():
+                self.assertEqual(config["infrastructure"][key], value)
+                self.assertEqual(config["normalized"]["provider"]["config"][key], value)
+
+    def test_full_parser_projects_validated_gcp_provider_options(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            provider_options = {
+                "gcp_cloud": "e2-standard-4",
+                "gcp_edge": "e2-standard-2",
+                "gcp_endpoint": "e2-small",
+                "gcp_region": "europe-west4",
+                "gcp_zone": "europe-west4-a",
+                "gcp_project": "dummy-project",
+                "gcp_credentials": "/tmp/dummy-credentials.json",
+            }
+            exp_path, _ = self._build_triplet(
+                root,
+                str(root),
+                clusters=self._provider_clusters(),
+                modules=self._image_classification_modules(),
+                provider=self._provider("gcp", root, provider_options),
+            )
+            from infrastructure.gcp import gcp
+
+            parser = argparse.ArgumentParser()
+            with mock.patch.object(gcp, "verify_options", wraps=gcp.verify_options) as verify:
+                config = input_module.start(parser, str(exp_path))
+
+            verify.assert_called_once()
+            for key, value in provider_options.items():
+                self.assertEqual(config["infrastructure"][key], value)
+                self.assertEqual(config["normalized"]["provider"]["config"][key], value)
+
+    def test_full_parser_rejects_trailing_slash_gcp_credentials(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            provider_options = {
+                "gcp_cloud": "e2-standard-4",
+                "gcp_edge": "e2-standard-2",
+                "gcp_endpoint": "e2-small",
+                "gcp_region": "europe-west4",
+                "gcp_zone": "europe-west4-a",
+                "gcp_project": "dummy-project",
+                "gcp_credentials": "/tmp/dummy-credentials/",
+            }
+            exp_path, _ = self._build_triplet(
+                root,
+                str(root),
+                clusters=self._provider_clusters(),
+                modules=self._image_classification_modules(),
+                provider=self._provider("gcp", root, provider_options),
+            )
+
+            error = self._parse_error(exp_path)
+
+            self.assertIn(
+                "Invalid gcp_credentials: must point to a file and must not end with '/'",
+                error,
+            )
+
+    def test_full_parser_expands_runtime_base_path_only(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            home = root / "patched-home"
+            exp_path, _ = self._build_triplet(root, "~")
+
+            from infrastructure import ansible, infrastructure, state
+            from input.configuration import config_access, yaml_parser
+
+            with mock.patch.dict("os.environ", {"HOME": str(home)}):
+                parser = argparse.ArgumentParser()
+                config = input_module.start(parser, str(exp_path))
+                runner = ansible.AnsibleRunner(config, [object()])
+                infrastructure.create_tmp_dir(config, [])
+                lock_path = yaml_parser.write_experiment_lock(config)
+
+            continuum_home = home / ".continuum"
+            self.assertEqual(config["infrastructure"]["base_path"], str(home))
+            self.assertEqual(config["normalized"]["provider"]["config"]["base_path"], "~")
+            self.assertEqual(config["domains"]["provider"]["config"]["base_path"], "~")
+            self.assertEqual(Path(lock_path), continuum_home / "experiment_lock.yaml")
+            self.assertEqual(Path(state.state_file_path(config)), continuum_home / "state.json")
+            self.assertEqual(Path(config_access.runtime_logs_dir(config)), continuum_home / "logs")
+            self.assertEqual(
+                Path(config_access.network_validation_logs_dir(config)),
+                continuum_home / "logs" / "network_validation",
+            )
+            self.assertEqual(
+                Path(config_access.benchmark_logs_dir(config)),
+                continuum_home / "logs" / "benchmark",
+            )
+            self.assertEqual(Path(config["tmp_dir"]), continuum_home / "tmp")
+            self.assertEqual(Path(runner.ansible_local_tmp), continuum_home / "ansible" / "tmp")
+            self.assertEqual(Path(runner.inventory_path()), continuum_home / "inventory_vms")
+            self.assertEqual(Path(config["ssh_key"]), continuum_home / "ssh" / "id_rsa_continuum")
+            self.assertEqual(
+                Path(config["ssh_known_hosts_file"]),
+                continuum_home / "ssh" / "known_hosts",
+            )
 
     def test_valid_benchmark_pipeline_parses(self):
         with tempfile.TemporaryDirectory() as tempdir:

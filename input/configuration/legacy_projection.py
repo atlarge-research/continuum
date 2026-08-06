@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import os
 
 
 def _required(mapping: dict, key: str, key_path: str):
@@ -66,6 +67,7 @@ def to_legacy_config(
     normalized: dict,
     allowed_tiers: tuple[str, ...],
     network_override_keys_in_order: tuple[str, ...],
+    validated_provider_config_keys=(),
 ) -> dict:
     """Convert normalized YAML model to current legacy runtime config shape."""
     run = _required(normalized, "run", "run")
@@ -131,7 +133,9 @@ def to_legacy_config(
                 "provider.config.external_physical_machines",
             ),
             "netperf": bool(_required(provider_cfg, "netperf", "provider.config.netperf")),
-            "base_path": _required(provider_cfg, "base_path", "provider.config.base_path"),
+            "base_path": os.path.expanduser(
+                _required(provider_cfg, "base_path", "provider.config.base_path")
+            ),
             "prefixIP": _required(ip_cfg, "prefix", "provider.config.ip.prefix"),
             "middleIP": int(
                 _required(ip_cfg, "middle", "provider.config.ip.middle")
@@ -144,6 +148,22 @@ def to_legacy_config(
         "benchmark": {},
         "mode": mode,
     }
+
+    provider_specific_keys = sorted(set(validated_provider_config_keys))
+    reserved_infrastructure_keys = set(config["infrastructure"]) | set(
+        network_override_keys_in_order
+    )
+    collisions = sorted(set(provider_specific_keys) & reserved_infrastructure_keys)
+    if collisions:
+        raise ValueError(
+            "Validated provider config key(s) collide with reserved runtime "
+            "infrastructure key(s): %s" % (", ".join(collisions),)
+        )
+
+    for key in provider_specific_keys:
+        config["infrastructure"][key] = copy.deepcopy(
+            _required(provider_cfg, key, "provider.config.%s" % (key,))
+        )
 
     overrides = _required(network, "overrides", "infrastructure.network.overrides")
     for key in network_override_keys_in_order:

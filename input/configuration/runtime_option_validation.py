@@ -181,8 +181,9 @@ def _application_contract_settings(config, declared_options):
 
 
 def apply_module_options(parser, config):
-    """Validate/default module options into canonical domain config."""
+    """Validate/default module options and return provider-specific config keys."""
     settings = []
+    provider_config_keys = set()
     allowed_domain_keys = {
         "application": set(),
         "provider": set(),
@@ -217,6 +218,8 @@ def apply_module_options(parser, config):
         if scope not in allowed_domain_keys:
             parser.error("Config: Unknown option scope %s" % (_scope_label(scope, config)))
         allowed_domain_keys[scope].add(option)
+        if scope == "provider":
+            provider_config_keys.add(option)
         _validate_option(parser, config, scope, setting)
 
     if config["module"]["application"]:
@@ -240,6 +243,8 @@ def apply_module_options(parser, config):
             "provider",
             allowed_domain_keys["provider"],
         )
+
+    return tuple(sorted(provider_config_keys))
 
 
 def verify_addon_compatibility(parser, config):
