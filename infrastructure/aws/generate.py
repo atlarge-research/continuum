@@ -2,6 +2,8 @@
 
 import os
 
+from infrastructure.terraform_utils import hcl_string_literal
+
 # 0. Header
 
 HEADER = """
@@ -43,9 +45,9 @@ def generate_header(config):
         f.write(
             PROVIDER
             % (
-                config["infrastructure"]["aws_region"],
-                config["infrastructure"]["aws_access_keys"],
-                config["infrastructure"]["aws_secret_access_keys"],
+                hcl_string_literal(config["infrastructure"]["aws_region"]),
+                hcl_string_literal(config["infrastructure"]["aws_access_keys"]),
+                hcl_string_literal(config["infrastructure"]["aws_secret_access_keys"]),
             )
         )
 
@@ -160,13 +162,20 @@ def generate_network(config):
         f.write(ROUTE_TABLES)
 
         if config["infrastructure"]["cloud_nodes"] > 0:
-            f.write(CLOUD_NETWORK % (config["infrastructure"]["aws_zone"]))
+            f.write(
+                CLOUD_NETWORK % (hcl_string_literal(config["infrastructure"]["aws_zone"]))
+            )
 
         if config["infrastructure"]["edge_nodes"] > 0:
-            f.write(EDGE_NETWORK % (config["infrastructure"]["aws_zone"]))
+            f.write(
+                EDGE_NETWORK % (hcl_string_literal(config["infrastructure"]["aws_zone"]))
+            )
 
         if config["infrastructure"]["endpoint_nodes"] > 0:
-            f.write(ENDPOINT_NETWORK % (config["infrastructure"]["aws_zone"]))
+            f.write(
+                ENDPOINT_NETWORK
+                % (hcl_string_literal(config["infrastructure"]["aws_zone"]))
+            )
 
         f.write(SECURITY_GROUP)
 
@@ -292,8 +301,8 @@ def generate_vm(config):
                 CLOUD
                 % (
                     config["infrastructure"]["cloud_nodes"],
-                    config["infrastructure"]["aws_cloud"],
-                    config["infrastructure"]["aws_ami"],
+                    hcl_string_literal(config["infrastructure"]["aws_cloud"]),
+                    hcl_string_literal(config["infrastructure"]["aws_ami"]),
                     USER % (8 * ("cloud",) + (config["ssh_key"],)),
                 )
             )
@@ -304,8 +313,8 @@ def generate_vm(config):
                 EDGE
                 % (
                     config["infrastructure"]["edge_nodes"],
-                    config["infrastructure"]["aws_edge"],
-                    config["infrastructure"]["aws_ami"],
+                    hcl_string_literal(config["infrastructure"]["aws_edge"]),
+                    hcl_string_literal(config["infrastructure"]["aws_ami"]),
                     USER % (8 * ("edge",) + (config["ssh_key"],)),
                 )
             )
@@ -316,8 +325,8 @@ def generate_vm(config):
                 ENDPOINT
                 % (
                     config["infrastructure"]["endpoint_nodes"],
-                    config["infrastructure"]["aws_endpoint"],
-                    config["infrastructure"]["aws_ami"],
+                    hcl_string_literal(config["infrastructure"]["aws_endpoint"]),
+                    hcl_string_literal(config["infrastructure"]["aws_ami"]),
                     USER % (8 * ("endpoint",) + (config["ssh_key"],)),
                 )
             )

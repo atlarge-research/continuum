@@ -2,6 +2,8 @@
 
 import os
 
+from infrastructure.terraform_utils import hcl_string_literal
+
 ###################################################################################################
 
 HEADER = """
@@ -44,10 +46,10 @@ def generate_header(config):
         f.write(
             PROVIDER
             % (
-                config["infrastructure"]["gcp_credentials"],
-                config["infrastructure"]["gcp_project"],
-                config["infrastructure"]["gcp_region"],
-                config["infrastructure"]["gcp_zone"],
+                hcl_string_literal(config["infrastructure"]["gcp_credentials"]),
+                hcl_string_literal(config["infrastructure"]["gcp_project"]),
+                hcl_string_literal(config["infrastructure"]["gcp_region"]),
+                hcl_string_literal(config["infrastructure"]["gcp_zone"]),
             )
         )
 
@@ -273,7 +275,7 @@ def generate_vm(config):
             f.write(
                 CLOUD
                 % (
-                    config["infrastructure"]["gcp_cloud"],
+                    hcl_string_literal(config["infrastructure"]["gcp_cloud"]),
                     config["infrastructure"]["cloud_nodes"],
                     "%s.pub" % (config["ssh_key"]),
                 )
@@ -285,7 +287,7 @@ def generate_vm(config):
             f.write(
                 EDGE
                 % (
-                    config["infrastructure"]["gcp_edge"],
+                    hcl_string_literal(config["infrastructure"]["gcp_edge"]),
                     config["infrastructure"]["edge_nodes"],
                     "%s.pub" % (config["ssh_key"]),
                 )
@@ -297,7 +299,7 @@ def generate_vm(config):
             f.write(
                 ENDPOINT
                 % (
-                    config["infrastructure"]["gcp_endpoint"],
+                    hcl_string_literal(config["infrastructure"]["gcp_endpoint"]),
                     config["infrastructure"]["endpoint_nodes"],
                     "%s.pub" % (config["ssh_key"]),
                 )
