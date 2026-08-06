@@ -101,10 +101,32 @@ def validate_assign_to(assign_to: dict, path, prefix: str) -> tuple[dict, dict, 
     if not isinstance(match, dict) or not match:
         _fail(path, "%s.match" % (prefix), "must be a non-empty mapping")
 
-    normalized_match = {}
-    for key, value in match.items():
+    source_keys_by_normalized_key = {}
+    for key in match:
         if not isinstance(key, str) or not key.strip():
             _fail(path, "%s.match" % (prefix), "selector key must be a non-empty string")
+        source_keys_by_normalized_key.setdefault(key.strip(), []).append(key)
+
+    colliding_keys = sorted(
+        normalized_key
+        for normalized_key, source_keys in source_keys_by_normalized_key.items()
+        if len(source_keys) > 1
+    )
+    if colliding_keys:
+        normalized_key = colliding_keys[0]
+        source_keys = ", ".join(
+            repr(source_key)
+            for source_key in sorted(source_keys_by_normalized_key[normalized_key])
+        )
+        _fail(
+            path,
+            "%s.match" % (prefix),
+            "selector keys %s collide after trimming to normalized key '%s'"
+            % (source_keys, normalized_key),
+        )
+
+    normalized_match = {}
+    for key, value in match.items():
         if not isinstance(value, str) or not value.strip():
             _fail(path, "%s.match.%s" % (prefix, key), "selector value must be a non-empty string")
         normalized_match[key.strip()] = value.strip()

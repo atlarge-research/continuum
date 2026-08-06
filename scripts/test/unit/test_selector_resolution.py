@@ -111,6 +111,28 @@ class SelectorResolutionTests(unittest.TestCase):
         self.assertIn("software.modules[0].assign_to.match.cluster", str(exc.exception))
         self.assertIn("selector value must be a non-empty string", str(exc.exception))
 
+    def test_validate_assign_to_rejects_trimmed_key_collision_independent_of_order(self):
+        matches = [
+            {"tier": "cloud", " tier ": "edge"},
+            {" tier ": "edge", "tier": "cloud"},
+        ]
+        messages = []
+
+        for match in matches:
+            with self.subTest(match=list(match.items())):
+                with self.assertRaises(ValueError) as exc:
+                    selector_resolution.validate_assign_to(
+                        {"match": match},
+                        Path("/tmp/selector-resolution.yaml"),
+                        "software.modules[0].assign_to",
+                    )
+                message = str(exc.exception)
+                self.assertIn("software.modules[0].assign_to.match", message)
+                self.assertIn("collide after trimming to normalized key 'tier'", message)
+                messages.append(message)
+
+        self.assertEqual(messages[0], messages[1])
+
     def test_scope_identity_repr_is_deterministic(self):
         scope_identity = {"selector_id": "sel_a", "kind": "selector"}
         self.assertEqual(
