@@ -83,6 +83,15 @@ def _validate_schema_version(data: dict, path: Path):
         _fail(path, "schema_version", "unsupported value %s (expected 1)" % (schema_version))
 
 
+def _validate_experiment_lock(lock: dict, path: Path):
+    _validate_kind(lock, "ContinuumExperimentLock", path)
+    _validate_schema_version(lock, path)
+    if "planner_snapshot" not in lock:
+        _fail(path, "planner_snapshot", "is required")
+    if not isinstance(lock.get("planner_snapshot"), dict):
+        _fail(path, "planner_snapshot", "must be a mapping")
+
+
 def _validate_run(run: dict, path: Path, prefix: str) -> list[str]:
     return run_schema_validation.validate_run(
         run,
@@ -307,16 +316,17 @@ def start(parser, arg):
     path = Path(arg).expanduser().resolve()
     data = yaml_io.load_yaml(path)
     kind = _kind(data)
+    is_lock = kind == "ContinuumExperimentLock"
     lock_planner_snapshot = None
 
     try:
-        if kind == "ContinuumExperimentLock":
+        if is_lock:
+            _validate_experiment_lock(data, path)
             normalized = copy.deepcopy(data.get("normalized_config", {}))
             if not normalized:
                 _fail(path, "normalized_config", "is required")
             _validate_normalized(normalized, path, "normalized_config", require_derived=True)
-            if "planner_snapshot" in data:
-                lock_planner_snapshot = copy.deepcopy(data.get("planner_snapshot"))
+            lock_planner_snapshot = copy.deepcopy(data.get("planner_snapshot"))
         else:
             _validate_experiment(data, path)
             environment, software, sources = _compose_from_experiment(path, data)
@@ -346,7 +356,7 @@ def start(parser, arg):
     runtime_option_validation.verify_options(parser, config)
 
     planner_snapshot = plans.build_planner_snapshot(config)
-    if lock_planner_snapshot is not None:
+    if is_lock:
         try:
             plans.validate_planner_snapshot(lock_planner_snapshot, planner_snapshot)
         except ValueError as exc:

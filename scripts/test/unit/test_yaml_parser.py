@@ -129,6 +129,14 @@ class YamlParserTests(unittest.TestCase):
                 input_module.start(parser, str(config_path))
         return stderr.getvalue()
 
+    def _write_valid_lock(self, root: Path) -> Path:
+        exp_path, _ = self._build_triplet(root, str(root))
+        parser = argparse.ArgumentParser()
+        config = input_module.start(parser, str(exp_path))
+        from input.configuration import yaml_parser
+
+        return Path(yaml_parser.write_experiment_lock(config))
+
     def _image_classification_stage(self):
         return {
             "id": "classify",
@@ -758,6 +766,82 @@ class YamlParserTests(unittest.TestCase):
             )
             self.assertIn(
                 "must match deterministic planner snapshot derived from canonical config",
+                stderr,
+            )
+
+    def test_lock_replay_rejects_missing_schema_version(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            del lock_payload["schema_version"]
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+            self.assertIn("schema_version: must be integer 1", stderr)
+
+    def test_lock_replay_rejects_unsupported_schema_version(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            lock_payload["schema_version"] = 2
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+            self.assertIn("schema_version: unsupported value 2 (expected 1)", stderr)
+
+    def test_lock_replay_rejects_non_integer_schema_versions(self):
+        for schema_version in (True, "1"):
+            with self.subTest(schema_version=schema_version):
+                with tempfile.TemporaryDirectory() as tempdir:
+                    lock_path = self._write_valid_lock(Path(tempdir))
+                    lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+                    lock_payload["schema_version"] = schema_version
+                    self._write(lock_path, lock_payload)
+
+                    stderr = self._parse_error(lock_path)
+                    self.assertIn("schema_version: must be integer 1", stderr)
+
+    def test_lock_replay_rejects_incorrect_kind(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            lock_payload["kind"] = "WrongLockKind"
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+            self.assertIn("Expected kind", stderr)
+            self.assertIn("WrongLockKind", stderr)
+
+    def test_lock_replay_rejects_missing_planner_snapshot(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            del lock_payload["planner_snapshot"]
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+            self.assertIn("planner_snapshot: is required", stderr)
+
+    def test_lock_replay_rejects_non_mapping_planner_snapshot(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            lock_payload["planner_snapshot"] = []
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+            self.assertIn("planner_snapshot: must be a mapping", stderr)
+
+    def test_lock_replay_rejects_empty_planner_snapshot(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            lock_payload["planner_snapshot"] = {}
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+            self.assertIn(
+                "planner_snapshot.benchmark_stage_assignments is required in planner snapshot",
                 stderr,
             )
 
