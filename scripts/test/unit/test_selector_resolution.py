@@ -63,6 +63,49 @@ class SelectorResolutionTests(unittest.TestCase):
         self.assertTrue(result["resolved_vm_ids_mismatch"])
         self.assertTrue(result["scope_identities_mismatch"])
 
+    def test_reconcile_assignment_resolves_union_and_deduplicates_overlap(self):
+        entity = {
+            "assign_to": {
+                "any_of": [
+                    {"cluster": "cloud-1"},
+                    {"tier": "cloud"},
+                    {"cluster": "edge-1"},
+                ]
+            },
+            "selector_id": "sel_union",
+        }
+
+        result = selector_resolution.reconcile_assignment(
+            entity,
+            self.resources,
+            self.resources_by_vm_id,
+        )
+
+        self.assertTrue(result["has_candidates"])
+        self.assertEqual(result["empty_clause_indexes"], [])
+        self.assertEqual(result["resolved_vm_ids"], [1, 2, 3])
+
+    def test_reconcile_assignment_reports_empty_union_clause(self):
+        entity = {
+            "assign_to": {
+                "any_of": [
+                    {"cluster": "cloud-1"},
+                    {"cluster": "missing"},
+                ]
+            },
+            "selector_id": "sel_union",
+        }
+
+        result = selector_resolution.reconcile_assignment(
+            entity,
+            self.resources,
+            self.resources_by_vm_id,
+        )
+
+        self.assertTrue(result["has_candidates"])
+        self.assertEqual(result["empty_clause_indexes"], [1])
+        self.assertEqual(result["resolved_vm_ids"], [1, 2])
+
     def test_reconcile_assignment_rejects_missing_assign_to_match(self):
         with self.assertRaises(ValueError) as exc:
             selector_resolution.reconcile_assignment(
@@ -132,6 +175,87 @@ class SelectorResolutionTests(unittest.TestCase):
                 messages.append(message)
 
         self.assertEqual(messages[0], messages[1])
+
+    def test_validate_assign_to_normalizes_any_of_independent_of_clause_order(self):
+        selectors = [
+            {"any_of": [{" cluster ": " edge-1 "}, {"cluster": "cloud-1"}]},
+            {"any_of": [{"cluster": "cloud-1"}, {" cluster ": " edge-1 "}]},
+        ]
+        results = [
+            selector_resolution.validate_assign_to(
+                selector,
+                Path("/tmp/selector-resolution.yaml"),
+                "software.modules[0].assign_to",
+                allow_any_of=True,
+            )
+            for selector in selectors
+        ]
+
+        expected_canonical = {
+            "any_of": [
+                {"match": [["cluster", "cloud-1"]]},
+                {"match": [["cluster", "edge-1"]]},
+            ]
+        }
+        self.assertEqual(
+            results[0][0],
+            {"any_of": [{"cluster": "edge-1"}, {"cluster": "cloud-1"}]},
+        )
+        self.assertEqual(
+            results[1][0],
+            {"any_of": [{"cluster": "cloud-1"}, {"cluster": "edge-1"}]},
+        )
+        resolved_vm_ids = []
+        for assign_to, canonical, result_selector_id in results:
+            self.assertEqual(canonical, expected_canonical)
+            assignment = selector_resolution.reconcile_assignment(
+                {"assign_to": assign_to, "selector_id": result_selector_id},
+                self.resources,
+                self.resources_by_vm_id,
+            )
+            resolved_vm_ids.append(assignment["resolved_vm_ids"])
+        self.assertEqual(results[0][2], results[1][2])
+        self.assertEqual(resolved_vm_ids, [[1, 2, 3], [1, 2, 3]])
+
+    def test_validate_assign_to_rejects_match_and_any_of_together(self):
+        with self.assertRaises(ValueError) as exc:
+            selector_resolution.validate_assign_to(
+                {
+                    "match": {"cluster": "cloud-1"},
+                    "any_of": [{"cluster": "edge-1"}],
+                },
+                Path("/tmp/selector-resolution.yaml"),
+                "software.modules[0].assign_to",
+                allow_any_of=True,
+            )
+        self.assertIn("must contain exactly one of match or any_of", str(exc.exception))
+
+    def test_validate_assign_to_rejects_duplicate_normalized_union_clause(self):
+        with self.assertRaises(ValueError) as exc:
+            selector_resolution.validate_assign_to(
+                {
+                    "any_of": [
+                        {"cluster": "cloud-1"},
+                        {" cluster ": " cloud-1 "},
+                    ]
+                },
+                Path("/tmp/selector-resolution.yaml"),
+                "software.modules[0].assign_to",
+                allow_any_of=True,
+            )
+        self.assertIn("duplicate normalized selector clause at indexes 0, 1", str(exc.exception))
+
+    def test_validate_assign_to_rejects_trimmed_key_collision_in_union_clause(self):
+        with self.assertRaises(ValueError) as exc:
+            selector_resolution.validate_assign_to(
+                {"any_of": [{"tier": "cloud", " tier ": "edge"}]},
+                Path("/tmp/selector-resolution.yaml"),
+                "software.modules[0].assign_to",
+                allow_any_of=True,
+            )
+        message = str(exc.exception)
+        self.assertIn("software.modules[0].assign_to.any_of[0]", message)
+        self.assertIn("normalized key 'tier'", message)
 
     def test_scope_identity_repr_is_deterministic(self):
         scope_identity = {"selector_id": "sel_a", "kind": "selector"}

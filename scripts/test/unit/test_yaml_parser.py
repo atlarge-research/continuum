@@ -606,6 +606,278 @@ class YamlParserTests(unittest.TestCase):
             self.assertEqual(module["selector_id"], expected_selector_id)
             self.assertIn({"kind": "selector", "selector_id": expected_selector_id}, module["scope_identities"])
 
+    def test_software_any_of_resolves_complete_kubeedge_envelope(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            clusters = [
+                {
+                    "id": "cloud-1",
+                    "tier": "cloud",
+                    "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 2}}},
+                },
+                {
+                    "id": "edge-1",
+                    "tier": "edge",
+                    "resources": {"vms": {"count": 2, "spec": {"cores": 1, "memory_gb": 1}}},
+                },
+            ]
+            modules = [
+                {
+                    "id": "kubeedge-main",
+                    "type": "kubeedge",
+                    "assign_to": {
+                        "any_of": [
+                            {"cluster": "edge-1"},
+                            {"cluster": "cloud-1"},
+                        ]
+                    },
+                    "config": {"kube_version": "v1.27.0", "cache_worker": False},
+                }
+            ]
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                clusters=clusters,
+                modules=modules,
+            )
+
+            config = input_module.start(argparse.ArgumentParser(), str(exp_path))
+            module = config["domains"]["software"]["modules"][0]
+
+            self.assertEqual(
+                module["assign_to"],
+                {"any_of": [{"cluster": "cloud-1"}, {"cluster": "edge-1"}]},
+            )
+            self.assertEqual(module["resolved_vm_ids"], [1, 2, 3])
+            self.assertEqual(
+                module["selector"],
+                {
+                    "any_of": [
+                        {"match": [["cluster", "cloud-1"]]},
+                        {"match": [["cluster", "edge-1"]]},
+                    ]
+                },
+            )
+
+    def test_software_any_of_rejects_empty_clause_and_benchmark_any_of(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            modules = [
+                {
+                    "id": "none-main",
+                    "type": "none",
+                    "assign_to": {
+                        "any_of": [
+                            {"cluster": "cloud-1"},
+                            {"cluster": "missing"},
+                        ]
+                    },
+                    "config": {},
+                }
+            ]
+            exp_path, _ = self._build_triplet(root, tempdir, modules=modules)
+            stderr = self._parse_error(exp_path)
+            self.assertIn("software.modules[0].assign_to.any_of[1]", stderr)
+            self.assertIn("selector clause resolves to no infrastructure resources", stderr)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            stage = self._image_classification_stage()
+            stage["assign_to"] = {"any_of": [{"cluster": "cloud-1"}]}
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["application"],
+                clusters=self._image_classification_clusters(),
+                modules=self._image_classification_modules(),
+                benchmark={"pipeline": [stage]},
+            )
+            stderr = self._parse_error(exp_path)
+            self.assertIn("benchmark.pipeline[0].assign_to.any_of", stderr)
+            self.assertIn("unexpected key for schema v1", stderr)
+
+    def test_software_any_of_empty_clause_reports_original_source_index(self):
+        clauses_by_expected_index = (
+            ([{"cluster": "z-missing"}, {"cluster": "a-valid"}], 0),
+            ([{"cluster": "a-valid"}, {"cluster": "z-missing"}], 1),
+        )
+        clusters = [
+            {
+                "id": "a-valid",
+                "tier": "cloud",
+                "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 2}}},
+            }
+        ]
+
+        for clauses, expected_index in clauses_by_expected_index:
+            with self.subTest(expected_index=expected_index):
+                with tempfile.TemporaryDirectory() as tempdir:
+                    root = Path(tempdir)
+                    modules = [
+                        {
+                            "id": "none-main",
+                            "type": "none",
+                            "assign_to": {"any_of": clauses},
+                            "config": {},
+                        }
+                    ]
+                    exp_path, _ = self._build_triplet(
+                        root,
+                        tempdir,
+                        clusters=clusters,
+                        modules=modules,
+                    )
+
+                    stderr = self._parse_error(exp_path)
+                    self.assertIn(
+                        "software.modules[0].assign_to.any_of[%s]" % (expected_index,),
+                        stderr,
+                    )
+                    self.assertIn(
+                        "selector clause resolves to no infrastructure resources",
+                        stderr,
+                    )
+
+    def test_partial_same_tier_software_assignment_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            clusters = [
+                {
+                    "id": "cloud-1",
+                    "tier": "cloud",
+                    "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 2}}},
+                },
+                {
+                    "id": "cloud-2",
+                    "tier": "cloud",
+                    "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 2}}},
+                },
+            ]
+            modules = [
+                {
+                    "id": "k8s-main",
+                    "type": "kubernetes",
+                    "assign_to": {"match": {"cluster": "cloud-1"}},
+                    "config": {"kube_version": "v1.27.0", "cache_worker": False},
+                }
+            ]
+            exp_path, sw_path = self._build_triplet(
+                root,
+                tempdir,
+                clusters=clusters,
+                modules=modules,
+            )
+
+            stderr = self._parse_error(exp_path)
+            self.assertIn("k8s-main", stderr)
+            self.assertIn("cluster=cloud-2", stderr)
+            self.assertIn("Partial assignments are unsupported", stderr)
+
+            modules[0]["assign_to"] = {
+                "any_of": [{"cluster": "cloud-1"}, {"cluster": "cloud-2"}]
+            }
+            self._write(
+                sw_path,
+                {
+                    "schema_version": 1,
+                    "kind": "ContinuumSoftware",
+                    "software": {"modules": modules},
+                },
+            )
+            config = input_module.start(argparse.ArgumentParser(), str(exp_path))
+            self.assertEqual(
+                config["domains"]["software"]["modules"][0]["resolved_vm_ids"],
+                [1, 2],
+            )
+
+    def test_kubeedge_cloud_only_assignment_and_replayed_lock_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            clusters = [
+                {
+                    "id": "cloud-1",
+                    "tier": "cloud",
+                    "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 2}}},
+                },
+                {
+                    "id": "edge-1",
+                    "tier": "edge",
+                    "resources": {"vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 1}}},
+                },
+            ]
+            modules = [
+                {
+                    "id": "kubeedge-main",
+                    "type": "kubeedge",
+                    "assign_to": {"match": {"cluster": "cloud-1"}},
+                    "config": {"kube_version": "v1.27.0", "cache_worker": False},
+                }
+            ]
+            exp_path, sw_path = self._build_triplet(
+                root,
+                tempdir,
+                clusters=clusters,
+                modules=modules,
+            )
+            stderr = self._parse_error(exp_path)
+            self.assertIn("kubeedge-main", stderr)
+            self.assertIn("cluster=edge-1", stderr)
+
+            modules[0]["assign_to"] = {
+                "any_of": [{"cluster": "cloud-1"}, {"cluster": "edge-1"}]
+            }
+            self._write(
+                sw_path,
+                {
+                    "schema_version": 1,
+                    "kind": "ContinuumSoftware",
+                    "software": {"modules": modules},
+                },
+            )
+            parser = argparse.ArgumentParser()
+            config = input_module.start(parser, str(exp_path))
+            from input.configuration import yaml_parser
+
+            lock_path = Path(yaml_parser.write_experiment_lock(config))
+            replayed = input_module.start(parser, str(lock_path))
+            self.assertEqual(
+                replayed["domains"]["software"]["modules"][0]["resolved_vm_ids"],
+                [1, 2],
+            )
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            normalized = lock_payload["normalized_config"]
+            module = normalized["software"]["modules"][0]
+            canonical, selector_id = selector_scope.canonical_selector(
+                {"cluster": "cloud-1"}
+            )
+            module["assign_to"] = {"match": {"cluster": "cloud-1"}}
+            module["selector"] = canonical
+            module["selector_id"] = selector_id
+            module["resolved_vm_ids"] = [1]
+            resources = normalized["infrastructure"]["resources"]
+            resources_by_vm_id = {resource["vm_id"]: resource for resource in resources}
+            module["scope_identities"] = selector_scope.build_scope_identities(
+                resources_by_vm_id,
+                [1],
+                selector_id,
+            )
+            assignment = lock_payload["planner_snapshot"]["software_module_assignments"][0]
+            assignment["selector_id"] = selector_id
+            assignment["resolved_vm_ids"] = [1]
+            assignment["resolved_resources"] = [
+                {
+                    key: resources_by_vm_id[1][key]
+                    for key in ("vm_id", "cluster_id", "tier", "index_in_cluster", "tags")
+                }
+            ]
+            assignment["scope_identities"] = module["scope_identities"]
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+            self.assertIn("kubeedge-main", stderr)
+            self.assertIn("cluster=edge-1", stderr)
+            self.assertIn("Partial assignments are unsupported", stderr)
+
     def test_run_image_prefetch_defaults_to_off(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

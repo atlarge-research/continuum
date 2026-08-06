@@ -177,16 +177,31 @@ Top-level keys for `ContinuumSoftware`:
 | --- | --- | --- | --- |
 | `id` | string | yes | Unique module instance id |
 | `type` | string | yes | Accepted module type |
-| `assign_to` | mapping | yes | Exact-match selector |
+| `assign_to` | mapping | yes | Exhaustive resource authorization envelope |
 | `config` | mapping | yes | Module-local config |
 
-`assign_to` currently supports exact-match selectors only:
+Software `assign_to` accepts exactly one of `match` or `any_of`. `match` is one
+exact-match clause with implicit AND across its key/value predicates:
 
 ```yaml
 assign_to:
   match:
     cluster: cloud-1
 ```
+
+`any_of` is the set union of exact-match AND clauses:
+
+```yaml
+assign_to:
+  any_of:
+    - cluster: cloud-1
+    - cluster: edge-1
+```
+
+The resolved resources are the module's exhaustive authorization envelope. Module roles,
+capabilities, and topology rules may partition or validate resources inside that envelope, but
+must never implicitly add resources outside it. `any_of` is software-only; benchmark-stage
+selectors remain match-only.
 
 Accepted module types:
 
@@ -235,6 +250,9 @@ Top-level keys:
 | `assign_to` | mapping | yes | Exact-match selector |
 | `tags` | mapping | yes | Must use `benchmark.*` namespacing for benchmark-owned tags |
 | `config` | mapping | yes | Stage-local contract |
+
+Benchmark `assign_to` supports only one exact-match `match` clause. Software-only `any_of` is
+not accepted for benchmark stages.
 
 Known benchmark stage config contracts:
 

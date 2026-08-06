@@ -87,8 +87,13 @@ def build_phase_plan(config):
             kind="playbook",
             playbook="playbooks/resource_manager/k8s_cluster.yml",
             extra_vars={"ignore_preflight_errors": True},
+            legacy_target_groups=("cloudcontroller", "clouds", "edges"),
         ),
-        plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/k8s_metrics.yml"),
+        plans.PlanEntry(
+            kind="playbook",
+            playbook="playbooks/resource_manager/k8s_metrics.yml",
+            legacy_target_groups=("cloudcontroller", "clouds"),
+        ),
     ]
     if observability_owner is not None:
         entries.append(
@@ -97,6 +102,7 @@ def build_phase_plan(config):
                 playbook="playbooks/resource_manager/k8s_observability.yml",
                 owner_id=observability_owner["id"],
                 owner_type=observability_owner["type"],
+                legacy_target_groups=("cloudcontroller",),
             )
         )
     return entries

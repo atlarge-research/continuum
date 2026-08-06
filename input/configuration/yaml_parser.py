@@ -359,12 +359,12 @@ def start(parser, arg):
     runtime_module_loader.add_constants(parser, config)
     runtime_option_validation.verify_options(parser, config)
 
-    planner_snapshot = plans.build_planner_snapshot(config)
-    if is_lock:
-        try:
+    try:
+        planner_snapshot = plans.build_planner_snapshot(config)
+        if is_lock:
             plans.validate_planner_snapshot(lock_planner_snapshot, planner_snapshot)
-        except ValueError as exc:
-            parser.error("YAML config validation failed: %s" % (exc,))
+    except ValueError as exc:
+        parser.error("YAML config validation failed: %s" % (exc,))
     config["planner_snapshot"] = planner_snapshot
 
     config["input_path"] = str(path)

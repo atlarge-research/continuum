@@ -92,9 +92,17 @@ def build_phase_plan(config):
     """
     if config_access.orchestrator_name(config) == "mist":
         return [
-            plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/mist_install.yml")
+            plans.PlanEntry(
+                kind="playbook",
+                playbook="playbooks/resource_manager/mist_install.yml",
+                legacy_target_groups=("edges",),
+            )
         ]
 
     return [
-        plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/kubeedge_cluster.yml")
+        plans.PlanEntry(
+            kind="playbook",
+            playbook="playbooks/resource_manager/kubeedge_cluster.yml",
+            legacy_target_groups=("cloudcontroller", "edges"),
+        )
     ]

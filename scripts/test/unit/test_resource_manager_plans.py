@@ -1,6 +1,7 @@
 """Unit tests for centralized resource-manager planning helpers."""
 
 import unittest
+from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 from unittest import mock
 
@@ -10,6 +11,22 @@ from resource_manager.kube_kata import kube_kata
 from resource_manager.kubecontrol import kubecontrol
 from resource_manager.kubeedge import kubeedge
 from resource_manager.kubernetes import kubernetes
+
+
+EXPECTED_LEGACY_TARGETS = {
+    "playbooks/resource_manager/k8s_cluster.yml": (
+        "cloudcontroller",
+        "clouds",
+        "edges",
+    ),
+    "playbooks/resource_manager/k8s_metrics.yml": ("cloudcontroller", "clouds"),
+    "playbooks/resource_manager/k8s_observability.yml": ("cloudcontroller",),
+    "playbooks/resource_manager/kata_setup.yml": ("cloudcontroller", "clouds", "edges"),
+    "playbooks/resource_manager/kubeedge_cluster.yml": ("cloudcontroller", "edges"),
+    "playbooks/resource_manager/mist_install.yml": ("edges",),
+    "playbooks/resource_manager/openfaas.yml": ("cloudcontroller",),
+    "playbooks/resource_manager/endpoint_install.yml": ("endpoints",),
+}
 
 
 def _module(
@@ -58,8 +75,9 @@ def _config(resource_manager=None, endpoint_nodes=0, modules=None, run_targets=N
     modules = modules or [_module("k8s-main", "kubernetes")]
     run_targets = run_targets or ["infrastructure", "software"]
     return {
+        "mode": "cloud",
         "module": {"resource_manager": resource_manager},
-        "infrastructure": {"endpoint_nodes": endpoint_nodes},
+        "infrastructure": {"endpoint_nodes": endpoint_nodes, "provider": "qemu"},
         "domains": {
             "run": {"targets": run_targets, "image_prefetch": "off"},
             "software": {"modules": modules},
@@ -257,19 +275,32 @@ class BaseInstallPlanTests(unittest.TestCase):
 
 
 class SoftwarePhasePlanTests(unittest.TestCase):
+    def test_plan_entry_legacy_target_groups_are_immutable(self):
+        entry = plans.PlanEntry(
+            kind="playbook",
+            playbook="playbooks/resource_manager/k8s_cluster.yml",
+            legacy_target_groups=("cloudcontroller", "clouds", "edges"),
+        )
+
+        with self.assertRaises(FrozenInstanceError):
+            entry.legacy_target_groups = ("endpoints",)
+
     def test_build_software_phase_entries_preserves_rm_order_then_addons(self):
         rm_module = SimpleNamespace(
             build_phase_plan=lambda _config: [
-                plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/k8s_cluster.yml"),
-                plans.PlanEntry(kind="command", command=["echo", "cluster-ready"]),
+                plans.PlanEntry(
+                    kind="playbook",
+                    playbook="playbooks/resource_manager/k8s_cluster.yml",
+                    legacy_target_groups=("cloudcontroller", "clouds", "edges"),
+                ),
             ]
         )
         config = _config(
             resource_manager=rm_module,
             endpoint_nodes=2,
             modules=[
-                _module("k8s-main", "kubernetes"),
-                _module("openfaas-main", "openfaas"),
+                _module("k8s-main", "kubernetes", resolved_vm_ids=[1, 2]),
+                _module("openfaas-main", "openfaas", resolved_vm_ids=[1, 2]),
                 _module("endpoint-runtime-main", "endpoint_runtime", resolved_vm_ids=[3]),
             ],
         )
@@ -277,6 +308,8 @@ class SoftwarePhasePlanTests(unittest.TestCase):
         _add_planner_snapshot(
             config,
             [
+                _software_assignment("k8s-main", "kubernetes", resolved_vm_ids=[1, 2]),
+                _software_assignment("openfaas-main", "openfaas", resolved_vm_ids=[1, 2]),
                 _software_assignment(
                     "endpoint-runtime-main",
                     "endpoint_runtime",
@@ -296,26 +329,181 @@ class SoftwarePhasePlanTests(unittest.TestCase):
                     playbook="playbooks/resource_manager/k8s_cluster.yml",
                     owner_id="k8s-main",
                     owner_type="kubernetes",
-                ),
-                plans.PlanEntry(
-                    kind="command",
-                    command=["echo", "cluster-ready"],
-                    owner_id="k8s-main",
-                    owner_type="kubernetes",
+                    legacy_target_groups=("cloudcontroller", "clouds", "edges"),
                 ),
                 plans.PlanEntry(
                     kind="playbook",
                     playbook="playbooks/resource_manager/openfaas.yml",
                     owner_id="openfaas-main",
                     owner_type="openfaas",
+                    legacy_target_groups=("cloudcontroller",),
                 ),
                 plans.PlanEntry(
                     kind="playbook",
                     playbook="playbooks/resource_manager/endpoint_install.yml",
                     owner_id="endpoint-runtime-main",
                     owner_type="endpoint_runtime",
+                    legacy_target_groups=("endpoints",),
                 ),
             ],
+        )
+
+    def test_build_software_phase_entries_rejects_command_with_unproven_scope(self):
+        rm_module = SimpleNamespace(
+            build_phase_plan=lambda _config: [
+                plans.PlanEntry(kind="command", command=["echo", "cluster-ready"])
+            ]
+        )
+        config = _config(
+            resource_manager=rm_module,
+            modules=[_module("k8s-main", "kubernetes", resolved_vm_ids=[1, 2])],
+        )
+        _add_planner_snapshot(
+            config,
+            [_software_assignment("k8s-main", "kubernetes", resolved_vm_ids=[1, 2])],
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            plans.build_software_phase_entries(config)
+
+        self.assertIn("command plan entry", str(exc.exception))
+        self.assertIn("scope cannot be proven", str(exc.exception))
+
+    def test_every_emitted_software_playbook_declares_approved_target_groups(self):
+        emitted_entries = []
+
+        for rm_module, module_type, module_config in (
+            (kubernetes, "kubernetes", {}),
+            (kubecontrol, "kubecontrol", {}),
+            (kube_kata, "kube_kata", {"runtime": "kata-qemu", "runtime_filesystem": "overlayfs"}),
+        ):
+            config = _config(
+                modules=[
+                    _module("orchestrator", module_type, config=module_config),
+                    _module("observability", "observability"),
+                ]
+            )
+            emitted_entries.extend(rm_module.build_phase_plan(config))
+
+        for module_type in ("kubeedge", "mist"):
+            config = _config(modules=[_module("orchestrator", module_type)])
+            emitted_entries.extend(kubeedge.build_phase_plan(config))
+
+        addon_config = _config(
+            endpoint_nodes=1,
+            modules=[
+                _module("none-main", "none", resolved_vm_ids=[1, 2]),
+                _module("openfaas-main", "openfaas", resolved_vm_ids=[1]),
+                _module("endpoint-runtime-main", "endpoint_runtime", resolved_vm_ids=[3]),
+            ],
+        )
+        _add_planner_snapshot(
+            addon_config,
+            [
+                _software_assignment("openfaas-main", "openfaas", resolved_vm_ids=[1]),
+                _software_assignment(
+                    "endpoint-runtime-main",
+                    "endpoint_runtime",
+                    resolved_vm_ids=[3],
+                    resolved_resources=[_resource(3, "endpoint-1", "endpoint", 0)],
+                ),
+            ],
+        )
+        emitted_entries.extend(plans.build_software_phase_entries(addon_config))
+
+        observed = {}
+        for entry in emitted_entries:
+            self.assertIsInstance(entry.legacy_target_groups, tuple)
+            if entry.playbook in observed:
+                self.assertEqual(observed[entry.playbook], entry.legacy_target_groups)
+            observed[entry.playbook] = entry.legacy_target_groups
+
+        self.assertEqual(observed, EXPECTED_LEGACY_TARGETS)
+
+    def test_build_software_phase_entries_rejects_missing_or_unknown_target_metadata(self):
+        entries = [
+            plans.PlanEntry(
+                kind="playbook",
+                playbook="playbooks/resource_manager/k8s_cluster.yml",
+            ),
+            plans.PlanEntry(
+                kind="playbook",
+                playbook="playbooks/resource_manager/k8s_cluster.yml",
+                legacy_target_groups=("unknown",),
+            ),
+        ]
+        config = _config(
+            modules=[_module("k8s-main", "kubernetes", resolved_vm_ids=[1, 2])]
+        )
+        _add_planner_snapshot(
+            config,
+            [_software_assignment("k8s-main", "kubernetes", resolved_vm_ids=[1, 2])],
+        )
+
+        for entry, expected in zip(entries, ("must declare immutable", "unknown legacy")):
+            rm_module = SimpleNamespace(build_phase_plan=lambda _config, entry=entry: [entry])
+            config["module"]["resource_manager"] = rm_module
+            with self.subTest(expected=expected):
+                with self.assertRaises(ValueError) as exc:
+                    plans.build_software_phase_entries(config)
+                self.assertIn(expected, str(exc.exception))
+
+    def test_partial_same_tier_assignment_fails_but_full_assignment_passes(self):
+        rm_module = SimpleNamespace(
+            build_phase_plan=lambda _config: [
+                plans.PlanEntry(
+                    kind="playbook",
+                    playbook="playbooks/resource_manager/k8s_cluster.yml",
+                    legacy_target_groups=("cloudcontroller", "clouds", "edges"),
+                )
+            ]
+        )
+        config = _config(
+            resource_manager=rm_module,
+            modules=[_module("k8s-main", "kubernetes", resolved_vm_ids=[1, 2])],
+        )
+        config["normalized"]["infrastructure"]["resources"].append(
+            _resource(4, "cloud-2", "cloud", 0)
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            plans.build_planner_snapshot(config)
+        message = str(exc.exception)
+        self.assertIn("k8s-main", message)
+        self.assertIn("cluster=cloud-2", message)
+        self.assertIn("Partial assignments are unsupported", message)
+
+        config["domains"]["software"]["modules"][0]["resolved_vm_ids"] = [1, 2, 4]
+        snapshot = plans.build_planner_snapshot(config)
+        self.assertEqual(
+            snapshot["software_module_assignments"][0]["resolved_vm_ids"],
+            [1, 2, 4],
+        )
+
+    def test_kubeedge_cloud_only_assignment_fails_but_complete_envelope_passes(self):
+        config = _config(
+            resource_manager=kubeedge,
+            modules=[_module("kubeedge-main", "kubeedge", resolved_vm_ids=[1])],
+        )
+        config["mode"] = "edge"
+        config["normalized"]["infrastructure"]["resources"] = [
+            _resource(1, "cloud-1", "cloud", 0),
+            _resource(2, "edge-1", "edge", 0),
+            _resource(3, "edge-1", "edge", 1),
+        ]
+
+        with self.assertRaises(ValueError) as exc:
+            plans.build_planner_snapshot(config)
+        message = str(exc.exception)
+        self.assertIn("kubeedge-main", message)
+        self.assertIn("cluster=edge-1", message)
+        self.assertIn("kubeedge_cluster.yml", message)
+
+        config["domains"]["software"]["modules"][0]["resolved_vm_ids"] = [1, 2, 3]
+        snapshot = plans.build_planner_snapshot(config)
+        self.assertEqual(
+            snapshot["software_module_assignments"][0]["resolved_vm_ids"],
+            [1, 2, 3],
         )
 
     def test_rm_module_start_hooks_delegate_to_centralized_entrypoint(self):
@@ -570,6 +758,7 @@ class SoftwarePhasePlanTests(unittest.TestCase):
                     playbook="playbooks/resource_manager/endpoint_install.yml",
                     owner_id="endpoint-runtime-main",
                     owner_type="endpoint_runtime",
+                    legacy_target_groups=("endpoints",),
                 )
             ],
         )
@@ -577,12 +766,17 @@ class SoftwarePhasePlanTests(unittest.TestCase):
     def test_build_planner_snapshot_captures_execution_order_and_assignments(self):
         rm_module = SimpleNamespace(
             build_phase_plan=lambda _config: [
-                plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/k8s_cluster.yml"),
+                plans.PlanEntry(
+                    kind="playbook",
+                    playbook="playbooks/resource_manager/k8s_cluster.yml",
+                    legacy_target_groups=("cloudcontroller", "clouds", "edges"),
+                ),
                 plans.PlanEntry(
                     kind="playbook",
                     playbook="playbooks/resource_manager/k8s_observability.yml",
                     owner_id="obs-main",
                     owner_type="observability",
+                    legacy_target_groups=("cloudcontroller",),
                 ),
             ]
         )

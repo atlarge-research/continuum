@@ -116,6 +116,16 @@ def validate_module_registry_contract(
     )
     module_records = evaluation["module_records"]
 
+    def _assignment_path(module_index):
+        module = modules[module_index]
+        assign_to = module.get("assign_to")
+        suffix = (
+            "assign_to.match"
+            if isinstance(assign_to, dict) and "match" in assign_to
+            else "assign_to"
+        )
+        return "%s.modules[%s].%s" % (prefix, module_index, suffix)
+
     for index, module, spec in module_records:
         module_type = module["type"]
         module_config = module.get("config")
@@ -178,7 +188,7 @@ def validate_module_registry_contract(
                 )
             _fail(
                 path,
-                "%s.modules[%s].assign_to.match" % (prefix, violation["module_index"]),
+                _assignment_path(violation["module_index"]),
                 "%s in an overlapping assignment scope" % (message,),
             )
             continue
@@ -211,7 +221,7 @@ def validate_module_registry_contract(
         if kind == "endpoint_runtime_not_on_endpoint":
             _fail(
                 path,
-                "%s.modules[%s].assign_to.match" % (prefix, violation["module_index"]),
+                _assignment_path(violation["module_index"]),
                 "endpoint_runtime module must be assigned to endpoint resources when endpoint "
                 "resources are present",
             )
@@ -287,7 +297,10 @@ def validate_software(
             )
 
         assign_to, canonical_selector, selector_id = selector_resolution.validate_assign_to(
-            module.get("assign_to"), path, "%s.assign_to" % (module_prefix)
+            module.get("assign_to"),
+            path,
+            "%s.assign_to" % (module_prefix),
+            allow_any_of=True,
         )
         if allow_derived:
             if require_derived:

@@ -86,7 +86,11 @@ def build_phase_plan(config):
         observability_owner = config_access.software_module_by_type(config, "observability")
 
     entries = [
-        plans.PlanEntry(kind="playbook", playbook="playbooks/resource_manager/k8s_cluster.yml")
+        plans.PlanEntry(
+            kind="playbook",
+            playbook="playbooks/resource_manager/k8s_cluster.yml",
+            legacy_target_groups=("cloudcontroller", "clouds", "edges"),
+        )
     ]
     if observability_owner is not None:
         entries.append(
@@ -95,6 +99,7 @@ def build_phase_plan(config):
                 playbook="playbooks/resource_manager/k8s_observability.yml",
                 owner_id=observability_owner["id"],
                 owner_type=observability_owner["type"],
+                legacy_target_groups=("cloudcontroller",),
             )
         )
     return entries

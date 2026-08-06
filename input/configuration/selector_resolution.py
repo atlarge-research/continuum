@@ -25,25 +25,51 @@ def reconcile_assignment(
     """Resolve selector assignment and compare against existing derived metadata."""
     entity_mapping = _required_mapping(entity, "entity")
     assign_to = _required_mapping(entity_mapping.get("assign_to"), "entity.assign_to")
-    match = _required_mapping(assign_to.get("match"), "entity.assign_to.match")
-    if not match:
-        raise ValueError("Invalid selector-assignment entity.assign_to.match: expected non-empty mapping")
-    for key, value in match.items():
-        if not isinstance(key, str) or not key.strip():
+    if "match" in assign_to:
+        matches = [_required_mapping(assign_to.get("match"), "entity.assign_to.match")]
+    else:
+        any_of = assign_to.get("any_of")
+        if not isinstance(any_of, list) or not any_of:
             raise ValueError(
-                "Invalid selector-assignment entity.assign_to.match: key must be non-empty string"
+                "Invalid selector-assignment entity.assign_to.any_of: expected non-empty list"
             )
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(
-                "Invalid selector-assignment entity.assign_to.match.%s: expected non-empty string"
-                % (key,)
-            )
-    selector_id = _required_non_empty_string(entity_mapping.get("selector_id"), "entity.selector_id")
+        matches = [
+            _required_mapping(match, "entity.assign_to.any_of[%s]" % (index,))
+            for index, match in enumerate(any_of)
+        ]
 
-    candidates = selector_scope.resolve_selector_vm_ids(resources, match)
+    for index, match in enumerate(matches):
+        clause_path = (
+            "entity.assign_to.match"
+            if "match" in assign_to
+            else "entity.assign_to.any_of[%s]" % (index,)
+        )
+        if not match:
+            raise ValueError(
+                "Invalid selector-assignment %s: expected non-empty mapping" % (clause_path,)
+            )
+        for key, value in match.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError(
+                    "Invalid selector-assignment %s: key must be non-empty string"
+                    % (clause_path,)
+                )
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    "Invalid selector-assignment %s.%s: expected non-empty string"
+                    % (clause_path, key)
+                )
+    selector_id = _required_non_empty_string(
+        entity_mapping.get("selector_id"), "entity.selector_id"
+    )
+
+    candidates, empty_clause_indexes = selector_scope.resolve_selector_union_vm_ids(
+        resources, matches
+    )
     if not candidates:
         return {
             "has_candidates": False,
+            "empty_clause_indexes": empty_clause_indexes,
             "resolved_vm_ids": [],
             "scope_identities": [],
             "resolved_vm_ids_mismatch": False,
@@ -58,6 +84,7 @@ def reconcile_assignment(
     )
     return {
         "has_candidates": True,
+        "empty_clause_indexes": empty_clause_indexes,
         "resolved_vm_ids": resolved_vm_ids,
         "scope_identities": scope_identities,
         "resolved_vm_ids_mismatch": (
@@ -91,20 +118,15 @@ def _is_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def validate_assign_to(assign_to: dict, path, prefix: str) -> tuple[dict, dict, str]:
-    """Validate and normalize assign_to.match, returning canonical selector metadata."""
-    if not isinstance(assign_to, dict):
-        _fail(path, prefix, "must be a mapping")
-    _fail_unknown_keys(path, prefix, assign_to, {"match"})
-
-    match = assign_to.get("match")
+def _normalize_match(match: dict, path, prefix: str) -> dict[str, str]:
+    """Validate and normalize one exact-match selector clause."""
     if not isinstance(match, dict) or not match:
-        _fail(path, "%s.match" % (prefix), "must be a non-empty mapping")
+        _fail(path, prefix, "must be a non-empty mapping")
 
     source_keys_by_normalized_key = {}
     for key in match:
         if not isinstance(key, str) or not key.strip():
-            _fail(path, "%s.match" % (prefix), "selector key must be a non-empty string")
+            _fail(path, prefix, "selector key must be a non-empty string")
         source_keys_by_normalized_key.setdefault(key.strip(), []).append(key)
 
     colliding_keys = sorted(
@@ -120,7 +142,7 @@ def validate_assign_to(assign_to: dict, path, prefix: str) -> tuple[dict, dict, 
         )
         _fail(
             path,
-            "%s.match" % (prefix),
+            prefix,
             "selector keys %s collide after trimming to normalized key '%s'"
             % (source_keys, normalized_key),
         )
@@ -128,11 +150,58 @@ def validate_assign_to(assign_to: dict, path, prefix: str) -> tuple[dict, dict, 
     normalized_match = {}
     for key, value in match.items():
         if not isinstance(value, str) or not value.strip():
-            _fail(path, "%s.match.%s" % (prefix, key), "selector value must be a non-empty string")
+            _fail(path, "%s.%s" % (prefix, key), "selector value must be a non-empty string")
         normalized_match[key.strip()] = value.strip()
+    return normalized_match
 
-    canonical_selector, selector_id = selector_scope.canonical_selector(normalized_match)
-    return {"match": normalized_match}, canonical_selector, selector_id
+
+def validate_assign_to(
+    assign_to: dict, path, prefix: str, *, allow_any_of: bool = False
+) -> tuple[dict, dict, str]:
+    """Validate and normalize selector assignment, returning canonical metadata."""
+    if not isinstance(assign_to, dict):
+        _fail(path, prefix, "must be a mapping")
+    allowed_keys = {"match", "any_of"} if allow_any_of else {"match"}
+    _fail_unknown_keys(path, prefix, assign_to, allowed_keys)
+
+    selector_keys = [key for key in ("match", "any_of") if key in assign_to]
+    if len(selector_keys) != 1:
+        if allow_any_of:
+            _fail(path, prefix, "must contain exactly one of match or any_of")
+        _fail(path, "%s.match" % (prefix,), "must be a non-empty mapping")
+
+    if "match" in assign_to:
+        normalized_match = _normalize_match(assign_to.get("match"), path, "%s.match" % (prefix,))
+        canonical_selector, selector_id = selector_scope.canonical_selector(normalized_match)
+        return {"match": normalized_match}, canonical_selector, selector_id
+
+    any_of = assign_to.get("any_of")
+    if not isinstance(any_of, list) or not any_of:
+        _fail(path, "%s.any_of" % (prefix,), "must be a non-empty list")
+
+    normalized_matches = [
+        _normalize_match(match, path, "%s.any_of[%s]" % (prefix, index))
+        for index, match in enumerate(any_of)
+    ]
+    clause_sources = {}
+    for index, match in enumerate(normalized_matches):
+        clause_json = json.dumps(match, separators=(",", ":"), sort_keys=True)
+        clause_sources.setdefault(clause_json, []).append(index)
+    duplicate_clauses = sorted(
+        clause_json for clause_json, indexes in clause_sources.items() if len(indexes) > 1
+    )
+    if duplicate_clauses:
+        clause_json = duplicate_clauses[0]
+        indexes = ", ".join(str(index) for index in clause_sources[clause_json])
+        _fail(
+            path,
+            "%s.any_of" % (prefix,),
+            "contains duplicate normalized selector clause at indexes %s: %s"
+            % (indexes, clause_json),
+        )
+
+    canonical_selector, selector_id = selector_scope.canonical_selector_union(normalized_matches)
+    return {"any_of": normalized_matches}, canonical_selector, selector_id
 
 
 def validate_scope_identities(scope_identities: list, path, prefix: str):
@@ -187,6 +256,13 @@ def validate_selector_derivatives(
     require_present: bool = False,
 ):
     """Validate optional/persisted selector and selector_id derived fields."""
+    assign_to = source_mapping.get("assign_to")
+    assignment_source = (
+        "assign_to.match"
+        if (isinstance(assign_to, dict) and "match" in assign_to)
+        or (not isinstance(assign_to, dict) and "match" in canonical_selector)
+        else "assign_to"
+    )
     if require_present and "selector" not in source_mapping:
         _fail(path, selector_key_path, "is required in normalized lock config")
     if require_present and "selector_id" not in source_mapping:
@@ -200,7 +276,7 @@ def validate_selector_derivatives(
             _fail(
                 path,
                 selector_key_path,
-                "must match canonical selector derived from assign_to.match",
+                "must match canonical selector derived from %s" % (assignment_source,),
             )
 
     if "selector_id" in source_mapping:
@@ -211,5 +287,5 @@ def validate_selector_derivatives(
             _fail(
                 path,
                 selector_id_key_path,
-                "must match canonical selector_id derived from assign_to.match",
+                "must match canonical selector_id derived from %s" % (assignment_source,),
             )

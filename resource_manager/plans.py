@@ -10,6 +10,7 @@ from typing import Any
 
 from infrastructure import orchestration_schema
 from input.configuration import config_access
+from resource_manager import legacy_execution
 from resource_manager.endpoint import endpoint
 
 
@@ -26,6 +27,7 @@ class PlanEntry:
     check: bool = True
     owner_id: str = ""
     owner_type: str = ""
+    legacy_target_groups: tuple[str, ...] | None = None
 
 
 def _validate_entry(entry: PlanEntry):
@@ -348,6 +350,7 @@ def build_software_phase_entries(
                 playbook="playbooks/resource_manager/openfaas.yml",
                 owner_id=addon_owner[0],
                 owner_type=addon_owner[1],
+                legacy_target_groups=("cloudcontroller",),
             )
         )
 
@@ -364,9 +367,15 @@ def build_software_phase_entries(
                 playbook="playbooks/resource_manager/endpoint_install.yml",
                 owner_id=addon_owner[0],
                 owner_type=addon_owner[1],
+                legacy_target_groups=("endpoints",),
             )
         )
 
+    legacy_execution.validate_software_execution_envelopes(
+        config,
+        entries,
+        use_planner_snapshot=use_planner_snapshot,
+    )
     return entries
 
 

@@ -107,7 +107,11 @@ software:
 Important rules:
 
 - module ids must be unique
-- module placement is explicit through `assign_to.match`
+- module placement and its exhaustive authorization envelope are explicit through exactly one of
+  `assign_to.match` or software-only `assign_to.any_of`; each clause is an exact-match AND and
+  `any_of` is their set union
+- module roles and topology may partition or validate the resolved envelope but may not expand it
+- benchmark-stage placement remains match-only
 - module-local `config` is required even when empty
 
 ### 3. `infrastructure.image_prefetch` -> `run.image_prefetch`

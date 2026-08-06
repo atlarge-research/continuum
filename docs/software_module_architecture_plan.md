@@ -24,6 +24,8 @@ Define a deterministic software execution model where:
 4. Dependencies are internal; no user dependency edges.
 5. Deterministic placement, ordering, and execution.
 6. Infra-owned tags are immutable from software modules.
+7. A module assignment is an exhaustive authorization envelope: execution may not modify a
+   resource outside its resolved assignment.
 
 ## 3. User-Facing Software Schema
 
@@ -46,14 +48,32 @@ software:
       config: {}
 ```
 
+As an alternative to the Kubernetes orchestrator above, a KubeEdge deployment can declare its
+complete cloud-and-edge authorization envelope with `any_of`:
+
+```yaml
+software:
+  modules:
+    - id: kubeedge-main
+      type: kubeedge
+      assign_to:
+        any_of:
+          - cluster: cloud-1
+          - cluster: edge-1
+      config: { kube_version: "v1.27.0" }
+```
+
 Schema rules:
 
 1. `id` unique,
 2. `type` registered,
-3. `assign_to.match` required,
+3. `assign_to` contains exactly one of `match` or `any_of`,
 4. `config` is required and must be a mapping (use `{}` when no keys are needed),
 5. no user dependency edge field,
-6. selectors use exact-match key/value predicates only.
+6. `match` is one exact-match AND clause,
+7. `any_of` is the set union of exact-match AND clauses and is available only to software
+   modules; benchmark-stage selectors remain match-only,
+8. the resolved assignment is the module's exhaustive authorization envelope.
 
 ## 4. Resource Identity and Tag Contract
 
@@ -104,16 +124,30 @@ Dependency strategy is explicit-only:
 
 Selector language:
 
-1. canonical user-facing selector shape is `match: {key: value}`.
-2. semantics are exact equality per pair with implicit AND across pairs.
-3. no `any`, `all`, `not`, range, or regex semantics in this architecture phase.
+1. software selectors contain exactly one of `match: {key: value}` or
+   `any_of: [{key: value}, ...]`.
+2. each clause uses exact equality with implicit AND across pairs.
+3. `any_of` is the set union of its clauses.
+4. benchmark-stage selectors remain match-only.
+5. no negation, range, regex, or implicit topology expansion is supported in this phase.
 
 Canonical selector representation:
 
 1. normalize to object form: `{"match":[["k1","v1"],["k2","v2"]]}`.
 2. sort pairs lexicographically by key, then value.
-3. serialize as canonical JSON for identity and lockfile use.
-4. derive `selector_id` as `sel_<sha256-prefix>` from canonical JSON.
+3. normalize software unions to `{"any_of":[{"match":[...]}, ...]}` and sort clauses by
+   canonical JSON.
+4. serialize as canonical JSON for identity and lockfile use.
+5. derive `selector_id` as `sel_<sha256-prefix>` from canonical JSON.
+
+Authorization semantics:
+
+1. the union of resolved VM ids is exhaustive: a module may not modify an unselected resource,
+2. roles, capabilities, cardinality, and topology may partition or validate resources inside the
+   envelope but may never expand it,
+3. the current legacy Ansible group check is a temporary execution adapter, not canonical
+   module-to-tier semantics; it is removable when execution consumes resolved assignments,
+4. current post-phase hooks are verification-only and do not expand the mutation envelope.
 
 Constraint scopes:
 
@@ -165,6 +199,11 @@ Planner flow:
 9. deterministic topological ordering,
 10. execute `apply(...)` in order,
 11. emit resolved software placement tags/artifacts for benchmark-stage resolver use.
+
+Until assignment-scoped execution replaces the broad legacy inventory, planner validation maps
+each software playbook's declared legacy target groups to normalized VM ids and rejects plans that
+would exceed the owning module's authorization envelope. This adapter describes current executor
+behavior only; literal legacy groups are not module requirements.
 
 Determinism requirements:
 

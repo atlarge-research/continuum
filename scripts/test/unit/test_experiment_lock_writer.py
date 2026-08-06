@@ -11,6 +11,7 @@ from unittest import mock
 import yaml
 
 from input.configuration import experiment_lock_writer
+from resource_manager import plans
 
 
 class ExperimentLockWriterTests(unittest.TestCase):
@@ -188,20 +189,25 @@ class ExperimentLockWriterTests(unittest.TestCase):
             root = Path(tempdir)
             config = {
                 "config_format": "yaml",
-                "infrastructure": {"base_path": str(root), "endpoint_nodes": 1},
+                "mode": "cloud",
+                "infrastructure": {
+                    "base_path": str(root),
+                    "endpoint_nodes": 1,
+                    "provider": "qemu",
+                },
                 "module": {
                     "resource_manager": SimpleNamespace(
                         build_phase_plan=lambda _config: [
-                            SimpleNamespace(
+                            plans.PlanEntry(
                                 kind="playbook",
                                 playbook="playbooks/resource_manager/k8s_cluster.yml",
-                                inventory="vms",
-                                extra_vars=None,
-                                command=None,
-                                shell=False,
-                                check=True,
                                 owner_id="k8s-main",
                                 owner_type="kubernetes",
+                                legacy_target_groups=(
+                                    "cloudcontroller",
+                                    "clouds",
+                                    "edges",
+                                ),
                             )
                         ]
                     )

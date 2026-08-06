@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from . import selector_resolution, software_domain_validation, validation_utils
@@ -89,17 +90,33 @@ def validate_selector_resolution(normalized: dict, path: Path, prefix: str):
     software_domain_validation.runtime_software_projection(modules, path, software_prefix)
 
     for index, module in enumerate(modules):
-        selector_prefix = _child_key_path(prefix, "software.modules[%s].assign_to.match" % (index))
+        selector_prefix = _child_key_path(
+            prefix,
+            "software.modules[%s].assign_to%s"
+            % (index, ".match" if "match" in module.get("assign_to", {}) else ""),
+        )
         resolved_prefix = _child_key_path(prefix, "software.modules[%s].resolved_vm_ids" % (index))
         scope_prefix = _child_key_path(prefix, "software.modules[%s].scope_identities" % (index))
         assignment = selector_resolution.reconcile_assignment(module, resources, resources_by_vm_id)
+        if "any_of" in module.get("assign_to", {}) and assignment["empty_clause_indexes"]:
+            clause_index = assignment["empty_clause_indexes"][0]
+            _fail(
+                path,
+                "%s.any_of[%s]" % (selector_prefix, clause_index),
+                "selector clause resolves to no infrastructure resources",
+            )
         if not assignment["has_candidates"]:
             _fail(path, selector_prefix, "selector resolves to no infrastructure resources")
         if assignment["resolved_vm_ids_mismatch"]:
             _fail(
                 path,
                 resolved_prefix,
-                "must match selector resolution derived from assign_to.match",
+                "must match selector resolution derived from %s"
+                % (
+                    "assign_to.match"
+                    if "match" in module.get("assign_to", {})
+                    else "assign_to",
+                ),
             )
         if assignment["scope_identities_mismatch"]:
             _fail(
@@ -109,6 +126,10 @@ def validate_selector_resolution(normalized: dict, path: Path, prefix: str):
             )
         module["resolved_vm_ids"] = assignment["resolved_vm_ids"]
         module["scope_identities"] = assignment["scope_identities"]
+        if "any_of" in module.get("assign_to", {}):
+            module["assign_to"]["any_of"].sort(
+                key=lambda match: json.dumps(match, separators=(",", ":"), sort_keys=True)
+            )
 
     software_domain_validation.validate_module_registry_contract(
         modules,

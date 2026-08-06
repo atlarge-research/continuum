@@ -6,13 +6,26 @@ import hashlib
 import json
 
 
+def _selector_id(canonical: dict) -> str:
+    selector_json = json.dumps(canonical, separators=(",", ":"), sort_keys=True)
+    return "sel_%s" % (hashlib.sha256(selector_json.encode("utf-8")).hexdigest()[:12])
+
+
 def canonical_selector(match: dict[str, str]) -> tuple[dict, str]:
     """Return canonical selector object and deterministic selector_id."""
     canonical_pairs = sorted((str(key), str(value)) for key, value in match.items())
     canonical = {"match": [[key, value] for key, value in canonical_pairs]}
-    selector_json = json.dumps(canonical, separators=(",", ":"), sort_keys=True)
-    selector_id = "sel_%s" % (hashlib.sha256(selector_json.encode("utf-8")).hexdigest()[:12])
-    return canonical, selector_id
+    return canonical, _selector_id(canonical)
+
+
+def canonical_selector_union(matches: list[dict[str, str]]) -> tuple[dict, str]:
+    """Return canonical union selector object and deterministic selector_id."""
+    canonical_matches = [canonical_selector(match)[0] for match in matches]
+    canonical_matches.sort(
+        key=lambda item: json.dumps(item, separators=(",", ":"), sort_keys=True)
+    )
+    canonical = {"any_of": canonical_matches}
+    return canonical, _selector_id(canonical)
 
 
 def selector_matches(resource_tags: dict, match: dict[str, str]) -> bool:
@@ -45,6 +58,20 @@ def resolve_selector_vm_ids(resources: list[dict], match: dict[str, str]) -> lis
         if selector_matches(tags, match):
             vm_ids.append(vm_id)
     return sorted(vm_ids)
+
+
+def resolve_selector_union_vm_ids(
+    resources: list[dict], matches: list[dict[str, str]]
+) -> tuple[list[int], list[int]]:
+    """Resolve a union of selector clauses and return VM ids plus empty clause indexes."""
+    vm_ids = set()
+    empty_clause_indexes = []
+    for index, match in enumerate(matches):
+        clause_vm_ids = resolve_selector_vm_ids(resources, match)
+        if not clause_vm_ids:
+            empty_clause_indexes.append(index)
+        vm_ids.update(clause_vm_ids)
+    return sorted(vm_ids), empty_clause_indexes
 
 
 def build_scope_identities(
