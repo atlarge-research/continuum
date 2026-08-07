@@ -9,6 +9,21 @@ from input.configuration import config_access
 from resource_manager import orchestrator_options, plans
 
 
+_NONZERO_RETURN_CODE_PREFIX = "Command exited with non-zero return code "
+_KUBECTL_FAILURE_TEXT = (
+    "timed out waiting for the condition",
+    "error:",
+    "error from server:",
+    "etcdserver: request timed out",
+    "unable to connect to the server",
+    "the connection to the server",
+    "context deadline exceeded",
+    "i/o timeout",
+    "connection refused",
+    "permission denied",
+)
+
+
 def add_options(_config):
     """[INTERFACE] Add config options for this RM module
 
@@ -115,7 +130,7 @@ def post_phase_hook(runner):
 
 
 def _stderr_has_real_error(err_lines):
-    """Check if the stderr contains a real error or a transient error we can retry
+    """Return whether kubectl stderr contains anything except controlled trace output.
 
     Args:
         err_lines (list(str)): List of error lines
@@ -123,28 +138,28 @@ def _stderr_has_real_error(err_lines):
     Returns:
         bool: True if the stderr contains a real error, False otherwise
     """
-    if not err_lines:
-        return False
+    for line in err_lines or []:
+        stripped = line.strip()
+        if not stripped:
+            continue
 
-    # Keep your existing behavior but don't ignore real errors that contain [CONTINUUM]
-    s = "".join(err_lines)
+        lowered = stripped.lower()
+        if _NONZERO_RETURN_CODE_PREFIX in stripped or any(
+            failure_text in lowered for failure_text in _KUBECTL_FAILURE_TEXT
+        ):
+            return True
 
-    # Strip prefix for detection (cheap and good enough)
-    s = s.replace("[CONTINUUM]", "")
-    s_lower = s.lower()
+        if stripped.startswith("[CONTINUUM]"):
+            continue
 
-    return any(
-        x in s_lower
-        for x in [
-            "error from server:",
-            "etcdserver: request timed out",
-            "unable to connect to the server",
-            "the connection to the server",
-            "context deadline exceeded",
-            "i/o timeout",
-            "connection refused",
-        ]
-    )
+        return True
+
+    return False
+
+
+def _stdout_has_readiness(out_lines):
+    """Return whether kubectl emitted a positive readiness result."""
+    return any("condition met" in line.lower() for line in out_lines or [])
 
 
 def verify_running_cluster(config, machines):
@@ -164,7 +179,7 @@ def verify_running_cluster(config, machines):
 
     for attempt in range(max_retries):
         out, err = machines[0].process(config, cmd_wait, ssh=config["cloud_ssh"][0])[0]
-        if not _stderr_has_real_error(err) and out:
+        if _stdout_has_readiness(out) and not _stderr_has_real_error(err):
             logging.info("All nodes are Ready")
             return
 
