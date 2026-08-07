@@ -3,6 +3,7 @@ Setup Kubernetes on cloud
 """
 
 import logging
+import re
 import sys
 import time
 from input.configuration import config_access
@@ -21,6 +22,20 @@ _KUBECTL_FAILURE_TEXT = (
     "i/o timeout",
     "connection refused",
     "permission denied",
+)
+_KUBERNETES_JOB_NAME_MAX_LENGTH = 63
+_DNS_LABEL_MAX_LENGTH = 63
+_DNS_LABEL = re.compile(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?")
+_CONTINUUM_TRACE_PAYLOAD = r"(?:0400|0402|0401 job=(?P<job_name>.*))"
+_BARE_CONTINUUM_TRACE = re.compile(r"^\[CONTINUUM\] " + _CONTINUUM_TRACE_PAYLOAD + r"$")
+_PREFIXED_CONTINUUM_TRACE = re.compile(
+    r"^(?:"
+    r"I\d{4} kubectl\.go:32\]|"
+    r"I\d{4} \d{2}:\d{2}:\d{2}\.\d{6} +\d+ kubectl\.go:32\] "
+    r"%!s\(int64=\d+\)"
+    r") \[CONTINUUM\] "
+    + _CONTINUUM_TRACE_PAYLOAD
+    + r"$"
 )
 
 
@@ -149,12 +164,36 @@ def _stderr_has_real_error(err_lines):
         ):
             return True
 
-        if stripped.startswith("[CONTINUUM]"):
+        if _is_benign_continuum_trace(stripped):
             continue
 
         return True
 
     return False
+
+
+def _is_benign_continuum_trace(line):
+    """Return whether one stderr line exactly matches a verified kubectl trace form."""
+    match = _BARE_CONTINUUM_TRACE.fullmatch(line) or _PREFIXED_CONTINUUM_TRACE.fullmatch(line)
+    if match is None:
+        return False
+
+    job_name = match.group("job_name")
+    return job_name is None or _is_valid_kubernetes_job_name(job_name)
+
+
+def _is_valid_kubernetes_job_name(name):
+    """Return whether a trace job value follows the Kubernetes Job name contract."""
+    if not name or len(name) > _KUBERNETES_JOB_NAME_MAX_LENGTH:
+        return False
+
+    labels = name.split(".")
+    return all(
+        label
+        and len(label) <= _DNS_LABEL_MAX_LENGTH
+        and _DNS_LABEL.fullmatch(label) is not None
+        for label in labels
+    )
 
 
 def _stdout_has_readiness(out_lines):
