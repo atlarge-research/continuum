@@ -162,18 +162,33 @@ def gather_worker_metrics(_machines, _config, worker_output, _starttime):
         worker_metrics[-1]["worker_id"] = i
 
         # Get network delay in ms (10**-3) and execution times
-        # Sometimes, the program gets an incorrect line, then skip
         delays = []
         processing = []
-        start_time = 0
-        end_time = 0
+        start_time = None
+        end_time = None
         negatives = []
+        worker_identity = out[0]
+        error_prefix = "text_translation result parsing failed for worker %r" % worker_identity
         for line in out[1]:
-            if start_time == 0 and "Read image and apply ML" in line:
-                start_time = application.to_datetime(line)
-            elif "Get item" in line:
-                end_time = application.to_datetime(line)
-            elif any(word in line for word in ["Latency", "Processing"]):
+            if start_time is None and "Latency (ns):" in line:
+                try:
+                    start_time = application.to_datetime(line)
+                except ValueError as exc:
+                    raise ValueError(
+                        "%s: malformed timestamp for normal-path start marker 'Latency (ns):': %s"
+                        % (error_prefix, line)
+                    ) from exc
+
+            if start_time is not None and "Get item" in line:
+                try:
+                    end_time = application.to_datetime(line)
+                except ValueError as exc:
+                    raise ValueError(
+                        "%s: malformed timestamp for required end marker 'Get item': %s"
+                        % (error_prefix, line)
+                    ) from exc
+
+            if any(word in line for word in ["Latency", "Processing"]):
                 try:
                     unit = line[line.find("(") + 1 : line.find(")")]
                     time = int(line.rstrip().split(":")[-1])
@@ -195,6 +210,20 @@ def gather_worker_metrics(_machines, _config, worker_output, _starttime):
                         delays.append(round(time / 10**6, 4))
                     elif "Processing" in line:
                         processing.append(round(time / 10**6, 4))
+
+        if start_time is None:
+            raise ValueError(
+                "%s: missing normal-path start marker 'Latency (ns):'" % error_prefix
+            )
+        if end_time is None:
+            raise ValueError(
+                "%s: missing post-start end marker 'Get item'" % error_prefix
+            )
+        if end_time < start_time:
+            raise ValueError(
+                "%s: end marker 'Get item' precedes start marker 'Latency (ns):'"
+                % error_prefix
+            )
 
         worker_metrics[-1]["total_time"] = round((end_time - start_time).total_seconds(), 2)
 
