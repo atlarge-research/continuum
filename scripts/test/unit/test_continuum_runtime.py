@@ -7,6 +7,7 @@ import io
 import json
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -254,6 +255,76 @@ class MachineProcessDiagnosticsTests(unittest.TestCase):
         self.assertEqual(len(result[1]), 2)
         self.assertEqual(result[1][0], "[WARNING]: test")
         self.assertIn("non-zero return code 7", result[1][1])
+
+
+class MachineProcessCommandShapeTests(unittest.TestCase):
+    @staticmethod
+    def _echo_argv(tokens):
+        return [
+            sys.executable,
+            "-c",
+            "import json, sys; print(json.dumps(sys.argv[1:]))",
+            *tokens,
+        ]
+
+    def test_flat_argv_preserves_ansible_tokens_with_whitespace(self):
+        machine = Machine("local", True)
+        tokens = [
+            "ansible-playbook",
+            "-i",
+            "/tmp/inventory path",
+            "site.yml",
+            "--extra-vars",
+            '{"label": "batch one"}',
+            "",
+            '"quoted token"',
+        ]
+
+        output, error = machine.process({}, self._echo_argv(tokens))[0]
+
+        self.assertEqual(error, [])
+        self.assertEqual(json.loads(output[0]), tokens)
+
+    def test_flat_argv_does_not_interpret_shell_syntax(self):
+        machine = Machine("local", True)
+        with tempfile.TemporaryDirectory() as tempdir:
+            sentinel = pathlib.Path(tempdir) / "shell-interpreted"
+            token = "$(touch %s)" % (sentinel,)
+
+            output, error = machine.process({}, self._echo_argv([token]))[0]
+
+            self.assertEqual(error, [])
+            self.assertEqual(json.loads(output[0]), [token])
+            self.assertFalse(sentinel.exists())
+
+    def test_nested_argv_commands_return_separate_ordered_results(self):
+        machine = Machine("local", True)
+        commands = [
+            [sys.executable, "-c", "print('first')"],
+            [sys.executable, "-c", "print('second')"],
+        ]
+
+        results = machine.process({}, commands)
+
+        self.assertEqual(results, [[['first'], []], [['second'], []]])
+
+    def test_string_shell_and_empty_command_compatibility(self):
+        machine = Machine("local", True)
+
+        self.assertEqual(machine.process({}, None), [])
+        self.assertEqual(machine.process({}, []), [])
+        self.assertEqual(
+            machine.process({}, "printf string-command"),
+            [[['string-command'], []]],
+        )
+        self.assertEqual(
+            machine.process({}, "printf left' ' && printf right", shell=True),
+            [[['left right'], []]],
+        )
+        self.assertEqual(
+            machine.process({}, ["printf first", "printf second"], shell=True),
+            [[['first'], []], [['second'], []]],
+        )
 
 
 class EndpointDockerStartDiagnosticsTests(unittest.TestCase):

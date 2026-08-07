@@ -63,12 +63,8 @@ def _normalize_commands(command, shell):
     if not isinstance(command, list) or len(command) == 0:
         return []
 
-    # If it's a list of argv tokens for ONE command (classic case: ["ssh", "u@h", "cmd"])
-    if (
-        all(isinstance(x, str) for x in command)
-        and not shell
-        and all(" " not in x for x in command)
-    ):
+    # A flat string list is one argv command. Token contents never determine command shape.
+    if all(isinstance(x, str) for x in command) and not shell:
         return [command]
 
     # Otherwise it's a list of commands (each element either str or argv list)
