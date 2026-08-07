@@ -274,7 +274,7 @@ Value rules:
 - `applications_per_worker`, `duration`, `sleep_time`, `stress_app_timeout`: integer `>= 1`
 - `frequency`
   - `image_classification`: integer `>= 1`
-  - `text_translation`: number `>= 0`
+  - `text_translation`: number `> 0`
 - CPU and memory sizing keys: number `>= 0.001`
 
 Unknown config keys for known stage types fail fast.

@@ -36,7 +36,15 @@ def add_options(_config):
         list(list()): Options to add
     """
     settings = [
-        ["frequency", float, lambda x: x >= 0, True, None],
+        [
+            "frequency",
+            float,
+            lambda value: isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and value > 0,
+            True,
+            None,
+        ],
         ["duration", int, lambda x: x >= 1, False, 300],
     ]
 

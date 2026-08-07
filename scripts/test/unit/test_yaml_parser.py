@@ -159,6 +159,14 @@ class YamlParserTests(unittest.TestCase):
             },
         }
 
+    def _text_translation_stage(self, frequency):
+        stage = self._image_classification_stage()
+        stage["id"] = "translate"
+        stage["type"] = "text_translation"
+        stage["tags"] = {"benchmark.role": "translate"}
+        stage["config"]["frequency"] = frequency
+        return stage
+
     def _image_classification_clusters(self):
         return [
             {
@@ -382,6 +390,54 @@ class YamlParserTests(unittest.TestCase):
             self.assertTrue(stages[0]["scope_identities"])
             self.assertNotIn("workload", cfg["domains"])
             self.assertFalse(cfg["module"]["application"])
+
+    def test_text_translation_positive_frequency_parses_as_float(self):
+        for frequency in (1, 0.5):
+            with self.subTest(frequency=frequency), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                benchmark = {"pipeline": [self._text_translation_stage(frequency)]}
+                exp_path, _ = self._build_triplet(
+                    root,
+                    tempdir,
+                    run_targets=["infrastructure", "software", "application"],
+                    clusters=self._image_classification_clusters(),
+                    modules=self._image_classification_modules(),
+                    benchmark=benchmark,
+                )
+
+                parser = argparse.ArgumentParser()
+                config = input_module.start(parser, str(exp_path))
+                normalized_frequency = config["domains"]["benchmark"]["pipeline"][0]["config"][
+                    "frequency"
+                ]
+                self.assertEqual(normalized_frequency, float(frequency))
+                self.assertIsInstance(normalized_frequency, float)
+
+    def test_text_translation_invalid_frequency_fails_before_projection_or_import(self):
+        for frequency in (0, -1, True, False, "1"):
+            with self.subTest(frequency=frequency), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                benchmark = {"pipeline": [self._text_translation_stage(frequency)]}
+                exp_path, _ = self._build_triplet(
+                    root,
+                    tempdir,
+                    run_targets=["infrastructure", "software", "application"],
+                    clusters=self._image_classification_clusters(),
+                    modules=self._image_classification_modules(),
+                    benchmark=benchmark,
+                )
+
+                with mock.patch(
+                    "input.configuration.yaml_parser.legacy_projection.to_legacy_config"
+                ) as project, mock.patch(
+                    "input.configuration.yaml_parser.runtime_module_loader.dynamic_import"
+                ) as dynamic_import:
+                    stderr = self._parse_error(exp_path)
+
+                project.assert_not_called()
+                dynamic_import.assert_not_called()
+                self.assertIn("benchmark.pipeline[0].config.frequency", stderr)
+                self.assertIn("must be number > 0", stderr)
 
     def test_application_requires_benchmark_pipeline(self):
         with tempfile.TemporaryDirectory() as tempdir:

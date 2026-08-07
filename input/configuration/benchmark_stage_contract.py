@@ -18,9 +18,9 @@ _BENCHMARK_STAGE_KEY_NUMBER_POSITIVE = (
     "number >= 0.001",
     lambda value: _is_number(value) and value >= 0.001,
 )
-_BENCHMARK_STAGE_KEY_NUMBER_NON_NEGATIVE = (
-    "number >= 0",
-    lambda value: _is_number(value) and value >= 0,
+_BENCHMARK_STAGE_KEY_NUMBER_STRICTLY_POSITIVE = (
+    "number > 0",
+    lambda value: _is_number(value) and value > 0,
 )
 
 BENCHMARK_STAGE_CONFIG_RULES = {
@@ -34,7 +34,7 @@ BENCHMARK_STAGE_CONFIG_RULES = {
         "application_endpoint_memory": _BENCHMARK_STAGE_KEY_NUMBER_POSITIVE,
     },
     "text_translation": {
-        "frequency": _BENCHMARK_STAGE_KEY_NUMBER_NON_NEGATIVE,
+        "frequency": _BENCHMARK_STAGE_KEY_NUMBER_STRICTLY_POSITIVE,
         "duration": _BENCHMARK_STAGE_KEY_INT_POSITIVE,
         "applications_per_worker": _BENCHMARK_STAGE_KEY_INT_POSITIVE,
         "application_worker_cpu": _BENCHMARK_STAGE_KEY_NUMBER_POSITIVE,
