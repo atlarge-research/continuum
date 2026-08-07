@@ -3,7 +3,6 @@
 import logging
 import time
 
-from application import runtime_helpers
 from input.configuration import config_access
 
 from ..empty.empty import cache_worker as empty_cache_worker
@@ -78,23 +77,25 @@ def start_worker(_config, _machines):
     return app_vars
 
 
-def get_mem_usage(config, machines, _start_worker_kube):
+def get_mem_usage(config, machines, start_worker_kube, runner):
     """Measure memory usage per container by deploying and comparing free memory.
 
     Args:
         config (dict): Parsed configuration.
         machines (list): List of machine objects representing physical machines.
-        _start_worker_kube: Unused; worker start function reference.
+        start_worker_kube: Injected Kubernetes worker deployment callback.
+        runner (AnsibleRunner): Shared runner for benchmark deployment.
     """
 
     def deploy_memory_deployment(config, machines, replicas: int):
         app_vars = start_worker(config, machines)
 
-        runtime_helpers.start_kubernetes_workers(
+        start_worker_kube(
             config,
             machines,
             app_vars,
             get_starttime=True,
+            runner=runner,
         )
 
         command = "kubectl get pods | grep -c Running"

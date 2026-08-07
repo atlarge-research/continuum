@@ -367,6 +367,7 @@ def kube_control(config, machines, runner=None):
             config,
             machines,
             application_runtime_helpers.start_kubernetes_workers,
+            runner,
         )
 
     # Start the worker
