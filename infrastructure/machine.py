@@ -15,6 +15,9 @@ import sys
 import threading
 import time
 
+_RESUME_SSH_MARKER = "CONTINUUM_RESUME_SSH_READY_V1"
+_SYNTHETIC_NONZERO_MARKER = "Command exited with non-zero return code"
+
 # -----------------------------
 # Helper utilities
 # -----------------------------
@@ -755,6 +758,174 @@ def gather_ssh(config, machines):
     logging.debug("Cloud SSH: %s", ", ".join(config["cloud_ssh"]))
     logging.debug("Edge SSH: %s", ", ".join(config["edge_ssh"]))
     logging.debug("Endpoint SSH: %s", ", ".join(config["endpoint_ssh"]))
+
+
+def validate_resume_ssh_reachability(config, machines):
+    """Require positive SSH reachability evidence from every managed guest.
+
+    ``Machine.process`` supplies the bounded SSH retry policy. This function invokes it once
+    for all expected targets and validates its ordered per-target results without adding a
+    second retry layer.
+
+    Args:
+        config (dict): Parsed configuration restored from state.
+        machines (list(Machine)): Physical owners and managed guests reconstructed from state.
+
+    Returns:
+        list(str): Managed SSH targets in deterministic state order.
+
+    Raises:
+        RuntimeError: If state topology is malformed or any target lacks exact marker evidence.
+    """
+    target_fields = (
+        ("cloud controller", "cloud_controller_names", "cloud_controller_ips", "cloud_controller"),
+        ("cloud", "cloud_names", "cloud_ips", "clouds"),
+        ("edge", "edge_names", "edge_ips", "edges"),
+        ("endpoint", "endpoint_names", "endpoint_ips", "endpoints"),
+    )
+    targets = []
+    seen_pairs = {}
+    seen_names = {}
+    seen_ips = {}
+    reconstructed_totals = {"cloud": 0, "edge": 0, "endpoint": 0}
+    for owner_index, owner in enumerate(machines):
+        for category, names_field, ips_field, count_field in target_fields:
+            names = getattr(owner, names_field, None)
+            ips = getattr(owner, ips_field, None)
+            count = getattr(owner, count_field, None)
+            if not isinstance(names, list):
+                raise RuntimeError(
+                    "resume state %s names for owner %d must be a list"
+                    % (category, owner_index)
+                )
+            if not isinstance(ips, list):
+                raise RuntimeError(
+                    "resume state %s IPs for owner %d must be a list"
+                    % (category, owner_index)
+                )
+            if len(names) != len(ips):
+                raise RuntimeError(
+                    "resume state %s topology length mismatch for owner %d: %d names, %d IPs"
+                    % (category, owner_index, len(names), len(ips))
+                )
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise RuntimeError(
+                    "resume state %s count for owner %d must be a non-negative integer"
+                    % (category, owner_index)
+                )
+            if count != len(names):
+                raise RuntimeError(
+                    "resume state %s count mismatch for owner %d: recorded %d, reconstructed %d"
+                    % (category, owner_index, count, len(names))
+                )
+            if category == "cloud controller":
+                reconstructed_totals["cloud"] += count
+            elif category in reconstructed_totals:
+                reconstructed_totals[category] += count
+            for name, ip in zip(names, ips):
+                if (
+                    not isinstance(name, str)
+                    or not name.strip()
+                    or not isinstance(ip, str)
+                    or not ip.strip()
+                ):
+                    raise RuntimeError(
+                        "resume state %s topology has an invalid guest name or IP for owner %d"
+                        % (category, owner_index)
+                    )
+                location = "%s owner %d" % (category, owner_index)
+                pair = (name, ip)
+                if pair in seen_pairs:
+                    raise RuntimeError(
+                        "resume state has duplicate managed guest pair %s@%s in %s; "
+                        "first seen in %s"
+                        % (name, ip, location, seen_pairs[pair])
+                    )
+                if name in seen_names:
+                    raise RuntimeError(
+                        "resume state has duplicate guest name %s in %s; first seen in %s"
+                        % (name, location, seen_names[name])
+                    )
+                if ip in seen_ips:
+                    raise RuntimeError(
+                        "resume state has duplicate guest IP %s in %s; first seen in %s"
+                        % (ip, location, seen_ips[ip])
+                    )
+                seen_pairs[pair] = location
+                seen_names[name] = location
+                seen_ips[ip] = location
+                target = "%s@%s" % (name, ip)
+                targets.append(target)
+
+    infrastructure_config = config.get("infrastructure")
+    if not isinstance(infrastructure_config, dict):
+        raise RuntimeError("resume configuration is missing infrastructure counts")
+    for category, config_field in (
+        ("cloud", "cloud_nodes"),
+        ("edge", "edge_nodes"),
+        ("endpoint", "endpoint_nodes"),
+    ):
+        configured_count = infrastructure_config.get(config_field)
+        if (
+            isinstance(configured_count, bool)
+            or not isinstance(configured_count, int)
+            or configured_count < 0
+        ):
+            raise RuntimeError(
+                "resume configuration %s must be a non-negative integer" % (config_field,)
+            )
+        if configured_count != reconstructed_totals[category]:
+            raise RuntimeError(
+                "resume configuration %s count mismatch: configured %d, reconstructed %d"
+                % (config_field, configured_count, reconstructed_totals[category])
+            )
+
+    if not targets:
+        raise RuntimeError("resume state contains no managed guests to validate")
+
+    try:
+        results = machines[0].process(
+            config,
+            ["printf", _RESUME_SSH_MARKER],
+            ssh=targets,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "SSH preflight raised while probing managed guests %s: %s"
+            % (", ".join(targets), exc)
+        ) from exc
+
+    if not isinstance(results, list):
+        raise RuntimeError("SSH preflight returned malformed results for all managed guests")
+
+    failures = []
+    for index, target in enumerate(targets):
+        if index >= len(results):
+            failures.append("%s (missing result)" % (target,))
+            continue
+        result = results[index]
+        if not isinstance(result, (list, tuple)) or len(result) != 2:
+            failures.append("%s (malformed result)" % (target,))
+            continue
+        output, error = result
+        if not isinstance(output, list) or not isinstance(error, list):
+            failures.append("%s (malformed output)" % (target,))
+            continue
+        if any(_SYNTHETIC_NONZERO_MARKER in str(line) for line in error):
+            failures.append("%s (command failed)" % (target,))
+            continue
+        if output != [_RESUME_SSH_MARKER]:
+            failures.append("%s (missing exact marker)" % (target,))
+
+    if len(results) > len(targets):
+        failures.append("unexpected extra result entries")
+
+    if failures:
+        raise RuntimeError(
+            "SSH preflight failed for managed guest(s): %s" % (", ".join(failures),)
+        )
+
+    return targets
 
 
 def gather_ips(config, machines):

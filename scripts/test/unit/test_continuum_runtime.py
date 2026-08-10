@@ -16,6 +16,7 @@ from infrastructure.qemu import qemu as qemu_module
 from infrastructure import ansible as infrastructure_ansible
 from infrastructure import infrastructure as infrastructure_module
 from infrastructure import image_registry as image_registry_module
+from infrastructure import machine as machine_module
 from infrastructure import orchestration_schema
 from infrastructure import state as infra_state
 from infrastructure.machine import Machine
@@ -255,6 +256,224 @@ class MachineProcessDiagnosticsTests(unittest.TestCase):
         self.assertEqual(len(result[1]), 2)
         self.assertEqual(result[1][0], "[WARNING]: test")
         self.assertIn("non-zero return code 7", result[1][1])
+
+
+class ResumeSshReachabilityTests(unittest.TestCase):
+    @staticmethod
+    def _machines():
+        local = Machine("local", True)
+        local.cloud_controller = 1
+        local.cloud_controller_names = ["controller0"]
+        local.cloud_controller_ips = ["192.0.2.10"]
+        local.clouds = 1
+        local.cloud_names = ["cloud0"]
+        local.cloud_ips = ["192.0.2.11"]
+        external = Machine("owner@example.invalid", False)
+        external.endpoints = 1
+        external.endpoint_names = ["endpoint0"]
+        external.endpoint_ips = ["192.0.2.12"]
+        return [local, external]
+
+    @staticmethod
+    def _config(cloud_nodes=2, edge_nodes=0, endpoint_nodes=1):
+        return {
+            "infrastructure": {
+                "cloud_nodes": cloud_nodes,
+                "edge_nodes": edge_nodes,
+                "endpoint_nodes": endpoint_nodes,
+            }
+        }
+
+    def test_valid_multi_category_topology_requires_ordered_exact_markers(self):
+        machines = self._machines()
+        config = self._config()
+        marker = machine_module._RESUME_SSH_MARKER
+        machines[0].process = mock.Mock(
+            return_value=[([marker], []), ([marker], []), ([marker], [])]
+        )
+
+        targets = machine_module.validate_resume_ssh_reachability(config, machines)
+
+        self.assertEqual(
+            targets,
+            [
+                "controller0@192.0.2.10",
+                "cloud0@192.0.2.11",
+                "endpoint0@192.0.2.12",
+            ],
+        )
+        machines[0].process.assert_called_once_with(
+            config,
+            ["printf", marker],
+            ssh=targets,
+        )
+
+    def test_empty_stdout_is_not_success(self):
+        machines = self._machines()
+        marker = machine_module._RESUME_SSH_MARKER
+        machines[0].process = mock.Mock(
+            return_value=[([], []), ([marker], []), ([marker], [])]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "controller0@192.0.2.10.*missing exact marker"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+    def test_missing_result_is_rejected(self):
+        machines = self._machines()
+        marker = machine_module._RESUME_SSH_MARKER
+        machines[0].process = mock.Mock(return_value=[([marker], []), ([marker], [])])
+
+        with self.assertRaisesRegex(RuntimeError, "endpoint0@192.0.2.12.*missing result"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+    def test_marker_plus_synthetic_nonzero_marker_is_rejected(self):
+        machines = self._machines()
+        marker = machine_module._RESUME_SSH_MARKER
+        machines[0].process = mock.Mock(
+            return_value=[
+                ([marker], []),
+                ([marker], ["Command exited with non-zero return code 7: printf"]),
+                ([marker], []),
+            ]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "cloud0@192.0.2.11.*command failed"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+    def test_each_target_must_return_its_own_marker(self):
+        machines = self._machines()
+        marker = machine_module._RESUME_SSH_MARKER
+        machines[0].process = mock.Mock(
+            return_value=[([marker], []), ([marker], []), (["wrong-target-marker"], [])]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "endpoint0@192.0.2.12.*missing exact marker"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+    def test_unexpected_output_is_not_success(self):
+        machines = self._machines()
+        marker = machine_module._RESUME_SSH_MARKER
+        machines[0].process = mock.Mock(
+            return_value=[
+                ([marker, "unexpected"], []),
+                ([marker], []),
+                ([marker], []),
+            ]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "controller0@192.0.2.10.*missing exact marker"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+    def test_process_exception_is_rejected_without_an_outer_retry(self):
+        machines = self._machines()
+        machines[0].process = mock.Mock(side_effect=OSError("transport unavailable"))
+
+        with self.assertRaisesRegex(RuntimeError, "SSH preflight raised.*transport unavailable"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+        machines[0].process.assert_called_once()
+
+    def test_transient_machine_process_failure_retries_then_accepts_marker(self):
+        machine = Machine("local", True)
+        machine.clouds = 1
+        machine.cloud_names = ["cloud0"]
+        machine.cloud_ips = ["192.0.2.11"]
+        marker = machine_module._RESUME_SSH_MARKER
+        transient_process = mock.Mock(returncode=255)
+        transient_process.communicate.return_value = (b"", b"Connection refused\n")
+        successful_process = mock.Mock(returncode=0)
+        successful_process.communicate.return_value = (marker.encode("utf-8"), b"")
+        config = {
+            "infrastructure": {
+                "cloud_nodes": 1,
+                "edge_nodes": 0,
+                "endpoint_nodes": 0,
+            },
+            "ssh_key": "/tmp/test-key",
+            "ssh_known_hosts_file": "/tmp/test-known-hosts",
+        }
+
+        with mock.patch.object(
+            machine_module.subprocess,
+            "Popen",
+            side_effect=[transient_process, successful_process],
+        ) as popen_mock, mock.patch.object(
+            machine_module.time, "sleep"
+        ) as sleep_mock, mock.patch.object(
+            machine_module, "_backoff_seconds", return_value=0.0
+        ):
+            targets = machine_module.validate_resume_ssh_reachability(config, [machine])
+
+        self.assertEqual(targets, ["cloud0@192.0.2.11"])
+        self.assertEqual(popen_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(0.0)
+
+    def test_duplicate_guest_name_with_different_ips_is_rejected_before_probe(self):
+        machines = self._machines()
+        machines[1].endpoint_names = ["cloud0"]
+        machines[0].process = mock.Mock()
+
+        with self.assertRaisesRegex(RuntimeError, "duplicate guest name cloud0"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+        machines[0].process.assert_not_called()
+
+    def test_duplicate_complete_guest_pair_is_rejected_before_probe(self):
+        machines = self._machines()
+        machines[1].endpoint_names = ["cloud0"]
+        machines[1].endpoint_ips = ["192.0.2.11"]
+        machines[0].process = mock.Mock()
+
+        with self.assertRaisesRegex(RuntimeError, "duplicate managed guest pair cloud0@192.0.2.11"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+        machines[0].process.assert_not_called()
+
+    def test_duplicate_guest_ip_with_different_names_is_rejected_before_probe(self):
+        machines = self._machines()
+        machines[1].endpoint_ips = ["192.0.2.11"]
+        machines[0].process = mock.Mock()
+
+        with self.assertRaisesRegex(RuntimeError, "duplicate guest IP 192.0.2.11"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+        machines[0].process.assert_not_called()
+
+    def test_category_name_ip_length_mismatch_is_rejected_before_probe(self):
+        machines = self._machines()
+        machines[0].cloud_ips = []
+        machines[0].process = mock.Mock()
+
+        with self.assertRaisesRegex(RuntimeError, "cloud topology length mismatch.*1 names, 0 IPs"):
+            machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+        machines[0].process.assert_not_called()
+
+    def test_recorded_category_count_mismatch_is_rejected_before_probe(self):
+        for recorded_count in (0, 2):
+            with self.subTest(recorded_count=recorded_count):
+                machines = self._machines()
+                machines[0].clouds = recorded_count
+                machines[0].process = mock.Mock()
+
+                with self.assertRaisesRegex(RuntimeError, "cloud count mismatch for owner 0"):
+                    machine_module.validate_resume_ssh_reachability(self._config(), machines)
+
+                machines[0].process.assert_not_called()
+
+    def test_configured_category_count_mismatch_is_rejected_before_probe(self):
+        for configured_count in (1, 3):
+            with self.subTest(configured_count=configured_count):
+                machines = self._machines()
+                machines[0].process = mock.Mock()
+
+                with self.assertRaisesRegex(RuntimeError, "cloud_nodes count mismatch"):
+                    machine_module.validate_resume_ssh_reachability(
+                        self._config(cloud_nodes=configured_count),
+                        machines,
+                    )
+
+                machines[0].process.assert_not_called()
 
 
 class MachineProcessCommandShapeTests(unittest.TestCase):
@@ -530,6 +749,10 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             "load_resume_state",
             return_value=({"phase_completed": "software"}, machines),
         ) as mock_load_resume_state, mock.patch.object(
+            continuum_module.machine_utils,
+            "validate_resume_ssh_reachability",
+            return_value=["cloud0@192.0.2.10"],
+        ) as mock_preflight, mock.patch.object(
             continuum_module.ansible, "AnsibleRunner", return_value=runner
         ) as mock_ansible_runner, mock.patch.object(
             continuum_module.yaml_parser,
@@ -550,10 +773,41 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
 
         mock_infra_start.assert_not_called()
         mock_load_resume_state.assert_called_once_with(config, "software")
+        mock_preflight.assert_called_once_with(config, machines)
         mock_ansible_runner.assert_called_once_with(config, machines)
         mock_resource_manager_start.assert_not_called()
         mock_application_start.assert_called_once_with(runner)
         mock_save_state.assert_called_once_with(config, "application", machines)
+
+    def test_infrastructure_target_does_not_discover_or_preflight_existing_state(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(["infrastructure"])
+            config["infrastructure"]["base_path"] = tempdir
+            args = argparse.Namespace(config=config)
+            machines = [mock.Mock()]
+            state_path = pathlib.Path(infra_state.state_file_path(config))
+            state_path.parent.mkdir(parents=True)
+            state_path.write_text("last-known-state", encoding="utf-8")
+
+            with mock.patch.object(
+                continuum_module.infrastructure, "start", return_value=machines
+            ), mock.patch.object(
+                continuum_module.infra_state, "load_resume_state"
+            ) as mock_load, mock.patch.object(
+                continuum_module.machine_utils, "validate_resume_ssh_reachability"
+            ) as mock_preflight, mock.patch.object(
+                continuum_module.infra_state,
+                "save_state",
+                return_value=str(state_path),
+            ), mock.patch.object(
+                continuum_module.ansible, "AnsibleRunner", return_value=mock.Mock()
+            ), mock.patch.object(
+                continuum_module.yaml_parser, "write_experiment_lock", return_value=None
+            ), mock.patch.object(continuum_module, "_log_vm_access_hints"):
+                continuum_module.main(args)
+
+            mock_load.assert_not_called()
+            mock_preflight.assert_not_called()
 
     def test_main_software_and_application_resume_from_infrastructure_state(self):
         config = self._config(["software", "application"])
@@ -566,6 +820,10 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             "load_resume_state",
             return_value=({"phase_completed": "infrastructure"}, machines),
         ) as mock_load_resume_state, mock.patch.object(
+            continuum_module.machine_utils,
+            "validate_resume_ssh_reachability",
+            return_value=["cloud0@192.0.2.10"],
+        ) as mock_preflight, mock.patch.object(
             continuum_module.ansible, "AnsibleRunner", return_value=runner
         ) as mock_ansible_runner, mock.patch.object(
             continuum_module.yaml_parser,
@@ -586,6 +844,7 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
 
         mock_infra_start.assert_not_called()
         mock_load_resume_state.assert_called_once_with(config, "infrastructure")
+        mock_preflight.assert_called_once_with(config, machines)
         mock_ansible_runner.assert_called_once_with(config, machines)
         mock_resource_manager_start.assert_called_once_with(runner)
         mock_application_start.assert_called_once_with(runner)
@@ -608,6 +867,10 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             continuum_module.infra_state,
             "load_resume_state",
             return_value=({"phase_completed": "software"}, machines),
+        ), mock.patch.object(
+            continuum_module.machine_utils,
+            "validate_resume_ssh_reachability",
+            return_value=["cloud0@192.0.2.10"],
         ), mock.patch.object(
             continuum_module.ansible, "AnsibleRunner", return_value=runner
         ), mock.patch.object(
@@ -632,6 +895,111 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         mock_resource_manager_start.assert_not_called()
         mock_application_start.assert_called_once_with(runner)
         mock_save_state.assert_not_called()
+
+    def test_delete_on_exit_preserves_state_snapshot_during_successful_teardown(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(["infrastructure"])
+            config["infrastructure"]["base_path"] = tempdir
+            config["infrastructure"]["delete"] = True
+            args = argparse.Namespace(config=config)
+            machines = [mock.Mock()]
+            state_path = pathlib.Path(infra_state.state_file_path(config))
+
+            def save_current_state(_config, _phase, _machines):
+                state_path.parent.mkdir(parents=True, exist_ok=True)
+                state_path.write_text("current-state", encoding="utf-8")
+                return str(state_path)
+
+            def assert_state_is_persistent(_config, _machines):
+                self.assertEqual(state_path.read_text(encoding="utf-8"), "current-state")
+
+            with mock.patch.object(
+                continuum_module.infrastructure, "start", return_value=machines
+            ), mock.patch.object(
+                continuum_module.infra_state, "save_state", side_effect=save_current_state
+            ), mock.patch.object(
+                continuum_module.infrastructure,
+                "delete_vms",
+                side_effect=assert_state_is_persistent,
+            ) as mock_delete, mock.patch.object(
+                continuum_module.ansible, "AnsibleRunner", return_value=mock.Mock()
+            ), mock.patch.object(
+                continuum_module.yaml_parser, "write_experiment_lock", return_value=None
+            ), mock.patch.object(continuum_module, "_log_vm_access_hints"):
+                continuum_module.main(args)
+
+            mock_delete.assert_called_once_with(config, machines)
+            self.assertEqual(state_path.read_text(encoding="utf-8"), "current-state")
+
+    def test_delete_on_exit_provider_failure_preserves_state_and_exception(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(["infrastructure"])
+            config["infrastructure"]["base_path"] = tempdir
+            config["infrastructure"]["delete"] = True
+            args = argparse.Namespace(config=config)
+            machines = [mock.Mock()]
+            state_path = pathlib.Path(infra_state.state_file_path(config))
+
+            def save_current_state(_config, _phase, _machines):
+                state_path.parent.mkdir(parents=True, exist_ok=True)
+                state_path.write_text("current-state", encoding="utf-8")
+                return str(state_path)
+
+            provider_error = RuntimeError("provider teardown failed")
+            with mock.patch.object(
+                continuum_module.infrastructure, "start", return_value=machines
+            ), mock.patch.object(
+                continuum_module.infra_state, "save_state", side_effect=save_current_state
+            ), mock.patch.object(
+                continuum_module.infrastructure, "delete_vms", side_effect=provider_error
+            ), mock.patch.object(
+                continuum_module.ansible, "AnsibleRunner", return_value=mock.Mock()
+            ), mock.patch.object(
+                continuum_module.yaml_parser, "write_experiment_lock", return_value=None
+            ), mock.patch.object(continuum_module, "_log_vm_access_hints"):
+                with self.assertRaises(RuntimeError) as exc:
+                    continuum_module.main(args)
+
+            self.assertIs(exc.exception, provider_error)
+            self.assertEqual(state_path.read_text(encoding="utf-8"), "current-state")
+
+    def test_resume_preflight_failure_aborts_before_downstream_work_or_state_save(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(["software", "application"])
+            config["infrastructure"]["base_path"] = tempdir
+            args = argparse.Namespace(config=config)
+            machines = [mock.Mock()]
+            state_path = pathlib.Path(infra_state.state_file_path(config))
+            state_path.parent.mkdir(parents=True)
+            state_path.write_text("last-known-state", encoding="utf-8")
+
+            with mock.patch.object(
+                continuum_module.infra_state,
+                "load_resume_state",
+                return_value=({"phase_completed": "infrastructure"}, machines),
+            ), mock.patch.object(
+                continuum_module.machine_utils,
+                "validate_resume_ssh_reachability",
+                side_effect=RuntimeError("cloud0@192.0.2.10 (missing exact marker)"),
+            ), mock.patch.object(
+                continuum_module.ansible, "AnsibleRunner"
+            ) as mock_ansible_runner, mock.patch.object(
+                continuum_module.resource_manager, "start"
+            ) as mock_resource_manager_start, mock.patch.object(
+                continuum_module.application, "start"
+            ) as mock_application_start, mock.patch.object(
+                continuum_module.infra_state, "save_state"
+            ) as mock_save_state, mock.patch.object(
+                continuum_module.yaml_parser, "write_experiment_lock", return_value=None
+            ), mock.patch.object(continuum_module, "_log_vm_access_hints"):
+                with self.assertRaises(SystemExit):
+                    continuum_module.main(args)
+
+            mock_ansible_runner.assert_not_called()
+            mock_resource_manager_start.assert_not_called()
+            mock_application_start.assert_not_called()
+            mock_save_state.assert_not_called()
+            self.assertEqual(state_path.read_text(encoding="utf-8"), "last-known-state")
 
     def test_apply_module_options_application_scope_defaults_primary_stage_config(self):
         parser = argparse.ArgumentParser(prog="apply-options-application")

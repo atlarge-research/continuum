@@ -219,9 +219,11 @@ This is a cross-cutting runtime concern rather than a separately requested
 
 1. experiment lock writing during bootstrap before infrastructure or resume execution,
 2. schema-v2 state persistence after each executable phase,
-3. resume validation by state schema, phase ordering, and resume-contract hash when skipping earlier phases,
+3. explicit resume validation by state schema, phase ordering, resume-contract hash, and an
+   authenticated SSH marker from every recorded managed guest when skipping infrastructure,
 4. final SSH access hints,
-5. optional infrastructure teardown when `delete` is enabled.
+5. optional provider teardown when `delete` is enabled, while retaining `state.json` as a
+   last-known deployment snapshot and post-mortem artifact.
 
 ### Primary code surfaces
 
@@ -233,11 +235,21 @@ This is a cross-cutting runtime concern rather than a separately requested
 
 ### Operational success evidence
 
-1. lock and state files are present and have matching `resume_contract` hashes,
-2. resume rejects legacy, malformed, or incompatible state cleanly,
+1. the lock and persistent `state.json` are present and have matching `resume_contract` hashes,
+2. resume is requested only by `run.targets` that omit infrastructure and rejects legacy,
+   malformed, incompatible, or currently unreachable state cleanly,
 3. final artifact/log locations are discoverable,
-4. teardown leaves no unexpected provider resources behind when requested,
-5. benchmark smoke reports a stable `teardown_failure` when retained QEMU domains remain after a delete-on-exit application leg.
+4. SSH preflight failure preserves `state.json` and occurs before Ansible, software,
+   application, or new phase-state saves,
+5. QEMU E2E success classification first binds `state.json` to the current run by requiring its
+   timezone-aware save timestamp not to predate the freshly written experiment lock, then checks
+   that teardown leaves no expected owner-scoped domains behind,
+6. benchmark smoke reports a stable `teardown_failure` when retained QEMU domains remain after a delete-on-exit application leg.
+
+The presence of `state.json` does not assert that infrastructure currently exists. It remains
+available after successful or failed teardown, and a later explicit resume may proceed only when
+all recorded guests are reachable. The SSH marker proves authenticated command execution but does
+not provide stronger guest identity attestation.
 
 ## 8. Mapping To `run.targets`
 
@@ -270,7 +282,8 @@ Minimum assertions per phase:
 4. Phase 3: benchmark artifacts and metrics are emitted, with runner-visible
    functional markers, stdout metric-table evidence, and structured metric-artifact
    sanity checks on the resumed K8s benchmark smoke path.
-5. Phase 4: lock/state resume contracts match and teardown artifacts behave consistently.
+5. Phase 4: lock/state resume contracts match, explicit resume passes all-guest reachability, and
+   teardown classification behaves consistently.
 
 Use `docs/operational_testing_strategy.md` for the test strategy that sits on
 top of this phase model.
@@ -291,4 +304,5 @@ Preferred operational shape for the Kubernetes path:
 2. infrastructure deployment and verification,
 3. resume into software deployment and verification on the same VMs,
 4. resume into benchmark execution on the same VMs,
-5. teardown only after the final phase, while retaining logs, lockfiles, and state artifacts.
+5. teardown only after the final phase, while retaining logs, lockfiles, and the last-known state
+   snapshot.

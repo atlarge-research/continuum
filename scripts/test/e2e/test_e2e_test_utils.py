@@ -28,18 +28,30 @@ def _contract_section(details=None):
     return resume_contract.persisted_resume_contract_from_details(details or {"test": "contract"})
 
 
-def _state_payload(phase_completed, contract=None, machine_data=None):
+def _state_payload(
+    phase_completed,
+    contract=None,
+    machine_data=None,
+    created_at="2026-05-20T00:00:01+00:00",
+):
     return {
         "schema_version": 2,
         "kind": "ContinuumState",
-        "created_at": "2026-05-20T00:00:00+00:00",
+        "created_at": created_at,
         "phase_completed": phase_completed,
         "resume_contract": contract or _contract_section(),
         "machine_data": machine_data or [{"cloud_names": ["cloud0_test"]}],
     }
 
 
-def _write_success_artifacts(root: Path, phase_completed, contract=None, machine_data=None):
+def _write_success_artifacts(
+    root: Path,
+    phase_completed,
+    contract=None,
+    machine_data=None,
+    lock_created_at="2026-05-20T00:00:00+00:00",
+    state_created_at="2026-05-20T00:00:01+00:00",
+):
     continuum_dir = root / ".continuum"
     continuum_dir.mkdir(parents=True)
     contract = contract or _contract_section()
@@ -48,6 +60,7 @@ def _write_success_artifacts(root: Path, phase_completed, contract=None, machine
             {
                 "schema_version": 1,
                 "kind": "ContinuumExperimentLock",
+                "created_at": lock_created_at,
                 "resume_contract": contract,
             },
             sort_keys=False,
@@ -60,6 +73,7 @@ def _write_success_artifacts(root: Path, phase_completed, contract=None, machine
                 phase_completed,
                 contract=contract,
                 machine_data=machine_data,
+                created_at=state_created_at,
             )
         ),
         encoding="utf-8",
@@ -1027,31 +1041,218 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertIn("Resume contract mismatch", reason)
 
-    def test_detect_success_verifies_qemu_teardown_when_requested(self):
+    @staticmethod
+    def _qemu_delete_config(base_path):
+        return {
+            "infrastructure": {
+                "base_path": base_path,
+                "delete_on_exit": True,
+                "infra_only": False,
+                "provider": "qemu",
+            },
+            "benchmark": {"resource_manager_only": False},
+        }
+
+    @staticmethod
+    def _owner_state(name="local", is_local=True, domains=None):
+        return {
+            "name": name,
+            "is_local": is_local,
+            "cloud_controller_names": [],
+            "cloud_names": domains or ["cloud0_test"],
+            "edge_names": [],
+            "endpoint_names": [],
+            "base_names": [],
+        }
+
+    def test_qemu_delete_without_optional_flag_uses_state_machine_data(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            _write_success_artifacts(
-                Path(tempdir),
-                "application",
-                machine_data=[{"cloud_names": ["cloud0_test"]}],
+            root = Path(tempdir)
+            machine_data = [self._owner_state(domains=["cloud0_current"])]
+            _write_success_artifacts(root, "application", machine_data=machine_data)
+            config = self._qemu_delete_config(tempdir)
+            state_payload = json.loads(
+                (root / ".continuum" / "state.json").read_text(encoding="utf-8")
             )
 
-            config = {
-                "infrastructure": {
-                    "base_path": tempdir,
-                    "delete_on_exit": True,
-                    "infra_only": False,
-                    "provider": "qemu",
-                },
-                "benchmark": {
-                    "resource_manager_only": False,
-                },
-            }
-            virsh_result = mock.Mock(returncode=0, stdout=" Id Name State\n", stderr="")
-            with mock.patch.object(test_utils.shutil, "which", return_value="/usr/bin/virsh"), mock.patch.object(
-                test_utils.subprocess,
-                "run",
-                return_value=virsh_result,
-            ) as run_mock:
+            with mock.patch.object(
+                test_utils,
+                "verify_qemu_teardown",
+                return_value=(True, "teardown_verified"),
+            ) as verify_mock:
+                success, reason = test_utils.detect_success(
+                    stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                    stderr="",
+                    exit_code=0,
+                    config=config,
+                    success_config={
+                        "require_ssh_output": False,
+                        "require_experiment_lock": False,
+                        "require_state_file": False,
+                        "require_state_phase": False,
+                        "require_resume_contract": False,
+                        "require_teardown": False,
+                    },
+                )
+
+            self.assertTrue(success)
+            self.assertIn("teardown_evidence_current_run", reason)
+            self.assertIn("teardown_verified", reason)
+            verify_mock.assert_called_once_with(config, state_payload)
+
+    def test_qemu_delete_rejects_older_same_contract_state_from_previous_run(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(
+                root,
+                "application",
+                machine_data=[self._owner_state()],
+                lock_created_at="2026-05-20T00:00:02+00:00",
+                state_created_at="2026-05-20T00:00:01+00:00",
+            )
+            config = self._qemu_delete_config(tempdir)
+
+            with mock.patch.object(test_utils, "verify_qemu_teardown") as verify_mock:
+                success, reason = test_utils.detect_success(
+                    stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                    stderr="",
+                    exit_code=0,
+                    config=config,
+                    success_config={},
+                )
+
+            self.assertFalse(success)
+            self.assertIn("state.created_at predates", reason)
+            verify_mock.assert_not_called()
+
+    def test_qemu_delete_rejects_malformed_or_naive_evidence_timestamps(self):
+        cases = (
+            ("missing lock", None, "2026-05-20T00:00:01+00:00"),
+            ("malformed lock", "not-a-timestamp", "2026-05-20T00:00:01+00:00"),
+            ("naive lock", "2026-05-20T00:00:00", "2026-05-20T00:00:01+00:00"),
+            ("missing state", "2026-05-20T00:00:00+00:00", None),
+            ("malformed state", "2026-05-20T00:00:00+00:00", "not-a-timestamp"),
+            ("naive state", "2026-05-20T00:00:00+00:00", "2026-05-20T00:00:01"),
+        )
+        for label, lock_created_at, state_created_at in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                _write_success_artifacts(
+                    root,
+                    "application",
+                    machine_data=[self._owner_state()],
+                    lock_created_at=lock_created_at,
+                    state_created_at=state_created_at,
+                )
+                config = self._qemu_delete_config(tempdir)
+
+                with mock.patch.object(test_utils, "verify_qemu_teardown") as verify_mock:
+                    success, reason = test_utils.detect_success(
+                        stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                        stderr="",
+                        exit_code=0,
+                        config=config,
+                        success_config={},
+                    )
+
+                self.assertFalse(success)
+                self.assertIn("timestamp", reason)
+                verify_mock.assert_not_called()
+
+    def test_qemu_delete_fails_when_expected_domain_remains(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(
+                root,
+                "application",
+                machine_data=[self._owner_state()],
+            )
+            config = self._qemu_delete_config(tempdir)
+
+            with mock.patch.object(
+                test_utils.Machine,
+                "process",
+                return_value=[(["cloud0_test"], [])],
+            ):
+                success, reason = test_utils.detect_success(
+                    stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                    stderr="",
+                    exit_code=0,
+                    config=config,
+                    success_config={},
+                )
+
+            self.assertFalse(success)
+            self.assertIn("VM domain(s) still present on local: cloud0_test", reason)
+
+    def test_qemu_delete_passes_when_expected_domains_are_absent(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(
+                root,
+                "application",
+                machine_data=[self._owner_state()],
+            )
+            config = self._qemu_delete_config(tempdir)
+
+            with mock.patch.object(
+                test_utils.Machine,
+                "process",
+                return_value=[([], [])],
+            ):
+                success, reason = test_utils.detect_success(
+                    stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                    stderr="",
+                    exit_code=0,
+                    config=config,
+                    success_config={"require_teardown": False},
+                )
+
+            self.assertTrue(success)
+            self.assertIn("teardown_verified", reason)
+
+    def test_non_qemu_delete_preserves_explicitly_disabled_artifact_criteria(self):
+        criteria = {
+            "require_ssh_output": False,
+            "require_experiment_lock": False,
+            "require_state_file": False,
+            "require_state_phase": False,
+            "require_resume_contract": False,
+            "require_teardown": False,
+        }
+        for provider in ("aws", "gcp"):
+            with self.subTest(provider=provider), tempfile.TemporaryDirectory() as tempdir:
+                config = self._qemu_delete_config(tempdir)
+                config["infrastructure"]["provider"] = provider
+
+                with mock.patch.object(test_utils, "verify_qemu_teardown") as verify_mock:
+                    success, reason = test_utils.detect_success(
+                        stdout="",
+                        stderr="",
+                        exit_code=0,
+                        config=config,
+                        success_config=criteria,
+                    )
+
+                self.assertTrue(success)
+                self.assertEqual(reason, "Success: exit_code=0")
+                verify_mock.assert_not_called()
+
+    def test_explicit_require_teardown_behavior_remains_enabled(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_success_artifacts(
+                root,
+                "application",
+                machine_data=[self._owner_state()],
+            )
+            config = self._qemu_delete_config(tempdir)
+
+            with mock.patch.object(
+                test_utils,
+                "verify_qemu_teardown",
+                return_value=(True, "teardown_verified"),
+            ) as verify_mock:
                 success, reason = test_utils.detect_success(
                     stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
                     stderr="",
@@ -1062,52 +1263,111 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
             self.assertTrue(success)
             self.assertIn("teardown_verified", reason)
-            run_mock.assert_called_once_with(
-                ["/usr/bin/virsh", "list", "--all"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+            verify_mock.assert_called_once()
 
-    def test_detect_success_rejects_remaining_qemu_domain(self):
+    def test_retained_qemu_skips_teardown_verification(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            _write_success_artifacts(
-                Path(tempdir),
-                "application",
-                machine_data=[{"cloud_names": ["cloud0_test"]}],
-            )
+            root = Path(tempdir)
+            _write_success_artifacts(root, "application")
+            config = self._qemu_delete_config(tempdir)
+            config["infrastructure"]["delete_on_exit"] = False
 
-            config = {
-                "infrastructure": {
-                    "base_path": tempdir,
-                    "delete_on_exit": True,
-                    "infra_only": False,
-                    "provider": "qemu",
-                },
-                "benchmark": {
-                    "resource_manager_only": False,
-                },
-            }
-            virsh_result = mock.Mock(
-                returncode=0,
-                stdout=" Id Name State\n 1 cloud0_test running\n",
-                stderr="",
-            )
-            with mock.patch.object(test_utils.shutil, "which", return_value="/usr/bin/virsh"), mock.patch.object(
-                test_utils.subprocess,
-                "run",
-                return_value=virsh_result,
-            ):
+            with mock.patch.object(test_utils, "verify_qemu_teardown") as verify_mock:
                 success, reason = test_utils.detect_success(
                     stdout="ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
                     stderr="",
                     exit_code=0,
                     config=config,
-                    success_config={"require_teardown": True},
+                    success_config={"require_teardown": False},
                 )
 
-            self.assertFalse(success)
-            self.assertIn("VM domain(s) still present: cloud0_test", reason)
+            self.assertTrue(success)
+            self.assertNotIn("teardown_verified", reason)
+            verify_mock.assert_not_called()
+
+    def test_qemu_teardown_verification_isolates_domains_by_physical_owner(self):
+        config = self._qemu_delete_config("/tmp/not-used")
+        state_payload = {
+            "machine_data": [
+                self._owner_state(domains=["local-domain"]),
+                self._owner_state(
+                    name="operator@external.invalid",
+                    is_local=False,
+                    domains=["external-domain"],
+                ),
+            ]
+        }
+        calls = []
+
+        def owner_aware_result(machine, _config, command, ssh=None, ssh_key=True):
+            calls.append((machine.name, command, ssh, ssh_key))
+            if machine.is_local:
+                return [(["external-domain"], [])]
+            return [(["local-domain"], [])]
+
+        with mock.patch.object(test_utils.Machine, "process", autospec=True) as process_mock:
+            process_mock.side_effect = owner_aware_result
+            success, reason = test_utils.verify_qemu_teardown(config, state_payload)
+
+        self.assertTrue(success)
+        self.assertEqual(reason, "teardown_verified")
+        self.assertEqual(
+            calls,
+            [
+                ("local", ["virsh", "list", "--all", "--name"], "local", False),
+                (
+                    "operator@external.invalid",
+                    ["virsh", "list", "--all", "--name"],
+                    "operator@external.invalid",
+                    False,
+                ),
+            ],
+        )
+
+    def test_qemu_teardown_rejects_malformed_non_local_owner_identities(self):
+        malformed_names = (
+            None,
+            "",
+            "   ",
+            "external.invalid",
+            "@external.invalid",
+            "operator@",
+            "operator@external.invalid@extra",
+            "operator @external.invalid",
+            "operator@external invalid",
+        )
+        config = self._qemu_delete_config("/tmp/not-used")
+        for owner_name in malformed_names:
+            with self.subTest(owner_name=owner_name):
+                state_payload = {
+                    "machine_data": [
+                        self._owner_state(name=owner_name, is_local=False),
+                    ]
+                }
+                with mock.patch.object(test_utils.Machine, "process") as process_mock:
+                    success, reason = test_utils.verify_qemu_teardown(config, state_payload)
+
+                self.assertFalse(success)
+                self.assertIn("physical owner identity", reason)
+                process_mock.assert_not_called()
+
+    def test_qemu_teardown_contains_owner_constructor_failures(self):
+        config = self._qemu_delete_config("/tmp/not-used")
+        state_payload = {
+            "machine_data": [
+                self._owner_state(name="operator@external.invalid", is_local=False),
+            ]
+        }
+
+        with mock.patch.object(
+            test_utils,
+            "Machine",
+            side_effect=ValueError("constructor rejected owner"),
+        ):
+            success, reason = test_utils.verify_qemu_teardown(config, state_payload)
+
+        self.assertFalse(success)
+        self.assertIn("constructor rejected owner", reason)
 
     def test_classify_test_failure_uses_stable_buckets(self):
         self.assertEqual(

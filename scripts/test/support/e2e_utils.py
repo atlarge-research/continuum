@@ -5,6 +5,7 @@ Provides functions for config discovery, base image management, success detectio
 
 import argparse
 import csv
+from datetime import datetime
 import fnmatch
 import getpass
 import importlib.util
@@ -12,14 +13,13 @@ import json
 import math
 import os
 import re
-import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
 
+from infrastructure.machine import Machine
 from input.configuration import resume_contract, yaml_parser
 
 _ORCHESTRATOR_MODULE_TYPES = ("none", "kubernetes", "kubeedge", "kubecontrol", "kube_kata", "mist")
@@ -885,6 +885,7 @@ def detect_success(
     else:
         criteria = success_config
 
+    delete_on_exit = config.get("infrastructure", {}).get("delete_on_exit", False)
     require_ssh = criteria.get("require_ssh_output", True)
     require_exit_zero = criteria.get("require_exit_code_zero", True)
     require_experiment_lock = criteria.get("require_experiment_lock", True)
@@ -892,11 +893,25 @@ def detect_success(
     require_state_phase = criteria.get("require_state_phase", True)
     require_resume_contract = criteria.get("require_resume_contract", True)
     require_teardown = criteria.get("require_teardown", False)
+    provider = config.get("infrastructure", {}).get("provider")
+    automatic_qemu_teardown = provider == "qemu" and delete_on_exit
+    explicit_qemu_teardown = (
+        require_teardown and provider == "qemu" and delete_on_exit
+    )
+    verify_qemu_teardown_required = automatic_qemu_teardown or explicit_qemu_teardown
     require_network_validation_results = criteria.get("require_network_validation_results", False)
     required_stdout_markers = criteria.get("required_stdout_markers", [])
     required_stdout_metric_tables = criteria.get("required_stdout_metric_tables", [])
     required_benchmark_metric_artifacts = criteria.get("required_benchmark_metric_artifacts", [])
     check_logs = criteria.get("check_log_files", False)
+
+    # A QEMU delete-on-exit run must retain its structured last-known snapshot
+    # regardless of relaxed suite-level artifact settings.
+    if automatic_qemu_teardown:
+        require_experiment_lock = True
+        require_state_file = True
+        require_state_phase = True
+        require_resume_contract = True
 
     reasons = []
 
@@ -918,7 +933,6 @@ def detect_success(
     continuum_dir = os.path.join(config.get("infrastructure", {}).get("base_path", ""), ".continuum")
     experiment_lock_path = os.path.join(continuum_dir, "experiment_lock.yaml")
     state_path = os.path.join(continuum_dir, "state.json")
-
     if require_experiment_lock:
         if not os.path.exists(experiment_lock_path):
             return False, "Experiment lock file missing: %s" % (experiment_lock_path)
@@ -1000,7 +1014,14 @@ def detect_success(
             )
         reasons.append("resume_contract_match")
 
-    if require_teardown and config.get("infrastructure", {}).get("delete_on_exit", False):
+    if verify_qemu_teardown_required:
+        attribution_ok, attribution_reason = _validate_qemu_teardown_evidence_timestamps(
+            lock_payload,
+            state_payload,
+        )
+        if not attribution_ok:
+            return False, attribution_reason
+        reasons.append(attribution_reason)
         teardown_ok, teardown_reason = verify_qemu_teardown(config, state_payload or {})
         if not teardown_ok:
             return False, teardown_reason
@@ -1080,7 +1101,7 @@ def _validate_state_artifact_schema(state_payload: Dict) -> Tuple[bool, str]:
     if not isinstance(state_payload.get("created_at"), str) or not state_payload.get(
         "created_at"
     ).strip():
-        return False, "State schema mismatch: missing created_at"
+        return False, "State schema mismatch: missing created_at timestamp"
     if state_payload.get("phase_completed") not in (
         "infrastructure",
         "software",
@@ -1095,8 +1116,50 @@ def _validate_state_artifact_schema(state_payload: Dict) -> Tuple[bool, str]:
     return True, "state_schema_valid"
 
 
+def _parse_timezone_aware_timestamp(value, field_name):
+    """Return a timezone-aware timestamp or a teardown-attribution failure."""
+    if not isinstance(value, str) or not value.strip():
+        return None, "Teardown verification failed: %s timestamp is missing" % (field_name,)
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None, "Teardown verification failed: %s timestamp is malformed" % (field_name,)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None, "Teardown verification failed: %s timestamp is not timezone-aware" % (
+            field_name,
+        )
+    return parsed, None
+
+
+def _validate_qemu_teardown_evidence_timestamps(lock_payload, state_payload):
+    """Bind QEMU teardown evidence to the lock freshly written for this E2E run."""
+    if not isinstance(lock_payload, dict):
+        return False, "Teardown verification failed: experiment lock payload is missing"
+    if not isinstance(state_payload, dict):
+        return False, "Teardown verification failed: state payload is missing"
+
+    lock_created_at, error = _parse_timezone_aware_timestamp(
+        lock_payload.get("created_at"),
+        "experiment_lock.created_at",
+    )
+    if error:
+        return False, error
+    state_created_at, error = _parse_timezone_aware_timestamp(
+        state_payload.get("created_at"),
+        "state.created_at",
+    )
+    if error:
+        return False, error
+    if state_created_at < lock_created_at:
+        return False, (
+            "Teardown verification failed: state.created_at predates the current "
+            "experiment_lock.created_at"
+        )
+    return True, "teardown_evidence_current_run"
+
+
 def verify_qemu_teardown(config: Dict, state_payload: Dict) -> Tuple[bool, str]:
-    """Verify that QEMU domains persisted in state are absent after teardown."""
+    """Verify on each owning physical host that persisted QEMU domains are absent."""
     infrastructure = config.get("infrastructure", {})
     if infrastructure.get("provider") != "qemu":
         return True, "teardown_skipped_non_qemu"
@@ -1112,44 +1175,91 @@ def verify_qemu_teardown(config: Dict, state_payload: Dict) -> Tuple[bool, str]:
         "endpoint_names",
         "base_names",
     )
-    domain_names = []
+    expected_by_owner = []
     for machine_entry in machine_data:
         if not isinstance(machine_entry, dict):
             return False, "Teardown verification failed: malformed state machine_data entry"
+        owner_name = machine_entry.get("name")
+        is_local = machine_entry.get("is_local")
+        if (
+            not isinstance(owner_name, str)
+            or not owner_name.strip()
+            or not isinstance(is_local, bool)
+        ):
+            return False, "Teardown verification failed: malformed physical owner identity"
+        if not is_local:
+            owner_parts = owner_name.split("@")
+            if (
+                len(owner_parts) != 2
+                or not all(part and part.strip() == part for part in owner_parts)
+                or any(any(character.isspace() for character in part) for part in owner_parts)
+            ):
+                return False, (
+                    "Teardown verification failed: malformed non-local physical owner identity %r"
+                    % (owner_name,)
+                )
+        domain_names = []
         for field in domain_name_fields:
             names = machine_entry.get(field, [])
             if isinstance(names, str):
                 names = [names]
             if not isinstance(names, list):
                 return False, "Teardown verification failed: malformed state field %s" % (field)
-            domain_names.extend(name for name in names if isinstance(name, str) and name)
+            if not all(isinstance(name, str) and name for name in names):
+                return False, "Teardown verification failed: malformed state field %s" % (field)
+            domain_names.extend(names)
+        expected_by_owner.append((owner_name, is_local, domain_names))
 
-    if not domain_names:
+    if not any(domain_names for _owner, _is_local, domain_names in expected_by_owner):
         return False, "Teardown verification failed: state machine names missing"
 
-    virsh = shutil.which("virsh")
-    if virsh is None:
-        return False, "Teardown verification failed: virsh not found"
-
-    try:
-        result = subprocess.run(
-            [virsh, "list", "--all"],
-            check=False,
-            capture_output=True,
-            text=True,
+    for owner_name, is_local, domain_names in expected_by_owner:
+        try:
+            owner = Machine(owner_name, is_local)
+            command = ["virsh", "list", "--all", "--name"]
+            results = owner.process(
+                config,
+                command,
+                ssh=owner.name,
+                ssh_key=False,
+            )
+        except Exception as exc:
+            return False, "Teardown verification failed: owner %s: %s" % (owner_name, exc)
+        if not isinstance(results, list) or len(results) != 1:
+            return False, "Teardown verification failed: owner %s returned malformed result" % (
+                owner_name,
+            )
+        result = results[0]
+        if not isinstance(result, (list, tuple)) or len(result) != 2:
+            return False, "Teardown verification failed: owner %s returned malformed result" % (
+                owner_name,
+            )
+        output, error = result
+        if not isinstance(output, list) or not isinstance(error, list):
+            return False, "Teardown verification failed: owner %s returned malformed output" % (
+                owner_name,
+            )
+        synthetic_error = next(
+            (
+                line
+                for line in error
+                if "Command exited with non-zero return code" in str(line)
+            ),
+            None,
         )
-    except OSError as exc:
-        return False, "Teardown verification failed: could not execute virsh: %s" % (exc)
+        if synthetic_error:
+            return False, "Teardown verification failed: owner %s: %s" % (
+                owner_name,
+                synthetic_error,
+            )
 
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "").strip()
-        return False, "Teardown verification failed: virsh list --all failed: %s" % (detail)
-
-    remaining = [name for name in domain_names if name in result.stdout]
-    if remaining:
-        return False, "Teardown verification failed: VM domain(s) still present: %s" % (
-            ", ".join(sorted(remaining))
-        )
+        present_domains = set(output)
+        remaining = sorted(set(domain_names).intersection(present_domains))
+        if remaining:
+            return False, "Teardown verification failed: VM domain(s) still present on %s: %s" % (
+                owner_name,
+                ", ".join(remaining),
+            )
 
     return True, "teardown_verified"
 

@@ -289,6 +289,10 @@ class KubernetesWaitStateBoundaryTests(unittest.TestCase):
                 "load_resume_state",
                 return_value=({"phase_completed": "infrastructure"}, [machine]),
             ), mock.patch.object(
+                continuum_module.machine_utils,
+                "validate_resume_ssh_reachability",
+                return_value=["controller@192.0.2.10"],
+            ), mock.patch.object(
                 continuum_module.ansible, "AnsibleRunner", return_value=runner
             ), mock.patch.object(
                 continuum_module.resource_manager,

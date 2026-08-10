@@ -72,6 +72,16 @@ Allowed `run.targets` values:
 
 `application` enables phase-3 benchmark/application execution and requires a `benchmark.pipeline` definition.
 
+State reuse is explicit. Omitting `infrastructure` from `run.targets` requests a resume from the
+last-known snapshot at `<base_path>/.continuum/state.json`; merely finding that file never triggers
+resume. Before software or application work begins, every managed guest recorded in the snapshot
+must pass the authenticated SSH reachability preflight. Recorded guest names and IPs must be
+globally unique, and each category's names, IPs, and recorded/configured counts must agree.
+
+`state.json` is retained after completed runs, including runs with `delete_on_exit: true`. It is a
+last-known deployment snapshot and post-mortem artifact, not evidence that the recorded resources
+still exist or are currently reachable.
+
 `prepare_for_resume: true` keeps selected later-phase software prerequisites available during an infrastructure-only retained run. Use it only for retained-resume workflows such as the benchmark smoke infrastructure leg; generic infrastructure-only runs should leave it omitted or `false`.
 
 Use quotes for `image_prefetch` values in YAML examples. Plain `off`/`on` can be loaded as booleans by YAML parsers.

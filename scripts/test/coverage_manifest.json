@@ -149,10 +149,22 @@
     },
     {
       "surface": "infrastructure/state.py",
-      "functions": ["save_state", "load_state", "validate_state_compatibility", "load_resume_state"],
+      "functions": [
+        "save_state",
+        "load_state",
+        "validate_state_compatibility",
+        "load_resume_state"
+      ],
       "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
-      "success": "schema-v2 state persists, loads, and reconstructs machine data",
+      "success": "schema-v2 state persists as a last-known snapshot, loads, and reconstructs managed machines",
       "failure": "legacy/malformed state, invalid phases, and stale contracts"
+    },
+    {
+      "surface": "infrastructure/machine.py",
+      "functions": ["validate_resume_ssh_reachability"],
+      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
+      "success": "every state-recorded guest returns its ordered authenticated SSH marker",
+      "failure": "duplicate or count-inconsistent topology and missing, malformed, unexpected, failed, or partial per-target marker results"
     },
     {
       "surface": "infrastructure/orchestration_schema.py",
@@ -262,12 +274,13 @@
       "functions": [
         "discover_config_files",
         "detect_success",
+        "verify_qemu_teardown",
         "verify_benchmark_metric_artifacts",
         "classify_test_failure"
       ],
       "test_paths": ["scripts/test/e2e/test_e2e_test_utils.py"],
-      "success": "YAML discovery, artifact validation, and result persistence",
-      "failure": "missing lock/state/network/benchmark artifacts, statistic drift, and teardown drift"
+      "success": "YAML discovery, persistent state validation, owner-scoped QEMU teardown checks, and result persistence",
+      "failure": "missing, stale, or timestamp-misattributed lock/state evidence, malformed QEMU owners, network/benchmark drift, and retained QEMU domains"
     }
   ]
 }

@@ -13,7 +13,7 @@ import sys
 import time
 
 from application import application
-from infrastructure import ansible, infrastructure, state as infra_state
+from infrastructure import ansible, infrastructure, machine as machine_utils, state as infra_state
 
 # pylint: disable-next=redefined-builtin
 from input import input
@@ -170,6 +170,18 @@ def main(args):
         except (OSError, ValueError) as exc:
             logging.error("%s", exc)
             sys.exit(1)
+        try:
+            reachable_targets = machine_utils.validate_resume_ssh_reachability(
+                args.config,
+                machines,
+            )
+        except RuntimeError as exc:
+            logging.error("Cannot resume retained deployment: %s", exc)
+            sys.exit(1)
+        logging.info(
+            "Resume SSH preflight succeeded for %d managed guest(s)",
+            len(reachable_targets),
+        )
         logging.info("Skipping infrastructure phase based on run targets")
         _log_vm_access_hints(args.config, header="VM access hints from resumed state")
 

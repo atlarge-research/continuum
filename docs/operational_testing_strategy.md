@@ -265,9 +265,15 @@ Concrete smoke success criteria currently agreed:
 5. teardown/resume:
    - intermediate phases should reuse saved state rather than reprovisioning from scratch
    - all VMs should be cleaned up only at the end of the smoke run
-   - exported state should remain available for inspection after the run
-   - benchmark-smoke success requires teardown evidence when the final config requests deletion
-   - resume state without schema-v2 metadata or with a stale resume contract is a failure
+   - every completed run retains `state.json` as a last-known snapshot, including after
+     delete-on-exit; its presence does not prove that the recorded resources still exist
+   - omitting infrastructure from explicit `run.targets` requests state reuse, which requires an
+     authenticated SSH marker from every recorded managed guest before downstream phases begin
+   - resume state without schema-v2 metadata, with a stale resume contract, or with any currently
+     unreachable managed guest is a failure; reachability failure leaves the snapshot unchanged
+   - every QEMU delete-on-exit run verifies the expected state-recorded domains are absent,
+     independently of the optional suite-level teardown flag; the state save timestamp must be
+     timezone-aware and not predate the current run's freshly written experiment lock
 6. network validation tolerance:
    - observed TCP_RR latency should be within 25% of the expected round-trip
      profile value, or within 10 ms, whichever tolerance is larger
@@ -418,12 +424,15 @@ What is already covered:
 27. dedicated host-wrapper scenario and suite for the full QEMU OpenFaaS
     image-classification row, with explicit Docker preflight:
     `qemu_openfaas_image_parity`.
+28. owner-isolated QEMU teardown classification with mocked local and external
+    physical-host command boundaries.
 
 Deferred after the active rework:
 
 1. final reproducibility-package architecture for durable run packages and optional external
    metric retention,
-2. policy decisions for which slow scenario regressions are mandatory in local development,
+2. live external-QEMU teardown coverage; current owner isolation is exercised only with mocks,
+3. policy decisions for which slow scenario regressions are mandatory in local development,
    CI, and release certification.
 
 ## 9. Operational Follow-Up Policy
