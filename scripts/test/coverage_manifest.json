@@ -208,13 +208,27 @@
       "surface": "infrastructure/qemu/qemu.py",
       "functions": [
         "_base_image_cache_invalid_reason",
+        "_cleanup_base_image_cache",
+        "_confirm_base_vms_stopped",
         "_expected_base_image_metadata",
+        "_host_cache_operation",
         "_machine_playbook_env",
+        "_write_base_image_metadata",
         "base_image"
       ],
-      "test_paths": ["scripts/test/unit/test_continuum_runtime.py"],
-      "success": "base image reuse uses success metadata and pinned Ansible env",
-      "failure": "partial or mismatched base-image metadata invalidates cache"
+      "test_paths": [
+        "scripts/test/unit/test_continuum_runtime.py",
+        "scripts/test/unit/test_qemu_host_cache_helper.py"
+      ],
+      "success": "each physical owner proves readable image/metadata integrity and publishes canonical ready metadata atomically after bounded shutdown confirmation",
+      "failure": "invalid owner caches are cleaned exactly while transport, lifecycle, cleanup, protocol, shutdown, and durability failures abort before ready publication"
+    },
+    {
+      "surface": "infrastructure/qemu/host_cache_helper.py",
+      "functions": ["check", "main", "publish", "remove_paths"],
+      "test_paths": ["scripts/test/unit/test_qemu_host_cache_helper.py"],
+      "success": "standalone argv protocol reads exact metadata, durably removes markers and cache files, and atomically publishes ready metadata",
+      "failure": "unlink, directory-open, fsync, close, dispatch, and atomic-publication failures emit no authoritative success"
     },
     {
       "surface": "infrastructure/ansible.py",

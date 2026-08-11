@@ -2,10 +2,13 @@
 Create and use QEMU Vms
 """
 
+import base64
+import binascii
 import hashlib
 import json
 import logging
 import os
+import shlex
 import sys
 import time
 
@@ -17,7 +20,23 @@ from infrastructure import machine as m
 from infrastructure import network, orchestration_schema
 from resource_manager import plans as rm_plans
 
-from . import generate
+from . import generate, host_cache_helper
+
+
+_CACHE_PROTOCOL = host_cache_helper.PROTOCOL
+_SYNTHETIC_NONZERO_MARKER = "Command exited with non-zero return code"
+_BASE_SHUTDOWN_ATTEMPTS = 12
+_BASE_SHUTDOWN_INTERVAL_SECONDS = 5
+
+
+def _load_host_cache_helper_source():
+    """Load the exact standalone helper source shipped beside this module."""
+    helper_path = os.path.join(os.path.dirname(__file__), "host_cache_helper.py")
+    with open(helper_path, "r", encoding="utf-8") as filep:
+        return filep.read()
+
+
+_HOST_CACHE_HELPER_SOURCE = _load_host_cache_helper_source()
 
 
 def _machine_playbook_env():
@@ -32,7 +51,7 @@ def _machine_playbook_env():
 
 
 def _delete_local_path(path):
-    """Best-effort local cache cleanup for unreadable QEMU artifacts."""
+    """Best-effort local cleanup retained for the OS-image cache path."""
     if os.path.exists(path):
         os.remove(path)
 
@@ -43,6 +62,188 @@ def _base_image_metadata_path(config, raw_base_name):
         config["infrastructure"]["base_path"],
         ".continuum/images/%s.meta.json" % (raw_base_name),
     )
+
+
+def _base_image_paths(config, raw_base_name):
+    """Return the exact owner-local paths associated with one base image."""
+    base_path = config["infrastructure"]["base_path"]
+    images_path = os.path.join(base_path, ".continuum", "images")
+    return {
+        "metadata": _base_image_metadata_path(config, raw_base_name),
+        "image": os.path.join(images_path, "%s.qcow2" % (raw_base_name,)),
+        "cloud_init": os.path.join(images_path, "user_data_%s.img" % (raw_base_name,)),
+        "user_data": os.path.join(
+            base_path,
+            ".continuum",
+            "user_data_%s.yml" % (raw_base_name,),
+        ),
+    }
+
+
+def _owner_process(machine, config, command):
+    """Run one flat argv command on its physical owner without a shell."""
+    if machine.is_local:
+        return machine.process(config, command)
+    remote_command = [shlex.quote(argument) for argument in command]
+    return machine.process(config, remote_command, ssh=machine.name, ssh_key=False)
+
+
+def _single_process_result(results, operation):
+    """Require one unambiguous successful Machine.process result."""
+    validated = _validated_process_results(results, 1, operation)
+    output, error = validated[0]
+    if error:
+        raise RuntimeError("%s failed: unexpected stderr" % (operation,))
+    return output
+
+
+def _validated_process_results(results, expected_count, operation):
+    """Validate result shape/count and reject every synthetic nonzero marker."""
+    if not isinstance(results, list) or len(results) != expected_count:
+        raise RuntimeError(
+            "%s failed: expected %s process result(s)" % (operation, expected_count)
+        )
+    validated = []
+    for result in results:
+        if not isinstance(result, (list, tuple)) or len(result) != 2:
+            raise RuntimeError("%s failed: malformed process result" % (operation,))
+        output, error = result
+        if not isinstance(output, list) or not isinstance(error, list):
+            raise RuntimeError("%s failed: malformed process output" % (operation,))
+        if any(_SYNTHETIC_NONZERO_MARKER in str(line) for line in error):
+            raise RuntimeError("%s failed: command returned nonzero" % (operation,))
+        validated.append((output, error))
+    return validated
+
+
+def _host_cache_operation(machine, config, operation, arguments, response_keys):
+    """Execute one strict cache-helper protocol operation on an owning host."""
+    command = ["python3", "-c", _HOST_CACHE_HELPER_SOURCE, operation]
+    command.extend(arguments)
+    output = _single_process_result(
+        _owner_process(machine, config, command),
+        "QEMU cache %s on %s" % (operation, machine.name),
+    )
+    if len(output) != 1:
+        raise RuntimeError(
+            "QEMU cache %s on %s failed: expected one protocol response"
+            % (operation, machine.name)
+        )
+    try:
+        response = json.loads(output[0])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "QEMU cache %s on %s failed: malformed protocol response"
+            % (operation, machine.name)
+        ) from exc
+    if not isinstance(response, dict) or set(response) not in response_keys:
+        raise RuntimeError(
+            "QEMU cache %s on %s failed: malformed protocol mapping"
+            % (operation, machine.name)
+        )
+    if response.get("protocol") != _CACHE_PROTOCOL:
+        raise RuntimeError(
+            "QEMU cache %s on %s failed: protocol mismatch" % (operation, machine.name)
+        )
+    return response
+
+
+def _cleanup_base_image_cache(machine, config, raw_base_name):
+    """Remove one invalid owner's exact cache files, ready metadata first."""
+    paths = _base_image_paths(config, raw_base_name)
+    response = _host_cache_operation(
+        machine,
+        config,
+        "cleanup",
+        [paths["metadata"], paths["image"], paths["cloud_init"], paths["user_data"]],
+        ({"protocol", "status"},),
+    )
+    if response["status"] != "ok":
+        raise RuntimeError("QEMU cache cleanup on %s did not succeed" % (machine.name,))
+
+
+def _invalidate_base_image_marker(machine, config, raw_base_name):
+    """Remove one participating owner's marker before its cache can be modified."""
+    response = _host_cache_operation(
+        machine,
+        config,
+        "invalidate",
+        [_base_image_metadata_path(config, raw_base_name)],
+        ({"protocol", "status"},),
+    )
+    if response["status"] != "ok":
+        raise RuntimeError("QEMU cache invalidation on %s did not succeed" % (machine.name,))
+
+
+def _confirm_base_vms_stopped(config, selected_entries):
+    """Boundedly confirm selected transient domains are absent from running domains."""
+    owners = []
+    for machine, _raw_base_name, _normalized_name, _invalid_reason in selected_entries:
+        if all(machine is not owner for owner in owners):
+            owners.append(machine)
+
+    for machine in owners:
+        selected_names = {
+            raw_base_name
+            for owner, raw_base_name, _normalized_name, _invalid_reason in selected_entries
+            if owner is machine
+        }
+        command = [
+            "virsh",
+            "--connect",
+            "qemu:///system",
+            "list",
+            "--state-running",
+            "--name",
+        ]
+        for attempt in range(_BASE_SHUTDOWN_ATTEMPTS):
+            output = _single_process_result(
+                _owner_process(machine, config, command),
+                "base VM shutdown confirmation on %s" % (machine.name,),
+            )
+            if all(isinstance(name, str) for name in output) and selected_names.isdisjoint(output):
+                break
+            if attempt + 1 < _BASE_SHUTDOWN_ATTEMPTS:
+                time.sleep(_BASE_SHUTDOWN_INTERVAL_SECONDS)
+        else:
+            raise RuntimeError(
+                "Base VM shutdown on %s was not confirmed after %s attempts"
+                % (machine.name, _BASE_SHUTDOWN_ATTEMPTS)
+            )
+
+
+def _select_base_image_rebuilds(config, machines):
+    """Validate owners, invalidate every participant, then clean invalid caches."""
+    cache_entries = []
+    rebuild_names = []
+    for machine in machines:
+        for raw_base_name in machine.base_names:
+            normalized_name = orchestration_schema.normalized_base_name(raw_base_name)
+            invalid_reason = _base_image_cache_invalid_reason(
+                config,
+                machines,
+                raw_base_name,
+                machine=machine,
+            )
+            cache_entries.append((machine, raw_base_name, normalized_name, invalid_reason))
+            if invalid_reason and normalized_name not in rebuild_names:
+                rebuild_names.append(normalized_name)
+
+    selected_entries = [entry for entry in cache_entries if entry[2] in rebuild_names]
+    for machine, raw_base_name, _normalized_name, _invalid_reason in selected_entries:
+        _invalidate_base_image_marker(machine, config, raw_base_name)
+
+    for machine, raw_base_name, _normalized_name, invalid_reason in selected_entries:
+        if not invalid_reason:
+            continue
+        logging.info(
+            "Cached base image is invalid on %s (%s); removing and rebuilding: %s",
+            machine.name,
+            invalid_reason,
+            _base_image_paths(config, raw_base_name)["image"],
+        )
+        _cleanup_base_image_cache(machine, config, raw_base_name)
+    return rebuild_names, selected_entries
 
 
 def _base_install_playbooks_for_base_names(config, machines, normalized_base_names):
@@ -232,37 +433,79 @@ def _expected_base_image_metadata(config, machines, raw_base_name):
     }
 
 
-def _base_image_cache_invalid_reason(config, machines, raw_base_name):
-    """Return a human-readable cache validation reason, or None when valid."""
-    metadata_path = _base_image_metadata_path(config, raw_base_name)
-    if not os.path.exists(metadata_path):
-        return "metadata missing"
+def _base_image_cache_invalid_reason(config, machines, raw_base_name, machine=None):
+    """Return an owner-proven cache validation reason, or None when valid."""
+    if machine is None:
+        machine = m.Machine("localhost", True)
+    paths = _base_image_paths(config, raw_base_name)
+    response = _host_cache_operation(
+        machine,
+        config,
+        "check",
+        [paths["image"], paths["metadata"]],
+        (
+            {"protocol", "status", "reason"},
+            {"protocol", "status", "metadata_b64"},
+        ),
+    )
+    if response["status"] == "invalid":
+        reason = response["reason"]
+        if reason not in (
+            "image missing",
+            "image unreadable",
+            "metadata missing",
+            "metadata unreadable",
+        ):
+            raise RuntimeError("QEMU cache check returned an unknown invalid reason")
+        return reason
+    if response["status"] != "ok" or not isinstance(response.get("metadata_b64"), str):
+        raise RuntimeError("QEMU cache check returned an invalid status")
 
     try:
-        with open(metadata_path, "r", encoding="utf-8") as filep:
-            payload = json.load(filep)
-    except (OSError, json.JSONDecodeError):
-        return "metadata unreadable"
-
+        metadata_bytes = base64.b64decode(response["metadata_b64"], validate=True)
+        payload = json.loads(metadata_bytes.decode("utf-8"))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return "metadata malformed"
     if not isinstance(payload, dict):
         return "metadata invalid"
 
     expected = _expected_base_image_metadata(config, machines, raw_base_name)
+    schema_version = payload.get("schema_version")
+    if (
+        type(schema_version) is not int  # pylint: disable=unidiomatic-typecheck
+        or schema_version != expected["schema_version"]
+    ):
+        return "metadata schema_version mismatch"
     for key, value in expected.items():
+        if key == "schema_version":
+            continue
         if payload.get(key) != value:
             return "metadata %s mismatch" % (key,)
     return None
 
 
-def _write_base_image_metadata(config, machines, raw_base_name):
-    """Persist the ready-marker metadata for one successfully prepared base image."""
-    metadata_path = _base_image_metadata_path(config, raw_base_name)
-    with open(metadata_path, "w", encoding="utf-8") as filep:
-        json.dump(
-            _expected_base_image_metadata(config, machines, raw_base_name),
-            filep,
-            sort_keys=True,
-        )
+def _canonical_base_image_metadata(config, machines, raw_base_name):
+    """Return deterministic canonical schema-v1 ready metadata bytes."""
+    payload = _expected_base_image_metadata(config, machines, raw_base_name)
+    return (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _write_base_image_metadata(config, machines, raw_base_name, machine=None):
+    """Atomically publish ready metadata on one owning physical host."""
+    if machine is None:
+        machine = m.Machine("localhost", True)
+    encoded_payload = base64.b64encode(
+        _canonical_base_image_metadata(config, machines, raw_base_name)
+    ).decode("ascii")
+    response = _host_cache_operation(
+        machine,
+        config,
+        "publish",
+        [_base_image_metadata_path(config, raw_base_name), encoded_payload],
+        ({"protocol", "status"},),
+    )
+    if response["status"] != "ok":
+        raise RuntimeError("QEMU cache publication on %s did not succeed" % (machine.name,))
 
 
 def _base_profile_token(config):
@@ -608,65 +851,8 @@ def base_image(config, machines, runner=None):
 
     logging.info("Check if new base image(s) needs to be created")
 
-    # Create a flat list of base_names, without any special characters
-    base_names = []
-    for machine in machines:
-        for base_name in machine.base_names:
-            name = orchestration_schema.normalized_base_name(base_name)
-            base_names.append(name)
-
-    # Create a mask for the previous list
-    need_images = [False for _ in range(len(base_names))]
-
-    # Check if all images are available on each machine, otherwise set need_images
-    for machine in machines:
-        for base_name in machine.base_names:
-            raw_base_name = base_name
-            image_path = os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/images/%s.qcow2" % (base_name),
-            )
-            command = [
-                "find",
-                image_path,
-            ]
-            output, error = machine.process(config, command, ssh=machine.name)[0]
-
-            if error or not output:
-                base_name = orchestration_schema.normalized_base_name(base_name)
-                need_images[base_names.index(base_name)] = True
-            elif machine.is_local and not os.access(image_path, os.R_OK):
-                logging.info("Cached base image is unreadable; removing and rebuilding: %s", image_path)
-                _delete_local_path(image_path)
-                user_data_path = os.path.join(
-                    config["infrastructure"]["base_path"],
-                    ".continuum/images/user_data_%s.img" % (raw_base_name),
-                )
-                _delete_local_path(user_data_path)
-                _delete_local_path(_base_image_metadata_path(config, raw_base_name))
-                base_name = orchestration_schema.normalized_base_name(base_name)
-                need_images[base_names.index(base_name)] = True
-            elif machine.is_local:
-                invalid_reason = _base_image_cache_invalid_reason(config, machines, raw_base_name)
-                if invalid_reason:
-                    logging.info(
-                        "Cached base image is stale (%s); removing and rebuilding: %s",
-                        invalid_reason,
-                        image_path,
-                    )
-                    _delete_local_path(image_path)
-                    user_data_path = os.path.join(
-                        config["infrastructure"]["base_path"],
-                        ".continuum/images/user_data_%s.img" % (raw_base_name),
-                    )
-                    _delete_local_path(user_data_path)
-                    _delete_local_path(_base_image_metadata_path(config, raw_base_name))
-                    base_name = orchestration_schema.normalized_base_name(base_name)
-                    need_images[base_names.index(base_name)] = True
-
-    # Stop if no base images are required
-    base_names = [name for name, need in zip(base_names, need_images) if need]
-    if base_names == []:
+    rebuild_names, selected_entries = _select_base_image_rebuilds(config, machines)
+    if not rebuild_names:
         logging.info("Base image(s) are all already present")
         return
 
@@ -676,52 +862,40 @@ def base_image(config, machines, runner=None):
         inventory="machine",
         extra_vars={
             "continuum_base_images_by_host": orchestration_schema.base_images_by_host(
-                machines, base_names
+                machines, rebuild_names
             )
         },
         env=_machine_playbook_env(),
     )
 
-    # Create commands to launch the base VMs concurrently
-    commands = []
     base_ips = []
-    for machine in machines:
-        for base_name, base_ip in zip(machine.base_names, machine.base_ips):
-            base_name_r = orchestration_schema.normalized_base_name(base_name)
-            if base_name_r in base_names:
-                path = os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (base_name)
-                )
-                if machine.is_local:
-                    command = "virsh --connect qemu:///system create %s" % (path)
-                else:
-                    command = "ssh %s 'bash -l -c \"virsh --connect qemu:///system create %s\"'" % (
-                        machine.name,
-                        path,
-                    )
-
-                commands.append(command)
-                base_ips.append(base_ip)
-
-    # Now launch the VMs
-    results = machines[0].process(config, commands, shell=True)
-
-    # Check if VM launching went as expected
-    for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for command [%s]", command)
-
-        if error and "Connection to " not in error[0]:
-            logging.error("ERROR: %s", "".join(error))
-            sys.exit(1)
-        elif "Domain " not in output[0] or " created from " not in output[0]:
-            logging.error("ERROR: %s", "".join(output))
-            sys.exit(1)
+    for machine, raw_base_name, _normalized_name, _invalid_reason in selected_entries:
+        base_ip = machine.base_ips[machine.base_names.index(raw_base_name)]
+        path = os.path.join(
+            config["infrastructure"]["base_path"],
+            ".continuum",
+            "domain_%s.xml" % (raw_base_name,),
+        )
+        command = ["virsh", "--connect", "qemu:///system", "create", path]
+        output = _single_process_result(
+            _owner_process(machine, config, command),
+            "base VM launch on %s" % (machine.name,),
+        )
+        if (
+            len(output) != 1
+            or not output[0].startswith("Domain ")
+            or " created from " not in output[0]
+        ):
+            raise RuntimeError(
+                "Base VM launch on %s returned an invalid response" % (machine.name,)
+            )
+        base_ips.append(base_ip)
 
     # Fix SSH keys for each base image
     infrastructure.add_ssh(config, machines, base=base_ips)
 
     # Install software concurrently (infra_only won't get anything installed)
-    playbooks = _base_install_playbooks_for_base_names(config, machines, base_names)
+    playbooks = _base_install_playbooks_for_base_names(config, machines, rebuild_names)
 
     if playbooks:
         logging.info("Install software in the base VMs")
@@ -733,7 +907,9 @@ def base_image(config, machines, runner=None):
         "playbooks/infrastructure/common_base_install.yml",
         inventory="vms",
         extra_vars={
-            "continuum_common_base_hosts": _common_base_install_hosts_for_base_names(base_names),
+            "continuum_common_base_hosts": _common_base_install_hosts_for_base_names(
+                rebuild_names
+            ),
             "continuum_enable_mahimahi": (
                 isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
             )
@@ -745,7 +921,7 @@ def base_image(config, machines, runner=None):
         # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
         # These RM will automatically pull images, so we can skip this here.
         # Only pull endpoint images instead
-        docker_base_names = base_names
+        docker_base_names = rebuild_names
         if config_access.orchestrator_name(config) in (
             "kubernetes",
             "kubeedge",
@@ -760,16 +936,18 @@ def base_image(config, machines, runner=None):
 
     # Get host timezone
     command = ["ls", "-alh", "/etc/localtime"]
-    output, error = machines[0].process(config, command)[0]
+    output = _single_process_result(
+        machines[0].process(config, command),
+        "host timezone discovery",
+    )
 
     if not output or "/etc/localtime" not in output[0]:
         logging.error("Could not get host timezone: %s", "".join(output))
         sys.exit(1)
-    elif error:
-        logging.error("Could not get host timezone: %s", "".join(error))
-        sys.exit(1)
-
-    timezone = output[0].split("-> ")[1].strip()
+    timezone_parts = output[0].split("-> ", 1)
+    if len(timezone_parts) != 2 or not timezone_parts[1].strip():
+        raise RuntimeError("Host timezone discovery returned an invalid symlink")
+    timezone = timezone_parts[1].strip()
 
     # Fix timezone on every base vm
     command = ["sudo", "ln", "-sf", timezone, "/etc/localtime"]
@@ -777,12 +955,13 @@ def base_image(config, machines, runner=None):
     for machine in machines:
         for ip, name in zip(machine.base_ips, machine.base_names):
             name_r = orchestration_schema.normalized_base_name(name)
-            if name_r in base_names:
+            if name_r in rebuild_names:
                 ssh = "%s@%s" % (orchestration_schema.guest_login_name(name), ip)
                 sshs.append(ssh)
 
     results = machines[0].process(config, command, ssh=sshs)
 
+    results = _validated_process_results(results, len(sshs), "base VM timezone update")
     for output, error in results:
         if output:
             logging.error("Could not set VM timezone: %s", "".join(output))
@@ -797,55 +976,37 @@ def base_image(config, machines, runner=None):
     for machine in machines:
         for base_name, ip in zip(machine.base_names, machine.base_ips):
             base_name_r = orchestration_schema.normalized_base_name(base_name)
-            if base_name_r in base_names:
+            if base_name_r in rebuild_names:
                 sshs.append("%s@%s" % (orchestration_schema.guest_login_name(base_name), ip))
 
     results = machines[0].process(config, command, ssh=sshs)
 
+    results = _validated_process_results(results, len(sshs), "base VM cloud-init cleanup")
     for ssh, (output, error) in zip(sshs, results):
         logging.info("Check output for command [sudo cloud-init clean] on [%s]", ssh)
         ansible.check_output((output, error))
 
-    # Shutdown VMs
-    commands = []
-    for machine in machines:
-        for base_name in machine.base_names:
-            base_name_r = orchestration_schema.normalized_base_name(base_name)
-            if base_name_r in base_names:
-                if machine.is_local:
-                    command = "virsh --connect qemu:///system shutdown %s" % (base_name)
-                else:
-                    command = (
-                        "ssh %s 'bash -l -c \"virsh --connect qemu:///system shutdown %s\"'"
-                        % (machine.name, base_name)
-                    )
+    for machine, raw_base_name, _normalized_name, _invalid_reason in selected_entries:
+        command = ["virsh", "--connect", "qemu:///system", "shutdown", raw_base_name]
+        output = _single_process_result(
+            _owner_process(machine, config, command),
+            "base VM shutdown on %s" % (machine.name,),
+        )
+        expected = "Domain %s is being shutdown" % (raw_base_name,)
+        if output != [expected]:
+            raise RuntimeError(
+                "Base VM shutdown on %s returned an invalid response" % (machine.name,)
+            )
 
-                commands.append(command)
+    _confirm_base_vms_stopped(config, selected_entries)
 
-    results = machines[0].process(config, commands, shell=True)
-
-    for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for command [%s]", command)
-
-        if error and not (
-            command.split(" ")[0] == "ssh" and any("Connection to " in e for e in error)
-        ):
-            logging.error("".join(error))
-            sys.exit(1)
-        elif "Domain " not in output[0] or " is being shutdown" not in output[0]:
-            logging.error("".join(output))
-            sys.exit(1)
-
-    for machine in machines:
-        if not machine.is_local:
-            continue
-        for raw_base_name in machine.base_names:
-            normalized_base_name = orchestration_schema.normalized_base_name(raw_base_name)
-            if normalized_base_name in base_names:
-                _write_base_image_metadata(config, machines, raw_base_name)
-
-    # Wait for the shutdown to be completed
-    time.sleep(5)
+    for machine, raw_base_name, _normalized_name, _invalid_reason in selected_entries:
+        _write_base_image_metadata(
+            config,
+            machines,
+            raw_base_name,
+            machine=machine,
+        )
 
 
 def launch_vms(config, machines, repeat=None):

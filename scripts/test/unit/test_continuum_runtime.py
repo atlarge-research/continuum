@@ -1,17 +1,22 @@
 """Unit tests for runtime target resolution and addon compatibility."""
 
 import argparse
-import continuum as continuum_module
+import base64
 import contextlib
+import copy
 import io
 import json
 import os
 import pathlib
+import shlex
 import sys
 import tempfile
 import unittest
 from unittest import mock
 
+import continuum as continuum_module
+
+from infrastructure.qemu import host_cache_helper
 from infrastructure.qemu import qemu as qemu_module
 from infrastructure import ansible as infrastructure_ansible
 from infrastructure import infrastructure as infrastructure_module
@@ -3593,6 +3598,697 @@ class QemuMachinePlaybookEnvTests(unittest.TestCase):
 
 
 class QemuBaseImageMetadataTests(unittest.TestCase):
+    RAW_BASE_NAME = "base_cloud_none_np1_mm0_0_continuum-smoke"
+
+    @staticmethod
+    def _protocol(payload):
+        response = dict(payload)
+        response["protocol"] = qemu_module._CACHE_PROTOCOL
+        return [([json.dumps(response, sort_keys=True)], [])]
+
+    @classmethod
+    def _config(cls, base_path):
+        return {
+            "base": str(pathlib.Path(__file__).parents[3]),
+            "home": base_path,
+            "mode": "cloud",
+            "module": {},
+            "prefetch_image_requirements": [],
+            "infrastructure": {
+                "base_path": base_path,
+                "wireless_network_preset": "",
+            },
+        }
+
+    @classmethod
+    def _machine(cls, is_local=True, raw_base_name=None):
+        raw_base_name = raw_base_name or cls.RAW_BASE_NAME
+        machine = mock.Mock()
+        machine.is_local = is_local
+        machine.name = "local" if is_local else "owner@example host"
+        machine.name_sanitized = "localhost" if is_local else "owner_example_host"
+        machine.base_names = [raw_base_name]
+        machine.base_ips = ["192.0.2.20"]
+        machine.cloud_controller = 0
+        machine.clouds = 1
+        machine.edges = 0
+        machine.endpoints = 0
+        return machine
+
+    @classmethod
+    def _metadata_response(cls, config, machines, raw_base_name=None):
+        raw_base_name = raw_base_name or cls.RAW_BASE_NAME
+        payload = qemu_module._expected_base_image_metadata(config, machines, raw_base_name)
+        metadata = json.dumps(payload, sort_keys=True).encode("utf-8")
+        return cls._protocol(
+            {"status": "ok", "metadata_b64": base64.b64encode(metadata).decode("ascii")}
+        )
+
+    def test_valid_local_reuse(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            machine = Machine("local", True)
+            machine.base_names = [self.RAW_BASE_NAME]
+            machine.base_ips = ["192.0.2.20"]
+            images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
+            images_dir.mkdir(parents=True)
+            (images_dir / (self.RAW_BASE_NAME + ".qcow2")).write_bytes(b"qcow2")
+            qemu_module._write_base_image_metadata(
+                config,
+                [machine],
+                self.RAW_BASE_NAME,
+                machine=machine,
+            )
+            original_config = copy.deepcopy(config)
+            runner = mock.Mock()
+
+            qemu_module.base_image(config, [machine], runner=runner)
+
+            runner.run_playbook.assert_not_called()
+            self.assertEqual(config, original_config)
+
+    def test_valid_external_owner_reuse_uses_managed_ssh(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            machine = self._machine(is_local=False)
+            machine.process.return_value = self._metadata_response(config, [machine])
+            runner = mock.Mock()
+
+            qemu_module.base_image(config, [machine], runner=runner)
+
+            runner.run_playbook.assert_not_called()
+            command = machine.process.call_args.args[1]
+            self.assertEqual(
+                shlex.split(" ".join(command))[:4],
+                ["python3", "-c", qemu_module._HOST_CACHE_HELPER_SOURCE, "check"],
+            )
+            self.assertEqual(
+                machine.process.call_args.kwargs,
+                {"ssh": machine.name, "ssh_key": False},
+            )
+
+    def test_missing_and_unreadable_owner_artifacts_are_invalid(self):
+        reasons = (
+            "image missing",
+            "metadata missing",
+            "image unreadable",
+            "metadata unreadable",
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            for reason in reasons:
+                with self.subTest(reason=reason):
+                    machine = self._machine(is_local=False)
+                    machine.process.return_value = self._protocol(
+                        {"status": "invalid", "reason": reason}
+                    )
+                    self.assertEqual(
+                        qemu_module._base_image_cache_invalid_reason(
+                            config,
+                            [machine],
+                            self.RAW_BASE_NAME,
+                            machine=machine,
+                        ),
+                        reason,
+                    )
+
+    def test_malformed_and_non_mapping_metadata_are_invalid(self):
+        payloads = (b"{", b"[]", b"not-json", b"\xff")
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            for payload in payloads:
+                with self.subTest(payload=payload):
+                    machine = self._machine(is_local=False)
+                    machine.process.return_value = self._protocol(
+                        {
+                            "status": "ok",
+                            "metadata_b64": base64.b64encode(payload).decode("ascii"),
+                        }
+                    )
+                    reason = qemu_module._base_image_cache_invalid_reason(
+                        config,
+                        [machine],
+                        self.RAW_BASE_NAME,
+                        machine=machine,
+                    )
+                    self.assertIn(reason, ("metadata malformed", "metadata invalid"))
+
+    def test_every_schema_v1_field_mismatch_is_invalid(self):
+        fields = (
+            "schema_version",
+            "status",
+            "guest_user",
+            "base_install_playbooks",
+            "base_install_fingerprints",
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            for field in fields:
+                with self.subTest(field=field):
+                    machine = self._machine(is_local=False)
+                    payload = qemu_module._expected_base_image_metadata(
+                        config, [machine], self.RAW_BASE_NAME
+                    )
+                    payload[field] = "mismatch"
+                    metadata = json.dumps(payload).encode("utf-8")
+                    machine.process.return_value = self._protocol(
+                        {
+                            "status": "ok",
+                            "metadata_b64": base64.b64encode(metadata).decode("ascii"),
+                        }
+                    )
+                    self.assertEqual(
+                        qemu_module._base_image_cache_invalid_reason(
+                            config,
+                            [machine],
+                            self.RAW_BASE_NAME,
+                            machine=machine,
+                        ),
+                        "metadata %s mismatch" % (field,),
+                    )
+
+    def test_schema_version_requires_exact_integer_one(self):
+        cases = (
+            ("integer", 1, False),
+            ("boolean", True, True),
+            ("float", 1.0, True),
+            ("missing", None, True),
+            ("string", "1", True),
+            ("unsupported", 2, True),
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            for label, schema_version, invalid in cases:
+                with self.subTest(label=label):
+                    machine = self._machine(is_local=False)
+                    payload = qemu_module._expected_base_image_metadata(
+                        config, [machine], self.RAW_BASE_NAME
+                    )
+                    if label == "missing":
+                        del payload["schema_version"]
+                    else:
+                        payload["schema_version"] = schema_version
+                    metadata = json.dumps(payload).encode("utf-8")
+                    machine.process.return_value = self._protocol(
+                        {
+                            "status": "ok",
+                            "metadata_b64": base64.b64encode(metadata).decode("ascii"),
+                        }
+                    )
+
+                    reason = qemu_module._base_image_cache_invalid_reason(
+                        config,
+                        [machine],
+                        self.RAW_BASE_NAME,
+                        machine=machine,
+                    )
+
+                    if invalid:
+                        self.assertEqual(reason, "metadata schema_version mismatch")
+                    else:
+                        self.assertIsNone(reason)
+
+    def test_protocol_transport_failures_abort_instead_of_rebuilding(self):
+        synthetic = "Command exited with non-zero return code 7: python3"
+        results = (
+            [],
+            [(["partial"], [synthetic])],
+            [([], [])],
+            [(["not-json"], [])],
+            [([json.dumps({"protocol": qemu_module._CACHE_PROTOCOL, "status": "ok"})], [])],
+            [(["one", "two"], [])],
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            for result in results:
+                with self.subTest(result=result):
+                    machine = self._machine(is_local=False)
+                    machine.process.return_value = result
+                    with self.assertRaises(RuntimeError):
+                        qemu_module._base_image_cache_invalid_reason(
+                            config,
+                            [machine],
+                            self.RAW_BASE_NAME,
+                            machine=machine,
+                        )
+
+    def test_exact_cleanup_order_and_already_absent_paths(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            machine = Machine("local", True)
+            paths = qemu_module._base_image_paths(config, self.RAW_BASE_NAME)
+            for path in paths.values():
+                pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+                pathlib.Path(path).write_bytes(b"artifact")
+
+            qemu_module._cleanup_base_image_cache(machine, config, self.RAW_BASE_NAME)
+            qemu_module._cleanup_base_image_cache(machine, config, self.RAW_BASE_NAME)
+
+            self.assertTrue(all(not pathlib.Path(path).exists() for path in paths.values()))
+
+    def test_cleanup_paths_and_payloads_are_inert_argv_data(self):
+        raw_base_name = "base $(touch SHOULD_NOT_EXIST); peer user"
+        with tempfile.TemporaryDirectory(prefix="continuum cache ; ") as tempdir:
+            config = self._config(tempdir)
+            machine = self._machine(is_local=False, raw_base_name=raw_base_name)
+            machine.process.return_value = self._protocol({"status": "ok"})
+
+            qemu_module._cleanup_base_image_cache(machine, config, raw_base_name)
+
+            command = machine.process.call_args.args[1]
+            decoded_command = shlex.split(" ".join(command))
+            expected = qemu_module._base_image_paths(config, raw_base_name)
+            self.assertEqual(decoded_command[3], "cleanup")
+            self.assertEqual(
+                decoded_command[4:],
+                [
+                    expected["metadata"],
+                    expected["image"],
+                    expected["cloud_init"],
+                    expected["user_data"],
+                ],
+            )
+            self.assertNotIn("shell", machine.process.call_args.kwargs)
+
+    def test_local_and_external_protocol_commands_have_semantic_parity(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            local = self._machine(is_local=True)
+            external = self._machine(is_local=False)
+            for machine in (local, external):
+                machine.process.return_value = self._protocol(
+                    {"status": "invalid", "reason": "image missing"}
+                )
+                self.assertEqual(
+                    qemu_module._base_image_cache_invalid_reason(
+                        config,
+                        [machine],
+                        self.RAW_BASE_NAME,
+                        machine=machine,
+                    ),
+                    "image missing",
+                )
+
+            self.assertEqual(
+                local.process.call_args.args[1],
+                shlex.split(" ".join(external.process.call_args.args[1])),
+            )
+            self.assertEqual(local.process.call_args.kwargs, {})
+            self.assertEqual(
+                external.process.call_args.kwargs,
+                {"ssh": external.name, "ssh_key": False},
+            )
+
+    def test_publication_path_and_canonical_payload_are_inert_argv_data(self):
+        raw_base_name = "base0_peer user;$(touch SHOULD_NOT_EXIST)"
+        with tempfile.TemporaryDirectory(prefix="continuum publish ; ") as tempdir:
+            config = self._config(tempdir)
+            machine = self._machine(is_local=False, raw_base_name=raw_base_name)
+            machine.process.return_value = self._protocol({"status": "ok"})
+
+            qemu_module._write_base_image_metadata(
+                config,
+                [machine],
+                raw_base_name,
+                machine=machine,
+            )
+
+            command = machine.process.call_args.args[1]
+            decoded_command = shlex.split(" ".join(command))
+            self.assertEqual(decoded_command[3], "publish")
+            self.assertEqual(
+                decoded_command[4], qemu_module._base_image_metadata_path(config, raw_base_name)
+            )
+            self.assertEqual(
+                base64.b64decode(decoded_command[5]),
+                qemu_module._canonical_base_image_metadata(
+                    config,
+                    [machine],
+                    raw_base_name,
+                ),
+            )
+            self.assertNotIn("shell", machine.process.call_args.kwargs)
+
+    def test_all_participating_markers_are_invalidated_before_prepare_failure(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            first_name = "base_cloud_none_np1_mm0_0_user"
+            second_name = "base_cloud_none_np1_mm0_1_user"
+            valid_owner = self._machine(is_local=False, raw_base_name=first_name)
+            valid_owner.name = "valid-owner"
+            valid_owner.name_sanitized = "valid_owner"
+            invalid_owner = self._machine(is_local=False, raw_base_name=second_name)
+            invalid_owner.name = "invalid-owner"
+            invalid_owner.name_sanitized = "invalid_owner"
+            machines = [valid_owner, invalid_owner]
+            events = []
+            valid_paths = qemu_module._base_image_paths(config, first_name)
+            invalid_paths = qemu_module._base_image_paths(config, second_name)
+            for path in tuple(valid_paths.values()) + tuple(invalid_paths.values()):
+                pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+                pathlib.Path(path).write_bytes(b"cache artifact")
+
+            def valid_process(_config, command, **_kwargs):
+                operation = command[3]
+                events.append("valid:%s" % (operation,))
+                if operation == "check":
+                    return self._metadata_response(config, machines, first_name)
+                if operation == "invalidate":
+                    host_cache_helper.remove_paths([valid_paths["metadata"]])
+                    return self._protocol({"status": "ok"})
+                self.fail("valid peer cache files must not be deleted")
+
+            def invalid_process(_config, command, **_kwargs):
+                operation = command[3]
+                events.append("invalid:%s" % (operation,))
+                if operation == "check":
+                    return self._protocol({"status": "invalid", "reason": "image unreadable"})
+                if operation == "invalidate":
+                    host_cache_helper.remove_paths([invalid_paths["metadata"]])
+                    return self._protocol({"status": "ok"})
+                if operation == "cleanup":
+                    for path in invalid_paths.values():
+                        if os.path.exists(path):
+                            os.remove(path)
+                    return self._protocol({"status": "ok"})
+                self.fail("unexpected invalid-owner operation %s" % (operation,))
+
+            valid_owner.process.side_effect = valid_process
+            invalid_owner.process.side_effect = invalid_process
+            runner = mock.Mock()
+
+            def prepare_failure(*_args, **_kwargs):
+                events.append("prepare")
+                raise RuntimeError("stop at preparation boundary")
+
+            runner.run_playbook.side_effect = prepare_failure
+            real_fsync_parent = host_cache_helper._fsync_parent
+
+            def durable_parent(path):
+                real_fsync_parent(path)
+                owner = "valid" if path == valid_paths["metadata"] else "invalid"
+                events.append("%s:invalidate-durable" % (owner,))
+
+            with mock.patch.object(
+                host_cache_helper, "_fsync_parent", side_effect=durable_parent
+            ):
+                with self.assertRaisesRegex(RuntimeError, "preparation boundary"):
+                    qemu_module.base_image(config, machines, runner=runner)
+
+            valid_operations = [call.args[1][3] for call in valid_owner.process.call_args_list]
+            invalid_operations = [call.args[1][3] for call in invalid_owner.process.call_args_list]
+            self.assertEqual(valid_operations, ["check", "invalidate"])
+            self.assertEqual(invalid_operations, ["check", "invalidate", "cleanup"])
+            self.assertEqual(
+                events,
+                [
+                    "valid:check",
+                    "invalid:check",
+                    "valid:invalidate",
+                    "valid:invalidate-durable",
+                    "invalid:invalidate",
+                    "invalid:invalidate-durable",
+                    "invalid:cleanup",
+                    "prepare",
+                ],
+            )
+            prepare_mapping = runner.run_playbook.call_args.kwargs["extra_vars"][
+                "continuum_base_images_by_host"
+            ]
+            self.assertEqual(prepare_mapping[valid_owner.name_sanitized], [first_name])
+            self.assertEqual(prepare_mapping[invalid_owner.name_sanitized], [second_name])
+            self.assertFalse(pathlib.Path(valid_paths["metadata"]).exists())
+            self.assertFalse(pathlib.Path(invalid_paths["metadata"]).exists())
+            self.assertTrue(pathlib.Path(valid_paths["image"]).exists())
+            self.assertTrue(pathlib.Path(valid_paths["cloud_init"]).exists())
+            self.assertTrue(pathlib.Path(valid_paths["user_data"]).exists())
+            self.assertFalse(pathlib.Path(invalid_paths["image"]).exists())
+
+    def test_partial_multi_owner_invalidation_failure_prevents_prepare_and_restore(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            first_name = "base_cloud_none_np1_mm0_0_user"
+            second_name = "base_cloud_none_np1_mm0_1_user"
+            first_owner = self._machine(is_local=False, raw_base_name=first_name)
+            second_owner = self._machine(is_local=False, raw_base_name=second_name)
+            first_owner.name = "first-owner"
+            second_owner.name = "second-owner"
+            machines = [first_owner, second_owner]
+            events = []
+            first_marker = qemu_module._base_image_metadata_path(config, first_name)
+            second_marker = qemu_module._base_image_metadata_path(config, second_name)
+            pathlib.Path(first_marker).parent.mkdir(parents=True, exist_ok=True)
+            pathlib.Path(first_marker).write_bytes(b"ready")
+            pathlib.Path(second_marker).write_bytes(b"ready")
+
+            def owner_process(owner_name, fail_invalidation):
+                def process(_config, command, **_kwargs):
+                    operation = command[3]
+                    events.append("%s:%s" % (owner_name, operation))
+                    if operation == "check":
+                        return self._protocol(
+                            {"status": "invalid", "reason": "image unreadable"}
+                        )
+                    if operation == "invalidate" and fail_invalidation:
+                        with mock.patch.object(
+                            host_cache_helper,
+                            "_fsync_parent",
+                            side_effect=OSError("injected directory fsync failure"),
+                        ):
+                            try:
+                                host_cache_helper.remove_paths([second_marker])
+                            except OSError:
+                                synthetic = (
+                                    "Command exited with non-zero return code 7: invalidate"
+                                )
+                                return [([], [synthetic])]
+                    if operation == "invalidate":
+                        host_cache_helper.remove_paths([first_marker])
+                        return self._protocol({"status": "ok"})
+                    self.fail("cleanup or publication must not run after invalidation failure")
+
+                return process
+
+            first_owner.process.side_effect = owner_process("first", False)
+            second_owner.process.side_effect = owner_process("second", True)
+            runner = mock.Mock()
+
+            with self.assertRaisesRegex(RuntimeError, "returned nonzero"):
+                qemu_module.base_image(config, machines, runner=runner)
+
+            self.assertEqual(
+                events,
+                [
+                    "first:check",
+                    "second:check",
+                    "first:invalidate",
+                    "second:invalidate",
+                ],
+            )
+            runner.run_playbook.assert_not_called()
+            self.assertFalse(pathlib.Path(first_marker).exists())
+            self.assertFalse(pathlib.Path(second_marker).exists())
+
+    def test_cleanup_failure_prevents_prepare_role(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            machine = self._machine(is_local=False)
+            synthetic = "Command exited with non-zero return code 1: cleanup"
+            machine.process.side_effect = [
+                self._protocol({"status": "invalid", "reason": "image unreadable"}),
+                self._protocol({"status": "ok"}),
+                [([], [synthetic])],
+            ]
+            runner = mock.Mock()
+
+            with self.assertRaisesRegex(RuntimeError, "returned nonzero"):
+                qemu_module.base_image(config, [machine], runner=runner)
+
+            runner.run_playbook.assert_not_called()
+
+    def _successful_rebuild_process(self, machine, published_operations, fail_operation=None):
+        synthetic = "Command exited with non-zero return code 9: injected"
+
+        def process(_config, command, **kwargs):
+            decoded_command = (
+                shlex.split(" ".join(command)) if kwargs.get("ssh") else command
+            )
+            operation = (
+                decoded_command[3]
+                if decoded_command[:3]
+                == ["python3", "-c", qemu_module._HOST_CACHE_HELPER_SOURCE]
+                else None
+            )
+            if operation:
+                if operation == "check":
+                    return self._protocol({"status": "invalid", "reason": "metadata missing"})
+                if operation == "publish":
+                    published_operations.append(operation)
+                if fail_operation == operation:
+                    return [(["partial"], [synthetic])]
+                return self._protocol({"status": "ok"})
+
+            if decoded_command[0] == "virsh":
+                operation = decoded_command[3]
+                if fail_operation == operation:
+                    return [(["partial"], [synthetic])]
+                if operation == "create":
+                    message = "Domain %s created from %s" % (
+                        machine.base_names[0],
+                        decoded_command[4],
+                    )
+                    return [([message], [])]
+                if operation == "shutdown":
+                    return [(["Domain %s is being shutdown" % (machine.base_names[0],)], [])]
+                if operation == "list":
+                    return [([], [])]
+
+            if decoded_command[0] == "ls":
+                if fail_operation == "timezone-discovery":
+                    return [(["partial"], [synthetic])]
+                return [(["/etc/localtime -> /usr/share/zoneinfo/Europe/Amsterdam"], [])]
+            if decoded_command[:2] == ["sudo", "ln"]:
+                if fail_operation == "timezone":
+                    return [([], [synthetic])]
+                return [([], [])]
+            if decoded_command[:2] == ["sudo", "cloud-init"]:
+                if fail_operation == "cloud-init":
+                    return [([], [synthetic])]
+                return [([], [])]
+            self.fail("unexpected rebuild command %r" % (command,))
+
+        return process
+
+    def _run_rebuild(
+        self,
+        fail_operation=None,
+        runner_failure=None,
+        prefetch_failure=False,
+        readiness_failure=False,
+    ):
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        config = self._config(tempdir.name)
+        machine = self._machine(is_local=False)
+        published = []
+        machine.process.side_effect = self._successful_rebuild_process(
+            machine, published, fail_operation=fail_operation
+        )
+        runner = mock.Mock()
+        self._last_rebuild = (machine, runner, published)
+        if runner_failure == "prepare":
+            runner.run_playbook.side_effect = RuntimeError("prepare failed")
+        elif runner_failure == "common":
+            runner.run_playbook.side_effect = [mock.DEFAULT, RuntimeError("common failed")]
+        elif runner_failure == "install":
+            runner.run_playbooks.side_effect = RuntimeError("install failed")
+
+        prefetch_enabled = prefetch_failure
+        patches = (
+            mock.patch.object(
+                infrastructure_module,
+                "add_ssh",
+                side_effect=RuntimeError("SSH readiness failed") if readiness_failure else None,
+            ),
+            mock.patch.object(
+                image_registry_module,
+                "has_prefetch_requirements",
+                return_value=prefetch_enabled,
+            ),
+            mock.patch.object(
+                image_registry_module,
+                "docker_pull",
+                side_effect=RuntimeError("prefetch failed") if prefetch_failure else None,
+            ),
+            mock.patch.object(qemu_module.time, "sleep"),
+            mock.patch.object(qemu_module.config_access, "orchestrator_name", return_value=None),
+        )
+        install_patch = mock.patch.object(
+            qemu_module,
+            "_base_install_playbooks_for_base_names",
+            return_value=["install.yml"] if runner_failure == "install" else [],
+        )
+        with patches[0], patches[1], patches[2], patches[3], patches[4], install_patch:
+            qemu_module.base_image(config, [machine], runner=runner)
+        return machine, runner, published
+
+    def test_successful_build_confirms_shutdown_then_publishes_atomically(self):
+        machine, _runner, published = self._run_rebuild()
+
+        decoded_commands = [
+            shlex.split(" ".join(call.args[1]))
+            if call.kwargs.get("ssh")
+            else call.args[1]
+            for call in machine.process.call_args_list
+        ]
+        operations = [
+            command[3]
+            for command in decoded_commands
+            if command[:3] == ["python3", "-c", qemu_module._HOST_CACHE_HELPER_SOURCE]
+        ]
+        self.assertEqual(operations, ["check", "invalidate", "cleanup", "publish"])
+        self.assertEqual(published, ["publish"])
+        virsh_operations = [
+            call.args[1][3]
+            for call in machine.process.call_args_list
+            if call.args[1][0] == "virsh"
+        ]
+        self.assertEqual(virsh_operations, ["create", "shutdown", "list"])
+        cache_or_virsh_operations = [
+            command[3]
+            for command in decoded_commands
+            if command[:3] == ["python3", "-c", qemu_module._HOST_CACHE_HELPER_SOURCE]
+            or command[0] == "virsh"
+        ]
+        self.assertEqual(
+            cache_or_virsh_operations,
+            ["check", "invalidate", "cleanup", "create", "shutdown", "list", "publish"],
+        )
+
+    def test_failed_machine_process_stages_prevent_publication(self):
+        stages = (
+            "create",
+            "timezone-discovery",
+            "timezone",
+            "cloud-init",
+            "shutdown",
+            "list",
+        )
+        for stage in stages:
+            with self.subTest(stage=stage):
+                with self.assertRaises(RuntimeError):
+                    self._run_rebuild(fail_operation=stage)
+                self.assertEqual(self._last_rebuild[2], [])
+
+    def test_failed_readiness_and_software_stages_prevent_publication(self):
+        cases = (
+            {"runner_failure": "prepare"},
+            {"readiness_failure": True},
+            {"runner_failure": "install"},
+            {"runner_failure": "common"},
+            {"prefetch_failure": True},
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                with self.assertRaises(RuntimeError):
+                    self._run_rebuild(**case)
+                self.assertEqual(self._last_rebuild[2], [])
+
+    def test_shutdown_confirmation_is_bounded_and_prevents_publication(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            machine = self._machine(is_local=False)
+            selected = [(machine, self.RAW_BASE_NAME, "base_cloud_none_np1_mm0", "invalid")]
+            machine.process.return_value = [([self.RAW_BASE_NAME], [])]
+            with mock.patch.object(qemu_module, "_BASE_SHUTDOWN_ATTEMPTS", 3):
+                with mock.patch.object(qemu_module.time, "sleep") as sleep_mock:
+                    with self.assertRaisesRegex(
+                        RuntimeError, "not confirmed after 3 attempts"
+                    ):
+                        qemu_module._confirm_base_vms_stopped(config, selected)
+            self.assertEqual(machine.process.call_count, 3)
+            self.assertEqual(sleep_mock.call_count, 2)
+
     def test_base_image_cache_invalid_without_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
             config = {"infrastructure": {"base_path": tempdir}, "module": {}}
@@ -3612,10 +4308,13 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             raw_base_name = "base_cloud_kubernetes_np1_mm0_0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
+            (images_dir / ("%s.qcow2" % (raw_base_name))).write_bytes(b"qcow2")
 
             qemu_module._write_base_image_metadata(config, [], raw_base_name)
 
-            self.assertIsNone(qemu_module._base_image_cache_invalid_reason(config, [], raw_base_name))
+            self.assertIsNone(
+                qemu_module._base_image_cache_invalid_reason(config, [], raw_base_name)
+            )
 
     def test_infra_only_base_install_playbooks_require_resume_prep(self):
         rm_module = mock.Mock(
@@ -3675,6 +4374,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             raw_base_name = "base0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
+            (images_dir / ("%s.qcow2" % (raw_base_name))).write_bytes(b"qcow2")
             machines = [
                 mock.Mock(
                     base_names=[raw_base_name],
@@ -3738,6 +4438,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             raw_base_name = "base0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
+            (images_dir / ("%s.qcow2" % (raw_base_name))).write_bytes(b"qcow2")
             machines = [
                 mock.Mock(
                     base_names=[raw_base_name],
