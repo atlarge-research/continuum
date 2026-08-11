@@ -479,11 +479,15 @@ Longer-term observability/reproducibility note:
 
 Cache-integrity note:
 
-1. `.continuum` image reuse must not trust file existence alone,
-2. QEMU base images are now considered reusable only when companion success metadata exists and
-   matches the expected guest-user contract,
-3. interrupted or partial base-image builds should therefore be invalidated and rebuilt instead of
-   being silently reused on the next operational run.
+1. `.continuum` image reuse does not trust file existence alone,
+2. cache validation occurs on the owning host and checks readable image data,
+   exact schema-v1 ready metadata, expected fields, and content fingerprints,
+3. participating ready markers are invalidated durably before cache
+   modification begins,
+4. ready metadata is published atomically only after image preparation and
+   bounded shutdown confirmation complete successfully,
+5. external-owner behavior currently has mocked and static coverage, but no
+   live external-host certification.
 
 ## 10. How A User Or Research Collaborator Can Help
 
