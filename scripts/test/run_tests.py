@@ -5,8 +5,10 @@ Discovers and executes test configurations, tracks results, and generates report
 """
 
 import argparse
+import errno
 import json
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -26,6 +28,142 @@ test_utils_path = os.path.join(os.path.dirname(__file__), "support", "e2e_utils.
 spec = importlib.util.spec_from_file_location("test_utils", test_utils_path)
 test_utils = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(test_utils)
+
+
+_PROCESS_GROUP_CLEANUP_GRACE_SECONDS = 5.0
+
+
+class _RunnerInfrastructureError(RuntimeError):
+    """The runner cannot safely manage its owned child process."""
+
+
+class _RunnerSignalCoordinator:
+    def __init__(self):
+        self.previous_handlers = None
+        self.cancellation = None
+        self.process = None
+        self.group_absent = True
+        self.installed = 0
+    def _record_cancellation(self, signum, _frame):
+        self.cancellation = self.cancellation or signum
+    def __enter__(self):
+        self.previous_handlers = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))
+        try:
+            signal.signal(signal.SIGINT, self._record_cancellation)
+            self.installed = 1
+            signal.signal(signal.SIGTERM, self._record_cancellation)
+            self.installed = 2
+        except BaseException as exc:
+            if self.installed:
+                try:
+                    signal.signal(signal.SIGINT, self.previous_handlers[0])
+                except BaseException as restore_exc:
+                    raise _RunnerInfrastructureError("Failed to restore SIGINT") from restore_exc
+            self.installed = 0
+            raise _RunnerInfrastructureError("Failed to install runner signal handlers") from exc
+        return self
+
+    def claim(self, process):
+        if self.process is not None:
+            raise _RunnerInfrastructureError("Runner already owns a child process group")
+        self.process = process
+        self.group_absent = False
+    def release(self):
+        if not self.group_absent or self.process is None or self.process.returncode is None:
+            raise _RunnerInfrastructureError("Child group is absent but leader is not reaped")
+        self.process = None
+    def cancellation_exception(self):
+        exceptions = {signal.SIGINT: KeyboardInterrupt, signal.SIGTERM: lambda: SystemExit(143)}
+        factory = exceptions.get(self.cancellation)
+        return factory() if factory else None
+    def raise_if_cancelled(self):
+        cancellation = self.cancellation_exception()
+        if cancellation is not None:
+            raise cancellation
+
+    def __exit__(self, _exc_type, pending, _traceback):
+        if not self.group_absent or self.process is not None:
+            if pending is None:
+                raise _RunnerInfrastructureError("Owned child cleanup remains incomplete")
+            return False
+        restoration_error = None
+        for installed, sig, previous in (
+            (2, signal.SIGTERM, self.previous_handlers[1]),
+            (1, signal.SIGINT, self.previous_handlers[0]),
+        ):
+            if self.installed < installed:
+                continue
+            try:
+                signal.signal(sig, previous)
+            except BaseException as exc:
+                restoration_error = restoration_error or exc
+        self.installed = 0
+        cancellation = self.cancellation_exception()
+        if isinstance(pending, _RunnerInfrastructureError):
+            return False
+        if restoration_error:
+            message = "Failed to restore signal handlers: %s" % restoration_error
+            raise _RunnerInfrastructureError(message) from (cancellation or pending)
+        if isinstance(pending, (KeyboardInterrupt, SystemExit)):
+            return False
+        if cancellation is not None:
+            raise cancellation from pending
+        return False
+
+
+def _probe_owned_group_absence(coordinator):
+    if coordinator.group_absent:
+        return True
+    try:
+        os.killpg(coordinator.process.pid, 0)
+    except OSError as exc:
+        if isinstance(exc, ProcessLookupError) or exc.errno == errno.ESRCH:
+            coordinator.group_absent = True
+            return True
+        raise _RunnerInfrastructureError("Failed to probe child process group") from exc
+    return False
+def _cleanup_owned_process(coordinator):
+    process = coordinator.process
+    try:
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            if coordinator.group_absent:
+                break
+            try:
+                os.killpg(process.pid, sig)
+            except OSError as exc:
+                if isinstance(exc, ProcessLookupError) or exc.errno == errno.ESRCH:
+                    coordinator.group_absent = True
+                    break
+                raise
+            deadline = time.monotonic() + _PROCESS_GROUP_CLEANUP_GRACE_SECONDS
+            while not coordinator.group_absent:
+                process.poll()
+                if _probe_owned_group_absence(coordinator):
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(0.05, remaining))
+        if not coordinator.group_absent:
+            raise _RunnerInfrastructureError("Child group %s survived SIGKILL" % process.pid)
+        return process.communicate()
+    except BaseException as exc:
+        message = "Failed to clean up child group %s: %s" % (process.pid, exc)
+        raise _RunnerInfrastructureError(message) from exc
+def _communicate_owned_process(coordinator, timeout_seconds):
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if coordinator.cancellation:
+            return None
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            output = coordinator.process.communicate(timeout=min(0.1, remaining))
+            return None if coordinator.cancellation is not None else output
+        except subprocess.TimeoutExpired:
+            if coordinator.cancellation:
+                return None
+            if time.monotonic() >= deadline:
+                raise
 
 
 class Colors:
@@ -252,7 +390,13 @@ def resolve_results_dir(base_path_override: Optional[str] = None) -> str:
     return os.path.join(project_root, "logs", "test_results")
 
 
-def run_single_test(
+def run_single_test(*args, **kwargs) -> Dict:
+    """Run one test with a coordinator scoped to this direct invocation."""
+    with _RunnerSignalCoordinator() as coordinator:
+        return _run_single_test(*args, coordinator=coordinator, **kwargs)
+
+
+def _run_single_test(
     config_path: str,
     test_config: Dict,
     base_path_override: Optional[str] = None,
@@ -260,8 +404,9 @@ def run_single_test(
     middle_ip_base_override: Optional[int] = None,
     external_physical_machines_override: Optional[str] = None,
     timeout_minutes: int = 30,
+    coordinator=None,
 ) -> Dict:
-    """Run a single test configuration.
+    """Run one test using the runner's active signal coordinator.
 
     Args:
         config_path: Path to test config file
@@ -348,29 +493,57 @@ def run_single_test(
         continuum_script = os.path.join(project_root, "continuum.py")
 
         cmd = [sys.executable, continuum_script, temp_config_path]
-
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=project_root,
-        )
-
-        # Wait with timeout
+        coordinator.raise_if_cancelled()
         try:
-            stdout, stderr = process.communicate(timeout=timeout_minutes * 60)
-            result["exit_code"] = process.returncode
-            result["stdout"] = stdout.decode("utf-8", errors="replace")
-            result["stderr"] = stderr.decode("utf-8", errors="replace")
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=project_root,
+                start_new_session=True,
+            )
+        except BaseException as exc:
+            if coordinator.cancellation:
+                raise coordinator.cancellation_exception() from exc
+            raise
+
+        coordinator.claim(process)
+        timed_out = False
+        try:
+            output = _communicate_owned_process(coordinator, timeout_minutes * 60)
         except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate()
+            timed_out = True
+            output = _cleanup_owned_process(coordinator)
+        except BaseException as exc:
+            try:
+                _cleanup_owned_process(coordinator)
+                coordinator.release()
+            except _RunnerInfrastructureError as cleanup_error:
+                raise cleanup_error from exc
+            raise
+
+        if output is None:
+            output = _cleanup_owned_process(coordinator)
+        elif not _probe_owned_group_absence(coordinator):
+            _cleanup_owned_process(coordinator)
+
+        coordinator.release()
+        coordinator.raise_if_cancelled()
+
+        stdout, stderr = output
+        if timed_out:
             result["exit_code"] = -1
             result["stdout"] = stdout.decode("utf-8", errors="replace") if stdout else ""
             result["stderr"] = stderr.decode("utf-8", errors="replace") if stderr else ""
             result["timed_out"] = True
             result["error"] = f"Test timed out after {timeout_minutes} minutes"
+        else:
+            result["exit_code"] = process.returncode
+            result["stdout"] = stdout.decode("utf-8", errors="replace")
+            result["stderr"] = stderr.decode("utf-8", errors="replace")
 
+    except (_RunnerInfrastructureError, KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         result["error"] = f"Failed to execute test: {e}"
         result["execution_time"] = time.time() - start_time
@@ -409,7 +582,13 @@ def run_single_test(
     return result
 
 
-def run_tests(
+def run_tests(*args, **kwargs) -> List[Dict]:
+    """Run all selected tests under one runner-scoped signal coordinator."""
+    with _RunnerSignalCoordinator() as coordinator:
+        return _run_tests(*args, coordinator=coordinator, **kwargs)
+
+
+def _run_tests(
     config_files: List[str],
     test_config: Dict,
     base_path_override: Optional[str] = None,
@@ -419,6 +598,7 @@ def run_tests(
     rebuild_base_images: bool = False,
     use_cache: bool = False,
     stop_on_failure: bool = False,
+    coordinator=None,
 ) -> List[Dict]:
     """Run multiple test configurations.
 
@@ -445,6 +625,7 @@ def run_tests(
     print_colored(f"{'='*80}\n", Colors.BOLD)
 
     for i, config_path in enumerate(config_files, 1):
+        coordinator.raise_if_cancelled()
         print_colored(f"[{i}/{len(config_files)}] Testing: {config_path}", Colors.BLUE)
 
         # Parse config to identify base images
@@ -497,7 +678,7 @@ def run_tests(
                     )
 
         # Run the test
-        result = run_single_test(
+        result = _run_single_test(
             config_path,
             test_config,
             base_path_override=base_path_override,
@@ -505,6 +686,7 @@ def run_tests(
             middle_ip_base_override=middle_ip_base_override,
             external_physical_machines_override=external_machines_override,
             timeout_minutes=timeout_minutes,
+            coordinator=coordinator,
         )
 
         result["base_images_rebuilt"] = [os.path.basename(img) for img in deleted_images]
