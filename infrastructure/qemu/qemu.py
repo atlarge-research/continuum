@@ -14,14 +14,13 @@ import time
 
 import yaml
 
-from input.configuration import config_access
 from infrastructure import ansible, image_registry, infrastructure
 from infrastructure import machine as m
 from infrastructure import network, orchestration_schema
+from input.configuration import config_access
 from resource_manager import plans as rm_plans
 
 from . import generate, host_cache_helper
-
 
 _CACHE_PROTOCOL = host_cache_helper.PROTOCOL
 _SYNTHETIC_NONZERO_MARKER = "Command exited with non-zero return code"
@@ -100,9 +99,7 @@ def _single_process_result(results, operation):
 def _validated_process_results(results, expected_count, operation):
     """Validate result shape/count and reject every synthetic nonzero marker."""
     if not isinstance(results, list) or len(results) != expected_count:
-        raise RuntimeError(
-            "%s failed: expected %s process result(s)" % (operation, expected_count)
-        )
+        raise RuntimeError("%s failed: expected %s process result(s)" % (operation, expected_count))
     validated = []
     for result in results:
         if not isinstance(result, (list, tuple)) or len(result) != 2:
@@ -126,20 +123,17 @@ def _host_cache_operation(machine, config, operation, arguments, response_keys):
     )
     if len(output) != 1:
         raise RuntimeError(
-            "QEMU cache %s on %s failed: expected one protocol response"
-            % (operation, machine.name)
+            "QEMU cache %s on %s failed: expected one protocol response" % (operation, machine.name)
         )
     try:
         response = json.loads(output[0])
     except (TypeError, ValueError) as exc:
         raise RuntimeError(
-            "QEMU cache %s on %s failed: malformed protocol response"
-            % (operation, machine.name)
+            "QEMU cache %s on %s failed: malformed protocol response" % (operation, machine.name)
         ) from exc
     if not isinstance(response, dict) or set(response) not in response_keys:
         raise RuntimeError(
-            "QEMU cache %s on %s failed: malformed protocol mapping"
-            % (operation, machine.name)
+            "QEMU cache %s on %s failed: malformed protocol mapping" % (operation, machine.name)
         )
     if response.get("protocol") != _CACHE_PROTOCOL:
         raise RuntimeError(
@@ -266,9 +260,7 @@ def _base_install_playbooks_for_base_names(config, machines, normalized_base_nam
         infra_only = False
 
     try:
-        prepare_for_resume = (
-            infra_only and config_access.prepare_for_resume_enabled(config)
-        )
+        prepare_for_resume = infra_only and config_access.prepare_for_resume_enabled(config)
     except (KeyError, TypeError, ValueError):
         prepare_for_resume = False
 
@@ -907,12 +899,10 @@ def base_image(config, machines, runner=None):
         "playbooks/infrastructure/common_base_install.yml",
         inventory="vms",
         extra_vars={
-            "continuum_common_base_hosts": _common_base_install_hosts_for_base_names(
-                rebuild_names
-            ),
+            "continuum_common_base_hosts": _common_base_install_hosts_for_base_names(rebuild_names),
             "continuum_enable_mahimahi": (
                 isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
-            )
+            ),
         },
     )
 
