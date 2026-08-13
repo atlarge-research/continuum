@@ -1,23 +1,28 @@
-# Define custom function directory
-ARG FUNCTION_DIR="/function"
+ARG PYTHON_IMAGE="docker.io/library/python:3.11.13-slim-bookworm@sha256:cec9aa7aa96eea4fa036e9b82be1e6b325f2e3707f462d885868df51ec0a4b47"
 
-#------------------------------------------------------------------------
-FROM python:3.8.7-slim-buster
+FROM ${PYTHON_IMAGE} AS python-dependencies
 
-# Include global arg in this stage of the build
-ARG FUNCTION_DIR
+COPY requirements.lock /tmp/requirements.lock
+RUN python3 -m pip install \
+    --disable-pip-version-check \
+    --no-cache-dir \
+    --require-hashes \
+    --prefix=/install \
+    --requirement /tmp/requirements.lock
 
-# Copy function source code
-RUN mkdir -p ${FUNCTION_DIR}
-COPY src/ ${FUNCTION_DIR}/
+FROM ${PYTHON_IMAGE} AS runtime
 
-# Install app specific packages
-RUN pip3 install -r ${FUNCTION_DIR}/requirements.txt
+ENV HOME="/tmp" \
+    PYTHONUNBUFFERED="1"
 
-# Set working directory to function root directory
-WORKDIR ${FUNCTION_DIR}
+COPY --from=python-dependencies /install/ /usr/local/
+COPY src/publisher.py src/crime_and_punishment.txt \
+    /opt/continuum/text-translation/publisher/
 
-# Open port to the MQTT broker
+WORKDIR /opt/continuum/text-translation/publisher
+
 EXPOSE 1883
 
-CMD [ "python3", "-u", "publisher.py"]
+USER 65532:65532
+
+CMD ["python3", "-u", "/opt/continuum/text-translation/publisher/publisher.py"]
