@@ -12,7 +12,7 @@ The main entry point is `continuum.py`. Core Python modules live in `infrastruct
 
 - `pip3 install -r requirements.txt`: install Python, Ansible, linting, and test dependencies.
 - `python3 continuum.py --help`: inspect runtime options.
-- `python3 continuum.py configuration/bench_cloud.cfg`: run a legacy example configuration.
+- `python3 continuum.py configs/experiments/bench_cloud.yaml`: run a YAML example configuration.
 - Keep generated logs, VM artifacts, and local temp data out of commits.
 
 ## Testing Instructions
@@ -21,7 +21,7 @@ The main entry point is `continuum.py`. Core Python modules live in `infrastruct
 - `PYTHONPATH=. python3 -m unittest discover scripts/test/e2e`: run local e2e-runner regression tests.
 - `PYTHONPATH=. python3 -m unittest discover scripts/test`: run the combined Python test suite.
 - `python3 scripts/test/run_tests.py --suite smoke`: run the configured smoke suite from `configs/experiments/`.
-- `python3 scripts/test/run_tests.py --config configuration/tests/qemu/01_infraonly-cloud.cfg`: run one end-to-end config.
+- `python3 scripts/test/run_tests.py --config configs/experiments/parity/qemu/01_infraonly_cloud.yaml`: run one end-to-end config.
 - `pylint --rcfile=sysconfig/pylintrc <path>` and `yamllint -c sysconfig/yamllint.yml <path>`: run lint checks.
 
 Tests use `unittest` with unit tests under `scripts/test/unit/test_*.py`, local e2e-runner regression tests under `scripts/test/e2e/test_*.py`, and shared helpers under `scripts/test/support/`. Classes should end in `Tests`. Add focused tests near the changed code path, especially for configuration parsing, schema validation, selector resolution, and runtime planning. End-to-end tests can create VMs or use cached base images; prefer `--suite smoke` or one `--config`.
