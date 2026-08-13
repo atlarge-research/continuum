@@ -579,6 +579,33 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
             ],
         )
 
+    def test_start_worker_baremetal_preserves_fractional_memory_in_docker_command(self):
+        for cloud_memory, expected_argument in (
+            (0.5, "--memory=0.5g"),
+            (0.1234564, "--memory=0.1234564g"),
+        ):
+            with self.subTest(cloud_memory=cloud_memory):
+                config = {
+                    "cloud_ssh": ["cloud0@192.168.1.2"],
+                    "registry": "registry.local:5000",
+                    "images": {"worker": "worker:test"},
+                    "infrastructure": {
+                        "cloud_nodes": 1,
+                        "edge_nodes": 0,
+                        "cloud_cores": 2,
+                        "cloud_memory": cloud_memory,
+                        "cloud_quota": 1.0,
+                    },
+                }
+                machine = mock.Mock()
+                machine.process.return_value = [(["container-id\n"], [])]
+
+                with mock.patch.object(runtime_helpers, "_wait_for_docker_workers"):
+                    runtime_helpers.start_worker_baremetal(config, [machine], [])
+
+                command = machine.process.call_args.args[1]
+                self.assertIn(expected_argument, command)
+
     def test_parse_custom_kubernetes_splits_extracts_timestamp_and_marker(self):
         line = (
             "I0824 22:23:21.269974 5026 kubectl.go:32] %!s(int64=1692908601269961032) "

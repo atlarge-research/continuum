@@ -102,6 +102,30 @@ class LegacyProjectionTests(unittest.TestCase):
         self.assertFalse(config["domains"]["run"]["prepare_for_resume"])
         self.assertEqual(config["config_format"], "yaml")
 
+    def test_to_legacy_config_preserves_tier_memory_as_float(self):
+        normalized = self._normalized()
+        normalized["infrastructure"]["clusters"] = [
+            self._cluster("cloud-1", "cloud", 1, 2, 0.5),
+            self._cluster("edge-1", "edge", 1, 1, 1.5),
+            self._cluster("endpoint-1", "endpoint", 1, 1, 2.0),
+        ]
+
+        config = legacy_projection.to_legacy_config(
+            normalized,
+            ("cloud", "edge", "endpoint"),
+            ("cloud_latency_avg", "cloud_location"),
+        )
+
+        for key, expected in (
+            ("cloud_memory", 0.5),
+            ("edge_memory", 1.5),
+            ("endpoint_memory", 2.0),
+        ):
+            with self.subTest(key=key):
+                value = config["infrastructure"][key]
+                self.assertEqual(value, expected)
+                self.assertIsInstance(value, float)
+
     def test_to_legacy_config_projects_prepare_for_resume(self):
         normalized = self._normalized()
         normalized["run"]["targets"] = ["infrastructure"]

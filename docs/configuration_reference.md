@@ -115,10 +115,15 @@ Top-level `infrastructure` keys:
 | Key | Type | Required | Default when `count > 0` | Notes |
 | --- | --- | --- | --- | --- |
 | `cores` | integer | no | `1` | Must be `>= 1` when `count > 0` |
-| `memory_gb` | number | no | `1.0` | Must be `>= 0` |
+| `memory_gb` | number | no | `1.0` | Must be a finite number `>= 0` |
 | `cpu_quota` | number | no | `1.0` | Must be `>= 0` |
 | `storage_read_mbps` | number | no | `0.0` | Must be `>= 0` |
 | `storage_write_mbps` | number | no | `0.0` | Must be `>= 0` |
+
+QEMU/libvirt represents VM memory at whole-KiB precision. A positive request that is not
+already KiB-aligned is rounded upward by less than one KiB at the QEMU generation boundary;
+the canonical and normalized `memory_gb` values remain unchanged. AWS and GCP VM memory is
+determined by the configured provider machine type.
 
 ### `infrastructure.network`
 

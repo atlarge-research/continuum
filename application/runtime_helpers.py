@@ -637,7 +637,7 @@ def start_worker_baremetal(config, machines, app_vars):
             "container",
             "run",
             "--detach",
-            "--memory=%ig" % (config["infrastructure"]["cloud_memory"]),
+            "--memory=%sg" % (float(config["infrastructure"]["cloud_memory"])),
             "--cpu-period=%i" % (period),
             "--cpu-quota=%i" % (quota),
             "--network=host",

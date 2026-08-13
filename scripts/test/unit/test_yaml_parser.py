@@ -202,12 +202,12 @@ class YamlParserTests(unittest.TestCase):
             {
                 "id": "cloud-1",
                 "tier": "cloud",
-                "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 4}}},
+                "resources": {"vms": {"count": 1, "spec": {"cores": 2, "memory_gb": 0.5}}},
             },
             {
                 "id": "edge-1",
                 "tier": "edge",
-                "resources": {"vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 2}}},
+                "resources": {"vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 1.5}}},
             },
             {
                 "id": "endpoint-1",
@@ -260,6 +260,9 @@ class YamlParserTests(unittest.TestCase):
             for key, value in provider_options.items():
                 self.assertEqual(config["infrastructure"][key], value)
                 self.assertEqual(config["normalized"]["provider"]["config"][key], value)
+            self.assertEqual(config["infrastructure"]["cloud_memory"], 0.5)
+            self.assertEqual(config["infrastructure"]["edge_memory"], 1.5)
+            self.assertEqual(config["infrastructure"]["endpoint_memory"], 2.0)
 
     def test_full_parser_projects_validated_gcp_provider_options(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -290,6 +293,9 @@ class YamlParserTests(unittest.TestCase):
             for key, value in provider_options.items():
                 self.assertEqual(config["infrastructure"][key], value)
                 self.assertEqual(config["normalized"]["provider"]["config"][key], value)
+            self.assertEqual(config["infrastructure"]["cloud_memory"], 0.5)
+            self.assertEqual(config["infrastructure"]["edge_memory"], 1.5)
+            self.assertEqual(config["infrastructure"]["endpoint_memory"], 2.0)
 
     def test_full_parser_rejects_trailing_slash_gcp_credentials(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1238,6 +1244,138 @@ class YamlParserTests(unittest.TestCase):
                 cfg_lock["planner_snapshot"]["benchmark_stage_assignments"][0]["id"],
                 "generate",
             )
+
+    def test_memory_gb_preserved_through_projection_lock_and_replay(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            clusters = [
+                {
+                    "id": "cloud-1",
+                    "tier": "cloud",
+                    "resources": {
+                        "vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 0.5}}
+                    },
+                },
+                {
+                    "id": "edge-1",
+                    "tier": "edge",
+                    "resources": {
+                        "vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 1.5}}
+                    },
+                },
+                {
+                    "id": "endpoint-1",
+                    "tier": "endpoint",
+                    "resources": {
+                        "vms": {"count": 1, "spec": {"cores": 1, "memory_gb": 2}}
+                    },
+                },
+            ]
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                clusters=clusters,
+                modules=self._image_classification_modules(),
+            )
+            canonical = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                [
+                    cluster["resources"]["vms"]["spec"]["memory_gb"]
+                    for cluster in canonical["infrastructure"]["clusters"]
+                ],
+                [0.5, 1.5, 2],
+            )
+
+            parser = argparse.ArgumentParser()
+            config = input_module.start(parser, str(exp_path))
+            from input.configuration import yaml_parser
+
+            expected = {"cloud": 0.5, "edge": 1.5, "endpoint": 2.0}
+
+            def assert_normalized_memory(infrastructure):
+                cluster_memory = {
+                    cluster["tier"]: cluster["resources"]["vms"]["spec"]["memory_gb"]
+                    for cluster in infrastructure["clusters"]
+                }
+                resource_memory = {
+                    resource["tier"]: resource["spec"]["memory_gb"]
+                    for resource in infrastructure["resources"]
+                }
+                self.assertEqual(cluster_memory, expected)
+                self.assertEqual(resource_memory, expected)
+                for value in cluster_memory.values():
+                    self.assertIsInstance(value, float)
+                for value in resource_memory.values():
+                    self.assertIsInstance(value, float)
+
+            assert_normalized_memory(config["normalized"]["infrastructure"])
+            for key, value in expected.items():
+                projected = config["infrastructure"]["%s_memory" % key]
+                self.assertEqual(projected, value)
+                self.assertIsInstance(projected, float)
+
+            lock_path = yaml_parser.write_experiment_lock(config)
+            lock_payload = yaml.safe_load(Path(lock_path).read_text(encoding="utf-8"))
+            assert_normalized_memory(lock_payload["normalized_config"]["infrastructure"])
+            assert_normalized_memory(lock_payload["resume_contract"]["details"]["infrastructure"])
+
+            replayed = input_module.start(parser, lock_path)
+            assert_normalized_memory(replayed["normalized"]["infrastructure"])
+            for key, value in expected.items():
+                projected = replayed["infrastructure"]["%s_memory" % key]
+                self.assertEqual(projected, value)
+                self.assertIsInstance(projected, float)
+
+    def test_non_finite_memory_gb_fails_before_projection_or_import(self):
+        for memory_gb in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(memory_gb=memory_gb), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                clusters = [
+                    {
+                        "id": "cloud-1",
+                        "tier": "cloud",
+                        "resources": {
+                            "vms": {
+                                "count": 1,
+                                "spec": {"cores": 1, "memory_gb": memory_gb},
+                            }
+                        },
+                    }
+                ]
+                exp_path, _ = self._build_triplet(root, tempdir, clusters=clusters)
+
+                with mock.patch(
+                    "input.configuration.yaml_parser.legacy_projection.to_legacy_config"
+                ) as project, mock.patch(
+                    "input.configuration.yaml_parser.runtime_module_loader.dynamic_import"
+                ) as dynamic_import:
+                    stderr = self._parse_error(exp_path)
+
+                project.assert_not_called()
+                dynamic_import.assert_not_called()
+                self.assertIn(
+                    "infrastructure.clusters[0].resources.vms.spec.memory_gb", stderr
+                )
+                self.assertIn("must be finite number >= 0", stderr)
+
+    def test_lock_replay_rejects_non_finite_memory_gb(self):
+        for memory_gb in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(memory_gb=memory_gb), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                lock_path = self._write_valid_lock(root)
+                lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+                lock_payload["normalized_config"]["infrastructure"]["clusters"][0][
+                    "resources"
+                ]["vms"]["spec"]["memory_gb"] = memory_gb
+                self._write(lock_path, lock_payload)
+
+                stderr = self._parse_error(lock_path)
+
+                self.assertIn(
+                    "normalized_config.infrastructure.clusters[0].resources.vms.spec.memory_gb",
+                    stderr,
+                )
+                self.assertIn("must be finite number >= 0", stderr)
 
     def test_lock_replay_rejects_mutated_multi_stage_pipeline_before_runtime_projection(self):
         with tempfile.TemporaryDirectory() as tempdir:

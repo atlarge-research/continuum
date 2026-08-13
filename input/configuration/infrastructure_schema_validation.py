@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from . import legacy_projection, validation_utils
@@ -86,8 +87,8 @@ def validate_vm_spec(
         _fail(path, "%s.cores" % (prefix), "must be integer >= 1 when count > 0")
 
     memory_gb = spec.get("memory_gb", default_tier_memory_gb if count > 0 else 0.0)
-    if not _is_number(memory_gb) or memory_gb < 0:
-        _fail(path, "%s.memory_gb" % (prefix), "must be number >= 0")
+    if not _is_number(memory_gb) or not math.isfinite(memory_gb) or memory_gb < 0:
+        _fail(path, "%s.memory_gb" % (prefix), "must be finite number >= 0")
 
     cpu_quota = spec.get("cpu_quota", default_tier_cpu_quota if count > 0 else 0.0)
     if not _is_number(cpu_quota) or cpu_quota < 0:

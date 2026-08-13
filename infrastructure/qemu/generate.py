@@ -4,6 +4,7 @@ The file is generated from scratch instead of using an existing template file as
 too many things can change depending on user input.
 """
 
+from decimal import Decimal, ROUND_CEILING
 import logging
 import os
 import re
@@ -15,12 +16,25 @@ from infrastructure import orchestration_schema
 from input.configuration import config_access
 
 _IPV4_PATTERN = re.compile(r"(\d{1,3}(?:\.\d{1,3}){3})")
+_KIB_PER_GIB = 1048576
 
 
 def _tmp_path(config, name):
     """Return the canonical generated-artifact path for one temp file."""
     root = config.get("tmp_dir", os.path.join(config.get("base", "."), ".tmp"))
     return os.path.join(root, name)
+
+
+def _memory_gib_to_kib(memory_gib):
+    """Convert GiB to whole KiB without provisioning less memory than requested."""
+    numerator, denominator = memory_gib.as_integer_ratio()
+    scaled_numerator = numerator * _KIB_PER_GIB
+    aligned_memory_kib, remainder = divmod(scaled_numerator, denominator)
+    if remainder == 0:
+        return aligned_memory_kib
+
+    memory_kib = Decimal(str(memory_gib)) * Decimal(_KIB_PER_GIB)
+    return int(memory_kib.to_integral_value(rounding=ROUND_CEILING))
 
 
 DOMAIN = """\
@@ -286,7 +300,7 @@ def start(config, machines):
             machine.cloud_controller_names + machine.cloud_names,
         ):
             with open(_tmp_path(config, "domain_%s.xml" % (name)), "w", encoding="utf-8") as f:
-                memory = int(1048576 * config["infrastructure"]["cloud_memory"])
+                memory = _memory_gib_to_kib(config["infrastructure"]["cloud_memory"])
 
                 if config["infrastructure"]["cpu_pin"]:
                     pinnings = [
@@ -329,7 +343,7 @@ def start(config, machines):
         # Edges
         for ip, name in zip(machine.edge_ips, machine.edge_names):
             with open(_tmp_path(config, "domain_%s.xml" % (name)), "w", encoding="utf-8") as f:
-                memory = int(1048576 * config["infrastructure"]["edge_memory"])
+                memory = _memory_gib_to_kib(config["infrastructure"]["edge_memory"])
 
                 if config["infrastructure"]["cpu_pin"]:
                     pinnings = [
@@ -372,7 +386,7 @@ def start(config, machines):
         # Endpoints
         for ip, name in zip(machine.endpoint_ips, machine.endpoint_names):
             with open(_tmp_path(config, "domain_%s.xml" % (name)), "w", encoding="utf-8") as f:
-                memory = int(1048576 * config["infrastructure"]["endpoint_memory"])
+                memory = _memory_gib_to_kib(config["infrastructure"]["endpoint_memory"])
 
                 if config["infrastructure"]["cpu_pin"]:
                     pinnings = [
