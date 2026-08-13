@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "classification": "new-benchmark-baseline",
+    "historical_equivalence": false,
+    "source_language": "en",
+    "target_language": "nl"
+  },
+  "model": {
+    "repository": "Helsinki-NLP/opus-mt-en-nl",
+    "revision": "8aad73b34ff36c090e7fc8a2eb7e2e7cca235d31",
+    "model_card": "https://huggingface.co/Helsinki-NLP/opus-mt-en-nl/blob/8aad73b34ff36c090e7fc8a2eb7e2e7cca235d31/README.md",
+    "license": "Apache-2.0",
+    "attribution": "Helsinki-NLP OPUS-MT English-to-Dutch model"
+  },
+  "artifacts": [
+    {
+      "filename": "README.md",
+      "roles": ["license", "provenance", "attribution"],
+      "size": 818,
+      "sha256": "0a0fbb867d334fca38994124f7416196e0323d7749edd307a512bb41b9b9e486"
+    },
+    {
+      "filename": "config.json",
+      "roles": ["model", "tokenizer"],
+      "size": 1381,
+      "sha256": "d64feaab43c91ef67f7c743ba539f520ce554abcca859f67a00b1346e01bb48c"
+    },
+    {
+      "filename": "generation_config.json",
+      "roles": ["model"],
+      "size": 293,
+      "sha256": "73e1fcce590b8c914675349db051e860ccec134280f7cea30e36cb1ac04bedad"
+    },
+    {
+      "filename": "pytorch_model.bin",
+      "roles": ["model"],
+      "size": 316246425,
+      "sha256": "8b2ff97027f9b35904984dca8508ab633dfffc4e58c7fbedb7eb236d2a937a36"
+    },
+    {
+      "filename": "source.spm",
+      "roles": ["tokenizer"],
+      "size": 789525,
+      "sha256": "d05781fde84b8793191528a7a176e1b17f96265388f602379ee6ae3139f59141"
+    },
+    {
+      "filename": "target.spm",
+      "roles": ["tokenizer"],
+      "size": 813866,
+      "sha256": "f538d23d4b30641cd97c608d2a83890d503aa1286a5560f19ef949404a786e94"
+    },
+    {
+      "filename": "tokenizer_config.json",
+      "roles": ["tokenizer"],
+      "size": 42,
+      "sha256": "3414714550ffa39dd0882835044b0363b0ef2ff8d845d806cc139aca5dfaa3ba"
+    },
+    {
+      "filename": "vocab.json",
+      "roles": ["tokenizer"],
+      "size": 1660216,
+      "sha256": "52ef60fa185ed5a6a6e75a4ea45de99582f1c1493df1c072a784489697407b2b"
+    }
+  ]
+}

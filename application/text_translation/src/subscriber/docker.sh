@@ -1,4 +1,10 @@
-#!/bin/bash
-cp -r ../translator ./src/translator
-docker buildx build --platform linux/amd64,linux/arm64 -t fzovpec2/text_translation:text_translation_subscriber --push .
-rm -rf src/translator
+#!/usr/bin/env bash
+set -euo pipefail
+
+image_tag="${1:-continuum-text-translation-subscriber:local}"
+
+docker buildx build \
+    --platform linux/amd64 \
+    --load \
+    --tag "${image_tag}" \
+    .

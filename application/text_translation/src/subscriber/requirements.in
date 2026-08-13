@@ -1,0 +1,6 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+paho-mqtt==2.1.0
+sentencepiece==0.2.0
+torch==2.5.1+cpu
+transformers==4.46.3

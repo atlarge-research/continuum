@@ -1,56 +1,48 @@
-# Define custom function directory
-ARG FUNCTION_DIR="/function"
+ARG PYTHON_IMAGE="docker.io/library/python:3.11.13-slim-bookworm@sha256:cec9aa7aa96eea4fa036e9b82be1e6b325f2e3707f462d885868df51ec0a4b47"
 
-#------------------------------------------------------------------------
-FROM python:3.8.7-slim-buster as build_image
+FROM ${PYTHON_IMAGE} AS model-artifacts
 
-# Install packages needed for TFlite
-RUN apt update
-RUN apt install -y \
-    swig \
-    libjpeg-dev \
-    zlib1g-dev \
-    python3-dev \
-    python3-numpy \
-    python3-pip \
-    git \
-    curl \
-    unzip \
-    wget \
-    tar
+COPY model.lock.json /tmp/model.lock.json
+COPY scripts/fetch_model.py /tmp/fetch_model.py
+RUN python3 /tmp/fetch_model.py \
+    --lock /tmp/model.lock.json \
+    --destination /opt/continuum/text-translation/artifacts/opus-mt-en-nl
 
-# Install python specific packages
-RUN pip3 install numpy pybind11
+FROM ${PYTHON_IMAGE} AS python-dependencies
 
-# Install TF lite from github
-RUN wget https://github.com/tensorflow/tensorflow/archive/refs/tags/v2.3.4.tar.gz
-RUN tar xvf v2.3.4.tar.gz
-RUN bash ./tensorflow-2.3.4/tensorflow/lite/tools/make/download_dependencies.sh
-RUN bash ./tensorflow-2.3.4/tensorflow/lite/tools/pip_package/build_pip_package.sh
+COPY requirements.lock /tmp/requirements.lock
+RUN python3 -m pip install \
+    --disable-pip-version-check \
+    --no-cache-dir \
+    --only-binary=:all: \
+    --require-hashes \
+    --prefix=/install \
+    --requirement /tmp/requirements.lock
 
+FROM ${PYTHON_IMAGE} AS runtime
 
-#------------------------------------------------------------------------
-FROM python:3.8.7-slim-buster as runtime_image
+ENV HOME="/tmp" \
+    HF_HOME="/tmp/huggingface" \
+    HF_HUB_OFFLINE="1" \
+    PYTHONUNBUFFERED="1" \
+    TRANSFORMERS_OFFLINE="1"
 
-# Include global arg in this stage of the build
-ARG FUNCTION_DIR
+LABEL io.continuum.benchmark.baseline="new-en-nl-opus-mt" \
+      io.continuum.model.license="Apache-2.0" \
+      io.continuum.model.repository="Helsinki-NLP/opus-mt-en-nl" \
+      io.continuum.model.revision="8aad73b34ff36c090e7fc8a2eb7e2e7cca235d31"
 
-# Copy function source code
-RUN mkdir -p ${FUNCTION_DIR}
-COPY src/* ${FUNCTION_DIR}/
+COPY --from=python-dependencies /install/ /usr/local/
+COPY --from=model-artifacts \
+    /opt/continuum/text-translation/artifacts/opus-mt-en-nl/ \
+    /opt/continuum/text-translation/artifacts/opus-mt-en-nl/
+COPY src/subscriber.py src/translation_runtime.py \
+    /opt/continuum/text-translation/subscriber/
 
-# Copy TFlite wheel
-# NOTE: IF TENSORFLOW UPDATES, THIS DOCKERFILE MAY CRASH HERE. UPDATE THE NAMES IN THAT CASE
-# COPY --from=build_image tensorflow-2.3.4/tensorflow/lite/tools/pip_package/gen/tflite_pip/python3/dist/*.whl ./
-# RUN pip3 install *.whl
+WORKDIR /opt/continuum/text-translation/subscriber
 
-# Install app specific packages
-RUN pip3 install -r ${FUNCTION_DIR}/requirements.txt
-
-# Set working directory to function root directory
-WORKDIR ${FUNCTION_DIR}
-
-# Open port to the MQTT broker
 EXPOSE 1883
 
-CMD [ "python3", "-u", "subscriber.py"]
+USER 65532:65532
+
+CMD ["python3", "-u", "/opt/continuum/text-translation/subscriber/subscriber.py"]

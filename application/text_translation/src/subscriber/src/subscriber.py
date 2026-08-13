@@ -8,10 +8,8 @@ import os
 import time
 
 import paho.mqtt.client as mqtt
-import torch
 
-# pylint: disable-next=import-error
-from transformers import MarianMTModel, MarianTokenizer
+from translation_runtime import load_translation_components
 
 MQTT_LOGS = os.environ["MQTT_LOGS"]
 CPU_THREADS = int(os.environ["CPU_THREADS"])
@@ -23,6 +21,13 @@ MQTT_TOPIC_SUB = "text-translation-sub"
 work_queue = multiprocessing.Queue()
 endpoints_connected = multiprocessing.Value("i", ENDPOINT_CONNECTED)
 texts_processed = multiprocessing.Value("i", 0)
+
+
+def create_mqtt_client():
+    """Create a client using the callback contract retained from Paho 1.x."""
+    # The image pins Paho 2.1; the development environment may still expose 1.x.
+    # pylint: disable-next=no-member
+    return mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
 
 
 def on_connect(client, _userdata, _flags, rc):
@@ -96,7 +101,7 @@ def connect_remote_client(current, ip):
     """
     # Save IPs from connected endpoints
     print("[%s] Connect to remote broker on endpoint %s" % (current.name, ip))
-    remote_client = mqtt.Client()
+    remote_client = create_mqtt_client()
     remote_client.on_publish = on_publish
 
     remote_client.connect(ip, port=1883, keepalive=120)
@@ -115,19 +120,10 @@ def do_tflite(queue):
     current = multiprocessing.current_process()
     print("[%s] Start thread\n" % (current.name), end="")
 
-    # Load the model
-    interpreter = MarianMTModel.from_pretrained("./model")
-    tokenizer = MarianTokenizer.from_pretrained("./tokenizer")
+    # Load the reviewed model and tokenizer from the image, without network access.
+    interpreter, tokenizer = load_translation_components()
     print("[%s] Model loaded\n" % (current.name), end="")
-    # Set the model to evaluation mode
-    interpreter.eval()
-    print("[%s] Model set to evaluation mode\n" % (current.name), end="")
-    # Set the model to use CPU
-    if torch.cuda.is_available():
-        interpreter.to("cpu")
-        print("[%s] Model set to use CPU\n" % (current.name), end="")
-    else:
-        print("[%s] No GPU available, using CPU\n" % (current.name), end="")
+    print("[%s] Model set to evaluation mode on CPU\n" % (current.name), end="")
 
     print("[%s] Preparations finished\n" % (current.name), end="")
 
@@ -201,7 +197,7 @@ def main():
     print("Topic: " + str(MQTT_TOPIC_SUB))
 
     with multiprocessing.Pool(CPU_THREADS, do_tflite, (work_queue,)):
-        local_client = mqtt.Client()
+        local_client = create_mqtt_client()
         local_client.on_connect = on_connect
         local_client.on_message = on_message
         local_client.on_subscribe = on_subscribe
