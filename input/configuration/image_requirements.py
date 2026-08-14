@@ -86,6 +86,14 @@ def _image_classification_images(
     )
 
 
+_TEXT_TRANSLATION_PUBLISHER_SOURCE = (
+    "redplanet00/continuum-text-translation-publisher"
+    "@sha256:502142b93182c63f1225165f44d0308537aac95ee75a99b6f0ba19e668f6f6bf"
+)
+_TEXT_TRANSLATION_SUBSCRIBER_SOURCE = (
+    "redplanet00/continuum-text-translation-subscriber"
+    "@sha256:9aac61a0a1f0fe8938db7283b7f09ab9f9c5f84d95467fa267e9ca3220aabd26"
+)
 _IMAGE_CATALOG: dict[
     str,
     str | tuple[str, ...] | Callable[[dict | None, dict | None], str | tuple[str, ...]],
@@ -98,9 +106,13 @@ _IMAGE_CATALOG: dict[
     "app.stress": "ansk/empty:stress",
     "app.image_classification": _image_classification_images,
     "app.text_translation": (
-        "fzovpec2/text_translation:text_translation_publisher",
-        "fzovpec2/text_translation:text_translation_subscriber",
+        _TEXT_TRANSLATION_PUBLISHER_SOURCE,
+        _TEXT_TRANSLATION_SUBSCRIBER_SOURCE,
     ),
+}
+_LOCAL_IMAGE_NAMES_BY_SOURCE = {
+    _TEXT_TRANSLATION_PUBLISHER_SOURCE: "text_translation_publisher_en-nl-8aad73b-r1",
+    _TEXT_TRANSLATION_SUBSCRIBER_SOURCE: "text_translation_subscriber_en-nl-8aad73b-r1",
 }
 
 
@@ -115,6 +127,9 @@ class ImageRequirement:
 
 
 def _local_name_for_source(source_ref: str) -> str:
+    explicit_name = _LOCAL_IMAGE_NAMES_BY_SOURCE.get(source_ref)
+    if explicit_name is not None:
+        return explicit_name
     if "/" not in source_ref:
         return source_ref
     return source_ref.split("/", 1)[1]

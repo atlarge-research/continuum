@@ -18,11 +18,9 @@ def set_container_location(config):
     Args:
         config (dict): Parsed configuration
     """
-    source = "fzovpec2/text_translation"
-
     config["images"] = {
-        "worker": "%s:text_translation_subscriber" % (source),
-        "endpoint": "%s:text_translation_publisher" % (source),
+        "worker": "continuum:text_translation_subscriber_en-nl-8aad73b-r1",
+        "endpoint": "continuum:text_translation_publisher_en-nl-8aad73b-r1",
     }
 
 

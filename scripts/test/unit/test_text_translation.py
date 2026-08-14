@@ -2,8 +2,11 @@
 
 import unittest
 import warnings
+from unittest import mock
 
 from application.text_translation import text_translation
+from infrastructure import image_registry
+from input.configuration import image_requirements
 
 
 class TextTranslationOptionTests(unittest.TestCase):
@@ -25,6 +28,96 @@ class TextTranslationOptionTests(unittest.TestCase):
         for value in (0, -1, True, False, "1"):
             with self.subTest(invalid=value):
                 self.assertFalse(condition(value))
+
+
+class TextTranslationImageSelectionTests(unittest.TestCase):
+    """Validate immutable sources and source-independent run-local names."""
+
+    def test_catalog_pins_published_images_by_oci_index_digest(self):
+        """The maintained images are selected only by their published OCI digests."""
+        source_refs = image_requirements._resolve_catalog_sources(  # pylint: disable=protected-access
+            "app.text_translation",
+            "benchmark.stage:text-translation",
+        )
+
+        self.assertEqual(
+            set(source_refs),
+            {
+                "redplanet00/continuum-text-translation-publisher"
+                "@sha256:502142b93182c63f1225165f44d0308537aac95ee75a99b6f0ba19e668f6f6bf",
+                "redplanet00/continuum-text-translation-subscriber"
+                "@sha256:9aac61a0a1f0fe8938db7283b7f09ab9f9c5f84d95467fa267e9ca3220aabd26",
+            },
+        )
+        for source_ref in source_refs:
+            self.assertNotIn(":en-nl-8aad73b-r1", source_ref)
+            self.assertRegex(source_ref, r"@sha256:[0-9a-f]{64}$")
+
+    def test_runtime_names_match_catalog_without_external_namespace(self):
+        """Deployment roles consume catalog-aligned names without Docker Hub ownership."""
+        source_refs = image_requirements._resolve_catalog_sources(  # pylint: disable=protected-access
+            "app.text_translation",
+            "benchmark.stage:text-translation",
+        )
+        config = {}
+
+        text_translation.set_container_location(config)
+
+        runtime_names = {value.split(":", 1)[1] for value in config["images"].values()}
+        catalog_names = {
+            image_requirements._local_name_for_source(  # pylint: disable=protected-access
+                source_ref
+            )
+            for source_ref in source_refs
+        }
+        self.assertEqual(runtime_names, catalog_names)
+        self.assertEqual(
+            runtime_names,
+            {
+                "text_translation_publisher_en-nl-8aad73b-r1",
+                "text_translation_subscriber_en-nl-8aad73b-r1",
+            },
+        )
+        for value in config["images"].values():
+            self.assertTrue(value.startswith("continuum:"))
+            self.assertNotIn("redplanet00", value)
+
+    def test_registry_flow_pulls_digests_and_retags_run_local_names(self):
+        """The existing registry flow retags each digest under its run-local name."""
+        source_refs = image_requirements._resolve_catalog_sources(  # pylint: disable=protected-access
+            "app.text_translation",
+            "benchmark.stage:text-translation",
+        )
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"image_prefetch": "on"}},
+            "prefetch_image_requirements": [
+                {
+                    "source_ref": source_ref,
+                    "local_name": image_requirements._local_name_for_source(  # pylint: disable=protected-access
+                        source_ref
+                    ),
+                    "owners": ["benchmark.stage:text-translation"],
+                    "tier_targets": ["cloud", "endpoint"],
+                }
+                for source_ref in source_refs
+            ],
+        }
+        machine = mock.Mock()
+        machine.process.return_value = [(["ok"], [])]
+
+        with mock.patch.object(image_registry, "_ensure_registry_running", return_value=set()):
+            image_registry.docker_registry(config, [machine])
+
+        commands = [call.args[1] for call in machine.process.call_args_list]
+        for source_ref in source_refs:
+            local_name = image_requirements._local_name_for_source(  # pylint: disable=protected-access
+                source_ref
+            )
+            destination = "127.0.0.1:5000/%s" % local_name
+            self.assertIn(["docker", "pull", source_ref], commands)
+            self.assertIn(["docker", "tag", source_ref, destination], commands)
+            self.assertIn(["docker", "push", destination], commands)
 
 
 class TextTranslationWorkerMetricTests(unittest.TestCase):
