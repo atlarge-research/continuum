@@ -10,6 +10,7 @@ from datetime import datetime
 
 from application import runtime_helpers as application_runtime_helpers
 from input.configuration import config_access
+from resource_manager import legacy_execution
 from resource_manager.endpoint import endpoint
 from resource_manager.kube_kata import kube_kata
 
@@ -59,6 +60,8 @@ def start(runner):
             config_access.benchmark_primary_stage_type(config),
         )
         sys.exit(1)
+
+    legacy_execution.validate_benchmark_execution_envelope(config)
 
     if config["infrastructure"]["provider"] == "baremetal":
         baremetal(config, machines, runner)

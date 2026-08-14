@@ -9,6 +9,12 @@ LEGACY_TARGET_GROUPS = frozenset(
     {"cloudcontroller", "clouds", "edges", "endpoints"}
 )
 
+BENCHMARK_WORKER_GROUP_BY_MODE = {
+    "cloud": "clouds",
+    "edge": "edges",
+    "endpoint": "endpoints",
+}
+
 
 def _normalized_resources(config: dict) -> list[dict]:
     normalized = config.get("normalized")
@@ -93,6 +99,45 @@ def _resource_description(resource: dict) -> str:
         resource.get("vm_id"),
         resource.get("cluster_id", "<unknown>"),
         resource.get("tier", "<unknown>"),
+    )
+
+
+def validate_benchmark_execution_envelope(config: dict):
+    """Reject benchmark assignments narrower than the legacy worker group."""
+    mode = config.get("mode")
+    worker_group = BENCHMARK_WORKER_GROUP_BY_MODE.get(mode)
+    if worker_group is None:
+        raise ValueError(
+            "Unsupported benchmark mode '%s' at the legacy application execution boundary"
+            % (mode,)
+        )
+
+    assignment = config_access.benchmark_stage_assignment(config)
+    resolved_vm_ids = assignment["resolved_vm_ids"]
+    executable_vm_ids = set(project_legacy_inventory_groups(config)[worker_group])
+    unselected_vm_ids = sorted(executable_vm_ids - set(resolved_vm_ids))
+    if not unselected_vm_ids:
+        return
+
+    resources_by_vm_id = {
+        resource["vm_id"]: resource for resource in _normalized_resources(config)
+    }
+    unselected = "; ".join(
+        _resource_description(resources_by_vm_id[vm_id]) for vm_id in unselected_vm_ids
+    )
+    raise ValueError(
+        "Benchmark stage '%s' (%s) authorizes resolved_vm_ids %s, but the current legacy "
+        "%s worker group '%s' would also target unselected resources: %s. Partial benchmark "
+        "assignments are unsupported at this execution boundary; include every legacy "
+        "benchmark worker in assign_to"
+        % (
+            assignment["id"],
+            assignment["type"],
+            sorted(resolved_vm_ids),
+            mode,
+            worker_group,
+            unselected,
+        )
     )
 
 

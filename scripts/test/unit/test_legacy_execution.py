@@ -3,6 +3,7 @@
 import unittest
 from unittest import mock
 
+from application import application
 from infrastructure import ansible
 from resource_manager import legacy_execution, plans
 
@@ -318,6 +319,187 @@ class LegacyExecutionEnvelopeTests(unittest.TestCase):
             [],
             use_planner_snapshot=False,
         )
+
+
+class LegacyBenchmarkExecutionEnvelopeTests(unittest.TestCase):
+    def _config(self, mode, resources, resolved_vm_ids):
+        orchestrator = {
+            "cloud": "kubernetes",
+            "edge": "kubeedge",
+            "endpoint": "none",
+        }[mode]
+        selector_id = "sel_stage_main"
+        config = {
+            "mode": mode,
+            "infrastructure": {
+                "provider": "qemu",
+                "endpoint_nodes": sum(
+                    1 for resource in resources if resource["tier"] == "endpoint"
+                ),
+            },
+            "module": {
+                "application": mock.Mock(),
+                "resource_manager": None,
+            },
+            "domains": {
+                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "software": {
+                    "modules": [
+                        {
+                            "id": "%s-main" % (orchestrator,),
+                            "type": orchestrator,
+                            "config": {},
+                            "selector_id": "sel_%s_main" % (orchestrator,),
+                            "resolved_vm_ids": [resource["vm_id"] for resource in resources],
+                            "scope_identities": [
+                                {
+                                    "kind": "selector",
+                                    "selector_id": "sel_%s_main" % (orchestrator,),
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "benchmark": {
+                    "pipeline": [
+                        {
+                            "id": "stage-main",
+                            "type": "image_classification",
+                            "config": {},
+                            "tags": {"benchmark.role": "primary"},
+                            "selector_id": selector_id,
+                            "resolved_vm_ids": resolved_vm_ids,
+                            "scope_identities": [
+                                {"kind": "selector", "selector_id": selector_id}
+                            ],
+                        }
+                    ]
+                },
+            },
+            "normalized": {"infrastructure": {"resources": resources}},
+        }
+        config["planner_snapshot"] = plans.build_planner_snapshot(config)
+        return config
+
+    def test_cloud_cluster_assignment_with_controller_and_all_workers_passes(self):
+        config = self._config(
+            "cloud",
+            [
+                _resource(1, "cloud-1", "cloud", 0),
+                _resource(2, "cloud-1", "cloud", 1),
+                _resource(3, "cloud-1", "cloud", 2),
+            ],
+            [1, 2, 3],
+        )
+
+        legacy_execution.validate_benchmark_execution_envelope(config)
+
+    def test_cloud_assignment_omitting_one_worker_fails_closed(self):
+        config = self._config(
+            "cloud",
+            [
+                _resource(1, "cloud-1", "cloud", 0),
+                _resource(2, "cloud-1", "cloud", 1),
+                _resource(3, "cloud-2", "cloud", 0),
+            ],
+            [1, 2],
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            legacy_execution.validate_benchmark_execution_envelope(config)
+
+        self.assertIn("cloud worker group 'clouds'", str(exc.exception))
+        self.assertIn("vm_id=3 cluster=cloud-2 tier=cloud", str(exc.exception))
+        self.assertIn("Partial benchmark assignments are unsupported", str(exc.exception))
+
+    def test_edge_assignment_omitting_one_worker_fails_closed(self):
+        config = self._config(
+            "edge",
+            [
+                _resource(1, "cloud-1", "cloud", 0),
+                _resource(2, "edge-1", "edge", 0),
+                _resource(3, "edge-2", "edge", 0),
+            ],
+            [2],
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            legacy_execution.validate_benchmark_execution_envelope(config)
+
+        self.assertIn("edge worker group 'edges'", str(exc.exception))
+        self.assertIn("vm_id=3 cluster=edge-2 tier=edge", str(exc.exception))
+
+    def test_complete_endpoint_worker_assignment_passes(self):
+        config = self._config(
+            "endpoint",
+            [
+                _resource(1, "endpoint-1", "endpoint", 0),
+                _resource(2, "endpoint-2", "endpoint", 0),
+            ],
+            [1, 2],
+        )
+
+        legacy_execution.validate_benchmark_execution_envelope(config)
+
+    def test_extra_authorized_non_worker_resource_passes(self):
+        config = self._config(
+            "cloud",
+            [
+                _resource(1, "cloud-1", "cloud", 0),
+                _resource(2, "cloud-1", "cloud", 1),
+                _resource(3, "endpoint-1", "endpoint", 0),
+            ],
+            [1, 2, 3],
+        )
+
+        legacy_execution.validate_benchmark_execution_envelope(config)
+
+    def test_cloud_and_edge_assignments_do_not_require_endpoint_publishers(self):
+        cases = [
+            (
+                "cloud",
+                [
+                    _resource(1, "cloud-1", "cloud", 0),
+                    _resource(2, "cloud-1", "cloud", 1),
+                    _resource(3, "endpoint-1", "endpoint", 0),
+                ],
+                [1, 2],
+            ),
+            (
+                "edge",
+                [
+                    _resource(1, "cloud-1", "cloud", 0),
+                    _resource(2, "edge-1", "edge", 0),
+                    _resource(3, "endpoint-1", "endpoint", 0),
+                ],
+                [2],
+            ),
+        ]
+
+        for mode, resources, resolved_vm_ids in cases:
+            with self.subTest(mode=mode):
+                config = self._config(mode, resources, resolved_vm_ids)
+                legacy_execution.validate_benchmark_execution_envelope(config)
+
+    def test_application_boundary_rejects_before_dispatch_or_runner_mutation(self):
+        config = self._config(
+            "cloud",
+            [
+                _resource(1, "cloud-1", "cloud", 0),
+                _resource(2, "cloud-1", "cloud", 1),
+                _resource(3, "cloud-2", "cloud", 0),
+            ],
+            [1, 2],
+        )
+        runner = mock.Mock(config=config, machines=[mock.Mock()])
+
+        with mock.patch.object(application, "kube") as dispatch:
+            with self.assertRaises(ValueError):
+                application.start(runner)
+
+        dispatch.assert_not_called()
+        runner.run_playbook.assert_not_called()
+        self.assertEqual(config["module"]["application"].mock_calls, [])
 
 
 if __name__ == "__main__":

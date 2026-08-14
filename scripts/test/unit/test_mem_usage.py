@@ -18,6 +18,22 @@ class MemUsageRunnerTests(unittest.TestCase):
 
     @staticmethod
     def _config(application_module=None):
+        resources = [
+            {
+                "vm_id": 1,
+                "cluster_id": "cloud-1",
+                "tier": "cloud",
+                "index_in_cluster": 0,
+                "tags": {"cluster": "cloud-1", "tier": "cloud"},
+            },
+            {
+                "vm_id": 2,
+                "cluster_id": "cloud-1",
+                "tier": "cloud",
+                "index_in_cluster": 1,
+                "tags": {"cluster": "cloud-1", "tier": "cloud"},
+            },
+        ]
         return {
             "mode": "cloud",
             "cloud_ssh": ["controller@10.0.0.1", "worker@10.0.0.2"],
@@ -46,6 +62,25 @@ class MemUsageRunnerTests(unittest.TestCase):
                         }
                     ]
                 },
+            },
+            "normalized": {"infrastructure": {"resources": resources}},
+            "planner_snapshot": {
+                "benchmark_stage_assignments": [
+                    {
+                        "id": "memory",
+                        "type": "mem_usage",
+                        "selector_id": "sel_memory_cloud_1",
+                        "resolved_vm_ids": [1, 2],
+                        "resolved_resources": resources,
+                        "scope_identities": [
+                            {
+                                "kind": "selector",
+                                "selector_id": "sel_memory_cloud_1",
+                            }
+                        ],
+                        "tags": {"benchmark.role": "memory"},
+                    }
+                ]
             },
         }
 
