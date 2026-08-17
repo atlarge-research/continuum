@@ -99,3 +99,26 @@ def validate_stage_config_contract(stage_type: str, config: dict, path: Path, pr
                 key_path,
                 "must be %s for benchmark stage type '%s'" % (constraint_label, stage_type),
             )
+
+    if stage_type == "text_translation":
+        try:
+            effective_frequency = config["frequency"] / 10
+            schedules_zero_texts = effective_frequency == 0 or int(
+                effective_frequency * config["duration"]
+            ) < 1
+        except OverflowError:
+            _fail(
+                path,
+                "%s.config" % (prefix),
+                "frequency and duration combination cannot be evaluated because of numeric "
+                "overflow under the current publisher calculation "
+                "int((frequency / 10) * duration)",
+            )
+
+        if schedules_zero_texts:
+            _fail(
+                path,
+                "%s.config" % (prefix),
+                "frequency and duration combination schedules zero texts under the current "
+                "publisher calculation int((frequency / 10) * duration)",
+            )

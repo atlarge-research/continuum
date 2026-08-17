@@ -145,12 +145,16 @@ class YamlParserTests(unittest.TestCase):
             mock.patch(
                 "input.configuration.yaml_parser.plans.build_planner_snapshot"
             ) as build_snapshot,
+            mock.patch(
+                "input.configuration.yaml_parser.plans.validate_planner_snapshot"
+            ) as validate_snapshot,
         ):
             stderr = self._parse_error(config_path)
 
         project.assert_not_called()
         dynamic_import.assert_not_called()
         build_snapshot.assert_not_called()
+        validate_snapshot.assert_not_called()
         return stderr
 
     def _write_valid_lock(self, root: Path) -> Path:
@@ -193,12 +197,13 @@ class YamlParserTests(unittest.TestCase):
             },
         }
 
-    def _text_translation_stage(self, frequency):
+    def _text_translation_stage(self, frequency, duration=120):
         stage = self._image_classification_stage()
         stage["id"] = "translate"
         stage["type"] = "text_translation"
         stage["tags"] = {"benchmark.role": "translate"}
         stage["config"]["frequency"] = frequency
+        stage["config"]["duration"] = duration
         return stage
 
     def _image_classification_clusters(self):
@@ -499,6 +504,59 @@ class YamlParserTests(unittest.TestCase):
                 stderr = self._parse_error_before_runtime_processing(exp_path)
                 self.assertIn("benchmark.pipeline[0].config.frequency", stderr)
                 self.assertIn("must be finite number > 0", stderr)
+
+    def test_text_translation_zero_work_fails_before_runtime_processing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            benchmark = {"pipeline": [self._text_translation_stage(0.5, duration=1)]}
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["infrastructure", "software", "application"],
+                clusters=self._image_classification_clusters(),
+                modules=self._image_classification_modules(),
+                benchmark=benchmark,
+            )
+
+            stderr = self._parse_error_before_runtime_processing(exp_path)
+            self.assertIn(str(exp_path.resolve()), stderr)
+            self.assertIn("benchmark.pipeline[0].config", stderr)
+            self.assertIn("frequency and duration", stderr)
+            self.assertIn(
+                "schedules zero texts under the current publisher calculation",
+                stderr,
+            )
+
+    def test_text_translation_arithmetic_edges_fail_before_runtime_processing(self):
+        cases = (
+            (10**400, 1, "cannot be evaluated because of numeric overflow"),
+            (1.0, 10**400, "cannot be evaluated because of numeric overflow"),
+            (5e-324, 10**400, "schedules zero texts"),
+        )
+        for frequency, duration, expected_error in cases:
+            with (
+                self.subTest(frequency=frequency, duration=duration),
+                tempfile.TemporaryDirectory() as tempdir,
+            ):
+                root = Path(tempdir)
+                benchmark = {
+                    "pipeline": [self._text_translation_stage(frequency, duration=duration)]
+                }
+                exp_path, _ = self._build_triplet(
+                    root,
+                    tempdir,
+                    run_targets=["infrastructure", "software", "application"],
+                    clusters=self._image_classification_clusters(),
+                    modules=self._image_classification_modules(),
+                    benchmark=benchmark,
+                )
+
+                stderr = self._parse_error_before_runtime_processing(exp_path)
+                self.assertIn(str(exp_path.resolve()), stderr)
+                self.assertIn("benchmark.pipeline[0].config", stderr)
+                self.assertIn("frequency and duration", stderr)
+                self.assertIn(expected_error, stderr)
+                self.assertIn("int((frequency / 10) * duration)", stderr)
 
     def test_non_finite_benchmark_resources_fail_before_runtime_processing(self):
         resource_keys = (
@@ -1673,6 +1731,57 @@ class YamlParserTests(unittest.TestCase):
                     stderr,
                 )
                 self.assertIn("must be finite number >= 0.001", stderr)
+
+    def test_lock_replay_rejects_text_translation_zero_work_before_runtime_processing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            lock_path = self._write_valid_application_lock(
+                root, self._text_translation_stage(0.5)
+            )
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            lock_payload["normalized_config"]["benchmark"]["pipeline"][0]["config"][
+                "duration"
+            ] = 1
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error_before_runtime_processing(lock_path)
+            self.assertIn(str(lock_path.resolve()), stderr)
+            self.assertIn("normalized_config.benchmark.pipeline[0].config", stderr)
+            self.assertIn("frequency and duration", stderr)
+            self.assertIn(
+                "schedules zero texts under the current publisher calculation",
+                stderr,
+            )
+
+    def test_lock_replay_rejects_text_translation_arithmetic_edges_before_runtime_processing(self):
+        cases = (
+            (10**400, 1, "cannot be evaluated because of numeric overflow"),
+            (1.0, 10**400, "cannot be evaluated because of numeric overflow"),
+            (5e-324, 10**400, "schedules zero texts"),
+        )
+        for frequency, duration, expected_error in cases:
+            with (
+                self.subTest(frequency=frequency, duration=duration),
+                tempfile.TemporaryDirectory() as tempdir,
+            ):
+                root = Path(tempdir)
+                lock_path = self._write_valid_application_lock(
+                    root, self._text_translation_stage(0.5)
+                )
+                lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+                stage_config = lock_payload["normalized_config"]["benchmark"]["pipeline"][0][
+                    "config"
+                ]
+                stage_config["frequency"] = frequency
+                stage_config["duration"] = duration
+                self._write(lock_path, lock_payload)
+
+                stderr = self._parse_error_before_runtime_processing(lock_path)
+                self.assertIn(str(lock_path.resolve()), stderr)
+                self.assertIn("normalized_config.benchmark.pipeline[0].config", stderr)
+                self.assertIn("frequency and duration", stderr)
+                self.assertIn(expected_error, stderr)
+                self.assertIn("int((frequency / 10) * duration)", stderr)
 
     def test_lock_replay_rejects_mutated_multi_stage_pipeline_before_runtime_projection(self):
         with tempfile.TemporaryDirectory() as tempdir:

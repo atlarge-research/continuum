@@ -22,10 +22,10 @@ class BenchmarkStageContractTests(unittest.TestCase):
             "application_endpoint_memory": 1.0,
         }
 
-    def _text_translation_config(self, frequency):
+    def _text_translation_config(self, frequency, duration=120):
         return {
             "frequency": frequency,
-            "duration": 120,
+            "duration": duration,
             "applications_per_worker": 1,
             "application_worker_cpu": 0.5,
             "application_worker_memory": 1.0,
@@ -116,6 +116,54 @@ class BenchmarkStageContractTests(unittest.TestCase):
                     "must be finite number > 0 for benchmark stage type 'text_translation'",
                     str(exc.exception),
                 )
+
+    def test_text_translation_rejects_zero_work_publisher_combinations(self):
+        for frequency, duration in ((0.5, 1), (2, 1), (0.5, 19), (5e-324, 10**400)):
+            with self.subTest(frequency=frequency, duration=duration):
+                with self.assertRaises(ValueError) as exc:
+                    benchmark_stage_contract.validate_stage_config_contract(
+                        "text_translation",
+                        self._text_translation_config(frequency, duration),
+                        self.path,
+                        self.prefix,
+                    )
+
+                message = str(exc.exception)
+                self.assertIn(str(self.path), message)
+                self.assertIn("benchmark.pipeline[0].config", message)
+                self.assertIn("frequency and duration", message)
+                self.assertIn(
+                    "schedules zero texts under the current publisher calculation",
+                    message,
+                )
+
+    def test_text_translation_accepts_one_or_more_publisher_texts(self):
+        for frequency, duration in ((0.5, 20), (10, 1), (0.5, 120)):
+            with self.subTest(frequency=frequency, duration=duration):
+                benchmark_stage_contract.validate_stage_config_contract(
+                    "text_translation",
+                    self._text_translation_config(frequency, duration),
+                    self.path,
+                    self.prefix,
+                )
+
+    def test_text_translation_rejects_publisher_calculation_overflow(self):
+        for frequency, duration in ((10**400, 1), (1.0, 10**400)):
+            with self.subTest(frequency=frequency, duration=duration):
+                with self.assertRaises(ValueError) as exc:
+                    benchmark_stage_contract.validate_stage_config_contract(
+                        "text_translation",
+                        self._text_translation_config(frequency, duration),
+                        self.path,
+                        self.prefix,
+                    )
+
+                message = str(exc.exception)
+                self.assertIn(str(self.path), message)
+                self.assertIn("benchmark.pipeline[0].config", message)
+                self.assertIn("frequency and duration", message)
+                self.assertIn("cannot be evaluated because of numeric overflow", message)
+                self.assertIn("int((frequency / 10) * duration)", message)
 
     def test_float_capable_resource_fields_reject_non_finite_values(self):
         for key in (
