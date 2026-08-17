@@ -4,23 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from . import validation_utils
+
 
 def _is_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _is_number(value) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
 _BENCHMARK_STAGE_KEY_INT_POSITIVE = ("integer >= 1", lambda value: _is_int(value) and value >= 1)
 _BENCHMARK_STAGE_KEY_NUMBER_POSITIVE = (
-    "number >= 0.001",
-    lambda value: _is_number(value) and value >= 0.001,
+    "finite number >= 0.001",
+    lambda value: validation_utils.is_finite_number(value) and value >= 0.001,
 )
 _BENCHMARK_STAGE_KEY_NUMBER_STRICTLY_POSITIVE = (
-    "number > 0",
-    lambda value: _is_number(value) and value > 0,
+    "finite number > 0",
+    lambda value: validation_utils.is_finite_number(value) and value > 0,
 )
 
 BENCHMARK_STAGE_CONFIG_RULES = {

@@ -12,7 +12,7 @@ from unittest import mock
 import yaml
 
 from input import input as input_module
-from input.configuration import module_registry, selector_scope
+from input.configuration import module_registry, selector_scope, validation_utils
 
 
 class YamlParserTests(unittest.TestCase):
@@ -134,10 +134,44 @@ class YamlParserTests(unittest.TestCase):
                 input_module.start(parser, str(config_path))
         return stderr.getvalue()
 
+    def _parse_error_before_runtime_processing(self, config_path: Path) -> str:
+        with (
+            mock.patch(
+                "input.configuration.yaml_parser.legacy_projection.to_legacy_config"
+            ) as project,
+            mock.patch(
+                "input.configuration.yaml_parser.runtime_module_loader.dynamic_import"
+            ) as dynamic_import,
+            mock.patch(
+                "input.configuration.yaml_parser.plans.build_planner_snapshot"
+            ) as build_snapshot,
+        ):
+            stderr = self._parse_error(config_path)
+
+        project.assert_not_called()
+        dynamic_import.assert_not_called()
+        build_snapshot.assert_not_called()
+        return stderr
+
     def _write_valid_lock(self, root: Path) -> Path:
         exp_path, _ = self._build_triplet(root, str(root))
         parser = argparse.ArgumentParser()
         config = input_module.start(parser, str(exp_path))
+        from input.configuration import yaml_parser
+
+        return Path(yaml_parser.write_experiment_lock(config))
+
+    def _write_valid_application_lock(self, root: Path, stage=None) -> Path:
+        benchmark = {"pipeline": [stage or self._image_classification_stage()]}
+        exp_path, _ = self._build_triplet(
+            root,
+            str(root),
+            run_targets=["infrastructure", "software", "application"],
+            clusters=self._image_classification_clusters(),
+            modules=self._image_classification_modules(),
+            benchmark=benchmark,
+        )
+        config = input_module.start(argparse.ArgumentParser(), str(exp_path))
         from input.configuration import yaml_parser
 
         return Path(yaml_parser.write_experiment_lock(config))
@@ -229,6 +263,25 @@ class YamlParserTests(unittest.TestCase):
                 **provider_options,
             },
         }
+
+    def test_is_finite_number_accepts_only_finite_builtin_numbers(self):
+        for value in (0, -1, 0.5, -0.5, 10**1000):
+            with self.subTest(value_type=type(value).__name__):
+                self.assertTrue(validation_utils.is_finite_number(value))
+
+        invalid_values = (
+            True,
+            False,
+            None,
+            "1",
+            object(),
+            float("inf"),
+            float("-inf"),
+            float("nan"),
+        )
+        for value in invalid_values:
+            with self.subTest(value_type=type(value).__name__, value=value):
+                self.assertFalse(validation_utils.is_finite_number(value))
 
     def test_full_parser_projects_validated_aws_provider_options(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -419,8 +472,18 @@ class YamlParserTests(unittest.TestCase):
                 self.assertEqual(normalized_frequency, float(frequency))
                 self.assertIsInstance(normalized_frequency, float)
 
-    def test_text_translation_invalid_frequency_fails_before_projection_or_import(self):
-        for frequency in (0, -1, True, False, "1"):
+    def test_text_translation_invalid_frequency_fails_before_runtime_processing(self):
+        invalid_frequencies = (
+            0,
+            -1,
+            True,
+            False,
+            "1",
+            float("inf"),
+            float("-inf"),
+            float("nan"),
+        )
+        for frequency in invalid_frequencies:
             with self.subTest(frequency=frequency), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 benchmark = {"pipeline": [self._text_translation_stage(frequency)]}
@@ -433,17 +496,38 @@ class YamlParserTests(unittest.TestCase):
                     benchmark=benchmark,
                 )
 
-                with mock.patch(
-                    "input.configuration.yaml_parser.legacy_projection.to_legacy_config"
-                ) as project, mock.patch(
-                    "input.configuration.yaml_parser.runtime_module_loader.dynamic_import"
-                ) as dynamic_import:
-                    stderr = self._parse_error(exp_path)
-
-                project.assert_not_called()
-                dynamic_import.assert_not_called()
+                stderr = self._parse_error_before_runtime_processing(exp_path)
                 self.assertIn("benchmark.pipeline[0].config.frequency", stderr)
-                self.assertIn("must be number > 0", stderr)
+                self.assertIn("must be finite number > 0", stderr)
+
+    def test_non_finite_benchmark_resources_fail_before_runtime_processing(self):
+        resource_keys = (
+            "application_worker_cpu",
+            "application_worker_memory",
+            "application_endpoint_cpu",
+            "application_endpoint_memory",
+        )
+        for key in resource_keys:
+            for value in (float("inf"), float("-inf"), float("nan")):
+                with (
+                    self.subTest(key=key, value=value),
+                    tempfile.TemporaryDirectory() as tempdir,
+                ):
+                    root = Path(tempdir)
+                    stage = self._image_classification_stage()
+                    stage["config"][key] = value
+                    exp_path, _ = self._build_triplet(
+                        root,
+                        tempdir,
+                        run_targets=["infrastructure", "software", "application"],
+                        clusters=self._image_classification_clusters(),
+                        modules=self._image_classification_modules(),
+                        benchmark={"pipeline": [stage]},
+                    )
+
+                    stderr = self._parse_error_before_runtime_processing(exp_path)
+                    self.assertIn("benchmark.pipeline[0].config.%s" % (key,), stderr)
+                    self.assertIn("must be finite number >= 0.001", stderr)
 
     def test_application_requires_benchmark_pipeline(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1360,9 +1444,68 @@ class YamlParserTests(unittest.TestCase):
                 self.assertEqual(projected, value)
                 self.assertIsInstance(projected, float)
 
-    def test_non_finite_memory_gb_fails_before_projection_or_import(self):
-        for memory_gb in (float("nan"), float("inf"), float("-inf")):
-            with self.subTest(memory_gb=memory_gb), tempfile.TemporaryDirectory() as tempdir:
+    def test_non_finite_vm_spec_fields_fail_before_runtime_processing(self):
+        vm_number_keys = (
+            "memory_gb",
+            "cpu_quota",
+            "storage_read_mbps",
+            "storage_write_mbps",
+        )
+        for key in vm_number_keys:
+            for value in (float("inf"), float("-inf"), float("nan")):
+                with (
+                    self.subTest(key=key, value=value),
+                    tempfile.TemporaryDirectory() as tempdir,
+                ):
+                    root = Path(tempdir)
+                    clusters = [
+                        {
+                            "id": "cloud-1",
+                            "tier": "cloud",
+                            "resources": {
+                                "vms": {
+                                    "count": 1,
+                                    "spec": {"cores": 1, "memory_gb": 1, key: value},
+                                }
+                            },
+                        }
+                    ]
+                    exp_path, _ = self._build_triplet(root, tempdir, clusters=clusters)
+
+                    stderr = self._parse_error_before_runtime_processing(exp_path)
+                    self.assertIn(
+                        "infrastructure.clusters[0].resources.vms.spec.%s" % (key,),
+                        stderr,
+                    )
+                    self.assertIn("must be finite number >= 0", stderr)
+
+    def test_non_finite_network_overrides_fail_before_runtime_processing(self):
+        for value in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                exp_path, _ = self._build_triplet(root, tempdir)
+                payload = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
+                payload["infrastructure"]["network"]["overrides"][
+                    "cloud_latency_avg"
+                ] = value
+                self._write(exp_path, payload)
+
+                stderr = self._parse_error_before_runtime_processing(exp_path)
+                self.assertIn(
+                    "infrastructure.network.overrides.cloud_latency_avg",
+                    stderr,
+                )
+                self.assertIn("must be finite number", stderr)
+
+    def test_existing_numeric_lower_bounds_remain_enforced(self):
+        vm_number_keys = (
+            "memory_gb",
+            "cpu_quota",
+            "storage_read_mbps",
+            "storage_write_mbps",
+        )
+        for key in vm_number_keys:
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 clusters = [
                     {
@@ -1371,26 +1514,108 @@ class YamlParserTests(unittest.TestCase):
                         "resources": {
                             "vms": {
                                 "count": 1,
-                                "spec": {"cores": 1, "memory_gb": memory_gb},
+                                "spec": {"cores": 1, "memory_gb": 1, key: -0.1},
                             }
                         },
                     }
                 ]
                 exp_path, _ = self._build_triplet(root, tempdir, clusters=clusters)
 
-                with mock.patch(
-                    "input.configuration.yaml_parser.legacy_projection.to_legacy_config"
-                ) as project, mock.patch(
-                    "input.configuration.yaml_parser.runtime_module_loader.dynamic_import"
-                ) as dynamic_import:
-                    stderr = self._parse_error(exp_path)
-
-                project.assert_not_called()
-                dynamic_import.assert_not_called()
+                stderr = self._parse_error(exp_path)
                 self.assertIn(
-                    "infrastructure.clusters[0].resources.vms.spec.memory_gb", stderr
+                    "infrastructure.clusters[0].resources.vms.spec.%s" % (key,),
+                    stderr,
                 )
                 self.assertIn("must be finite number >= 0", stderr)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            stage = self._image_classification_stage()
+            stage["config"]["application_worker_cpu"] = 0.0009
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["infrastructure", "software", "application"],
+                clusters=self._image_classification_clusters(),
+                modules=self._image_classification_modules(),
+                benchmark={"pipeline": [stage]},
+            )
+
+            stderr = self._parse_error(exp_path)
+            self.assertIn("benchmark.pipeline[0].config.application_worker_cpu", stderr)
+            self.assertIn("must be finite number >= 0.001", stderr)
+
+    def test_finite_integer_and_fractional_values_survive_lock_replay(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            clusters = self._image_classification_clusters()
+            vm_spec = clusters[0]["resources"]["vms"]["spec"]
+            vm_spec.update(
+                {
+                    "memory_gb": 0.5,
+                    "cpu_quota": 1,
+                    "storage_read_mbps": 2.5,
+                    "storage_write_mbps": 3,
+                }
+            )
+            stage = self._text_translation_stage(0.5)
+            stage["config"].update(
+                {
+                    "application_worker_cpu": 1,
+                    "application_worker_memory": 1.25,
+                    "application_endpoint_cpu": 2,
+                    "application_endpoint_memory": 0.75,
+                }
+            )
+            exp_path, _ = self._build_triplet(
+                root,
+                tempdir,
+                run_targets=["infrastructure", "software", "application"],
+                clusters=clusters,
+                modules=self._image_classification_modules(),
+                benchmark={"pipeline": [stage]},
+            )
+            payload = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
+            payload["infrastructure"]["network"]["overrides"] = {
+                "cloud_latency_avg": -1.5,
+                "edge_throughput": 2,
+            }
+            self._write(exp_path, payload)
+
+            parser = argparse.ArgumentParser()
+            config = input_module.start(parser, str(exp_path))
+            from input.configuration import yaml_parser
+
+            lock_path = yaml_parser.write_experiment_lock(config)
+            replayed = input_module.start(parser, lock_path)
+
+            expected_vm_spec = {
+                "cores": 2,
+                "memory_gb": 0.5,
+                "cpu_quota": 1.0,
+                "storage_read_mbps": 2.5,
+                "storage_write_mbps": 3.0,
+            }
+            expected_stage_values = {
+                "frequency": 0.5,
+                "application_worker_cpu": 1.0,
+                "application_worker_memory": 1.25,
+                "application_endpoint_cpu": 2.0,
+                "application_endpoint_memory": 0.75,
+            }
+            for parsed in (config, replayed):
+                normalized = parsed["normalized"]
+                self.assertEqual(
+                    normalized["infrastructure"]["clusters"][0]["resources"]["vms"]["spec"],
+                    expected_vm_spec,
+                )
+                self.assertEqual(
+                    normalized["infrastructure"]["network"]["overrides"],
+                    {"cloud_latency_avg": -1.5, "edge_throughput": 2},
+                )
+                stage_config = normalized["benchmark"]["pipeline"][0]["config"]
+                for key, value in expected_stage_values.items():
+                    self.assertEqual(stage_config[key], value)
 
     def test_lock_replay_rejects_non_finite_memory_gb(self):
         for memory_gb in (float("nan"), float("inf"), float("-inf")):
@@ -1410,6 +1635,44 @@ class YamlParserTests(unittest.TestCase):
                     stderr,
                 )
                 self.assertIn("must be finite number >= 0", stderr)
+
+    def test_lock_replay_rejects_non_finite_numeric_network_override(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                lock_path = self._write_valid_lock(root)
+                lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+                lock_payload["normalized_config"]["infrastructure"]["network"]["overrides"][
+                    "cloud_latency_avg"
+                ] = value
+                self._write(lock_path, lock_payload)
+
+                stderr = self._parse_error(lock_path)
+
+                self.assertIn(
+                    "normalized_config.infrastructure.network.overrides.cloud_latency_avg",
+                    stderr,
+                )
+                self.assertIn("must be finite number", stderr)
+
+    def test_lock_replay_rejects_non_finite_benchmark_number(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                lock_path = self._write_valid_application_lock(root)
+                lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+                lock_payload["normalized_config"]["benchmark"]["pipeline"][0]["config"][
+                    "application_worker_cpu"
+                ] = value
+                self._write(lock_path, lock_payload)
+
+                stderr = self._parse_error(lock_path)
+
+                self.assertIn(
+                    "normalized_config.benchmark.pipeline[0].config.application_worker_cpu",
+                    stderr,
+                )
+                self.assertIn("must be finite number >= 0.001", stderr)
 
     def test_lock_replay_rejects_mutated_multi_stage_pipeline_before_runtime_projection(self):
         with tempfile.TemporaryDirectory() as tempdir:

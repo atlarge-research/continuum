@@ -93,7 +93,16 @@ class BenchmarkStageContractTests(unittest.TestCase):
                 )
 
     def test_text_translation_frequency_rejects_non_positive_and_non_numeric_values(self):
-        for frequency in (0, -1, True, False, "1"):
+        for frequency in (
+            0,
+            -1,
+            True,
+            False,
+            "1",
+            float("inf"),
+            float("-inf"),
+            float("nan"),
+        ):
             with self.subTest(frequency=frequency):
                 with self.assertRaises(ValueError) as exc:
                     benchmark_stage_contract.validate_stage_config_contract(
@@ -104,9 +113,33 @@ class BenchmarkStageContractTests(unittest.TestCase):
                     )
                 self.assertIn("benchmark.pipeline[0].config.frequency", str(exc.exception))
                 self.assertIn(
-                    "must be number > 0 for benchmark stage type 'text_translation'",
+                    "must be finite number > 0 for benchmark stage type 'text_translation'",
                     str(exc.exception),
                 )
+
+    def test_float_capable_resource_fields_reject_non_finite_values(self):
+        for key in (
+            "application_worker_cpu",
+            "application_worker_memory",
+            "application_endpoint_cpu",
+            "application_endpoint_memory",
+        ):
+            for value in (float("inf"), float("-inf"), float("nan")):
+                with self.subTest(key=key, value=value):
+                    config = self._image_classification_config()
+                    config[key] = value
+                    with self.assertRaises(ValueError) as exc:
+                        benchmark_stage_contract.validate_stage_config_contract(
+                            "image_classification",
+                            config,
+                            self.path,
+                            self.prefix,
+                        )
+                    self.assertIn(
+                        "benchmark.pipeline[0].config.%s" % (key,),
+                        str(exc.exception),
+                    )
+                    self.assertIn("must be finite number >= 0.001", str(exc.exception))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 
@@ -28,3 +29,11 @@ def is_int(value) -> bool:
 
 def is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def is_finite_number(value) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, float) and math.isfinite(value)

@@ -1141,7 +1141,7 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
                             "config": {
                                 "frequency": 5,
                                 "applications_per_worker": 1,
-                                "application_worker_cpu": 0.5,
+                                "application_worker_cpu": 1,
                                 "application_worker_memory": 1.0,
                                 "application_endpoint_cpu": 0.5,
                                 "application_endpoint_memory": 1.0,
@@ -1165,7 +1165,7 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             {
                 "frequency": 5,
                 "applications_per_worker": 1,
-                "application_worker_cpu": 0.5,
+                "application_worker_cpu": 1.0,
                 "application_worker_memory": 1.0,
                 "application_endpoint_cpu": 0.5,
                 "application_endpoint_memory": 1.0,

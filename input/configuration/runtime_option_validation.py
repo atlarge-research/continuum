@@ -149,7 +149,7 @@ def _constraint_type(stage_type, option, constraint_label):
         return float
     if constraint_label.startswith("integer"):
         return int
-    if constraint_label.startswith("number"):
+    if constraint_label.startswith(("number", "finite number")):
         return float
     raise ValueError(
         "Unsupported benchmark contract label %r for stage %r option %r"
