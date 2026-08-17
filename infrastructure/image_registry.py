@@ -12,6 +12,12 @@ from input.configuration import config_access, image_requirements
 
 from . import orchestration_schema
 
+_LOCAL_MANIFEST_MEDIA_TYPES = {
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+}
+_LOCAL_MANIFEST_ACCEPT = "Accept: %s" % (", ".join(sorted(_LOCAL_MANIFEST_MEDIA_TYPES)),)
+
 
 def _fail_prefetch_requirements(message):
     logging.error("Invalid prefetch image requirements: %s", message)
@@ -227,24 +233,92 @@ def _registry_repo_tags(config, machines, repo_name):
     return set(str(tag) for tag in tags)
 
 
+def _registry_descriptor_has_required_fields(descriptor):
+    """Validate only required descriptor fields and their basic JSON types."""
+    if not isinstance(descriptor, dict):
+        return False
+    for field in ("mediaType", "digest"):
+        value = descriptor.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return False
+    size = descriptor.get("size")
+    return isinstance(size, int) and not isinstance(size, bool) and size >= 0
+
+
+def _registry_manifest_config_digest(config, machines, repo_name, tag_name):
+    """Return a config digest from a manifest with required structural fields."""
+    encoded_repo = quote(repo_name, safe="/")
+    encoded_tag = quote(tag_name, safe="")
+    command = [
+        "curl",
+        "-fsS",
+        "-H",
+        _LOCAL_MANIFEST_ACCEPT,
+        "%s/v2/%s/manifests/%s" % (config["registry"], encoded_repo, encoded_tag),
+    ]
+    output, error = machines[0].process(config, command)[0]
+    if error or not output:
+        return None
+    try:
+        payload = json.loads(output[0])
+    except (ValueError, TypeError):
+        return None
+    config_digest = None
+    if not isinstance(payload, dict):
+        return None
+    schema_version = payload.get("schemaVersion")
+    manifest_config = payload.get("config")
+    layers = payload.get("layers")
+    if (
+        isinstance(schema_version, int)
+        and not isinstance(schema_version, bool)
+        and schema_version == 2
+        and payload.get("mediaType") in _LOCAL_MANIFEST_MEDIA_TYPES
+        and _registry_descriptor_has_required_fields(manifest_config)
+        and isinstance(layers, list)
+        and all(_registry_descriptor_has_required_fields(layer) for layer in layers)
+    ):
+        config_digest = manifest_config["digest"]
+    return config_digest if image_requirements.is_valid_sha256_digest(config_digest) else None
+
+
+def _registry_matches_expected_config_digest(
+    config, machines, repo_name, tag_name, expected_digest
+):
+    return (
+        _registry_manifest_config_digest(config, machines, repo_name, tag_name)
+        == expected_digest
+    )
+
+
 def _registry_has_required_image(config, machines, requirement, repos, tags_cache):
+    source_ref = requirement["source_ref"]
+    digest_pinned = image_requirements.source_ref_is_digest_pinned(source_ref)
+    expected_config_digest = None
+    if digest_pinned:
+        expected_config_digest = image_requirements.expected_local_config_digest(source_ref)
+        if expected_config_digest is None:
+            return False
+
     local_name = requirement["local_name"]
     repo_name = _registry_repo_name(local_name)
-    if not repo_name:
-        return False
-    if repo_name not in repos:
-        return False
-    if _registry_has_digest(local_name):
-        # Digest references are treated as non-cacheable in this pass.
+    if not repo_name or repo_name not in repos or _registry_has_digest(local_name):
+        # Local digest references remain non-cacheable in this pass.
         return False
 
     required_tag = _registry_tag_name(local_name)
     if required_tag is None:
-        return True
+        if not digest_pinned:
+            return True
+        required_tag = "latest"
 
     if repo_name not in tags_cache:
         tags_cache[repo_name] = _registry_repo_tags(config, machines, repo_name)
-    return required_tag in tags_cache[repo_name]
+    if required_tag not in tags_cache[repo_name]:
+        return False
+    return not digest_pinned or _registry_matches_expected_config_digest(
+        config, machines, repo_name, required_tag, expected_config_digest
+    )
 
 
 def _requirements_to_pull(config, machines, requirements, repos):
@@ -304,6 +378,9 @@ def docker_registry(config, machines):
     for requirement in to_pull:
         source_ref = requirement["source_ref"]
         local_name = requirement["local_name"]
+        expected_config_digest = None
+        if image_requirements.source_ref_is_digest_pinned(source_ref):
+            expected_config_digest = image_requirements.expected_local_config_digest(source_ref)
         dest = os.path.join(config["registry"], local_name)
         for command in (
             ["docker", "pull", source_ref],
@@ -313,6 +390,25 @@ def docker_registry(config, machines):
             _output, error = machines[0].process(config, command)[0]
             if error:
                 logging.error("".join(error))
+                sys.exit(1)
+        if expected_config_digest is not None:
+            repo_name = _registry_repo_name(local_name)
+            tag_name = _registry_tag_name(local_name) or "latest"
+            if not _registry_matches_expected_config_digest(
+                config,
+                machines,
+                repo_name,
+                tag_name,
+                expected_config_digest,
+            ):
+                logging.error(
+                    "Refreshed local registry image %s/%s:%s does not match expected "
+                    "image-config digest %s",
+                    config["registry"],
+                    repo_name,
+                    tag_name,
+                    expected_config_digest,
+                )
                 sys.exit(1)
     return requirements
 

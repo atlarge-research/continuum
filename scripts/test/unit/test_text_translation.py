@@ -53,6 +53,24 @@ class TextTranslationImageSelectionTests(unittest.TestCase):
             self.assertNotIn(":en-nl-8aad73b-r1", source_ref)
             self.assertRegex(source_ref, r"@sha256:[0-9a-f]{64}$")
 
+        expected_config_digests = {
+            (
+                "redplanet00/continuum-text-translation-publisher"
+                "@sha256:502142b93182c63f1225165f44d0308537aac95ee75a99b6f0ba19e668f6f6bf"
+            ): "sha256:5fab1472b1ba67c56b86dcb48c7d9aeee270604a42514f0edf6f853988f57cfe",
+            (
+                "redplanet00/continuum-text-translation-subscriber"
+                "@sha256:9aac61a0a1f0fe8938db7283b7f09ab9f9c5f84d95467fa267e9ca3220aabd26"
+            ): "sha256:8973a8d27ba02c08b5dbbc43329a1c8f54c56a887945e3520cc10bab63167417",
+        }
+        self.assertEqual(
+            {
+                source_ref: image_requirements.expected_local_config_digest(source_ref)
+                for source_ref in source_refs
+            },
+            expected_config_digests,
+        )
+
     def test_runtime_names_match_catalog_without_external_namespace(self):
         """Deployment roles consume catalog-aligned names without Docker Hub ownership."""
         source_refs = image_requirements._resolve_catalog_sources(  # pylint: disable=protected-access
@@ -62,6 +80,14 @@ class TextTranslationImageSelectionTests(unittest.TestCase):
         config = {}
 
         text_translation.set_container_location(config)
+
+        self.assertEqual(
+            config["images"],
+            {
+                "worker": "continuum:text_translation_subscriber_en-nl-8aad73b-r1",
+                "endpoint": "continuum:text_translation_publisher_en-nl-8aad73b-r1",
+            },
+        )
 
         runtime_names = {value.split(":", 1)[1] for value in config["images"].values()}
         catalog_names = {
@@ -106,7 +132,11 @@ class TextTranslationImageSelectionTests(unittest.TestCase):
         machine = mock.Mock()
         machine.process.return_value = [(["ok"], [])]
 
-        with mock.patch.object(image_registry, "_ensure_registry_running", return_value=set()):
+        with mock.patch.object(
+            image_registry, "_ensure_registry_running", return_value=set()
+        ), mock.patch.object(
+            image_registry, "_registry_matches_expected_config_digest", return_value=True
+        ) as verify_mock:
             image_registry.docker_registry(config, [machine])
 
         commands = [call.args[1] for call in machine.process.call_args_list]
@@ -118,6 +148,7 @@ class TextTranslationImageSelectionTests(unittest.TestCase):
             self.assertIn(["docker", "pull", source_ref], commands)
             self.assertIn(["docker", "tag", source_ref, destination], commands)
             self.assertIn(["docker", "push", destination], commands)
+        self.assertEqual(verify_mock.call_count, 2)
 
 
 class TextTranslationWorkerMetricTests(unittest.TestCase):

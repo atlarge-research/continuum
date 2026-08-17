@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -94,6 +95,12 @@ _TEXT_TRANSLATION_SUBSCRIBER_SOURCE = (
     "redplanet00/continuum-text-translation-subscriber"
     "@sha256:9aac61a0a1f0fe8938db7283b7f09ab9f9c5f84d95467fa267e9ca3220aabd26"
 )
+_TEXT_TRANSLATION_PUBLISHER_CONFIG_DIGEST = (
+    "sha256:5fab1472b1ba67c56b86dcb48c7d9aeee270604a42514f0edf6f853988f57cfe"
+)
+_TEXT_TRANSLATION_SUBSCRIBER_CONFIG_DIGEST = (
+    "sha256:8973a8d27ba02c08b5dbbc43329a1c8f54c56a887945e3520cc10bab63167417"
+)
 _IMAGE_CATALOG: dict[
     str,
     str | tuple[str, ...] | Callable[[dict | None, dict | None], str | tuple[str, ...]],
@@ -114,6 +121,11 @@ _LOCAL_IMAGE_NAMES_BY_SOURCE = {
     _TEXT_TRANSLATION_PUBLISHER_SOURCE: "text_translation_publisher_en-nl-8aad73b-r1",
     _TEXT_TRANSLATION_SUBSCRIBER_SOURCE: "text_translation_subscriber_en-nl-8aad73b-r1",
 }
+_LOCAL_IMAGE_CONFIG_DIGEST_BY_SOURCE = {
+    _TEXT_TRANSLATION_PUBLISHER_SOURCE: _TEXT_TRANSLATION_PUBLISHER_CONFIG_DIGEST,
+    _TEXT_TRANSLATION_SUBSCRIBER_SOURCE: _TEXT_TRANSLATION_SUBSCRIBER_CONFIG_DIGEST,
+}
+_SHA256_DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
 @dataclass(frozen=True)
@@ -133,6 +145,29 @@ def _local_name_for_source(source_ref: str) -> str:
     if "/" not in source_ref:
         return source_ref
     return source_ref.split("/", 1)[1]
+
+
+def source_ref_is_digest_pinned(source_ref: str) -> bool:
+    """Return whether an image source uses an immutable digest reference."""
+    return isinstance(source_ref, str) and "@" in source_ref.strip()
+
+
+def is_valid_sha256_digest(value: object) -> bool:
+    """Return whether a value is a canonical sha256 digest string."""
+    return isinstance(value, str) and _SHA256_DIGEST_PATTERN.fullmatch(value) is not None
+
+
+def expected_local_config_digest(source_ref: str) -> str | None:
+    """Return the trusted run-local image-config identity for a pinned source."""
+    expected_digest = _LOCAL_IMAGE_CONFIG_DIGEST_BY_SOURCE.get(source_ref)
+    if expected_digest is None:
+        return None
+    if not is_valid_sha256_digest(expected_digest):
+        raise ValueError(
+            "Invalid expected local image-config digest for source '%s': %r"
+            % (source_ref, expected_digest)
+        )
+    return expected_digest
 
 
 def _normalize_catalog_sources(

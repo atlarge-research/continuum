@@ -27,6 +27,7 @@ from infrastructure import state as infra_state
 from infrastructure.machine import Machine
 from input.configuration import (
     config_access,
+    image_requirements,
     module_registry,
     runtime_module_loader,
     runtime_option_validation,
@@ -1882,6 +1883,71 @@ class ImagePrefetchFlowTests(unittest.TestCase):
             ]
         }
 
+    def _digest_requirement(self, source_ref, local_name):
+        return {
+            "source_ref": source_ref,
+            "local_name": local_name,
+            "owners": ["benchmark.stage:text-translation"],
+            "tier_targets": ["cloud", "endpoint"],
+        }
+
+    def _manifest_payload(self, config_digest, media_type=None):
+        return {
+            "schemaVersion": 2,
+            "mediaType": media_type or "application/vnd.oci.image.manifest.v1+json",
+            "config": {
+                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "digest": config_digest,
+                "size": 1,
+            },
+            "layers": [],
+        }
+
+    def _local_registry_machine(self, repo_name, manifest_responses, tags=None):
+        responses = list(manifest_responses)
+        machine = mock.Mock()
+
+        def process(_config, command, **_kwargs):
+            if command[0] == "docker":
+                return self._process_result(["ok"])
+            self.assertEqual(command[0], "curl")
+            self.assertTrue(command[-1].startswith("127.0.0.1:5000/v2/"))
+            if command[-1].endswith("/v2/_catalog"):
+                return self._process_result(
+                    [json.dumps({"repositories": [repo_name]})]
+                )
+            if command[-1].endswith("/%s/tags/list" % repo_name):
+                return self._process_result(
+                    [json.dumps({"name": repo_name, "tags": tags or ["latest"]})]
+                )
+            if "/%s/manifests/" % repo_name in command[-1]:
+                response = responses.pop(0) if responses else None
+                if response is None:
+                    return self._process_result([])
+                if not isinstance(response, str):
+                    response = json.dumps(response)
+                return self._process_result([response])
+            self.fail("Unexpected local registry command: %r" % (command,))
+
+        machine.process.side_effect = process
+        return machine
+
+    def _text_translation_digest_requirements(self):
+        return (
+            (
+                "redplanet00/continuum-text-translation-publisher"
+                "@sha256:502142b93182c63f1225165f44d0308537aac95ee75a99b6f0ba19e668f6f6bf",
+                "text_translation_publisher_en-nl-8aad73b-r1",
+                "sha256:5fab1472b1ba67c56b86dcb48c7d9aeee270604a42514f0edf6f853988f57cfe",
+            ),
+            (
+                "redplanet00/continuum-text-translation-subscriber"
+                "@sha256:9aac61a0a1f0fe8938db7283b7f09ab9f9c5f84d95467fa267e9ca3220aabd26",
+                "text_translation_subscriber_en-nl-8aad73b-r1",
+                "sha256:8973a8d27ba02c08b5dbbc43329a1c8f54c56a887945e3520cc10bab63167417",
+            ),
+        )
+
     def test_get_prefetch_requirements_requires_prefetch_key(self):
         with self.assertRaises(SystemExit):
             image_registry_module.get_prefetch_requirements({})
@@ -2563,6 +2629,301 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         requirements = image_registry_module.docker_registry(config, [machine])
         self.assertEqual(requirements, [])
         machine.process.assert_not_called()
+
+    def test_wrong_text_translation_cache_identity_refreshes_each_pinned_source(self):
+        wrong_digest = "sha256:%s" % ("0" * 64)
+        for source_ref, local_name, expected_digest in self._text_translation_digest_requirements():
+            with self.subTest(source_ref=source_ref):
+                machine = self._local_registry_machine(
+                    local_name,
+                    [
+                        self._manifest_payload(wrong_digest),
+                        self._manifest_payload(expected_digest),
+                    ],
+                )
+                config = {
+                    "registry": "127.0.0.1:5000",
+                    "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+                    "prefetch_image_requirements": [
+                        self._digest_requirement(source_ref, local_name)
+                    ],
+                }
+
+                image_registry_module.docker_registry(config, [machine])
+
+                commands = [call.args[1] for call in machine.process.call_args_list]
+                self.assertIn(["docker", "pull", source_ref], commands)
+                manifest_commands = [
+                    command for command in commands if "/manifests/latest" in command[-1]
+                ]
+                self.assertEqual(len(manifest_commands), 2)
+
+    def test_matching_digest_cache_identity_reuses_oci_and_docker_manifests(self):
+        source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
+        media_types = (
+            "application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.docker.distribution.manifest.v2+json",
+        )
+        for media_type in media_types:
+            with self.subTest(media_type=media_type):
+                machine = self._local_registry_machine(
+                    local_name,
+                    [self._manifest_payload(expected_digest, media_type=media_type)],
+                )
+                config = {
+                    "registry": "127.0.0.1:5000",
+                    "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+                    "prefetch_image_requirements": [
+                        self._digest_requirement(source_ref, local_name)
+                    ],
+                }
+
+                image_registry_module.docker_registry(config, [machine])
+
+                commands = [call.args[1] for call in machine.process.call_args_list]
+                self.assertFalse(any(command[0] == "docker" for command in commands))
+                manifest_command = next(
+                    command for command in commands if "/manifests/latest" in command[-1]
+                )
+                self.assertEqual(manifest_command[:4], ["curl", "-fsS", "-H", mock.ANY])
+
+    def test_incomplete_digest_cache_manifests_are_missing(self):
+        source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
+        missing_field = object()
+        valid_manifest = self._manifest_payload(expected_digest)
+        valid_manifest_with_layer = copy.deepcopy(valid_manifest)
+        valid_manifest_with_layer["layers"] = [
+            {
+                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                "digest": "sha256:%s" % ("1" * 64),
+                "size": 1,
+            }
+        ]
+
+        def changed(base, path, value):
+            payload = copy.deepcopy(base)
+            target = payload
+            for key in path[:-1]:
+                target = target[key]
+            if value is missing_field:
+                target.pop(path[-1])
+            else:
+                target[path[-1]] = value
+            return payload
+
+        cases = {
+            "missing-response": None,
+            "malformed-json": "not-json",
+            "index": {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.index.v1+json",
+                "manifests": [],
+            },
+            "schema-version-missing": changed(
+                valid_manifest, ("schemaVersion",), missing_field
+            ),
+            "schema-version-wrong-value": changed(valid_manifest, ("schemaVersion",), 3),
+            "schema-version-boolean": changed(valid_manifest, ("schemaVersion",), True),
+            "schema-version-float": changed(valid_manifest, ("schemaVersion",), 2.0),
+            "schema-version-string": changed(valid_manifest, ("schemaVersion",), "2"),
+            "config-missing": changed(valid_manifest, ("config",), missing_field),
+            "config-not-mapping": changed(valid_manifest, ("config",), []),
+            "config-media-type-missing": changed(
+                valid_manifest, ("config", "mediaType"), missing_field
+            ),
+            "config-media-type-empty": changed(valid_manifest, ("config", "mediaType"), ""),
+            "config-media-type-whitespace": changed(
+                valid_manifest, ("config", "mediaType"), " \t"
+            ),
+            "config-media-type-wrong-type": changed(
+                valid_manifest, ("config", "mediaType"), 1
+            ),
+            "config-digest-missing": changed(
+                valid_manifest, ("config", "digest"), missing_field
+            ),
+            "config-digest-empty": changed(valid_manifest, ("config", "digest"), ""),
+            "config-digest-whitespace": changed(
+                valid_manifest, ("config", "digest"), " \t"
+            ),
+            "config-digest-wrong-type": changed(valid_manifest, ("config", "digest"), 1),
+            "malformed-config-digest": self._manifest_payload("sha256:not-a-digest"),
+            "config-size-missing": changed(
+                valid_manifest, ("config", "size"), missing_field
+            ),
+            "config-size-negative": changed(valid_manifest, ("config", "size"), -1),
+            "config-size-boolean": changed(valid_manifest, ("config", "size"), True),
+            "config-size-float": changed(valid_manifest, ("config", "size"), 1.0),
+            "config-size-string": changed(valid_manifest, ("config", "size"), "1"),
+            "layers-missing": changed(valid_manifest, ("layers",), missing_field),
+            "layers-null": changed(valid_manifest, ("layers",), None),
+            "layers-mapping": changed(valid_manifest, ("layers",), {}),
+            "layers-scalar": changed(valid_manifest, ("layers",), 1),
+            "layer-not-mapping": changed(valid_manifest, ("layers",), [None]),
+            "layer-media-type-missing": changed(
+                valid_manifest_with_layer,
+                ("layers", 0, "mediaType"),
+                missing_field,
+            ),
+            "layer-media-type-empty": changed(
+                valid_manifest_with_layer, ("layers", 0, "mediaType"), ""
+            ),
+            "layer-media-type-whitespace": changed(
+                valid_manifest_with_layer, ("layers", 0, "mediaType"), " \t"
+            ),
+            "layer-media-type-wrong-type": changed(
+                valid_manifest_with_layer, ("layers", 0, "mediaType"), 1
+            ),
+            "layer-digest-missing": changed(
+                valid_manifest_with_layer,
+                ("layers", 0, "digest"),
+                missing_field,
+            ),
+            "layer-digest-empty": changed(
+                valid_manifest_with_layer, ("layers", 0, "digest"), ""
+            ),
+            "layer-digest-whitespace": changed(
+                valid_manifest_with_layer, ("layers", 0, "digest"), " \t"
+            ),
+            "layer-digest-wrong-type": changed(
+                valid_manifest_with_layer, ("layers", 0, "digest"), 1
+            ),
+            "layer-size-missing": changed(
+                valid_manifest_with_layer, ("layers", 0, "size"), missing_field
+            ),
+            "layer-size-negative": changed(
+                valid_manifest_with_layer, ("layers", 0, "size"), -1
+            ),
+            "layer-size-boolean": changed(
+                valid_manifest_with_layer, ("layers", 0, "size"), True
+            ),
+            "layer-size-float": changed(
+                valid_manifest_with_layer, ("layers", 0, "size"), 1.0
+            ),
+            "layer-size-string": changed(
+                valid_manifest_with_layer, ("layers", 0, "size"), "1"
+            ),
+        }
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+            "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
+        }
+        for label, response in cases.items():
+            with self.subTest(case=label):
+                machine = self._local_registry_machine(local_name, [response])
+                missing = image_registry_module.missing_cached_requirements(config, [machine])
+                self.assertEqual(missing, config["prefetch_image_requirements"])
+        self.assertEqual(
+            image_requirements.expected_local_config_digest(source_ref), expected_digest
+        )
+
+    def test_empty_layers_list_remains_a_valid_digest_cache_hit(self):
+        source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
+        manifest = self._manifest_payload(expected_digest)
+        self.assertEqual(manifest["layers"], [])
+        machine = self._local_registry_machine(local_name, [manifest])
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+            "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
+        }
+
+        missing = image_registry_module.missing_cached_requirements(config, [machine])
+
+        self.assertEqual(missing, [])
+
+    def test_refreshed_digest_identity_is_verified_and_failure_is_closed(self):
+        source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
+        wrong_digest = "sha256:%s" % ("0" * 64)
+        incomplete_matching_manifest = self._manifest_payload(expected_digest)
+        incomplete_matching_manifest["config"].pop("size")
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["application"], "image_prefetch": "on"}},
+            "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
+        }
+        responses = {
+            "wrong-digest": self._manifest_payload(wrong_digest),
+            "incomplete-matching-manifest": incomplete_matching_manifest,
+        }
+        for label, response in responses.items():
+            with self.subTest(case=label):
+                machine = self._local_registry_machine(local_name, [response])
+
+                with self.assertRaises(SystemExit):
+                    image_registry_module.docker_registry(config, [machine])
+
+                commands = [call.args[1] for call in machine.process.call_args_list]
+                self.assertIn(["docker", "pull", source_ref], commands)
+                self.assertTrue(any("/manifests/latest" in command[-1] for command in commands))
+
+    def test_unknown_digest_pinned_source_is_refreshed_without_tag_cache_acceptance(self):
+        source_ref = "registry.example/future@sha256:%s" % ("a" * 64)
+        local_name = "future:latest"
+        machine = self._local_registry_machine(local_name.split(":", 1)[0], [])
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
+        }
+
+        image_registry_module.docker_registry(config, [machine])
+
+        commands = [call.args[1] for call in machine.process.call_args_list]
+        self.assertIn(["docker", "pull", source_ref], commands)
+        self.assertFalse(any("/tags/list" in command[-1] for command in commands))
+        self.assertFalse(any("/manifests/" in command[-1] for command in commands))
+
+    def test_malformed_expected_config_digest_fails_clearly(self):
+        source_ref, local_name, _expected_digest = self._text_translation_digest_requirements()[0]
+        machine = self._local_registry_machine(local_name, [])
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["application"], "image_prefetch": "on"}},
+            "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
+        }
+        with mock.patch.dict(
+            image_requirements._LOCAL_IMAGE_CONFIG_DIGEST_BY_SOURCE,
+            {source_ref: "not-a-digest"},
+        ):
+            with self.assertRaisesRegex(ValueError, "Invalid expected local image-config digest"):
+                image_registry_module.docker_registry(config, [machine])
+        commands = [call.args[1] for call in machine.process.call_args_list]
+        self.assertFalse(any(command[0] == "docker" for command in commands))
+
+    def test_missing_and_registry_refresh_share_digest_cache_validity(self):
+        source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
+        wrong_digest = "sha256:%s" % ("0" * 64)
+        cases = {
+            "correct": self._manifest_payload(expected_digest),
+            "incorrect": self._manifest_payload(wrong_digest),
+            "unverifiable": {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.index.v1+json",
+                "manifests": [],
+            },
+        }
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+            "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
+        }
+        for label, cached_response in cases.items():
+            with self.subTest(case=label):
+                missing_machine = self._local_registry_machine(local_name, [cached_response])
+                missing = image_registry_module.missing_cached_requirements(
+                    config, [missing_machine]
+                )
+
+                refresh_responses = [cached_response]
+                if label != "correct":
+                    refresh_responses.append(self._manifest_payload(expected_digest))
+                registry_machine = self._local_registry_machine(local_name, refresh_responses)
+                image_registry_module.docker_registry(config, [registry_machine])
+                commands = [call.args[1] for call in registry_machine.process.call_args_list]
+                pulled = ["docker", "pull", source_ref] in commands
+
+                self.assertEqual(bool(missing), pulled)
 
     def test_docker_registry_mode_off_pulls_only_missing(self):
         machine = mock.Mock()
