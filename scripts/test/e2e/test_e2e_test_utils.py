@@ -22,6 +22,7 @@ def _load_test_utils_module():
 
 
 test_utils = _load_test_utils_module()
+NETWORK_RESULTS_TIMESTAMP = "2026-05-21_15:30:42"
 
 
 def _contract_section(details=None):
@@ -80,12 +81,10 @@ def _write_success_artifacts(
     )
 
 
-def _write_network_results(root: Path, entries=None):
-    results_dir = root / ".continuum" / "logs" / "network_validation"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    results_path = results_dir / "netperf_results_2026-05-21T000000.ndjson"
-    entries = entries or [
+def _network_result_entries(timestamp=NETWORK_RESULTS_TIMESTAMP):
+    return [
         {
+            "timestamp": timestamp,
             "source": "cloud",
             "target": "endpoint",
             "direction": "latency",
@@ -94,6 +93,7 @@ def _write_network_results(root: Path, entries=None):
             "expected_throughput_mbps": 7.21,
         },
         {
+            "timestamp": timestamp,
             "source": "cloud",
             "target": "endpoint",
             "direction": "throughput",
@@ -102,10 +102,24 @@ def _write_network_results(root: Path, entries=None):
             "expected_throughput_mbps": 7.21,
         },
     ]
+
+
+def _write_network_results(root: Path, timestamp=NETWORK_RESULTS_TIMESTAMP, entries=None):
+    results_dir = root / ".continuum" / "logs" / "network_validation"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    results_path = results_dir / ("netperf_results_%s.ndjson" % (timestamp,))
+    if entries is None:
+        entries = _network_result_entries(timestamp)
     with results_path.open("w", encoding="utf-8") as filep:
         for entry in entries:
             filep.write(json.dumps(entry) + "\n")
     return results_path
+
+
+def _run_log_stdout(timestamp=NETWORK_RESULTS_TIMESTAMP):
+    return "Logging has been enabled. Writing to stdout and file %s_infra_only.log\n" % (
+        timestamp,
+    )
 
 
 def _write_benchmark_metrics(root: Path, latency_value="12.5"):
@@ -811,7 +825,7 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 },
             }
             success, reason = test_utils.detect_success(
-                stdout="",
+                stdout=_run_log_stdout(),
                 stderr="",
                 exit_code=0,
                 config=config,
@@ -826,9 +840,14 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertTrue(success)
             self.assertIn("network_validation_results=%s" % (results_path,), reason)
 
-    def test_detect_success_rejects_missing_network_results(self):
+    def test_detect_success_rejects_older_network_results_when_current_is_missing(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            _write_success_artifacts(Path(tempdir), "infrastructure")
+            root = Path(tempdir)
+            _write_success_artifacts(root, "infrastructure")
+            older_path = _write_network_results(root, timestamp="2026-05-20_15:30:42")
+            current_path = older_path.parent / (
+                "netperf_results_%s.ndjson" % (NETWORK_RESULTS_TIMESTAMP,)
+            )
 
             config = {
                 "infrastructure": {
@@ -840,7 +859,7 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
                 },
             }
             success, reason = test_utils.detect_success(
-                stdout="",
+                stdout=_run_log_stdout(),
                 stderr="",
                 exit_code=0,
                 config=config,
@@ -854,6 +873,159 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
             self.assertFalse(success)
             self.assertIn("Network validation artifact missing", reason)
+            self.assertIn(str(current_path), reason)
+            self.assertNotIn(str(older_path), reason)
+
+    def test_network_validation_fails_when_current_run_timestamp_is_unknown(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            _write_network_results(root)
+            config = {"infrastructure": {"base_path": tempdir}}
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("current run timestamp could not be determined", reason)
+
+    def test_network_validation_prefers_explicit_config_timestamp(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            results_path = _write_network_results(root)
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(
+                config,
+                stdout=_run_log_stdout("2026-05-20_15:30:42"),
+            )
+
+            self.assertTrue(success)
+            self.assertIn(str(results_path), reason)
+
+    def test_network_validation_rejects_entry_with_missing_timestamp(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            entries = _network_result_entries()
+            entries[0].pop("timestamp")
+            _write_network_results(Path(tempdir), entries=entries)
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("entry 1 is missing timestamp", reason)
+
+    def test_network_validation_rejects_entry_with_wrong_timestamp(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            entries = _network_result_entries()
+            entries[0]["timestamp"] = "2026-05-20_15:30:42"
+            _write_network_results(Path(tempdir), entries=entries)
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("entry 1 timestamp '2026-05-20_15:30:42'", reason)
+            self.assertIn("current run timestamp %r" % (NETWORK_RESULTS_TIMESTAMP,), reason)
+
+    def test_network_validation_rejects_mixed_current_and_stale_timestamps(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            entries = _network_result_entries()
+            entries[1]["timestamp"] = "2026-05-20_15:30:42"
+            _write_network_results(Path(tempdir), entries=entries)
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("entry 2 timestamp '2026-05-20_15:30:42'", reason)
+
+    def test_network_validation_rejects_non_mapping_entry_clearly(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            entries = _network_result_entries()
+            entries.append(["malformed"])
+            _write_network_results(Path(tempdir), entries=entries)
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("entry 3 must be a mapping", reason)
+
+    def test_network_validation_rejects_empty_current_run_artifact(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_network_results(Path(tempdir), entries=[])
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("no netperf entries found", reason)
+
+    def test_network_validation_preserves_profile_failures(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            entries = _network_result_entries()
+            entries[0]["output"] = "1000,140000,150000,1000,25,135000,145000,150000"
+            entries[1]["output"] = "30.00"
+            _write_network_results(Path(tempdir), entries=entries)
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("Network validation profile mismatch", reason)
+            self.assertIn("latency", reason)
+            self.assertIn("throughput", reason)
+
+    def test_network_validation_reports_exact_current_artifact_as_unreadable(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            _write_network_results(Path(tempdir))
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+            verifier = test_utils._load_verify_network_profiles()
+
+            with mock.patch.object(verifier, "load_results", side_effect=OSError("denied")):
+                success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("Network validation artifact unreadable", reason)
+            self.assertIn("denied", reason)
+
+    def test_network_validation_rejects_non_utf8_current_artifact_as_unreadable(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            results_path = _write_network_results(Path(tempdir))
+            results_path.write_bytes(b"\xff")
+            config = {
+                "timestamp": NETWORK_RESULTS_TIMESTAMP,
+                "infrastructure": {"base_path": tempdir},
+            }
+
+            success, reason = test_utils.verify_network_validation_results(config)
+
+            self.assertFalse(success)
+            self.assertIn("Network validation artifact unreadable", reason)
+            self.assertIn("utf-8", reason)
 
     def test_detect_success_allows_successful_ansible_retry_noise(self):
         with tempfile.TemporaryDirectory() as tempdir:

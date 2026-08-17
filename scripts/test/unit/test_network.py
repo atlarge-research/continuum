@@ -80,7 +80,7 @@ class NetworkHelpersTests(unittest.TestCase):
                     "base_path": tempdir,
                     "wireless_network_preset": "4g",
                 },
-                "timestamp": "2026-05-21T000000",
+                "timestamp": "2026-05-21_15:30:42",
             }
 
             network.benchmark_output(
@@ -99,7 +99,7 @@ class NetworkHelpersTests(unittest.TestCase):
                 / ".continuum"
                 / "logs"
                 / "network_validation"
-                / "netperf_results_2026-05-21T000000.ndjson"
+                / "netperf_results_2026-05-21_15:30:42.ndjson"
             )
             entries = [
                 json.loads(line)
@@ -107,8 +107,50 @@ class NetworkHelpersTests(unittest.TestCase):
             ]
 
             self.assertEqual(len(entries), 2)
+            self.assertTrue(
+                all(entry["timestamp"] == "2026-05-21_15:30:42" for entry in entries)
+            )
             self.assertEqual(entries[0]["direction"], "latency")
             self.assertEqual(entries[1]["direction"], "throughput")
+
+    def test_benchmark_output_raises_clear_error_when_artifact_write_fails(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            machine = mock.Mock()
+            machine.process.return_value = [(["1000,40000,50000"], [])]
+            config = {
+                "infrastructure": {
+                    "base_path": tempdir,
+                    "wireless_network_preset": "4g",
+                },
+                "timestamp": "2026-05-21_15:30:42",
+            }
+            results_path = (
+                Path(tempdir)
+                / ".continuum"
+                / "logs"
+                / "network_validation"
+                / "netperf_results_2026-05-21_15:30:42.ndjson"
+            )
+            artifact_file = mock.MagicMock()
+            artifact_file.__enter__.return_value = artifact_file
+            artifact_file.write.side_effect = OSError("disk full")
+
+            with mock.patch("builtins.open", return_value=artifact_file):
+                with self.assertRaises(RuntimeError) as raised:
+                    network.benchmark_output(
+                        config,
+                        machine,
+                        ["192.168.100.3"],
+                        [["netperf", "-t", "TCP_RR"]],
+                        [["netperf", "-t", "TCP_STREAM"]],
+                        "cloud0@192.168.100.2",
+                        "cloud",
+                        "endpoint",
+                    )
+
+            self.assertIn(str(results_path), str(raised.exception))
+            self.assertIn("disk full", str(raised.exception))
+            self.assertIsInstance(raised.exception.__cause__, OSError)
 
 
 if __name__ == "__main__":

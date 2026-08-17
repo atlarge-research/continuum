@@ -447,25 +447,54 @@ def should_rebuild_base_images(
     return False
 
 
-def verify_network_validation_results(config: Dict) -> Tuple[bool, str]:
+def verify_network_validation_results(config: Dict, stdout: str = "") -> Tuple[bool, str]:
     """Validate structured network-validation netperf results for one run."""
     base_path = config.get("infrastructure", {}).get("base_path")
     if not isinstance(base_path, str) or not base_path.strip():
         return False, "Network validation artifact missing: infrastructure.base_path is not set"
 
+    expected_timestamp = config.get("timestamp")
+    if not isinstance(expected_timestamp, str) or not expected_timestamp.strip():
+        expected_timestamp = _extract_run_timestamp(stdout)
+    if not expected_timestamp:
+        return False, (
+            "Network validation artifact attribution failed: current run timestamp "
+            "could not be determined"
+        )
+
     verifier = _load_verify_network_profiles()
-    try:
-        results_file = verifier.latest_results_file(base_path=base_path)
-    except FileNotFoundError as exc:
-        return False, "Network validation artifact missing: %s" % (exc,)
+    results_dir = verifier.results_dir_for_base_path(base_path)
+    results_file = os.path.join(
+        results_dir,
+        "netperf_results_%s.ndjson" % (expected_timestamp,),
+    )
+    if not os.path.isfile(results_file):
+        return False, "Network validation artifact missing: %s" % (results_file,)
 
     try:
         results = verifier.load_results(results_file)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         return False, "Network validation artifact unreadable: %s" % (exc,)
 
     if not results:
         return False, "Network validation artifact invalid: no netperf entries found"
+
+    for index, entry in enumerate(results, 1):
+        if not isinstance(entry, dict):
+            return False, (
+                "Network validation artifact invalid: entry %s must be a mapping" % (index,)
+            )
+        if "timestamp" not in entry:
+            return False, (
+                "Network validation artifact attribution mismatch: entry %s is missing timestamp "
+                "(expected %r)" % (index, expected_timestamp)
+            )
+        if entry["timestamp"] != expected_timestamp:
+            return False, (
+                "Network validation artifact attribution mismatch: entry %s timestamp %r does not "
+                "match current run timestamp %r"
+                % (index, entry["timestamp"], expected_timestamp)
+            )
 
     failures = verifier.validate_results(results)
     if failures:
@@ -1028,7 +1057,7 @@ def detect_success(
         reasons.append(teardown_reason)
 
     if require_network_validation_results:
-        network_ok, network_reason = verify_network_validation_results(config)
+        network_ok, network_reason = verify_network_validation_results(config, stdout=stdout)
         if not network_ok:
             return False, network_reason
         reasons.append(network_reason)

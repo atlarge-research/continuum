@@ -25,8 +25,8 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
                 Path(tempdir) / ".continuum" / "logs" / "network_validation"
             )
             results_dir.mkdir(parents=True)
-            older = results_dir / "netperf_results_2026-05-20T000000.ndjson"
-            newer = results_dir / "netperf_results_2026-05-21T000000.ndjson"
+            older = results_dir / "netperf_results_2026-05-20_15:30:42.ndjson"
+            newer = results_dir / "netperf_results_2026-05-21_15:30:42.ndjson"
             older.write_text("{}\n", encoding="utf-8")
             newer.write_text("{}\n", encoding="utf-8")
             os.utime(older, (1, 1))
@@ -44,6 +44,7 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
     def test_validate_results_accepts_values_within_combined_tolerance(self):
         results = [
             {
+                "timestamp": "2026-05-21_15:30:42",
                 "source": "cloud",
                 "target": "endpoint",
                 "direction": "latency",
@@ -52,6 +53,7 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
                 "expected_throughput_mbps": 7.21,
             },
             {
+                "timestamp": "2026-05-21_15:30:42",
                 "source": "cloud",
                 "target": "endpoint",
                 "direction": "throughput",
@@ -66,6 +68,7 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
     def test_validate_results_rejects_values_outside_tolerance(self):
         results = [
             {
+                "timestamp": "2026-05-21_15:30:42",
                 "source": "cloud",
                 "target": "endpoint",
                 "direction": "latency",
@@ -74,6 +77,7 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
                 "expected_throughput_mbps": 7.21,
             },
             {
+                "timestamp": "2026-05-21_15:30:42",
                 "source": "cloud",
                 "target": "endpoint",
                 "direction": "throughput",
@@ -103,6 +107,7 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
     def test_validate_results_skips_strict_high_capacity_throughput(self):
         results = [
             {
+                "timestamp": "2026-05-21_15:30:42",
                 "source": "cloud",
                 "target": "edge",
                 "direction": "latency",
@@ -111,6 +116,7 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
                 "expected_throughput_mbps": 1000.0,
             },
             {
+                "timestamp": "2026-05-21_15:30:42",
                 "source": "cloud",
                 "target": "edge",
                 "direction": "throughput",

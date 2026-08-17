@@ -609,9 +609,10 @@ def benchmark_output(
         try:
             with open(results_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
-        except OSError:
-            # Non-fatal; structured validation data is best-effort
-            pass
+        except OSError as exc:
+            raise RuntimeError(
+                "Failed to write network validation artifact %s: %s" % (results_path, exc)
+            ) from exc
 
 
 def benchmark(config, machines):
