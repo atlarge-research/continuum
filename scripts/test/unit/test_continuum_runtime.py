@@ -114,6 +114,33 @@ class RuntimeTargetResolutionTests(unittest.TestCase):
         config = {"domains": {"run": {"targets": ["application"]}}}
         self.assertEqual(runtime_phase_targets.resolve_runtime_targets(config), (False, False, True))
 
+    def test_resolve_targets_rejects_fresh_application_without_software(self):
+        for targets in (
+            ["infrastructure", "application"],
+            ["application", "infrastructure"],
+        ):
+            with self.subTest(targets=targets):
+                config = {"domains": {"run": {"targets": targets}}}
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"domains\.run\.targets: fresh application execution requires the software phase",
+                ):
+                    runtime_phase_targets.resolve_runtime_targets(config)
+
+    def test_resolve_targets_preserves_valid_fresh_and_resume_combinations(self):
+        cases = (
+            (["infrastructure"], (True, False, False)),
+            (["infrastructure", "software"], (True, True, False)),
+            (["infrastructure", "software", "application"], (True, True, True)),
+            (["software"], (False, True, False)),
+            (["software", "application"], (False, True, True)),
+            (["application"], (False, False, True)),
+        )
+        for targets, expected in cases:
+            with self.subTest(targets=targets):
+                config = {"domains": {"run": {"targets": targets}}}
+                self.assertEqual(runtime_phase_targets.resolve_runtime_targets(config), expected)
+
     def test_required_completed_phase_for_resume(self):
         self.assertIsNone(runtime_phase_targets.required_state_phase_for_targets(True, False, False))
         self.assertEqual(
@@ -743,6 +770,47 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
                 "endpoint_nodes": 1,
             },
         }
+
+    def test_main_rejects_fresh_application_without_software_before_side_effects(self):
+        config = self._config(["infrastructure", "application"])
+        args = argparse.Namespace(config=config)
+
+        with (
+            mock.patch.object(
+                continuum_module.yaml_parser, "write_experiment_lock"
+            ) as mock_write_lock,
+            mock.patch.object(
+                continuum_module.infrastructure, "start"
+            ) as mock_infrastructure_start,
+            mock.patch.object(
+                continuum_module.infra_state, "load_resume_state"
+            ) as mock_load_resume_state,
+            mock.patch.object(
+                continuum_module.machine_utils, "validate_resume_ssh_reachability"
+            ) as mock_resume_preflight,
+            mock.patch.object(
+                continuum_module.ansible, "AnsibleRunner"
+            ) as mock_ansible_runner,
+            mock.patch.object(
+                continuum_module.resource_manager, "start"
+            ) as mock_resource_manager_start,
+            mock.patch.object(
+                continuum_module.application, "start"
+            ) as mock_application_start,
+            mock.patch.object(continuum_module.infra_state, "save_state") as mock_save_state,
+        ):
+            with self.assertRaises(SystemExit) as exc:
+                continuum_module.main(args)
+
+        self.assertEqual(exc.exception.code, 1)
+        mock_write_lock.assert_not_called()
+        mock_infrastructure_start.assert_not_called()
+        mock_load_resume_state.assert_not_called()
+        mock_resume_preflight.assert_not_called()
+        mock_ansible_runner.assert_not_called()
+        mock_resource_manager_start.assert_not_called()
+        mock_application_start.assert_not_called()
+        mock_save_state.assert_not_called()
 
     def test_main_application_only_resumes_software_state_and_saves_application_phase(self):
         config = self._config(["application"])

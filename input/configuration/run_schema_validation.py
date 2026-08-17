@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import validation_utils
+from . import runtime_phase_targets, validation_utils
 
 _fail = validation_utils.fail
 _fail_unknown_keys = validation_utils.fail_unknown_keys
@@ -60,6 +60,13 @@ def validate_run(
     normalized_targets = normalize_targets(targets, path, prefix, allowed_targets)
     if not normalized_targets:
         _fail(path, "%s.targets" % (prefix), "must contain at least one supported target")
+    if runtime_phase_targets.fresh_application_without_software(normalized_targets):
+        _fail(
+            path,
+            "%s.targets" % (prefix),
+            "fresh application execution requires the software phase when infrastructure "
+            "is selected",
+        )
 
     for key in ("dry_run", "clean", "prepare_for_resume"):
         if key in run and not isinstance(run[key], bool):

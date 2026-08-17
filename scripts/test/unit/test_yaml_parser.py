@@ -974,6 +974,40 @@ class YamlParserTests(unittest.TestCase):
             cfg = input_module.start(parser, str(exp_path))
             self.assertFalse(cfg["domains"]["run"]["prepare_for_resume"])
 
+    def test_run_targets_reject_fresh_application_without_software_in_any_order(self):
+        for targets in (
+            ["infrastructure", "application"],
+            ["application", "infrastructure"],
+        ):
+            with self.subTest(targets=targets), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                exp_path, _ = self._build_triplet(root, tempdir, run_targets=targets)
+
+                stderr = self._parse_error(exp_path)
+
+                self.assertIn("run.targets", stderr)
+                self.assertIn(
+                    "fresh application execution requires the software phase", stderr
+                )
+
+    def test_lock_replay_rejects_fresh_application_without_software(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            lock_path = self._write_valid_lock(root)
+            lock_payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            lock_payload["normalized_config"]["run"]["targets"] = [
+                "infrastructure",
+                "application",
+            ]
+            self._write(lock_path, lock_payload)
+
+            stderr = self._parse_error(lock_path)
+
+            self.assertIn("normalized_config.run.targets", stderr)
+            self.assertIn(
+                "fresh application execution requires the software phase", stderr
+            )
+
     def test_run_prepare_for_resume_accepts_infrastructure_only(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
