@@ -2,7 +2,7 @@
 
 from input.configuration import config_access
 
-_UNSUPPORTED_RESUME_PROVIDERS = {"aws", "gcp"}
+_SUPPORTED_RESUME_PROVIDERS = {"qemu"}
 
 
 def fresh_application_without_software(targets):
@@ -16,14 +16,14 @@ def fresh_application_without_software(targets):
 
 
 def provider_resume_error(provider_name, targets):
-    """Return an error when a provider lacks a certified retained-registry resume path."""
+    """Return an error when a provider lacks a supported retained-resume path."""
     target_set = set(targets)
-    if "infrastructure" in target_set or provider_name not in _UNSUPPORTED_RESUME_PROVIDERS:
+    if "infrastructure" in target_set or provider_name in _SUPPORTED_RESUME_PROVIDERS:
         return None
     return (
         "Provider '%s' does not support run.targets that skip infrastructure: "
-        "its retained registry lifecycle is not certified; run infrastructure in the same "
-        "execution"
+        "only QEMU currently has a supported retained-resume path; choose QEMU or use a "
+        "supported fresh workflow for that provider"
         % (provider_name,)
     )
 

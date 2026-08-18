@@ -78,9 +78,11 @@ resume. Before software or application work begins, every managed guest recorded
 must pass the authenticated SSH reachability preflight. Recorded guest names and IPs must be
 globally unique, and each category's names, IPs, and recorded/configured counts must agree.
 
-Infrastructure-skipping resume is supported for the QEMU and bare-metal providers. AWS and GCP
-resume requests are rejected until those providers have a certified retained-registry lifecycle;
-run the infrastructure phase in the same execution when using either cloud provider.
+Infrastructure-skipping resume is currently supported only for QEMU. AWS and GCP resume requests
+are rejected; run the infrastructure phase in the same execution for those cloud providers.
+Bare-metal resume is also rejected, and the provider remains release-unsupported. It can be
+enabled separately after its provider validation is repaired and a supported YAML profile plus
+host-backed evidence are available.
 
 `state.json` is retained after completed runs, including runs with `delete_on_exit: true`. It is a
 last-known deployment snapshot and post-mortem artifact, not evidence that the recorded resources

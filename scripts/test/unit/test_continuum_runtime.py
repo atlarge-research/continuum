@@ -107,11 +107,17 @@ class RuntimeTargetResolutionTests(unittest.TestCase):
         self.assertEqual(runtime_phase_targets.resolve_runtime_targets(config), (True, False, False))
 
     def test_resolve_targets_software_only_without_infrastructure(self):
-        config = {"domains": {"run": {"targets": ["software"]}}}
+        config = {
+            "infrastructure": {"provider": "qemu"},
+            "domains": {"run": {"targets": ["software"]}},
+        }
         self.assertEqual(runtime_phase_targets.resolve_runtime_targets(config), (False, True, False))
 
     def test_resolve_targets_application_supported(self):
-        config = {"domains": {"run": {"targets": ["application"]}}}
+        config = {
+            "infrastructure": {"provider": "qemu"},
+            "domains": {"run": {"targets": ["application"]}},
+        }
         self.assertEqual(runtime_phase_targets.resolve_runtime_targets(config), (False, False, True))
 
     def test_resolve_targets_rejects_fresh_application_without_software(self):
@@ -138,11 +144,14 @@ class RuntimeTargetResolutionTests(unittest.TestCase):
         )
         for targets, expected in cases:
             with self.subTest(targets=targets):
-                config = {"domains": {"run": {"targets": targets}}}
+                config = {
+                    "infrastructure": {"provider": "qemu"},
+                    "domains": {"run": {"targets": targets}},
+                }
                 self.assertEqual(runtime_phase_targets.resolve_runtime_targets(config), expected)
 
-    def test_resolve_targets_rejects_aws_and_gcp_resume_but_accepts_fresh_runs(self):
-        for provider_name in ("aws", "gcp"):
+    def test_resolve_targets_allows_only_qemu_resume_but_accepts_fresh_runs(self):
+        for provider_name in ("aws", "gcp", "baremetal"):
             with self.subTest(provider=provider_name, mode="resume"):
                 config = {
                     "infrastructure": {"provider": provider_name},
@@ -160,16 +169,14 @@ class RuntimeTargetResolutionTests(unittest.TestCase):
                     (True, True, False),
                 )
 
-        for provider_name in ("qemu", "baremetal"):
-            with self.subTest(provider=provider_name, mode="supported-resume"):
-                config = {
-                    "infrastructure": {"provider": provider_name},
-                    "domains": {"run": {"targets": ["application"]}},
-                }
-                self.assertEqual(
-                    runtime_phase_targets.resolve_runtime_targets(config),
-                    (False, False, True),
-                )
+        config = {
+            "infrastructure": {"provider": "qemu"},
+            "domains": {"run": {"targets": ["application"]}},
+        }
+        self.assertEqual(
+            runtime_phase_targets.resolve_runtime_targets(config),
+            (False, False, True),
+        )
 
     def test_required_completed_phase_for_resume(self):
         self.assertIsNone(runtime_phase_targets.required_state_phase_for_targets(True, False, False))

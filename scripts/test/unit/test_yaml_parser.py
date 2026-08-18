@@ -1159,8 +1159,8 @@ class YamlParserTests(unittest.TestCase):
                 "fresh application execution requires the software phase", stderr
             )
 
-    def test_source_rejects_aws_and_gcp_infrastructure_skipping_resume(self):
-        for provider_name in ("aws", "gcp"):
+    def test_source_rejects_non_qemu_infrastructure_skipping_resume(self):
+        for provider_name in ("aws", "gcp", "baremetal"):
             with self.subTest(provider=provider_name), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 exp_path, _ = self._build_triplet(
@@ -1175,8 +1175,8 @@ class YamlParserTests(unittest.TestCase):
                 self.assertIn("normalized_config.run.targets", stderr)
                 self.assertIn("does not support run.targets that skip infrastructure", stderr)
 
-    def test_lock_replay_rejects_aws_and_gcp_infrastructure_skipping_resume(self):
-        for provider_name in ("aws", "gcp"):
+    def test_lock_replay_rejects_non_qemu_infrastructure_skipping_resume(self):
+        for provider_name in ("aws", "gcp", "baremetal"):
             with self.subTest(provider=provider_name), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 lock_path = self._write_valid_lock(root)
