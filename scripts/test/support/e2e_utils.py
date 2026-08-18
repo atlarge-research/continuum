@@ -1349,6 +1349,8 @@ def classify_test_failure(result: Dict) -> Optional[str]:
         return "unreadable_network_artifact"
     if detail.startswith("Network validation artifact invalid:"):
         return "invalid_network_artifact"
+    if detail.startswith("Network validation artifact attribution mismatch:"):
+        return "network_artifact_attribution"
     if detail.startswith("Network validation profile mismatch:"):
         return "network_profile_mismatch"
     if detail.startswith("No SSH output found"):

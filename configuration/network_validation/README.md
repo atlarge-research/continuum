@@ -30,14 +30,17 @@ When `provider.config.netperf: true`, `infrastructure.network.benchmark()`:
 - Additionally writes **NDJSON** entries to:
   - `<base_path>/.continuum/logs/network_validation/netperf_results_<timestamp>.ndjson`
 
-Each NDJSON line contains:
+The schema-v1 NDJSON artifact is self-describing:
 
-- `timestamp`: benchmark timestamp taken from the main config.
-- `source` / `target`: logical node types (e.g. `cloud`, `endpoint`).
-- `source_ssh` / `target_ip`: where the command ran and which IP was targeted.
-- `direction`: `"latency"` or `"throughput"`.
-- `command`: the exact netperf command that was executed.
-- `output` / `error`: raw netperf stdout / stderr (as a single string).
+- The first line is one `ContinuumNetperfRun` header. Its `planned_pairs` list records
+  every directed source/target pair, SSH source, target IP, and expected profile value.
+- Every remaining line is a `ContinuumNetperfInvocation` record for exactly one
+  `latency` or `throughput` command. It binds the run timestamp and planned pair to
+  the exact command plus raw `output` and `error` strings.
+
+The validator requires exactly one invocation in each direction for every header pair.
+Legacy invocation-only artifacts are intentionally rejected; generate fresh evidence
+with the current producer before validating a run.
 
 ### Running the network validation suite
 

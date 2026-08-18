@@ -247,9 +247,11 @@ This is a cross-cutting runtime concern rather than a separately requested
 6. benchmark smoke reports a stable `teardown_failure` when retained QEMU domains remain after a delete-on-exit application leg.
 
 The presence of `state.json` does not assert that infrastructure currently exists. It remains
-available after successful or failed teardown, and a later explicit resume may proceed only when
-all recorded guests are reachable. The SSH marker proves authenticated command execution but does
-not provide stronger guest identity attestation.
+available after successful or failed teardown. A later explicit resume is currently supported for
+QEMU and bare-metal only, and may proceed only when all recorded guests are reachable. AWS and GCP
+resume paths fail closed until retained provider-local registry verification is supported. The SSH
+marker proves authenticated command execution but does not provide stronger guest identity
+attestation.
 
 ## 8. Mapping To `run.targets`
 
@@ -258,8 +260,9 @@ not provide stronger guest identity attestation.
 Current mapping:
 
 1. `infrastructure` -> phases 0, 1, and 4
-2. `software` -> phases 0, 1 or resume-from-1, 2, and 4
-3. `application` -> phases 0, 1 or resume-from-1, 2 or resume-from-2, 3, and 4
+2. `software` -> phases 0, 1 or QEMU/bare-metal resume-from-1, 2, and 4
+3. `application` -> phases 0, 1 or QEMU/bare-metal resume-from-1, 2 or
+   QEMU/bare-metal resume-from-2, 3, and 4
 
 Current runtime note:
 

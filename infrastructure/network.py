@@ -659,6 +659,8 @@ def benchmark_output(config, machine, pair, artifact_file, results_path):
     commands = (("latency", lat_commands[0]), ("throughput", tp_commands[0]))
     for direction, command in commands:
         output, error = machine.process(config, command, ssh=pair["source_ssh"])[0]
+        rendered_output = "\n".join(output)
+        rendered_error = "\n".join(error)
         logging.info(
             "From %s %s to %s %s: %s",
             pair["source"],
@@ -667,8 +669,8 @@ def benchmark_output(config, machine, pair, artifact_file, results_path):
             pair["target_ip"],
             command,
         )
-        logging.info("\n%s", "".join(output))
-        logging.info("\n%s", "".join(error))
+        logging.info("\n%s", rendered_output)
+        logging.info("\n%s", rendered_error)
         entry = {
             "kind": "ContinuumNetperfInvocation",
             "schema_version": 1,
@@ -676,8 +678,8 @@ def benchmark_output(config, machine, pair, artifact_file, results_path):
             **pair,
             "direction": direction,
             "command": command,
-            "output": "".join(output),
-            "error": "".join(error),
+            "output": rendered_output,
+            "error": rendered_error,
         }
         _write_network_record(artifact_file, results_path, entry)
 
@@ -692,6 +694,8 @@ def benchmark(config, machines):
     logging.info("Benchmark network between VMs")
 
     pairs = plan_network_benchmark_pairs(config)
+    if not pairs:
+        raise RuntimeError("Cannot plan network benchmark: no directed pairs")
 
     # Start the netperf netserver on each machine
     for ssh in config["cloud_ssh"] + config["edge_ssh"] + config["endpoint_ssh"]:

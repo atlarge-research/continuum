@@ -180,6 +180,17 @@ class NetworkHelpersTests(unittest.TestCase):
             self.assertEqual(entries[1]["command"][4], "TCP_RR")
             self.assertEqual(entries[2]["command"][4], "TCP_STREAM")
 
+    def test_benchmark_rejects_topology_without_directed_pairs(self):
+        config = self._benchmark_config("/tmp")
+        config["endpoint_ips_internal"] = []
+        config["endpoint_ssh"] = []
+        machine = mock.Mock()
+
+        with self.assertRaisesRegex(RuntimeError, "no directed pairs"):
+            network.benchmark(config, [machine])
+
+        machine.process.assert_not_called()
+
     def test_benchmark_exclusive_creation_rejects_existing_current_artifact(self):
         with tempfile.TemporaryDirectory() as tempdir:
             config = self._benchmark_config(tempdir)

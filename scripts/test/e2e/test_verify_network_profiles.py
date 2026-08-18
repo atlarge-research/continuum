@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from infrastructure import network
+
 
 def _load_verify_module():
     module_path = Path(__file__).resolve().parents[1] / "verify_network_profiles.py"
@@ -119,6 +121,73 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
             "72074 92012.55 190955 12199.53 10.777 91000 102307 109230"
         )
         self.assertAlmostEqual(verify_module._parse_latency_ms(output), 92.01255)
+
+    def test_throughput_parser_uses_netperf_result_row(self):
+        output = (
+            "MIGRATED TCP STREAM TEST from 0.0.0.0 port 0\n"
+            "Recv Socket Size  Send Socket Size  Send Message Size  Elapsed Time  Throughput\n"
+            "bytes             bytes             bytes              secs.         10^6bits/sec\n"
+            "87380             16384             16384              10.00         7.50\n"
+        )
+        self.assertEqual(verify_module._parse_throughput(output), 7.5)
+
+    def test_observation_parsers_reject_numeric_error_text(self):
+        self.assertIsNone(
+            verify_module._parse_throughput("netperf failed with exit code 7.2")
+        )
+        self.assertIsNone(verify_module._parse_latency_ms("garbage 1000 90000"))
+
+        records = _records()
+        records[1]["output"] = "garbage 1000 90000"
+        self.assertIn("unparseable", verify_module.validate_results(records)[0])
+        records = _records()
+        records[2]["output"] = "netperf failed with exit code 7.2"
+        self.assertIn("unparseable", verify_module.validate_results(records)[0])
+
+    def test_producer_preserves_and_validator_parses_machine_output_lines(self):
+        latency_lines = [
+            "MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 port 0",
+            "Minimum Mean Maximum Stddev Transaction 50th 90th 99th",
+            "Latency Latency Latency Latency Rate Percentile Percentile Percentile",
+            "Microseconds Microseconds Microseconds Microseconds Tran/s Latency Latency Latency",
+            "74503 91700.29 193985 12030.85 10.700 91666 99000 108888",
+        ]
+        throughput_lines = [
+            "MIGRATED TCP STREAM TEST from 0.0.0.0 port 0",
+            "Recv Send Send",
+            "Socket Socket Message Elapsed",
+            "Size Size Size Time Throughput",
+            "bytes bytes bytes secs. 10^6bits/sec",
+            "131072 16384 16384 13.30 6.24",
+        ]
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            [(latency_lines, [])],
+            [(throughput_lines, [])],
+        ]
+        pair = _pair()
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = Path(tempdir) / "results.ndjson"
+            with path.open("x", encoding="utf-8") as artifact_file:
+                artifact_file.write(
+                    json.dumps(
+                        {
+                            "kind": "ContinuumNetperfRun",
+                            "schema_version": 1,
+                            "timestamp": TIMESTAMP,
+                            "planned_pairs": [pair],
+                        }
+                    )
+                    + "\n"
+                )
+                network.benchmark_output(
+                    {"timestamp": TIMESTAMP}, machine, pair, artifact_file, str(path)
+                )
+
+            records = verify_module.load_results(str(path))
+            self.assertIn("\n", records[1]["output"])
+            self.assertEqual(verify_module.validate_results(records, TIMESTAMP), [])
 
     def test_strict_loader_reports_malformed_middle_line_number(self):
         with tempfile.TemporaryDirectory() as tempdir:

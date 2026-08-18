@@ -1693,6 +1693,17 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             test_utils.classify_test_failure(
                 {
                     "success": False,
+                    "success_reason": (
+                        "Network validation artifact attribution mismatch: wrong timestamp"
+                    ),
+                }
+            ),
+            "network_artifact_attribution",
+        )
+        self.assertEqual(
+            test_utils.classify_test_failure(
+                {
+                    "success": False,
                     "success_reason": "Network validation profile mismatch: latency",
                 }
             ),

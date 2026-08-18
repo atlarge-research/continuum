@@ -137,32 +137,65 @@ def load_results(path: str) -> List[Dict]:
     return results
 
 
-def _parse_number(output: str, latency=False):  # pylint: disable=too-many-return-statements
-    if not isinstance(output, str):
-        return None
-    if re.search(r"(?i)(?<![a-z])(?:nan|[-+]?inf(?:inity)?)(?![a-z])", output):
-        return None
-    numbers = _NUMBER_PATTERN.findall(output)
-    if latency and len(numbers) < 2:
-        return None
-    if not latency and not numbers:
-        return None
+def _finite_float(value):
     try:
-        selected = (numbers[-8:] if len(numbers) >= 8 else numbers)[1] if latency else numbers[-1]
-        value = float(selected)
-    except (ValueError, OverflowError, IndexError):
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
         return None
-    if not math.isfinite(value):
+    return parsed if math.isfinite(parsed) else None
+
+
+def _numeric_fields(payload, expected_count):
+    fields = [field for field in re.split(r"[\s,]+", payload.strip()) if field]
+    if len(fields) != expected_count or any(
+        _NUMBER_PATTERN.fullmatch(field) is None for field in fields
+    ):
         return None
-    return value / 1000.0 if latency else value
+    return fields
 
 
 def _parse_throughput(output: str):
-    return _parse_number(output, latency=False)
+    if not isinstance(output, str):
+        return None
+    payload = output.strip()
+    if _NUMBER_PATTERN.fullmatch(payload):
+        return _finite_float(payload)
+    if not re.search(r"(?i)TCP\s+STREAM\s+TEST", payload):
+        return None
+    heading = re.search(r"(?i)\bThroughput\b", payload)
+    if heading is None:
+        return None
+    metric_rows = []
+    for line in payload[heading.end() :].splitlines():
+        fields = _numeric_fields(line, 5)
+        if fields is not None:
+            metric_rows.append(fields)
+    return _finite_float(metric_rows[-1][-1]) if metric_rows else None
 
 
 def _parse_latency_ms(output: str):
-    return _parse_number(output, latency=True)
+    if not isinstance(output, str):
+        return None
+    payload = output.strip()
+    fields = _numeric_fields(payload, 8)
+    if fields is None:
+        marker = re.search(r"(?i)TCP\s+REQUEST/RESPONSE\s+TEST", payload)
+        heading = re.search(
+            r"(?is)\bMinimum\b.*\bMean\b.*\bMaximum\b.*\bStddev\b.*"
+            r"\bTransaction\b.*(?:\bp50\b|\b50th\b).*"
+            r"(?:\bp90\b|\b90th\b).*(?:\bp99\b|\b99th\b)",
+            payload,
+        )
+        if marker is None or heading is None or heading.start() < marker.end():
+            return None
+        metric_rows = []
+        for line in payload[heading.end() :].splitlines():
+            candidate_fields = _numeric_fields(line, 8)
+            if candidate_fields is not None:
+                metric_rows.append(candidate_fields)
+        fields = metric_rows[-1] if metric_rows else None
+    observed_microseconds = _finite_float(fields[1]) if fields is not None else None
+    return observed_microseconds / 1000.0 if observed_microseconds is not None else None
 
 
 def _pair_identity(pair):

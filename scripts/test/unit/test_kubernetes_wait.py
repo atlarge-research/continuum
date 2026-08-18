@@ -293,6 +293,8 @@ class KubernetesWaitStateBoundaryTests(unittest.TestCase):
                 "validate_resume_ssh_reachability",
                 return_value=["controller@192.0.2.10"],
             ), mock.patch.object(
+                continuum_module.image_registry, "prepare_runtime_images"
+            ), mock.patch.object(
                 continuum_module.ansible, "AnsibleRunner", return_value=runner
             ), mock.patch.object(
                 continuum_module.resource_manager,
