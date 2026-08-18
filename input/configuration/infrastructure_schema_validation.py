@@ -9,7 +9,7 @@ from . import legacy_projection, validation_utils
 _fail = validation_utils.fail
 _fail_unknown_keys = validation_utils.fail_unknown_keys
 _is_int = validation_utils.is_int
-_is_finite_number = validation_utils.is_finite_number
+_is_float_representable_number = validation_utils.is_float_representable_number
 
 
 def validate_network(
@@ -43,8 +43,8 @@ def validate_network(
         key_path = "%s.overrides.%s" % (prefix, key)
         if key not in network_override_keys:
             _fail(path, key_path, "unsupported override key")
-        if key in network_override_numeric_keys and not _is_finite_number(value):
-            _fail(path, key_path, "must be finite number")
+        if key in network_override_numeric_keys and not _is_float_representable_number(value):
+            _fail(path, key_path, "must be finite number representable as float")
         if key in network_override_string_keys and (
             not isinstance(value, str) or not value.strip()
         ):
@@ -86,20 +86,36 @@ def validate_vm_spec(
         _fail(path, "%s.cores" % (prefix), "must be integer >= 1 when count > 0")
 
     memory_gb = spec.get("memory_gb", default_tier_memory_gb if count > 0 else 0.0)
-    if not _is_finite_number(memory_gb) or memory_gb < 0:
-        _fail(path, "%s.memory_gb" % (prefix), "must be finite number >= 0")
+    if not _is_float_representable_number(memory_gb) or memory_gb < 0:
+        _fail(
+            path,
+            "%s.memory_gb" % (prefix),
+            "must be finite number >= 0 representable as float",
+        )
 
     cpu_quota = spec.get("cpu_quota", default_tier_cpu_quota if count > 0 else 0.0)
-    if not _is_finite_number(cpu_quota) or cpu_quota < 0:
-        _fail(path, "%s.cpu_quota" % (prefix), "must be finite number >= 0")
+    if not _is_float_representable_number(cpu_quota) or cpu_quota < 0:
+        _fail(
+            path,
+            "%s.cpu_quota" % (prefix),
+            "must be finite number >= 0 representable as float",
+        )
 
     storage_read_mbps = spec.get("storage_read_mbps", default_tier_storage_mbps)
-    if not _is_finite_number(storage_read_mbps) or storage_read_mbps < 0:
-        _fail(path, "%s.storage_read_mbps" % (prefix), "must be finite number >= 0")
+    if not _is_float_representable_number(storage_read_mbps) or storage_read_mbps < 0:
+        _fail(
+            path,
+            "%s.storage_read_mbps" % (prefix),
+            "must be finite number >= 0 representable as float",
+        )
 
     storage_write_mbps = spec.get("storage_write_mbps", default_tier_storage_mbps)
-    if not _is_finite_number(storage_write_mbps) or storage_write_mbps < 0:
-        _fail(path, "%s.storage_write_mbps" % (prefix), "must be finite number >= 0")
+    if not _is_float_representable_number(storage_write_mbps) or storage_write_mbps < 0:
+        _fail(
+            path,
+            "%s.storage_write_mbps" % (prefix),
+            "must be finite number >= 0 representable as float",
+        )
 
     return {
         "cores": int(cores),

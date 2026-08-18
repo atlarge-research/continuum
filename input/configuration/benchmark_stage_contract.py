@@ -13,12 +13,12 @@ def _is_int(value) -> bool:
 
 _BENCHMARK_STAGE_KEY_INT_POSITIVE = ("integer >= 1", lambda value: _is_int(value) and value >= 1)
 _BENCHMARK_STAGE_KEY_NUMBER_POSITIVE = (
-    "finite number >= 0.001",
-    lambda value: validation_utils.is_finite_number(value) and value >= 0.001,
+    "finite number >= 0.001 representable as float",
+    lambda value: validation_utils.is_float_representable_number(value) and value >= 0.001,
 )
 _BENCHMARK_STAGE_KEY_NUMBER_STRICTLY_POSITIVE = (
-    "finite number > 0",
-    lambda value: validation_utils.is_finite_number(value) and value > 0,
+    "finite number > 0 representable as float",
+    lambda value: validation_utils.is_float_representable_number(value) and value > 0,
 )
 
 BENCHMARK_STAGE_CONFIG_RULES = {

@@ -467,7 +467,7 @@ def benchmark_param_float(config, key, stage_id=None):
         raise ValueError("Invalid float value for %s" % (path,))
     try:
         return float(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("Invalid float value for %s: %r" % (path, value)) from exc
 
 

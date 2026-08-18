@@ -94,7 +94,7 @@ def _coerce_option_value(parser, config, scope, option, intype, value):
             if isinstance(value, str):
                 return [part.strip() for part in value.split(",") if part.strip()]
             raise ValueError
-    except ValueError:
+    except (ValueError, OverflowError):
         parser.error(
             "Config: Invalid type for option %s->%s, expected %s"
             % (_scope_label(scope, config), option, intype)

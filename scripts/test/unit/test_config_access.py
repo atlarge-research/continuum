@@ -770,6 +770,16 @@ class ConfigAccessTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             config_access.benchmark_param_float(cfg, "application_worker_cpu")
 
+        cfg["domains"]["benchmark"]["pipeline"][0]["config"][
+            "application_worker_cpu"
+        ] = 10**400
+        with self.assertRaises(ValueError) as exc:
+            config_access.benchmark_param_float(cfg, "application_worker_cpu")
+        self.assertIn(
+            "domains.benchmark.pipeline[0].config.application_worker_cpu",
+            str(exc.exception),
+        )
+
     def test_benchmark_param_required_key_missing_fails_fast(self):
         cfg = self._config_single_stage()
         del cfg["domains"]["benchmark"]["pipeline"][0]["config"]["duration"]

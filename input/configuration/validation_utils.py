@@ -37,3 +37,14 @@ def is_finite_number(value) -> bool:
     if isinstance(value, int):
         return True
     return isinstance(value, float) and math.isfinite(value)
+
+
+def is_float_representable_number(value) -> bool:
+    """Return whether a finite builtin number can be normalized to ``float`` safely."""
+    if not is_finite_number(value):
+        return False
+    try:
+        converted = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return math.isfinite(converted)

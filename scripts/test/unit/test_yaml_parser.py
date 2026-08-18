@@ -288,6 +288,15 @@ class YamlParserTests(unittest.TestCase):
             with self.subTest(value_type=type(value).__name__, value=value):
                 self.assertFalse(validation_utils.is_finite_number(value))
 
+    def test_float_representability_rejects_only_unrepresentable_numbers(self):
+        for value in (0, -1, 0.5, -0.5, 10**100):
+            with self.subTest(value=value):
+                self.assertTrue(validation_utils.is_float_representable_number(value))
+
+        for value in (True, None, "1", float("inf"), float("nan"), 10**400):
+            with self.subTest(value=value):
+                self.assertFalse(validation_utils.is_float_representable_number(value))
+
     def test_full_parser_projects_validated_aws_provider_options(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
@@ -487,6 +496,7 @@ class YamlParserTests(unittest.TestCase):
             float("inf"),
             float("-inf"),
             float("nan"),
+            10**400,
         )
         for frequency in invalid_frequencies:
             with self.subTest(frequency=frequency), tempfile.TemporaryDirectory() as tempdir:
@@ -529,7 +539,6 @@ class YamlParserTests(unittest.TestCase):
 
     def test_text_translation_arithmetic_edges_fail_before_runtime_processing(self):
         cases = (
-            (10**400, 1, "cannot be evaluated because of numeric overflow"),
             (1.0, 10**400, "cannot be evaluated because of numeric overflow"),
             (5e-324, 10**400, "schedules zero texts"),
         )
@@ -566,7 +575,7 @@ class YamlParserTests(unittest.TestCase):
             "application_endpoint_memory",
         )
         for key in resource_keys:
-            for value in (float("inf"), float("-inf"), float("nan")):
+            for value in (float("inf"), float("-inf"), float("nan"), 10**400):
                 with (
                     self.subTest(key=key, value=value),
                     tempfile.TemporaryDirectory() as tempdir,
@@ -1510,7 +1519,7 @@ class YamlParserTests(unittest.TestCase):
             "storage_write_mbps",
         )
         for key in vm_number_keys:
-            for value in (float("inf"), float("-inf"), float("nan")):
+            for value in (float("inf"), float("-inf"), float("nan"), 10**400):
                 with (
                     self.subTest(key=key, value=value),
                     tempfile.TemporaryDirectory() as tempdir,
@@ -1538,7 +1547,7 @@ class YamlParserTests(unittest.TestCase):
                     self.assertIn("must be finite number >= 0", stderr)
 
     def test_non_finite_network_overrides_fail_before_runtime_processing(self):
-        for value in (float("inf"), float("-inf"), float("nan")):
+        for value in (float("inf"), float("-inf"), float("nan"), 10**400):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 exp_path, _ = self._build_triplet(root, tempdir)
@@ -1676,7 +1685,7 @@ class YamlParserTests(unittest.TestCase):
                     self.assertEqual(stage_config[key], value)
 
     def test_lock_replay_rejects_non_finite_memory_gb(self):
-        for memory_gb in (float("nan"), float("inf"), float("-inf")):
+        for memory_gb in (float("nan"), float("inf"), float("-inf"), 10**400):
             with self.subTest(memory_gb=memory_gb), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 lock_path = self._write_valid_lock(root)
@@ -1695,7 +1704,7 @@ class YamlParserTests(unittest.TestCase):
                 self.assertIn("must be finite number >= 0", stderr)
 
     def test_lock_replay_rejects_non_finite_numeric_network_override(self):
-        for value in (float("nan"), float("inf"), float("-inf")):
+        for value in (float("nan"), float("inf"), float("-inf"), 10**400):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 lock_path = self._write_valid_lock(root)
@@ -1714,7 +1723,7 @@ class YamlParserTests(unittest.TestCase):
                 self.assertIn("must be finite number", stderr)
 
     def test_lock_replay_rejects_non_finite_benchmark_number(self):
-        for value in (float("nan"), float("inf"), float("-inf")):
+        for value in (float("nan"), float("inf"), float("-inf"), 10**400):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as tempdir:
                 root = Path(tempdir)
                 lock_path = self._write_valid_application_lock(root)
@@ -1755,7 +1764,6 @@ class YamlParserTests(unittest.TestCase):
 
     def test_lock_replay_rejects_text_translation_arithmetic_edges_before_runtime_processing(self):
         cases = (
-            (10**400, 1, "cannot be evaluated because of numeric overflow"),
             (1.0, 10**400, "cannot be evaluated because of numeric overflow"),
             (5e-324, 10**400, "schedules zero texts"),
         )

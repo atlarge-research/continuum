@@ -1124,6 +1124,37 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             },
         )
 
+    def test_runtime_option_float_overflow_uses_parser_error_boundary(self):
+        parser = argparse.ArgumentParser(prog="apply-options-overflow")
+        config = {
+            "domains": {
+                "benchmark": {
+                    "pipeline": [
+                        {
+                            "id": "bench-1",
+                            "type": "image_classification",
+                            "config": {"application_worker_cpu": 10**400},
+                        }
+                    ]
+                }
+            }
+        }
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit):
+                runtime_option_validation._coerce_option_value(  # pylint: disable=protected-access
+                    parser,
+                    config,
+                    "application",
+                    "application_worker_cpu",
+                    float,
+                    10**400,
+                )
+
+        self.assertIn("application_worker_cpu", stderr.getvalue())
+        self.assertIn("expected <class 'float'>", stderr.getvalue())
+
     def test_apply_module_options_application_scope_accepts_shared_stage_contract_keys(self):
         parser = argparse.ArgumentParser(prog="apply-options-application-shared")
         config = {

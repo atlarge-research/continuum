@@ -113,7 +113,8 @@ class BenchmarkStageContractTests(unittest.TestCase):
                     )
                 self.assertIn("benchmark.pipeline[0].config.frequency", str(exc.exception))
                 self.assertIn(
-                    "must be finite number > 0 for benchmark stage type 'text_translation'",
+                    "must be finite number > 0 representable as float "
+                    "for benchmark stage type 'text_translation'",
                     str(exc.exception),
                 )
 
@@ -147,23 +148,34 @@ class BenchmarkStageContractTests(unittest.TestCase):
                     self.prefix,
                 )
 
-    def test_text_translation_rejects_publisher_calculation_overflow(self):
-        for frequency, duration in ((10**400, 1), (1.0, 10**400)):
-            with self.subTest(frequency=frequency, duration=duration):
-                with self.assertRaises(ValueError) as exc:
-                    benchmark_stage_contract.validate_stage_config_contract(
-                        "text_translation",
-                        self._text_translation_config(frequency, duration),
-                        self.path,
-                        self.prefix,
-                    )
+    def test_text_translation_rejects_unrepresentable_frequency_at_field_boundary(self):
+        with self.assertRaises(ValueError) as exc:
+            benchmark_stage_contract.validate_stage_config_contract(
+                "text_translation",
+                self._text_translation_config(10**400, 1),
+                self.path,
+                self.prefix,
+            )
 
-                message = str(exc.exception)
-                self.assertIn(str(self.path), message)
-                self.assertIn("benchmark.pipeline[0].config", message)
-                self.assertIn("frequency and duration", message)
-                self.assertIn("cannot be evaluated because of numeric overflow", message)
-                self.assertIn("int((frequency / 10) * duration)", message)
+        message = str(exc.exception)
+        self.assertIn("benchmark.pipeline[0].config.frequency", message)
+        self.assertIn("representable as float", message)
+
+    def test_text_translation_rejects_publisher_calculation_overflow(self):
+        with self.assertRaises(ValueError) as exc:
+            benchmark_stage_contract.validate_stage_config_contract(
+                "text_translation",
+                self._text_translation_config(1.0, 10**400),
+                self.path,
+                self.prefix,
+            )
+
+        message = str(exc.exception)
+        self.assertIn(str(self.path), message)
+        self.assertIn("benchmark.pipeline[0].config", message)
+        self.assertIn("frequency and duration", message)
+        self.assertIn("cannot be evaluated because of numeric overflow", message)
+        self.assertIn("int((frequency / 10) * duration)", message)
 
     def test_float_capable_resource_fields_reject_non_finite_values(self):
         for key in (
@@ -172,7 +184,7 @@ class BenchmarkStageContractTests(unittest.TestCase):
             "application_endpoint_cpu",
             "application_endpoint_memory",
         ):
-            for value in (float("inf"), float("-inf"), float("nan")):
+            for value in (float("inf"), float("-inf"), float("nan"), 10**400):
                 with self.subTest(key=key, value=value):
                     config = self._image_classification_config()
                     config[key] = value
