@@ -4,6 +4,7 @@ import logging
 import os
 
 from infrastructure import ansible
+from input.configuration import image_requirements
 
 
 def add_options(_config):
@@ -72,7 +73,10 @@ def start_worker(config, machines):
 
     global_vars = {
         "app_name": config["benchmark"]["application"].split("_")[0],
-        "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        "image": image_requirements.runtime_image_ref(
+            config,
+            os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        ),
         "memory_req": memory,
         "cpu_req": cpu,
         "cpu_threads": max(1, cpu),

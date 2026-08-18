@@ -150,6 +150,43 @@ class TextTranslationImageSelectionTests(unittest.TestCase):
             self.assertIn(["docker", "push", destination], commands)
         self.assertEqual(verify_mock.call_count, 2)
 
+    def test_runtime_image_ref_preserves_unpinned_legacy_reference_exactly(self):
+        config = {"registry": "registry.local:5000"}
+        legacy_ref = "registry.local:5000/repository/image:tag"
+
+        self.assertEqual(
+            image_requirements.runtime_image_ref(config, legacy_ref),
+            legacy_ref,
+        )
+
+    def test_runtime_image_ref_requires_verified_mapping_for_pinned_alias(self):
+        local_name = "text_translation_subscriber_en-nl-8aad73b-r1"
+        legacy_ref = "registry.local:5000/%s" % (local_name,)
+        config = {"registry": "registry.local:5000"}
+
+        with self.assertRaisesRegex(ValueError, "Missing verified immutable"):
+            image_requirements.runtime_image_ref(config, legacy_ref)
+
+        config["verified_runtime_image_refs"] = {
+            local_name: "other-registry:5000/%s@sha256:%s" % (local_name, "a" * 64)
+        }
+        with self.assertRaisesRegex(ValueError, "Invalid verified immutable"):
+            image_requirements.runtime_image_ref(config, legacy_ref)
+
+    def test_runtime_image_ref_returns_verified_active_registry_digest(self):
+        local_name = "text_translation_subscriber_en-nl-8aad73b-r1"
+        legacy_ref = "registry.local:5000/%s" % (local_name,)
+        immutable_ref = "%s@sha256:%s" % (legacy_ref, "a" * 64)
+        config = {
+            "registry": "registry.local:5000",
+            "verified_runtime_image_refs": {local_name: immutable_ref},
+        }
+
+        self.assertEqual(
+            image_requirements.runtime_image_ref(config, legacy_ref),
+            immutable_ref,
+        )
+
 
 class TextTranslationWorkerMetricTests(unittest.TestCase):
     """Validate the worker timing-marker result contract."""

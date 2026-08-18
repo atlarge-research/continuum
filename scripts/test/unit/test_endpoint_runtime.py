@@ -89,7 +89,32 @@ class EndpointRuntimeTests(unittest.TestCase):
         self.assertIn("--env", run_cmd)
         self.assertIn("CPU_THREADS=1", run_cmd)
         self.assertNotIn("--env CPU_THREADS=1", run_cmd)
+        self.assertIn("127.0.0.1:5000/combined-image", run_cmd)
         self.assertFalse(machine.shell_values[-1])
+
+    def test_start_endpoint_default_uses_verified_pinned_publisher_image(self):
+        cfg = self._config()
+        local_name = "text_translation_publisher_en-nl-8aad73b-r1"
+        immutable_ref = "127.0.0.1:5000/%s@sha256:%s" % (local_name, "a" * 64)
+        cfg["images"]["combined"] = "continuum:%s" % (local_name,)
+        cfg["verified_runtime_image_refs"] = {local_name: immutable_ref}
+        machine = _FakeMachine()
+
+        endpoint.start_endpoint_default(cfg, [machine])
+
+        self.assertIn(immutable_ref, machine.commands[1])
+
+    def test_start_endpoint_baremetal_uses_verified_pinned_publisher_image(self):
+        cfg = self._config()
+        local_name = "text_translation_publisher_en-nl-8aad73b-r1"
+        immutable_ref = "127.0.0.1:5000/%s@sha256:%s" % (local_name, "a" * 64)
+        cfg["images"] = {"endpoint": "continuum:%s" % (local_name,)}
+        cfg["verified_runtime_image_refs"] = {local_name: immutable_ref}
+        machine = _FakeMachine()
+
+        endpoint.start_endpoint_baremetal(cfg, [machine])
+
+        self.assertIn(immutable_ref, machine.commands[1])
 
     def test_openfaas_endpoint_start_uses_shell_safe_ssh_command(self):
         cfg = self._config()

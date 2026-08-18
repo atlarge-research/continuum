@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 
 from application import runtime_helpers as application_runtime_helpers
-from input.configuration import config_access
+from input.configuration import config_access, image_requirements
 from resource_manager import legacy_execution
 from resource_manager.endpoint import endpoint
 from resource_manager.kube_kata import kube_kata
@@ -233,7 +233,10 @@ def _start_openfaas_worker(runner):
     cpu = min(1, config_access.benchmark_param_float(config, "application_worker_cpu"))
     extra_vars = {
         "app_name": config_access.benchmark_primary_stage_type(config).split("_")[0],
-        "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        "image": image_requirements.runtime_image_ref(
+            config,
+            os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        ),
         "memory_req": memory,
         "cpu_req": cpu,
         "cpu_threads": max(1, int(cpu)),

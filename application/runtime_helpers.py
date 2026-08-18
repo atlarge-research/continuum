@@ -14,7 +14,7 @@ import time
 
 import pandas as pd
 
-from input.configuration import config_access
+from input.configuration import config_access, image_requirements
 
 
 BENCHMARK_METRICS_KIND = "ContinuumBenchmarkMetrics"
@@ -332,7 +332,10 @@ def kubernetes_worker_global_vars(config, worker_apps, cpu_req, pull_policy):
     benchmark_handoff = benchmark_pipeline_handoffs[0]
     global_vars = {
         "app_name": config_access.benchmark_primary_stage_type(config).replace("_", "-"),
-        "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        "image": image_requirements.runtime_image_ref(
+            config,
+            os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+        ),
         "memory_req": int(
             config_access.benchmark_param_float(config, "application_worker_memory") * 1000
         ),
@@ -569,7 +572,12 @@ def start_worker_mist(config, machines, app_vars):
             + [
                 "--name",
                 container_name,
-                os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+                image_requirements.runtime_image_ref(
+                    config,
+                    os.path.join(
+                        config["registry"], config["images"]["worker"].split(":")[1]
+                    ),
+                ),
             ]
         )
 
@@ -646,7 +654,10 @@ def start_worker_baremetal(config, machines, app_vars):
         + [
             "--name",
             container_name,
-            os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+            image_requirements.runtime_image_ref(
+                config,
+                os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
+            ),
         ]
     )
 

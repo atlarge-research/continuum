@@ -7,7 +7,7 @@ import os
 import sys
 import time
 
-from input.configuration import config_access
+from input.configuration import config_access, image_requirements
 
 
 _DOCKER_CONTAINER_STATUS_COMMAND = (
@@ -237,9 +237,12 @@ def start_endpoint_default(config, machines):
                     *_docker_env_args(env),
                     "--name",
                     cont_name,
-                    os.path.join(
-                        config["registry"],
-                        config["images"][image].split(":")[1],
+                    image_requirements.runtime_image_ref(
+                        config,
+                        os.path.join(
+                            config["registry"],
+                            config["images"][image].split(":")[1],
+                        ),
                     ),
                 ]
                 + _endpoint_command_override(config)
@@ -327,9 +330,12 @@ def start_endpoint_baremetal(config, machines):
             + [
                 "--name",
                 cont_name,
-                os.path.join(
-                    config["registry"],
-                    config["images"]["endpoint"].split(":")[1],
+                image_requirements.runtime_image_ref(
+                    config,
+                    os.path.join(
+                        config["registry"],
+                        config["images"]["endpoint"].split(":")[1],
+                    ),
                 ),
             ]
         )

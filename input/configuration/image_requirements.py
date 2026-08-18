@@ -170,6 +170,57 @@ def expected_local_config_digest(source_ref: str) -> str | None:
     return expected_digest
 
 
+def _local_runtime_ref(registry: str, local_name: str) -> str:
+    return "%s/%s" % (registry.rstrip("/"), local_name.lstrip("/"))
+
+
+def _local_repo_name(local_name: str) -> str:
+    if "@" in local_name:
+        return local_name.split("@", 1)[0]
+    last_slash = local_name.rfind("/")
+    last_colon = local_name.rfind(":")
+    if last_colon > last_slash:
+        return local_name[:last_colon]
+    return local_name
+
+
+def runtime_image_ref(config: dict, legacy_runtime_ref: str) -> str:
+    """Return a verified immutable ref for known pinned aliases, preserving other refs."""
+    if not isinstance(legacy_runtime_ref, str) or not legacy_runtime_ref:
+        raise ValueError("Runtime image reference must be a non-empty string")
+    registry = config.get("registry")
+    if not isinstance(registry, str) or not registry.strip():
+        raise ValueError("Missing required config path registry")
+    registry = registry.strip().rstrip("/")
+
+    for source_ref in _LOCAL_IMAGE_CONFIG_DIGEST_BY_SOURCE:
+        local_name = _local_name_for_source(source_ref)
+        if legacy_runtime_ref != _local_runtime_ref(registry, local_name):
+            continue
+
+        verified_refs = config.get("verified_runtime_image_refs")
+        if not isinstance(verified_refs, dict):
+            raise ValueError(
+                "Missing verified immutable runtime image mapping for pinned alias '%s'"
+                % (local_name,)
+            )
+        verified_ref = verified_refs.get(local_name)
+        expected_prefix = "%s/%s@" % (registry, _local_repo_name(local_name))
+        if not isinstance(verified_ref, str) or not verified_ref.startswith(expected_prefix):
+            raise ValueError(
+                "Invalid verified immutable runtime image mapping for pinned alias '%s'"
+                % (local_name,)
+            )
+        if not is_valid_sha256_digest(verified_ref[len(expected_prefix) :]):
+            raise ValueError(
+                "Invalid verified immutable runtime image mapping for pinned alias '%s'"
+                % (local_name,)
+            )
+        return verified_ref
+
+    return legacy_runtime_ref
+
+
 def _normalize_catalog_sources(
     value: str | tuple[str, ...] | list[str] | None,
     catalog_ref: str,

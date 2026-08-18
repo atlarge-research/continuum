@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from application import application as application_module
 from application import runtime_helpers
 from application.empty import empty as empty_app
 from application.empty_kata import empty_kata as empty_kata_app
@@ -605,6 +606,31 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
 
                 command = machine.process.call_args.args[1]
                 self.assertIn(expected_argument, command)
+                self.assertEqual(command[-1], "registry.local:5000/test")
+
+    def test_start_worker_baremetal_uses_verified_pinned_image(self):
+        local_name = "text_translation_subscriber_en-nl-8aad73b-r1"
+        immutable_ref = "registry.local:5000/%s@sha256:%s" % (local_name, "a" * 64)
+        config = {
+            "cloud_ssh": ["cloud0@192.168.1.2"],
+            "registry": "registry.local:5000",
+            "images": {"worker": "continuum:%s" % (local_name,)},
+            "verified_runtime_image_refs": {local_name: immutable_ref},
+            "infrastructure": {
+                "cloud_nodes": 1,
+                "edge_nodes": 0,
+                "cloud_cores": 2,
+                "cloud_memory": 1.0,
+                "cloud_quota": 1.0,
+            },
+        }
+        machine = mock.Mock()
+        machine.process.return_value = [(["container-id\n"], [])]
+
+        with mock.patch.object(runtime_helpers, "_wait_for_docker_workers"):
+            runtime_helpers.start_worker_baremetal(config, [machine], [])
+
+        self.assertEqual(machine.process.call_args.args[1][-1], immutable_ref)
 
     def test_parse_custom_kubernetes_splits_extracts_timestamp_and_marker(self):
         line = (
@@ -781,6 +807,7 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         self.assertIn("MQTT_LOCAL_IP=10.0.0.2", issued_command)
         self.assertNotIn("--env MQTT_LOGS=True", issued_command)
         self.assertNotIn("--env MQTT_LOCAL_IP=10.0.0.2", issued_command)
+        self.assertEqual(issued_command[-1], "registry.local:5000/1.0")
         status_call = machine.process.call_args_list[1]
         self.assertEqual(
             status_call.args[1],
@@ -830,6 +857,41 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         )
 
         self.assertEqual(container_names, ["edge0"])
+
+    @mock.patch("application.runtime_helpers.time.sleep", autospec=True)
+    def test_start_worker_mist_uses_verified_pinned_image(self, _mock_sleep):
+        local_name = "text_translation_subscriber_en-nl-8aad73b-r1"
+        immutable_ref = "registry.local:5000/%s@sha256:%s" % (local_name, "a" * 64)
+        config = {
+            "registry": "registry.local:5000",
+            "images": {"worker": "continuum:%s" % (local_name,)},
+            "verified_runtime_image_refs": {local_name: immutable_ref},
+            "domains": {
+                "benchmark": {
+                    "pipeline": [
+                        {
+                            "id": "translation",
+                            "type": "text_translation",
+                            "config": {
+                                "application_worker_cpu": 0.5,
+                                "application_worker_memory": 1.5,
+                            },
+                        }
+                    ]
+                }
+            },
+            "edge_ssh": ["edge0@10.0.0.2"],
+            "infrastructure": {"provider": "qemu"},
+        }
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            [(["started"], [])],
+            [(["deadbeef: Up 2 seconds edge0"], [])],
+        ]
+
+        runtime_helpers.start_worker_mist(config, [machine], ["MQTT_LOGS=True"])
+
+        self.assertEqual(machine.process.call_args_list[0].args[1][-1], immutable_ref)
 
     @mock.patch("application.runtime_helpers.time.sleep", autospec=True)
     def test_start_worker_mist_retries_transient_ssh_startup_failure(self, mock_sleep):
@@ -1470,6 +1532,57 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
         )
         self.assertEqual(global_vars["runtime"], "runc")
         self.assertEqual(global_vars["runtime_filesystem"], "overlayfs")
+
+    def test_kubernetes_worker_global_vars_uses_verified_pinned_image(self):
+        config = self._planner_handoff_config()
+        local_name = "text_translation_subscriber_en-nl-8aad73b-r1"
+        immutable_ref = "registry.local:5000/%s@sha256:%s" % (local_name, "a" * 64)
+        config["images"]["worker"] = "continuum:%s" % (local_name,)
+        config["verified_runtime_image_refs"] = {local_name: immutable_ref}
+
+        global_vars = runtime_helpers.kubernetes_worker_global_vars(
+            config,
+            worker_apps=4,
+            cpu_req=0.5,
+            pull_policy="IfNotPresent",
+        )
+
+        self.assertEqual(global_vars["image"], immutable_ref)
+
+    def test_openfaas_worker_uses_verified_pinned_image(self):
+        config = self._planner_handoff_config()
+        config["mode"] = "cloud"
+        local_name = "text_translation_subscriber_en-nl-8aad73b-r1"
+        immutable_ref = "registry.local:5000/%s@sha256:%s" % (local_name, "a" * 64)
+        config["images"]["worker"] = "continuum:%s" % (local_name,)
+        config["verified_runtime_image_refs"] = {local_name: immutable_ref}
+        runner = mock.Mock(config=config)
+
+        with mock.patch.object(
+            application_module.application_runtime_helpers,
+            "resolve_benchmark_launch_playbook",
+            return_value="playbooks/launch.yml",
+        ):
+            application_module._start_openfaas_worker(runner)  # pylint: disable=protected-access
+
+        self.assertEqual(runner.run_playbook.call_args.kwargs["extra_vars"]["image"], immutable_ref)
+
+    def test_openfaas_worker_preserves_unpinned_legacy_image(self):
+        config = self._planner_handoff_config()
+        config["mode"] = "cloud"
+        runner = mock.Mock(config=config)
+
+        with mock.patch.object(
+            application_module.application_runtime_helpers,
+            "resolve_benchmark_launch_playbook",
+            return_value="playbooks/launch.yml",
+        ):
+            application_module._start_openfaas_worker(runner)  # pylint: disable=protected-access
+
+        self.assertEqual(
+            runner.run_playbook.call_args.kwargs["extra_vars"]["image"],
+            "registry.local:5000/1.0",
+        )
 
     def test_launch_kubernetes_with_starttime_parses_trace_output(self):
         config = {
