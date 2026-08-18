@@ -2,6 +2,8 @@
 
 from input.configuration import config_access
 
+_UNSUPPORTED_RESUME_PROVIDERS = {"aws", "gcp"}
+
 
 def fresh_application_without_software(targets):
     """Return whether fresh infrastructure would run an application without software."""
@@ -10,6 +12,19 @@ def fresh_application_without_software(targets):
         "infrastructure" in target_set
         and "application" in target_set
         and "software" not in target_set
+    )
+
+
+def provider_resume_error(provider_name, targets):
+    """Return an error when a provider lacks a certified retained-registry resume path."""
+    target_set = set(targets)
+    if "infrastructure" in target_set or provider_name not in _UNSUPPORTED_RESUME_PROVIDERS:
+        return None
+    return (
+        "Provider '%s' does not support run.targets that skip infrastructure: "
+        "its retained registry lifecycle is not certified; run infrastructure in the same "
+        "execution"
+        % (provider_name,)
     )
 
 
@@ -22,6 +37,11 @@ def resolve_runtime_targets(config):
             "fresh application execution requires the software phase when infrastructure "
             "is selected"
         )
+
+    provider_name = config.get("infrastructure", {}).get("provider")
+    resume_error = provider_resume_error(provider_name, targets)
+    if resume_error is not None:
+        raise ValueError(resume_error)
 
     target_set = set(targets)
     run_infrastructure = "infrastructure" in target_set

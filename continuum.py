@@ -13,7 +13,13 @@ import sys
 import time
 
 from application import application
-from infrastructure import ansible, infrastructure, machine as machine_utils, state as infra_state
+from infrastructure import (
+    ansible,
+    image_registry,
+    infrastructure,
+    machine as machine_utils,
+    state as infra_state,
+)
 
 # pylint: disable-next=redefined-builtin
 from input import input
@@ -184,6 +190,7 @@ def main(args):
         )
         logging.info("Skipping infrastructure phase based on run targets")
         _log_vm_access_hints(args.config, header="VM access hints from resumed state")
+        image_registry.prepare_runtime_images(args.config, machines)
 
     if not machines:
         logging.error("No machines available for software/application phases")

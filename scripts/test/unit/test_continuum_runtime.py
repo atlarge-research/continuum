@@ -141,6 +141,36 @@ class RuntimeTargetResolutionTests(unittest.TestCase):
                 config = {"domains": {"run": {"targets": targets}}}
                 self.assertEqual(runtime_phase_targets.resolve_runtime_targets(config), expected)
 
+    def test_resolve_targets_rejects_aws_and_gcp_resume_but_accepts_fresh_runs(self):
+        for provider_name in ("aws", "gcp"):
+            with self.subTest(provider=provider_name, mode="resume"):
+                config = {
+                    "infrastructure": {"provider": provider_name},
+                    "domains": {"run": {"targets": ["software"]}},
+                }
+                with self.assertRaisesRegex(
+                    ValueError, "does not support run.targets that skip infrastructure"
+                ):
+                    runtime_phase_targets.resolve_runtime_targets(config)
+
+            with self.subTest(provider=provider_name, mode="fresh"):
+                config["domains"]["run"]["targets"] = ["infrastructure", "software"]
+                self.assertEqual(
+                    runtime_phase_targets.resolve_runtime_targets(config),
+                    (True, True, False),
+                )
+
+        for provider_name in ("qemu", "baremetal"):
+            with self.subTest(provider=provider_name, mode="supported-resume"):
+                config = {
+                    "infrastructure": {"provider": provider_name},
+                    "domains": {"run": {"targets": ["application"]}},
+                }
+                self.assertEqual(
+                    runtime_phase_targets.resolve_runtime_targets(config),
+                    (False, False, True),
+                )
+
     def test_required_completed_phase_for_resume(self):
         self.assertIsNone(runtime_phase_targets.required_state_phase_for_targets(True, False, False))
         self.assertEqual(
@@ -812,6 +842,27 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         mock_application_start.assert_not_called()
         mock_save_state.assert_not_called()
 
+    def test_main_rejects_cloud_resume_before_lock_or_state_access(self):
+        for provider_name in ("aws", "gcp"):
+            with self.subTest(provider=provider_name):
+                config = self._config(["software"])
+                config["infrastructure"]["provider"] = provider_name
+                args = argparse.Namespace(config=config)
+                with mock.patch.object(
+                    continuum_module.yaml_parser, "write_experiment_lock"
+                ) as write_lock, mock.patch.object(
+                    continuum_module.infra_state, "load_resume_state"
+                ) as load_state, mock.patch.object(
+                    continuum_module.image_registry, "prepare_runtime_images"
+                ) as prepare_images:
+                    with self.assertRaises(SystemExit) as exc:
+                        continuum_module.main(args)
+
+                self.assertEqual(exc.exception.code, 1)
+                write_lock.assert_not_called()
+                load_state.assert_not_called()
+                prepare_images.assert_not_called()
+
     def test_main_application_only_resumes_software_state_and_saves_application_phase(self):
         config = self._config(["application"])
         args = argparse.Namespace(config=config)
@@ -827,6 +878,8 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             "validate_resume_ssh_reachability",
             return_value=["cloud0@192.0.2.10"],
         ) as mock_preflight, mock.patch.object(
+            continuum_module.image_registry, "prepare_runtime_images"
+        ) as mock_prepare_images, mock.patch.object(
             continuum_module.ansible, "AnsibleRunner", return_value=runner
         ) as mock_ansible_runner, mock.patch.object(
             continuum_module.yaml_parser,
@@ -848,6 +901,7 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         mock_infra_start.assert_not_called()
         mock_load_resume_state.assert_called_once_with(config, "software")
         mock_preflight.assert_called_once_with(config, machines)
+        mock_prepare_images.assert_called_once_with(config, machines)
         mock_ansible_runner.assert_called_once_with(config, machines)
         mock_resource_manager_start.assert_not_called()
         mock_application_start.assert_called_once_with(runner)
@@ -898,6 +952,8 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             "validate_resume_ssh_reachability",
             return_value=["cloud0@192.0.2.10"],
         ) as mock_preflight, mock.patch.object(
+            continuum_module.image_registry, "prepare_runtime_images"
+        ) as mock_prepare_images, mock.patch.object(
             continuum_module.ansible, "AnsibleRunner", return_value=runner
         ) as mock_ansible_runner, mock.patch.object(
             continuum_module.yaml_parser,
@@ -919,6 +975,7 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
         mock_infra_start.assert_not_called()
         mock_load_resume_state.assert_called_once_with(config, "infrastructure")
         mock_preflight.assert_called_once_with(config, machines)
+        mock_prepare_images.assert_called_once_with(config, machines)
         mock_ansible_runner.assert_called_once_with(config, machines)
         mock_resource_manager_start.assert_called_once_with(runner)
         mock_application_start.assert_called_once_with(runner)
@@ -945,6 +1002,8 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             continuum_module.machine_utils,
             "validate_resume_ssh_reachability",
             return_value=["cloud0@192.0.2.10"],
+        ), mock.patch.object(
+            continuum_module.image_registry, "prepare_runtime_images"
         ), mock.patch.object(
             continuum_module.ansible, "AnsibleRunner", return_value=runner
         ), mock.patch.object(
@@ -1056,6 +1115,8 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
                 "validate_resume_ssh_reachability",
                 side_effect=RuntimeError("cloud0@192.0.2.10 (missing exact marker)"),
             ), mock.patch.object(
+                continuum_module.image_registry, "prepare_runtime_images"
+            ) as mock_prepare_images, mock.patch.object(
                 continuum_module.ansible, "AnsibleRunner"
             ) as mock_ansible_runner, mock.patch.object(
                 continuum_module.resource_manager, "start"
@@ -1070,10 +1131,55 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
                     continuum_module.main(args)
 
             mock_ansible_runner.assert_not_called()
+            mock_prepare_images.assert_not_called()
             mock_resource_manager_start.assert_not_called()
             mock_application_start.assert_not_called()
             mock_save_state.assert_not_called()
             self.assertEqual(state_path.read_text(encoding="utf-8"), "last-known-state")
+
+    def test_resume_image_preparation_failure_stops_before_runner_dispatch_and_state_save(self):
+        config = self._config(["software"])
+        args = argparse.Namespace(config=config)
+        machines = [mock.Mock()]
+        events = []
+
+        def fail_image_preparation(*_args):
+            events.append("prepare")
+            raise SystemExit(1)
+
+        with mock.patch.object(
+            continuum_module.yaml_parser, "write_experiment_lock", return_value=None
+        ), mock.patch.object(
+            continuum_module.infra_state,
+            "load_resume_state",
+            return_value=({"phase_completed": "infrastructure"}, machines),
+        ), mock.patch.object(
+            continuum_module.machine_utils,
+            "validate_resume_ssh_reachability",
+            side_effect=lambda *_args: events.append("preflight") or ["cloud0@192.0.2.10"],
+        ), mock.patch.object(
+            continuum_module.image_registry,
+            "prepare_runtime_images",
+            side_effect=fail_image_preparation,
+        ), mock.patch.object(
+            continuum_module.ansible, "AnsibleRunner"
+        ) as ansible_runner, mock.patch.object(
+            continuum_module.resource_manager, "start"
+        ) as resource_manager_start, mock.patch.object(
+            continuum_module.application, "start"
+        ) as application_start, mock.patch.object(
+            continuum_module.infra_state, "save_state"
+        ) as save_state, mock.patch.object(
+            continuum_module, "_log_vm_access_hints"
+        ):
+            with self.assertRaises(SystemExit):
+                continuum_module.main(args)
+
+        self.assertEqual(events, ["preflight", "prepare"])
+        ansible_runner.assert_not_called()
+        resource_manager_start.assert_not_called()
+        application_start.assert_not_called()
+        save_state.assert_not_called()
 
     def test_apply_module_options_application_scope_defaults_primary_stage_config(self):
         parser = argparse.ArgumentParser(prog="apply-options-application")
@@ -2057,6 +2163,75 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                 "sha256:8973a8d27ba02c08b5dbbc43329a1c8f54c56a887945e3520cc10bab63167417",
             ),
         )
+
+    def test_prepare_runtime_images_resolves_before_registry_verification(self):
+        config = {"marker": "config"}
+        machines = [mock.Mock()]
+        events = []
+        with mock.patch.object(
+            image_registry_module,
+            "resolve_prefetch_requirements",
+            side_effect=lambda *_args: events.append("resolve"),
+        ) as resolve, mock.patch.object(
+            image_registry_module,
+            "docker_registry",
+            side_effect=lambda *_args: events.append("registry"),
+        ) as registry:
+            image_registry_module.prepare_runtime_images(config, machines)
+
+        self.assertEqual(events, ["resolve", "registry"])
+        resolve.assert_called_once_with(config)
+        registry.assert_called_once_with(config, machines)
+
+    def test_fresh_infrastructure_prepares_images_before_provider_start(self):
+        config = {
+            "infrastructure": {
+                "cpu_pin": False,
+                "cloud_nodes": 1,
+                "edge_nodes": 0,
+                "endpoint_nodes": 0,
+                "cloud_cores": 1,
+                "edge_cores": 1,
+                "endpoint_cores": 1,
+                "network_emulation": False,
+                "netperf": False,
+            }
+        }
+        machine = mock.Mock(cores=4)
+        events = []
+        with mock.patch.object(
+            infrastructure_module.m, "make_machine_objects", return_value=[machine]
+        ), mock.patch.object(
+            infrastructure_module.m,
+            "remove_idle",
+            return_value=([machine], [{"cloud": 1, "edge": 0, "endpoint": 0}]),
+        ), mock.patch.object(
+            infrastructure_module, "delete_vms"
+        ), mock.patch.object(
+            infrastructure_module, "create_tmp_dir"
+        ), mock.patch.object(
+            infrastructure_module, "delete_old_content"
+        ), mock.patch.object(
+            infrastructure_module, "create_continuum_dir"
+        ), mock.patch.object(
+            infrastructure_module, "set_ip_names"
+        ), mock.patch.object(
+            infrastructure_module.m, "print_schedule"
+        ), mock.patch.object(
+            infrastructure_module.image_registry,
+            "prepare_runtime_images",
+            side_effect=lambda *_args: events.append("prepare"),
+        ) as prepare, mock.patch.object(
+            infrastructure_module,
+            "start_provider",
+            side_effect=lambda *_args: events.append("provider"),
+        ) as provider:
+            result = infrastructure_module.start(config)
+
+        self.assertEqual(result, [machine])
+        self.assertEqual(events, ["prepare", "provider"])
+        prepare.assert_called_once_with(config, [machine])
+        provider.assert_called_once_with(config, [machine])
 
     def test_get_prefetch_requirements_requires_prefetch_key(self):
         with self.assertRaises(SystemExit):

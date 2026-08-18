@@ -22,6 +22,7 @@ from . import (
     provider_schema_validation,
     profile_composition,
     run_schema_validation,
+    runtime_phase_targets,
     runtime_module_loader,
     runtime_option_validation,
     selector_assignment_validation,
@@ -284,6 +285,12 @@ def _validate_normalized(normalized: dict, path: Path, prefix: str, require_deri
         allow_derived=True,
     )
     _validate_provider(normalized.get("provider"), path, provider_prefix)
+    provider_name = normalized["provider"]["name"]
+    resume_error = runtime_phase_targets.provider_resume_error(
+        provider_name, normalized_targets
+    )
+    if resume_error is not None:
+        _fail(path, run_prefix + ".targets", resume_error)
     _validate_software(
         normalized.get("software"),
         path,

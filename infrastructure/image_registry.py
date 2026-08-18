@@ -132,6 +132,12 @@ def resolve_prefetch_requirements(config):
     return serialized
 
 
+def prepare_runtime_images(config, machines):
+    """Resolve, populate, and verify the active registry identities for this execution."""
+    resolve_prefetch_requirements(config)
+    return docker_registry(config, machines)
+
+
 def _registry_catalog(config, machines):
     command = ["curl", "-fsS", "%s/v2/_catalog" % (config["registry"])]
     output, error = machines[0].process(config, command)[0]

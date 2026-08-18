@@ -484,8 +484,7 @@ def start(config):
     set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
-    image_registry.resolve_prefetch_requirements(config)
-    image_registry.docker_registry(config, machines)
+    image_registry.prepare_runtime_images(config, machines)
 
     start_provider(config, machines)
 
