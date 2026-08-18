@@ -1,10 +1,16 @@
-"""Unit tests for structured network-profile verification."""
+"""Unit tests for strict self-describing network-profile verification."""
 
+import contextlib
+import copy
 import importlib.util
+import io
+import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def _load_verify_module():
@@ -16,14 +22,64 @@ def _load_verify_module():
 
 
 verify_module = _load_verify_module()
+TIMESTAMP = "2026-05-21_15:30:42"
+
+
+def _pair(source_ssh="cloud0@192.0.2.1", target_ip="10.0.0.2"):
+    return {
+        "source": "cloud",
+        "target": "endpoint",
+        "source_ssh": source_ssh,
+        "target_ip": target_ip,
+        "expected_latency_ms": 45.0,
+        "expected_throughput_mbps": 7.21,
+    }
+
+
+def _invocation(pair, direction, timestamp=TIMESTAMP):
+    output = (
+        "1000,90000,100000,1000,25,85000,95000,100000"
+        if direction == "latency"
+        else "7.50"
+    )
+    return {
+        "kind": "ContinuumNetperfInvocation",
+        "schema_version": 1,
+        "timestamp": timestamp,
+        **copy.deepcopy(pair),
+        "direction": direction,
+        "command": verify_module._canonical_command(direction, pair["target_ip"]),
+        "output": output,
+        "error": "",
+    }
+
+
+def _records(pairs=None):
+    pairs = copy.deepcopy(pairs or [_pair()])
+    records = [
+        {
+            "kind": "ContinuumNetperfRun",
+            "schema_version": 1,
+            "timestamp": TIMESTAMP,
+            "planned_pairs": pairs,
+        }
+    ]
+    for pair in pairs:
+        records.extend((_invocation(pair, "latency"), _invocation(pair, "throughput")))
+    return records
+
+
+def _write_records(path, records):
+    path.write_text(
+        "".join(json.dumps(record, allow_nan=False) + "\n" for record in records),
+        encoding="utf-8",
+    )
 
 
 class VerifyNetworkProfilesTests(unittest.TestCase):
     def test_latest_results_file_uses_base_path_runtime_log_dir(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            results_dir = (
-                Path(tempdir) / ".continuum" / "logs" / "network_validation"
-            )
+            results_dir = Path(tempdir) / ".continuum" / "logs" / "network_validation"
             results_dir.mkdir(parents=True)
             older = results_dir / "netperf_results_2026-05-20_15:30:42.ndjson"
             newer = results_dir / "netperf_results_2026-05-21_15:30:42.ndjson"
@@ -31,99 +87,162 @@ class VerifyNetworkProfilesTests(unittest.TestCase):
             newer.write_text("{}\n", encoding="utf-8")
             os.utime(older, (1, 1))
             os.utime(newer, (2, 2))
+            self.assertEqual(verify_module.latest_results_file(base_path=tempdir), str(newer))
 
-            self.assertEqual(
-                verify_module.results_dir_for_base_path(tempdir),
-                str(results_dir),
-            )
-            self.assertEqual(
-                verify_module.latest_results_file(base_path=tempdir),
-                str(newer),
-            )
+    def test_complete_artifact_accepts_values_within_tolerance(self):
+        records = _records()
+        self.assertEqual(verify_module.validate_results(records, TIMESTAMP), [])
 
-    def test_validate_results_accepts_values_within_combined_tolerance(self):
-        results = [
-            {
-                "timestamp": "2026-05-21_15:30:42",
-                "source": "cloud",
-                "target": "endpoint",
-                "direction": "latency",
-                "output": "1000,90000,100000,1000,25,85000,95000,100000",
-                "expected_latency_ms": 45.0,
-                "expected_throughput_mbps": 7.21,
-            },
-            {
-                "timestamp": "2026-05-21_15:30:42",
-                "source": "cloud",
-                "target": "endpoint",
-                "direction": "throughput",
-                "output": "7.50",
-                "expected_latency_ms": 45.0,
-                "expected_throughput_mbps": 7.21,
-            },
-        ]
+    def test_profile_validation_is_per_physical_pair(self):
+        pairs = [_pair(), _pair("cloud1@192.0.2.2", "10.0.0.3")]
+        records = _records(pairs)
+        records[-1]["output"] = "30.00"
+        failures = verify_module.validate_results(records)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("cloud1@192.0.2.2", failures[0])
+        self.assertIn("10.0.0.3", failures[0])
 
-        self.assertEqual(verify_module.validate_results(results), [])
+    def test_high_capacity_throughput_still_requires_parseable_output(self):
+        records = _records()
+        records[0]["planned_pairs"][0]["expected_throughput_mbps"] = 1000.0
+        records[1]["expected_throughput_mbps"] = 1000.0
+        records[2]["expected_throughput_mbps"] = 1000.0
+        records[2]["output"] = "129.26"
+        self.assertEqual(verify_module.validate_results(records), [])
+        records[2]["output"] = "Infinity"
+        self.assertIn("unparseable", verify_module.validate_results(records)[0])
 
-    def test_validate_results_rejects_values_outside_tolerance(self):
-        results = [
-            {
-                "timestamp": "2026-05-21_15:30:42",
-                "source": "cloud",
-                "target": "endpoint",
-                "direction": "latency",
-                "output": "1000,140000,150000,1000,25,135000,145000,150000",
-                "expected_latency_ms": 45.0,
-                "expected_throughput_mbps": 7.21,
-            },
-            {
-                "timestamp": "2026-05-21_15:30:42",
-                "source": "cloud",
-                "target": "endpoint",
-                "direction": "throughput",
-                "output": "30.00",
-                "expected_latency_ms": 45.0,
-                "expected_throughput_mbps": 7.21,
-            },
-        ]
-
-        failures = verify_module.validate_results(results)
-        self.assertEqual(len(failures), 2)
-        self.assertTrue(any("latency" in failure for failure in failures))
-        self.assertTrue(any("throughput" in failure for failure in failures))
-
-    def test_validate_results_parses_netperf_header_latency(self):
+    def test_latency_parser_uses_netperf_result_fields(self):
         output = (
-            "MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 "
-            "AF_INET to 192.168.100.4 () port 0 AF_INET : spin interval : first burst 0 "
-            "Minimum      Mean         Maximum      Stddev       Transaction 50th "
-            "Microseconds Microseconds Microseconds Microseconds Tran/s      Latency "
-            "72074        92012.55     190955       12199.53     10.777 "
-            "91000        102307       109230"
+            "MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 port 0 "
+            "Minimum Mean Maximum Stddev Transaction p50 p90 p99 "
+            "72074 92012.55 190955 12199.53 10.777 91000 102307 109230"
         )
-
         self.assertAlmostEqual(verify_module._parse_latency_ms(output), 92.01255)
 
-    def test_validate_results_skips_strict_high_capacity_throughput(self):
-        results = [
-            {
-                "timestamp": "2026-05-21_15:30:42",
-                "source": "cloud",
-                "target": "edge",
-                "direction": "latency",
-                "output": "1000,16000,20000,1000,25,15000,18000,20000",
-                "expected_latency_ms": 7.5,
-                "expected_throughput_mbps": 1000.0,
-            },
-            {
-                "timestamp": "2026-05-21_15:30:42",
-                "source": "cloud",
-                "target": "edge",
-                "direction": "throughput",
-                "output": "129.26",
-                "expected_latency_ms": 7.5,
-                "expected_throughput_mbps": 1000.0,
-            },
-        ]
+    def test_strict_loader_reports_malformed_middle_line_number(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = Path(tempdir) / "results.ndjson"
+            path.write_text('{}\n{"broken":\n{}\n', encoding="utf-8")
+            with self.assertRaisesRegex(verify_module.NetworkResultsFormatError, "line 2"):
+                verify_module.load_results(str(path))
 
-        self.assertEqual(verify_module.validate_results(results), [])
+    def test_strict_loader_rejects_constants_duplicates_and_torn_last_line(self):
+        cases = {
+            "nan": '{"value":NaN}\n',
+            "infinity": '{"value":Infinity}\n',
+            "duplicate": '{"value":1,"value":2}\n',
+            "torn": '{"value":1}',
+        }
+        for label, payload in cases.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as tempdir:
+                path = Path(tempdir) / "results.ndjson"
+                path.write_text(payload, encoding="utf-8")
+                with self.assertRaises(verify_module.NetworkResultsFormatError):
+                    verify_module.load_results(str(path))
+
+    def test_header_is_required_first_and_unique(self):
+        valid = _records()
+        cases = {
+            "missing": valid[1:],
+            "duplicate": [valid[0], copy.deepcopy(valid[0]), *valid[1:]],
+            "late": [valid[1], valid[0], valid[2]],
+        }
+        for label, records in cases.items():
+            with self.subTest(case=label):
+                with self.assertRaises(verify_module.NetworkResultsValidationError):
+                    verify_module.validate_structure(records)
+
+        duplicate_pair = _records()
+        duplicate_pair[0]["planned_pairs"].append(
+            copy.deepcopy(duplicate_pair[0]["planned_pairs"][0])
+        )
+        with self.assertRaises(verify_module.NetworkResultsValidationError):
+            verify_module.validate_structure(duplicate_pair)
+
+    def test_completeness_rejects_omitted_pair_direction_and_duplicates(self):
+        pairs = [_pair(), _pair("cloud1@192.0.2.2", "10.0.0.3")]
+        valid = _records(pairs)
+        cases = {
+            "whole-pair-omitted": valid[:-2],
+            "latency-omitted": [valid[0], *valid[2:]],
+            "throughput-omitted": [*valid[:-1]],
+            "latency-duplicate": [*valid, copy.deepcopy(valid[1])],
+            "throughput-duplicate": [*valid, copy.deepcopy(valid[2])],
+        }
+        for label, records in cases.items():
+            with self.subTest(case=label):
+                with self.assertRaises(verify_module.NetworkResultsValidationError):
+                    verify_module.validate_structure(records)
+
+    def test_structure_rejects_wrong_schema_relation_command_and_types(self):
+        mutations = {
+            "header-kind": lambda records: records[0].update(kind="Wrong"),
+            "header-version": lambda records: records[0].update(schema_version=2),
+            "header-version-boolean": lambda records: records[0].update(schema_version=True),
+            "invocation-kind": lambda records: records[1].update(kind="Wrong"),
+            "unsupported-relation": lambda records: [
+                record.update(target="endpoint", source="endpoint")
+                for record in records
+            ],
+            "wrong-target-binding": lambda records: records[1]["command"].__setitem__(
+                2, "10.0.0.99"
+            ),
+            "wrong-direction-binding": lambda records: records[1]["command"].__setitem__(
+                4, "TCP_STREAM"
+            ),
+            "boolean-expected": lambda records: records[0]["planned_pairs"][0].update(
+                expected_latency_ms=True
+            ),
+            "huge-expected": lambda records: records[0]["planned_pairs"][0].update(
+                expected_latency_ms=10**400
+            ),
+            "non-string-error": lambda records: records[1].update(error=[]),
+            "invocation-expectation-mismatch": lambda records: records[1].update(
+                expected_latency_ms=99.0
+            ),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(case=label):
+                records = _records()
+                mutate(records)
+                with self.assertRaises(verify_module.NetworkResultsValidationError):
+                    verify_module.validate_structure(records)
+
+    def test_structure_rejects_header_and_invocation_timestamp_mismatch(self):
+        records = _records()
+        records[1]["timestamp"] = "2026-05-20_15:30:42"
+        with self.assertRaises(verify_module.NetworkResultsAttributionError):
+            verify_module.validate_structure(records)
+        with self.assertRaises(verify_module.NetworkResultsAttributionError):
+            verify_module.validate_structure(_records(), "2026-05-20_15:30:42")
+
+    def test_profile_rejects_nonempty_error_and_bad_observations(self):
+        cases = {
+            "error": ("error", "netperf failed"),
+            "empty": ("output", ""),
+            "nan": ("output", "NaN"),
+            "infinity": ("output", "Infinity"),
+            "overflow": ("output", "1e309"),
+        }
+        for label, (field, value) in cases.items():
+            with self.subTest(case=label):
+                records = _records()
+                records[1][field] = value
+                failures = verify_module.validate_results(records)
+                self.assertEqual(len(failures), 1)
+
+    def test_cli_reports_invalid_artifact_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = Path(tempdir) / "results.ndjson"
+            path.write_text("not-json\n", encoding="utf-8")
+            stdout = io.StringIO()
+            with mock.patch.object(sys, "argv", ["verify", "--results-file", str(path)]):
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(verify_module.main(), 1)
+            self.assertIn("Network results invalid", stdout.getvalue())
+            self.assertNotIn("Traceback", stdout.getvalue())
+
+
+if __name__ == "__main__":
+    unittest.main()

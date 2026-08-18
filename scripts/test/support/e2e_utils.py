@@ -473,30 +473,19 @@ def verify_network_validation_results(config: Dict, stdout: str = "") -> Tuple[b
 
     try:
         results = verifier.load_results(results_file)
+    except verifier.NetworkResultsFormatError as exc:
+        return False, "Network validation artifact invalid: %s" % (exc,)
     except (OSError, UnicodeError) as exc:
         return False, "Network validation artifact unreadable: %s" % (exc,)
 
-    if not results:
-        return False, "Network validation artifact invalid: no netperf entries found"
+    try:
+        invocations = verifier.validate_structure(results, expected_timestamp)
+    except verifier.NetworkResultsAttributionError as exc:
+        return False, "Network validation artifact attribution mismatch: %s" % (exc,)
+    except verifier.NetworkResultsValidationError as exc:
+        return False, "Network validation artifact invalid: %s" % (exc,)
 
-    for index, entry in enumerate(results, 1):
-        if not isinstance(entry, dict):
-            return False, (
-                "Network validation artifact invalid: entry %s must be a mapping" % (index,)
-            )
-        if "timestamp" not in entry:
-            return False, (
-                "Network validation artifact attribution mismatch: entry %s is missing timestamp "
-                "(expected %r)" % (index, expected_timestamp)
-            )
-        if entry["timestamp"] != expected_timestamp:
-            return False, (
-                "Network validation artifact attribution mismatch: entry %s timestamp %r does not "
-                "match current run timestamp %r"
-                % (index, entry["timestamp"], expected_timestamp)
-            )
-
-    failures = verifier.validate_results(results)
+    failures = verifier.validate_profile_results(invocations)
     if failures:
         return False, "Network validation profile mismatch: %s" % ("; ".join(failures),)
 

@@ -558,61 +558,128 @@ def expected_profile_values(config, source_name, target_name):
     return float(values[0]), float(values[2])
 
 
-def benchmark_output(
-    config, machine, targets, lat_commands, tp_commands, ssh, source_name, target_name
-):
-    """Execute the netperf commands and log output
+def _network_tier_inventory(tier_name, internal_ips, ssh_targets):
+    if len(internal_ips) != len(ssh_targets):
+        raise RuntimeError(
+            "Cannot plan network benchmark: %s internal IP/SSH cardinality mismatch (%s != %s)"
+            % (tier_name, len(internal_ips), len(ssh_targets))
+        )
+    if len(set(internal_ips)) != len(internal_ips) or len(set(ssh_targets)) != len(ssh_targets):
+        raise RuntimeError(
+            "Cannot plan network benchmark: %s internal IPs and SSH targets must be unique"
+            % (tier_name,)
+        )
+    inventory = []
+    for index, (internal_ip, ssh_target) in enumerate(zip(internal_ips, ssh_targets)):
+        if not isinstance(internal_ip, str) or not internal_ip.strip():
+            raise RuntimeError(
+                "Cannot plan network benchmark: %s internal IP %s is invalid"
+                % (tier_name, index)
+            )
+        if not isinstance(ssh_target, str) or not ssh_target.strip():
+            raise RuntimeError(
+                "Cannot plan network benchmark: %s SSH target %s is invalid"
+                % (tier_name, index)
+            )
+        inventory.append((internal_ip.strip(), ssh_target.strip()))
+    return inventory
 
-    Args:
-        config (dict): Parsed configuration
-        machine (Machine object): Machine object representing the main physical machines
-        targets (list(str)): List of ips to target for netperf
-        lat_commands (list(str)): Generated netperf latency commands
-        tp_commands (list(str)): Generated netperf throughput commands
-        ssh (str): name@ip of VM target to run netperf in
-        source_name (str): Type of VM running netperf
-        target_name (str): Type of VMs on the receiving side of netperf
-    """
-    # Prepare path for optional structured netperf results (NDJSON).
-    results_dir = config_access.network_validation_logs_dir(config)
-    os.makedirs(results_dir, exist_ok=True)
-    ts = config["timestamp"]
-    results_path = os.path.join(results_dir, f"netperf_results_{ts}.ndjson")
 
-    all_targets = targets + targets
-    all_commands = lat_commands + tp_commands
-
-    for idx, (target_ip, command) in enumerate(zip(all_targets, all_commands)):
-        output, error = machine.process(config, command, ssh=ssh)[0]
-        logging.info("From %s %s to %s %s: %s", source_name, ssh, target_name, target_ip, command)
-        logging.info("\n%s", "".join(output))
-        logging.info("\n%s", "".join(error))
-
-        # Write one NDJSON entry per netperf invocation for later validation
-        direction = "latency" if idx < len(targets) else "throughput"
+def plan_network_benchmark_pairs(config):
+    """Return the complete deterministic directed netperf pair plan for this run."""
+    inventories = {
+        "cloud": _network_tier_inventory(
+            "cloud",
+            list(config["control_ips_internal"]) + list(config["cloud_ips_internal"]),
+            list(config["cloud_ssh"]),
+        ),
+        "edge": _network_tier_inventory(
+            "edge",
+            list(config["edge_ips_internal"]),
+            list(config["edge_ssh"]),
+        ),
+        "endpoint": _network_tier_inventory(
+            "endpoint",
+            list(config["endpoint_ips_internal"]),
+            list(config["endpoint_ssh"]),
+        ),
+    }
+    relations = (
+        ("cloud", "cloud"),
+        ("cloud", "edge"),
+        ("cloud", "endpoint"),
+        ("edge", "edge"),
+        ("edge", "cloud"),
+        ("edge", "endpoint"),
+        ("endpoint", "cloud"),
+        ("endpoint", "edge"),
+    )
+    pairs = []
+    identities = set()
+    for source_name, target_name in relations:
         expected_latency_ms, expected_throughput_mbps = expected_profile_values(
             config, source_name, target_name
         )
+        for source_ip, source_ssh in inventories[source_name]:
+            for target_ip, _target_ssh in inventories[target_name]:
+                if source_name == target_name and source_ip == target_ip:
+                    continue
+                pair = {
+                    "source": source_name,
+                    "target": target_name,
+                    "source_ssh": source_ssh,
+                    "target_ip": target_ip,
+                    "expected_latency_ms": expected_latency_ms,
+                    "expected_throughput_mbps": expected_throughput_mbps,
+                }
+                identity = (source_name, target_name, source_ssh, target_ip)
+                if identity in identities:
+                    raise RuntimeError(
+                        "Cannot plan network benchmark: duplicate directed pair %r" % (identity,)
+                    )
+                identities.add(identity)
+                pairs.append(pair)
+    return pairs
+
+
+def _write_network_record(artifact_file, results_path, record):
+    try:
+        rendered = json.dumps(record, allow_nan=False, sort_keys=True)
+        artifact_file.write(rendered + "\n")
+        artifact_file.flush()
+    except (OSError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "Failed to write network validation artifact %s: %s" % (results_path, exc)
+        ) from exc
+
+
+def benchmark_output(config, machine, pair, artifact_file, results_path):
+    """Execute and persist exactly one latency and throughput invocation for a pair."""
+    lat_commands, tp_commands = netperf_commands([pair["target_ip"]])
+    commands = (("latency", lat_commands[0]), ("throughput", tp_commands[0]))
+    for direction, command in commands:
+        output, error = machine.process(config, command, ssh=pair["source_ssh"])[0]
+        logging.info(
+            "From %s %s to %s %s: %s",
+            pair["source"],
+            pair["source_ssh"],
+            pair["target"],
+            pair["target_ip"],
+            command,
+        )
+        logging.info("\n%s", "".join(output))
+        logging.info("\n%s", "".join(error))
         entry = {
-            "timestamp": ts,
-            "source": source_name,
-            "target": target_name,
-            "source_ssh": ssh,
-            "target_ip": target_ip,
+            "kind": "ContinuumNetperfInvocation",
+            "schema_version": 1,
+            "timestamp": config["timestamp"],
+            **pair,
             "direction": direction,
             "command": command,
             "output": "".join(output),
             "error": "".join(error),
-            "expected_latency_ms": expected_latency_ms,
-            "expected_throughput_mbps": expected_throughput_mbps,
         }
-        try:
-            with open(results_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry) + "\n")
-        except OSError as exc:
-            raise RuntimeError(
-                "Failed to write network validation artifact %s: %s" % (results_path, exc)
-            ) from exc
+        _write_network_record(artifact_file, results_path, entry)
 
 
 def benchmark(config, machines):
@@ -624,74 +691,29 @@ def benchmark(config, machines):
     """
     logging.info("Benchmark network between VMs")
 
+    pairs = plan_network_benchmark_pairs(config)
+
     # Start the netperf netserver on each machine
     for ssh in config["cloud_ssh"] + config["edge_ssh"] + config["endpoint_ssh"]:
         _, _ = machines[0].process(config, ["netserver"], ssh=ssh)[0]
 
-    # From cloud to cloud
-    for ip, ssh in zip(
-        config["control_ips_internal"] + config["cloud_ips_internal"], config["cloud_ssh"]
-    ):
-        targets = list(
-            set(config["control_ips_internal"] + config["cloud_ips_internal"]) - set([ip])
-        )
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "cloud"
-        )
-
-    # From cloud to edge
-    for ssh in config["cloud_ssh"]:
-        targets = config["edge_ips_internal"]
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "edge"
-        )
-
-    # From cloud to endpoint
-    for ssh in config["cloud_ssh"]:
-        targets = config["endpoint_ips_internal"]
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "endpoint"
-        )
-
-    # Between edge nodes
-    for ip, ssh in zip(config["edge_ips_internal"], config["edge_ssh"]):
-        targets = list(set(config["edge_ips_internal"]) - set([ip]))
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "edge", "edge"
-        )
-
-    # From edge to cloud
-    for ssh in config["edge_ssh"]:
-        targets = config["control_ips_internal"] + config["cloud_ips_internal"]
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "edge", "cloud"
-        )
-
-    # From edge to endpoint
-    for ssh in config["edge_ssh"]:
-        targets = config["endpoint_ips_internal"]
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "edge", "endpoint"
-        )
-
-    # From endpoint to cloud
-    for ssh in config["endpoint_ssh"]:
-        targets = config["control_ips_internal"] + config["cloud_ips_internal"]
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "cloud"
-        )
-
-    # From endpoint to edge
-    for ssh in config["endpoint_ssh"]:
-        targets = config["edge_ips_internal"]
-        lat_commands, tp_commands = netperf_commands(targets)
-        benchmark_output(
-            config, machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "edge"
-        )
+    results_dir = config_access.network_validation_logs_dir(config)
+    os.makedirs(results_dir, exist_ok=True)
+    results_path = os.path.join(
+        results_dir, "netperf_results_%s.ndjson" % (config["timestamp"],)
+    )
+    header = {
+        "kind": "ContinuumNetperfRun",
+        "schema_version": 1,
+        "timestamp": config["timestamp"],
+        "planned_pairs": pairs,
+    }
+    try:
+        with open(results_path, "x", encoding="utf-8") as artifact_file:
+            _write_network_record(artifact_file, results_path, header)
+            for pair in pairs:
+                benchmark_output(config, machines[0], pair, artifact_file, results_path)
+    except OSError as exc:
+        raise RuntimeError(
+            "Failed to initialize network validation artifact %s: %s" % (results_path, exc)
+        ) from exc

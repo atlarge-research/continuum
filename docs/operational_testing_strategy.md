@@ -120,6 +120,16 @@ Artifacts:
 2. provider logs
 3. optional `<base_path>/.continuum/logs/network_validation/netperf_results_<timestamp>.ndjson`
 
+Network-result NDJSON uses schema v1: exactly one `ContinuumNetperfRun` header is written first,
+followed by `ContinuumNetperfInvocation` records. The header declares every planned directed
+physical pair and its expected profile values; validation requires exactly one latency and one
+throughput invocation per declared pair. Legacy invocation-only artifacts are intentionally
+invalid and must be replaced with fresh host evidence.
+
+Concurrent Continuum runs sharing one `base_path` remain unsupported. Network artifacts use
+exclusive creation, so a same-timestamp collision fails, and an interrupted current artifact is
+left visible so validation fails closed instead of selecting older evidence.
+
 ### Phase 2: Software Deployment
 
 Assert:
@@ -283,6 +293,8 @@ Concrete smoke success criteria currently agreed:
      rather than exact host-capacity assertions
    - network-validation suite success detection must validate the structured netperf NDJSON
      written under the run's `<base_path>`
+   - malformed lines, duplicate records, missing planned pairs or directions, non-canonical
+     commands, mismatched timestamps, and non-finite observations fail validation
 
 Suite behavior policy currently agreed:
 
