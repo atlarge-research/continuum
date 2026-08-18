@@ -4,6 +4,14 @@
 
 Continuum automates infrastructure deployment, software installation, and application benchmarking across cloud, edge, and endpoint tiers. The framework is being reworked, so expect file changes and keep new edits scoped.
 
+## Agent Change Workflow
+
+For non-trivial implementation or documentation work, prepare a bounded plan before editing. Before implementation, have one or more independent, read-only subagents, scaled to the task's risk and complexity, review the plan. After implementation, have one or more independent, read-only subagents review the complete uncommitted change. Reviewers must not edit files. Trivial typos and mechanical one-line corrections may skip this loop unless they touch a sensitive contract.
+
+The primary agent must adjudicate findings as evidence, not votes or automatic requirements. Address only in-scope correctness, maintainability, evidence, security, or requirement issues that materially affect the task; reject unrelated modernization, speculative abstraction, style-only churn, and other scope expansion. The aim is to improve confidence without overengineering or blocking useful framework progress: do not treat every suggestion, preference, or theoretical concern as actionable. When an actionable finding materially changes the plan or implementation, revise and repeat the applicable planning, validation, and review until no actionable findings remain.
+
+Keep validation proportional and follow the repository's applicable testing and specialized-skill guidance. This workflow grants no authority for destructive, external, privileged, certification, publishing, or other approval-sensitive actions.
+
 ## Project Structure & Module Organization
 
 The main entry point is `continuum.py`. Core Python modules live in `infrastructure/`, `resource_manager/`, `application/`, `execution_model/`, and `input/configuration/`. Ansible automation is in `playbooks/` and `roles/`, with root-level `ansible.cfg` and `.ansible-lint`. New YAML profiles and experiments live in `configs/`; legacy `.cfg` examples remain under `configuration/`. Tests are in `scripts/test/`. Docs and diagrams are under `docs/`. Mahimahi is an optional runtime dependency fetched into `<base_path>/.continuum/mahimahi` by the Ansible role for `_mahimahi` presets; do not vendor or edit a repo-root `mahimahi/` checkout unless the task explicitly targets that external project.
