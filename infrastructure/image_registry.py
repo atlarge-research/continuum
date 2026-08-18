@@ -17,6 +17,26 @@ _LOCAL_MANIFEST_MEDIA_TYPES = {
     "application/vnd.docker.distribution.manifest.v2+json",
 }
 _LOCAL_MANIFEST_ACCEPT = "Accept: %s" % (", ".join(sorted(_LOCAL_MANIFEST_MEDIA_TYPES)),)
+_MANIFEST_DESCRIPTOR_MEDIA_TYPES = {
+    "application/vnd.oci.image.manifest.v1+json": {
+        "config": {"application/vnd.oci.image.config.v1+json"},
+        "layers": {
+            "application/vnd.oci.image.layer.v1.tar",
+            "application/vnd.oci.image.layer.v1.tar+gzip",
+            "application/vnd.oci.image.layer.v1.tar+zstd",
+            "application/vnd.oci.image.layer.nondistributable.v1.tar",
+            "application/vnd.oci.image.layer.nondistributable.v1.tar+gzip",
+            "application/vnd.oci.image.layer.nondistributable.v1.tar+zstd",
+        },
+    },
+    "application/vnd.docker.distribution.manifest.v2+json": {
+        "config": {"application/vnd.docker.container.image.v1+json"},
+        "layers": {
+            "application/vnd.docker.image.rootfs.diff.tar.gzip",
+            "application/vnd.docker.image.rootfs.foreign.diff.tar.gzip",
+        },
+    },
+}
 
 
 def _fail_prefetch_requirements(message):
@@ -233,62 +253,115 @@ def _registry_repo_tags(config, machines, repo_name):
     return set(str(tag) for tag in tags)
 
 
-def _registry_descriptor_has_required_fields(descriptor):
-    """Validate only required descriptor fields and their basic JSON types."""
+def _registry_descriptor_is_valid(descriptor, allowed_media_types):
+    """Validate the required descriptor fields and the expected media-type family."""
     if not isinstance(descriptor, dict):
         return False
-    for field in ("mediaType", "digest"):
-        value = descriptor.get(field)
-        if not isinstance(value, str) or not value.strip():
-            return False
+    if descriptor.get("mediaType") not in allowed_media_types:
+        return False
+    if not image_requirements.is_valid_sha256_digest(descriptor.get("digest")):
+        return False
     size = descriptor.get("size")
     return isinstance(size, int) and not isinstance(size, bool) and size >= 0
 
 
-def _registry_manifest_config_digest(config, machines, repo_name, tag_name):
-    """Return a config digest from a manifest with required structural fields."""
+def _registry_manifest_digest(config, machines, repo_name, tag_name, ssh=None):
+    """Resolve exactly one canonical registry manifest digest for a tag."""
     encoded_repo = quote(repo_name, safe="/")
     encoded_tag = quote(tag_name, safe="")
     command = [
         "curl",
         "-fsS",
+        "-I",
         "-H",
         _LOCAL_MANIFEST_ACCEPT,
         "%s/v2/%s/manifests/%s" % (config["registry"], encoded_repo, encoded_tag),
     ]
-    output, error = machines[0].process(config, command)[0]
+    output, error = machines[0].process(config, command, ssh=ssh)[0]
+    if error or not output:
+        return None
+    digests = []
+    for line in output:
+        if not isinstance(line, str) or ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        if name.strip().lower() == "docker-content-digest":
+            digests.append(value.strip())
+    if len(digests) != 1 or not image_requirements.is_valid_sha256_digest(digests[0]):
+        return None
+    return digests[0]
+
+
+def _registry_manifest_identity(config, machines, repo_name, tag_name, ssh=None):
+    """Return the immutable manifest/config identity for a strict runnable manifest."""
+    manifest_digest = _registry_manifest_digest(
+        config, machines, repo_name, tag_name, ssh=ssh
+    )
+    if manifest_digest is None:
+        return None
+
+    encoded_repo = quote(repo_name, safe="/")
+    encoded_digest = quote(manifest_digest, safe=":")
+    command = [
+        "curl",
+        "-fsS",
+        "-H",
+        _LOCAL_MANIFEST_ACCEPT,
+        "%s/v2/%s/manifests/%s"
+        % (config["registry"], encoded_repo, encoded_digest),
+    ]
+    output, error = machines[0].process(config, command, ssh=ssh)[0]
     if error or not output:
         return None
     try:
         payload = json.loads(output[0])
     except (ValueError, TypeError):
         return None
-    config_digest = None
     if not isinstance(payload, dict):
         return None
     schema_version = payload.get("schemaVersion")
+    manifest_media_type = payload.get("mediaType")
+    descriptor_media_types = _MANIFEST_DESCRIPTOR_MEDIA_TYPES.get(manifest_media_type)
     manifest_config = payload.get("config")
     layers = payload.get("layers")
-    if (
+    if not (
         isinstance(schema_version, int)
         and not isinstance(schema_version, bool)
         and schema_version == 2
-        and payload.get("mediaType") in _LOCAL_MANIFEST_MEDIA_TYPES
-        and _registry_descriptor_has_required_fields(manifest_config)
+        and descriptor_media_types is not None
+        and _registry_descriptor_is_valid(
+            manifest_config, descriptor_media_types["config"]
+        )
         and isinstance(layers, list)
-        and all(_registry_descriptor_has_required_fields(layer) for layer in layers)
+        and all(
+            _registry_descriptor_is_valid(layer, descriptor_media_types["layers"])
+            for layer in layers
+        )
     ):
-        config_digest = manifest_config["digest"]
-    return config_digest if image_requirements.is_valid_sha256_digest(config_digest) else None
+        return None
+    return manifest_digest, manifest_config["digest"]
+
+
+def _record_verified_runtime_image_ref(config, local_name, repo_name, manifest_digest):
+    verified_refs = config.setdefault("verified_runtime_image_refs", {})
+    verified_refs[local_name] = "%s/%s@%s" % (
+        config["registry"].rstrip("/"),
+        repo_name,
+        manifest_digest,
+    )
 
 
 def _registry_matches_expected_config_digest(
-    config, machines, repo_name, tag_name, expected_digest
+    config, machines, repo_name, tag_name, expected_digest, local_name=None, ssh=None
 ):
-    return (
-        _registry_manifest_config_digest(config, machines, repo_name, tag_name)
-        == expected_digest
+    identity = _registry_manifest_identity(
+        config, machines, repo_name, tag_name, ssh=ssh
     )
+    if identity is None or identity[1] != expected_digest:
+        return False
+    if local_name is not None:
+        _record_verified_runtime_image_ref(config, local_name, repo_name, identity[0])
+    return True
 
 
 def _registry_has_required_image(config, machines, requirement, repos, tags_cache):
@@ -317,7 +390,12 @@ def _registry_has_required_image(config, machines, requirement, repos, tags_cach
     if required_tag not in tags_cache[repo_name]:
         return False
     return not digest_pinned or _registry_matches_expected_config_digest(
-        config, machines, repo_name, required_tag, expected_config_digest
+        config,
+        machines,
+        repo_name,
+        required_tag,
+        expected_config_digest,
+        local_name=local_name,
     )
 
 
@@ -353,6 +431,7 @@ def missing_cached_requirements(config, machines):
 
 def docker_registry(config, machines):
     """Ensure local registry cache and prefetch required container images."""
+    config["verified_runtime_image_refs"] = {}
     requirements = get_prefetch_requirements(config)
     if not requirements:
         logging.info(
@@ -400,6 +479,7 @@ def docker_registry(config, machines):
                 repo_name,
                 tag_name,
                 expected_config_digest,
+                local_name=local_name,
             ):
                 logging.error(
                     "Refreshed local registry image %s/%s:%s does not match expected "
@@ -608,4 +688,30 @@ def move_prefetched_images_to_remote_registry(config, machines):
             _, error = machines[0].process(config, command, ssh=ssh)[0]
             if error:
                 logging.error("".join(error))
+                sys.exit(1)
+
+        source_ref = requirement["source_ref"]
+        expected_config_digest = None
+        if image_requirements.source_ref_is_digest_pinned(source_ref):
+            expected_config_digest = image_requirements.expected_local_config_digest(source_ref)
+        if expected_config_digest is not None:
+            repo_name = _registry_repo_name(image_name)
+            tag_name = _registry_tag_name(image_name) or "latest"
+            if not _registry_matches_expected_config_digest(
+                config,
+                machines,
+                repo_name,
+                tag_name,
+                expected_config_digest,
+                local_name=image_name,
+                ssh=ssh,
+            ):
+                logging.error(
+                    "Migrated registry image %s/%s:%s does not match expected "
+                    "image-config digest %s",
+                    config["registry"],
+                    repo_name,
+                    tag_name,
+                    expected_config_digest,
+                )
                 sys.exit(1)

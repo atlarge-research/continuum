@@ -1991,11 +1991,16 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         }
 
     def _manifest_payload(self, config_digest, media_type=None):
+        manifest_media_type = media_type or "application/vnd.oci.image.manifest.v1+json"
+        if manifest_media_type == "application/vnd.docker.distribution.manifest.v2+json":
+            config_media_type = "application/vnd.docker.container.image.v1+json"
+        else:
+            config_media_type = "application/vnd.oci.image.config.v1+json"
         return {
             "schemaVersion": 2,
-            "mediaType": media_type or "application/vnd.oci.image.manifest.v1+json",
+            "mediaType": manifest_media_type,
             "config": {
-                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "mediaType": config_media_type,
                 "digest": config_digest,
                 "size": 1,
             },
@@ -2004,6 +2009,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
 
     def _local_registry_machine(self, repo_name, manifest_responses, tags=None):
         responses = list(manifest_responses)
+        manifest_digest = "sha256:%s" % ("b" * 64)
         machine = mock.Mock()
 
         def process(_config, command, **_kwargs):
@@ -2020,6 +2026,11 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                     [json.dumps({"name": repo_name, "tags": tags or ["latest"]})]
                 )
             if "/%s/manifests/" % repo_name in command[-1]:
+                if "-I" in command:
+                    return self._process_result(
+                        ["Docker-Content-Digest: %s" % manifest_digest]
+                    )
+                self.assertTrue(command[-1].endswith("/manifests/%s" % manifest_digest))
                 response = responses.pop(0) if responses else None
                 if response is None:
                     return self._process_result([])
@@ -2784,7 +2795,15 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                 manifest_command = next(
                     command for command in commands if "/manifests/latest" in command[-1]
                 )
-                self.assertEqual(manifest_command[:4], ["curl", "-fsS", "-H", mock.ANY])
+                self.assertEqual(
+                    manifest_command[:5], ["curl", "-fsS", "-I", "-H", mock.ANY]
+                )
+                immutable_ref = config["verified_runtime_image_refs"][local_name]
+                self.assertEqual(
+                    immutable_ref,
+                    "127.0.0.1:5000/%s@sha256:%s"
+                    % (local_name, "b" * 64),
+                )
 
     def test_incomplete_digest_cache_manifests_are_missing(self):
         source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
@@ -2837,6 +2856,11 @@ class ImagePrefetchFlowTests(unittest.TestCase):
             "config-media-type-wrong-type": changed(
                 valid_manifest, ("config", "mediaType"), 1
             ),
+            "config-media-type-wrong-family": changed(
+                valid_manifest,
+                ("config", "mediaType"),
+                "application/vnd.docker.container.image.v1+json",
+            ),
             "config-digest-missing": changed(
                 valid_manifest, ("config", "digest"), missing_field
             ),
@@ -2871,6 +2895,16 @@ class ImagePrefetchFlowTests(unittest.TestCase):
             ),
             "layer-media-type-wrong-type": changed(
                 valid_manifest_with_layer, ("layers", 0, "mediaType"), 1
+            ),
+            "layer-media-type-wrong-family": changed(
+                valid_manifest_with_layer,
+                ("layers", 0, "mediaType"),
+                "application/vnd.docker.image.rootfs.diff.tar.gzip",
+            ),
+            "layer-media-type-unknown": changed(
+                valid_manifest_with_layer,
+                ("layers", 0, "mediaType"),
+                "application/vnd.example.layer",
             ),
             "layer-digest-missing": changed(
                 valid_manifest_with_layer,
@@ -2915,6 +2949,91 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         self.assertEqual(
             image_requirements.expected_local_config_digest(source_ref), expected_digest
         )
+
+    def test_manifest_descriptor_media_type_families_are_accepted(self):
+        source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
+        families = {
+            "application/vnd.oci.image.manifest.v1+json": (
+                "application/vnd.oci.image.config.v1+json",
+                (
+                    "application/vnd.oci.image.layer.v1.tar",
+                    "application/vnd.oci.image.layer.v1.tar+gzip",
+                    "application/vnd.oci.image.layer.v1.tar+zstd",
+                    "application/vnd.oci.image.layer.nondistributable.v1.tar",
+                    "application/vnd.oci.image.layer.nondistributable.v1.tar+gzip",
+                    "application/vnd.oci.image.layer.nondistributable.v1.tar+zstd",
+                ),
+            ),
+            "application/vnd.docker.distribution.manifest.v2+json": (
+                "application/vnd.docker.container.image.v1+json",
+                (
+                    "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "application/vnd.docker.image.rootfs.foreign.diff.tar.gzip",
+                ),
+            ),
+        }
+        for manifest_type, (config_type, layer_types) in families.items():
+            for layer_type in layer_types:
+                with self.subTest(manifest_type=manifest_type, layer_type=layer_type):
+                    manifest = self._manifest_payload(expected_digest, manifest_type)
+                    manifest["config"]["mediaType"] = config_type
+                    manifest["layers"] = [
+                        {
+                            "mediaType": layer_type,
+                            "digest": "sha256:%s" % ("1" * 64),
+                            "size": 1,
+                        }
+                    ]
+                    machine = self._local_registry_machine(local_name, [manifest])
+                    config = {
+                        "registry": "127.0.0.1:5000",
+                        "prefetch_image_requirements": [
+                            self._digest_requirement(source_ref, local_name)
+                        ],
+                    }
+
+                    self.assertEqual(
+                        image_registry_module.missing_cached_requirements(config, [machine]),
+                        [],
+                    )
+
+    def test_manifest_head_requires_one_valid_content_digest(self):
+        source_ref, local_name, _expected_digest = self._text_translation_digest_requirements()[0]
+        valid_digest = "sha256:%s" % ("b" * 64)
+        cases = {
+            "missing": [],
+            "wrong-header": ["Content-Digest: %s" % valid_digest],
+            "invalid": ["Docker-Content-Digest: sha256:not-a-digest"],
+            "duplicate": [
+                "Docker-Content-Digest: %s" % valid_digest,
+                "docker-content-digest: %s" % valid_digest,
+            ],
+            "conflicting": [
+                "Docker-Content-Digest: %s" % valid_digest,
+                "Docker-Content-Digest: sha256:%s" % ("c" * 64),
+            ],
+        }
+        for label, headers in cases.items():
+            with self.subTest(case=label):
+                machine = mock.Mock()
+                machine.process.side_effect = [
+                    self._process_result([json.dumps({"repositories": [local_name]})]),
+                    self._process_result(
+                        [json.dumps({"name": local_name, "tags": ["latest"]})]
+                    ),
+                    self._process_result(headers),
+                ]
+                config = {
+                    "registry": "127.0.0.1:5000",
+                    "prefetch_image_requirements": [
+                        self._digest_requirement(source_ref, local_name)
+                    ],
+                }
+
+                missing = image_registry_module.missing_cached_requirements(config, [machine])
+
+                self.assertEqual(missing, config["prefetch_image_requirements"])
+                self.assertEqual(len(machine.process.call_args_list), 3)
 
     def test_empty_layers_list_remains_a_valid_digest_cache_hit(self):
         source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
@@ -3335,6 +3454,54 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         commands = [call.args[1] for call in machine.process.call_args_list]
         self.assertIn(["docker", "pull", "127.0.0.1:5000/missing-repo:latest"], commands)
         self.assertIn(["docker", "push", "10.0.0.10:5000/missing-repo:latest"], commands)
+
+    def test_remote_migration_reverifies_pinned_identity_over_ssh(self):
+        source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
+        manifest_digest = "sha256:%s" % ("d" * 64)
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            self._process_result(["registry-started"]),
+            self._process_result(["pull-ok"]),
+            self._process_result(["save-ok"]),
+            self._process_result([], []),
+            self._process_result(["load-ok"]),
+            self._process_result(["tag-ok"]),
+            self._process_result(["push-ok"]),
+            self._process_result(["Docker-Content-Digest: %s" % manifest_digest]),
+            self._process_result([json.dumps(self._manifest_payload(expected_digest))]),
+        ]
+        config = {
+            "registry": "10.0.0.10:5000",
+            "old_registry": "127.0.0.1:5000",
+            "ssh_key": "/tmp/id_rsa",
+            "infrastructure": {
+                "cloud_nodes": 1,
+                "edge_nodes": 0,
+                "endpoint_nodes": 0,
+                "base_path": "/tmp",
+            },
+            "cloud_ssh": ["cloud0@198.51.100.1"],
+            "edge_ssh": [],
+            "endpoint_ssh": [],
+            "prefetch_image_requirements": [
+                self._digest_requirement(source_ref, local_name)
+            ],
+            "verified_runtime_image_refs": {
+                local_name: "127.0.0.1:5000/%s@sha256:%s" % (local_name, "b" * 64)
+            },
+        }
+
+        image_registry_module.move_prefetched_images_to_remote_registry(config, [machine])
+
+        head_call, get_call = machine.process.call_args_list[-2:]
+        self.assertIn("-I", head_call.args[1])
+        self.assertTrue(get_call.args[1][-1].endswith("/manifests/%s" % manifest_digest))
+        self.assertEqual(head_call.kwargs["ssh"], "cloud0@198.51.100.1")
+        self.assertEqual(get_call.kwargs["ssh"], "cloud0@198.51.100.1")
+        self.assertEqual(
+            config["verified_runtime_image_refs"][local_name],
+            "10.0.0.10:5000/%s@%s" % (local_name, manifest_digest),
+        )
 
     def test_move_prefetched_images_to_remote_registry_requires_old_registry(self):
         machine = mock.Mock()
