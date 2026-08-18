@@ -2,98 +2,94 @@
 
 ## Purpose And Authority
 
-This is the live restart point for release-readiness work. It records the
-completed runtime-remediation checkpoint and next decision boundary; it does
-not duplicate certification rows, finding analysis, or release policy.
+This is the live operational restart point for release-readiness work. It
+records the completed runtime-remediation checkpoint and the next decision
+boundary; it does not define policy or duplicate certification rows, finding
+reports, or release evidence.
 
 Use these authorities:
 
-1. `docs/rework_plan_stack.md` for architecture precedence and locked decisions,
-2. `docs/rework_milestone_release_plan.md` for release policy and milestones,
-3. `docs/release_certification_matrix.md` for current certification status,
-   claim boundaries, evidence, and row actions.
+1. `docs/rework_plan_stack.md` for planning precedence and locked decisions,
+2. `docs/rework_milestone_release_plan.md` for the active release-readiness
+   phase and release policy,
+3. `docs/release_certification_matrix.md` as the sole authority for current
+   certification status, claim boundaries, evidence, and row actions.
+
+Use the commit history and those governing documents for detail beyond this
+compact restart checkpoint.
 
 ## Current Checkpoint
 
-Start in `/home/matthijs/continuum` on branch `pr-23-curated`. Commit `71d29b7`
-is the completed six-packet remediation checkpoint from baseline `41b0418`.
-Independent review closed all 15 runtime findings, R-01 through R-15.
+Start in `/home/matthijs/continuum` on branch `pr-23-curated`. Commit
+`e6aa3a2df043cacbe8b58e5f70a536e859ff8dfe` (`e6aa3a2`) is the completed
+final runtime-remediation checkpoint.
 
-The compact fixing-commit map, grouped by the packets actually reviewed, is:
+The checkpoint advances from the N-02 endpoint and records two remediation
+ranges:
 
-| Packet | Findings and fixing commits |
-| --- | --- |
-| 1 | R-13 `34bac3c51e31`; R-10 `6494d2a39002` |
-| 2 | R-07 and R-12 `e61d16ed01d3`; R-15 `8fa61f096469` |
-| 3 | R-11 `aec59588f4da`; R-08 `9f2c9caf3352`; R-01 `030cb5577af5` |
-| 4 | R-03 `c14c137a9658`; R-14 `e27df6fcce28`, `58ead34239de` |
-| 5 | R-05 `b47d53a7f442`; R-04 `e28ee7984200`; R-02 `ebec74c9bc2a` |
-| 6 | R-09 `1a97fc64ffd8`; R-06 `71d29b7b1a53` |
+1. N-02 endpoint:
+   `1c8042376ae9f7f53ce7c24dda60a2f2a108de31`.
+2. First final-review remediation range, exactly six linear commits:
+   `1c8042376ae9f7f53ce7c24dda60a2f2a108de31..7f322c96a0545f866dc5efda183930701463c5d5`.
+3. Closure-review follow-up range, exactly seven linear commits:
+   `7f322c96a0545f866dc5efda183930701463c5d5..e6aa3a2df043cacbe8b58e5f70a536e859ff8dfe`.
+4. Complete post-N-02 remediation range, exactly 13 linear commits:
+   `1c8042376ae9f7f53ce7c24dda60a2f2a108de31..e6aa3a2df043cacbe8b58e5f70a536e859ff8dfe`.
 
-This closure synchronization is docs-only. It does not change runtime behavior,
-release evidence, or any certification row status. Inspect the current diff and
-worktree rather than relying on a persisted clean/dirty claim here.
+The original six branch-wide findings and the subsequent closure-review
+findings have been addressed in those ranges. This statement records the
+implementation checkpoint; it does not claim renewed runtime validation or a
+new review verdict.
 
-## Release Boundary
+The earlier six-packet closure of R-01 through R-15 at `71d29b7b1a53`, from
+baseline `41b0418`, remains closed historical context. It is not the current
+checkpoint and is not reopened by the later remediation work. Consult commit
+history for the detailed finding-to-commit maps rather than extending this
+handoff into a cumulative changelog.
 
-Claim only exact rows marked `certified`, plus non-runtime core behavior marked
-`core-ready`, in `docs/release_certification_matrix.md`. In particular:
+## Resulting Runtime Invariants
 
-1. do not infer support from provider or module code alone,
-2. do not broaden a certified row beyond its recorded provider, topology,
-   module set, application, runtime targets, or evidence,
-3. keep GCP/AWS historical and other unverified surfaces unclaimed until all
-   matrix-defined certification prerequisites are satisfied,
-4. treat retained `M2-*` research row IDs as evidence identifiers, not as the
-   M2 Provider Parity milestone name.
+The post-N-02 remediation ranges establish these implementation boundaries:
 
-These are certification backlog items, not reopened R-ID implementation
-defects; all R-01 through R-15 remain CLOSED.
-`docs/release_certification_matrix.md` is the sole authority for the complete
-prerequisites and current certification status of scopes that have been
-nominated and represented there:
+1. benchmark execution authorization fails closed,
+2. image requirements, caches, and runtime launches preserve immutable image
+   identity,
+3. network validation requires current-run, complete, attributable, structured
+   evidence,
+4. phase dependencies and numeric validity are enforced parser-first,
+5. zero-work text-translation configurations are rejected,
+6. resume support is limited to the provider path validated by the
+   implementation: QEMU.
 
-1. AWS and GCP require maintainer-nominated scope, credentials and cost
-   guardrails, suitable YAML profiles and suites, and provider-appropriate
-   evidence.
-2. `text_translation` and `mem_usage` require nominated configurations and
-   targets, the matrix-defined success and artifact contracts, and
-   provider-appropriate evidence.
-3. Live external-owner QEMU cache validation remains uncertified. Its exact
-   scope and closure requirements must be nominated and added to the
-   certification matrix before making any certification claim.
+## Certification And Evidence Boundary
 
-This closure does not renew or imply certification for any of those surfaces.
+This documentation synchronization changes no certification row, evidence
+claim, or release status. Do not promote or demote any matrix row because of
+the remediation checkpoint. `docs/release_certification_matrix.md` remains the
+sole certification authority.
 
-## Preserved Runtime Decisions
-
-1. R-01 currently accepts exactly one executable benchmark stage.
-2. R-08 assignments are exhaustive authorization envelopes; broad legacy
-   inventories remain guarded by the temporary adapter.
-3. R-09 `state.json` is persistent last-known and postmortem state. Resume is
-   explicit and requires fail-closed reachability validation.
-
-## Current Validation Contract
-
-The August 11 runtime-closure validation recorded 787 unit tests, 112 local E2E
-tests, and 899 combined tests, with all required cloud-static gates passing.
-The report is
-`logs/cloud_static_audit/cloud_static_audit_2026-08-11T133142Z.md`.
-
-That report validates runtime checkpoint `71d29b7`. It does not certify this
-later documentation-only diff. Do not start VM-backed suites or infer renewed
-runtime evidence for this synchronization.
+Existing retained VM-backed evidence predates the later runtime-affecting
+changes in the remediation ranges. As already required by the certification
+matrix and milestone release plan, affected evidence must be refreshed on the
+exact, clean publication candidate before tagging. Static, unit, and
+documentation checks do not renew VM, Kubernetes, application, network,
+provider, or cloud certification.
 
 ## Next Decision Boundary
 
-After this closure synchronization, choose the next roadmap or milestone task
-using the existing authoritative plans and the release certification matrix.
-Do not turn certification backlog items into implementation findings or create
-public support claims beyond the matrix.
+1. After this synchronization is committed and the tree is clean, decide
+   whether to begin the M1 evidence refresh on that exact revision as the
+   publication candidate. Any evidence used for publication must name and run
+   against the exact clean publication candidate.
+2. Do not select or update work from the retired
+   `.codex/OVERHAUL_EXECUTION_PLAN.md`; `.codex/NEXT_AGENT.md` remains the
+   pointer away from that completed historical dispatcher.
+3. Defer Phase-G architecture work until a separate RFC/ADR and an explicit
+   scope decision authorize it.
 
 ## Operational Boundaries
 
-Do not use arbitrary `sudo`. Do not commit generated audit reports, runtime
-logs, VM artifacts, credentials, service keys, local `.tmp` files, or
-machine-specific overrides. Use the reviewed host wrappers only when a future
-task explicitly requires retained VM-backed certification work.
+Do not start certification-host or VM-backed work from this documentation
+synchronization. Do not commit generated audit reports, runtime logs, VM
+artifacts, credentials, service keys, local `.tmp` files, or machine-specific
+overrides.
