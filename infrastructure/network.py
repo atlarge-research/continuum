@@ -31,18 +31,7 @@ def generate_tc_commands(config, values, ips, disk):
     if disk == 1:
         # Root disk
         commands.append(
-            [
-                "sudo",
-                "tc",
-                "qdisc",
-                "add",
-                "dev",
-                network,
-                "root",
-                "handle",
-                "1:",
-                "htb",
-            ]
+            ["sudo", "tc", "qdisc", "add", "dev", network, "root", "handle", "1:", "htb"]
         )
 
 
@@ -461,14 +450,7 @@ def benchmark(config, machines):
         )
         lat_commands, tp_commands = netperf_commands(targets)
         benchmark_output(
-            config,
-            machines[0],
-            targets,
-            lat_commands,
-            tp_commands,
-            ssh,
-            "cloud",
-            "cloud",
+            config, machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "cloud"
         )
 
     # From cloud to edge
@@ -476,14 +458,7 @@ def benchmark(config, machines):
         targets = config["edge_ips_internal"]
         lat_commands, tp_commands = netperf_commands(targets)
         benchmark_output(
-            config,
-            machines[0],
-            targets,
-            lat_commands,
-            tp_commands,
-            ssh,
-            "cloud",
-            "edge",
+            config, machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "edge"
         )
 
     # From cloud to endpoint
@@ -491,14 +466,7 @@ def benchmark(config, machines):
         targets = config["endpoint_ips_internal"]
         lat_commands, tp_commands = netperf_commands(targets)
         benchmark_output(
-            config,
-            machines[0],
-            targets,
-            lat_commands,
-            tp_commands,
-            ssh,
-            "cloud",
-            "endpoint",
+            config, machines[0], targets, lat_commands, tp_commands, ssh, "cloud", "endpoint"
         )
 
     # Between edge nodes
@@ -514,14 +482,7 @@ def benchmark(config, machines):
         targets = config["control_ips_internal"] + config["cloud_ips_internal"]
         lat_commands, tp_commands = netperf_commands(targets)
         benchmark_output(
-            config,
-            machines[0],
-            targets,
-            lat_commands,
-            tp_commands,
-            ssh,
-            "edge",
-            "cloud",
+            config, machines[0], targets, lat_commands, tp_commands, ssh, "edge", "cloud"
         )
 
     # From edge to endpoint
@@ -529,14 +490,7 @@ def benchmark(config, machines):
         targets = config["endpoint_ips_internal"]
         lat_commands, tp_commands = netperf_commands(targets)
         benchmark_output(
-            config,
-            machines[0],
-            targets,
-            lat_commands,
-            tp_commands,
-            ssh,
-            "edge",
-            "endpoint",
+            config, machines[0], targets, lat_commands, tp_commands, ssh, "edge", "endpoint"
         )
 
     # From endpoint to cloud
@@ -544,14 +498,7 @@ def benchmark(config, machines):
         targets = config["control_ips_internal"] + config["cloud_ips_internal"]
         lat_commands, tp_commands = netperf_commands(targets)
         benchmark_output(
-            config,
-            machines[0],
-            targets,
-            lat_commands,
-            tp_commands,
-            ssh,
-            "endpoint",
-            "cloud",
+            config, machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "cloud"
         )
 
     # From endpoint to edge
@@ -559,12 +506,5 @@ def benchmark(config, machines):
         targets = config["edge_ips_internal"]
         lat_commands, tp_commands = netperf_commands(targets)
         benchmark_output(
-            config,
-            machines[0],
-            targets,
-            lat_commands,
-            tp_commands,
-            ssh,
-            "endpoint",
-            "edge",
+            config, machines[0], targets, lat_commands, tp_commands, ssh, "endpoint", "edge"
         )

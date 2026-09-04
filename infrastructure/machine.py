@@ -3,12 +3,12 @@ Define Machine object and functions to work with this object
 The Machine object represents a physical machine used to run this benchmark
 """
 
-import sys
-import logging
-import subprocess
-import re
 import getpass
+import logging
 import math
+import re
+import subprocess
+import sys
 
 
 class Machine:

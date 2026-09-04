@@ -51,10 +51,7 @@ def start(config, machines):
         "ansible-playbook",
         "-i",
         os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/cloud/openfaas.yml",
-        ),
+        os.path.join(config["infrastructure"]["base_path"], ".continuum/cloud/openfaas.yml"),
     ]
 
     ansible.check_output(machines[0].process(config, command)[0])
