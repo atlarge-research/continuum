@@ -14,6 +14,15 @@ from . import machine as m
 from . import network
 
 
+def mahimahi_enabled(config):
+    """Return whether this run selected a MahiMahi-backed network preset."""
+    infrastructure_config = config["infrastructure"]
+    preset = infrastructure_config.get("wireless_network_preset", "")
+    return infrastructure_config["network_emulation"] and preset.endswith(
+        "_mahimahi"
+    )
+
+
 def delete_vms(config, machines):
     """[INTERFACE] Delete VM infrastructure
 
@@ -336,14 +345,12 @@ def create_continuum_dir(config, machines):
 
         commands.append(command)
 
-        if machine.is_local:
-            print("We are copying")
-            command = (
-                "cp -r mahimahi %s/.continuum/mahimahi"
-                % ((config["infrastructure"]["base_path"],))
+        if machine.is_local and mahimahi_enabled(config):
+            commands.append(
+                "mkdir -p %s/.continuum/mahimahi && "
+                "cp -r mahimahi/. %s/.continuum/mahimahi"
+                % ((config["infrastructure"]["base_path"],) * 2)
             )
-        
-        commands.append(command)
 
     results = machines[0].process(config, commands, shell=True)
 

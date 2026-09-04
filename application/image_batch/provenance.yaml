@@ -1,0 +1,35 @@
+schema_version: 1
+demo: fns-2026-10-08
+
+continuum:
+  repository: https://github.com/atlarge-research/continuum.git
+  commit: 39022508131df910a2a92562e5528d234b34a7c9
+  description: Gleb Mishchenko final pre-rework commit
+
+edward_opendt:
+  repository: https://github.com/EDChui/closed-loop-opendt.git
+  tag: v1.0.0
+  commit: c3e1f8cd56918d8c10c4013a8b8733011323f9d7
+  import_status: reference-only
+
+edward_workload_generator:
+  repository: https://github.com/EDChui/k8s-workload-generator.git
+  commit: 1a49703e9c2039f2ab19c9a8847e67a241a50d7f
+  import_status: behavior-replaced-by-image-batch-endpoint
+
+application:
+  protocol_version: 1
+  batch_format: application/x-tar
+  sample_batch:
+    source: ../image_classification/src/images
+    selection: first-4-sorted-jpegs
+  classifier: mobilenet-v2-tflite
+  classifier_runtime: tflite-runtime==2.14.0
+  classifier_model: ../image_classification/src/model/model.tflite
+  classifier_labels: ../image_classification/src/model/labels.txt
+  kubernetes_job_ttl_seconds: 3600
+  container_images: unpinned
+
+network_trace:
+  status: blocked-on-artifact-handoff
+  note: Gleb's pinned Continuum commit references /home/mahimahi traces, but the mahimahi directory and trace files are not committed in Continuum.

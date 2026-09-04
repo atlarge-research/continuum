@@ -148,7 +148,7 @@ def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
     commands.append([
         "(",
         "sudo",
-        f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {" ".join([target for target in targets])}",
+        f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {' '.join(targets)}",
         ">output_reroute.txt",
         "2>&1",
         "&",

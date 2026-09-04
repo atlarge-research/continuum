@@ -533,18 +533,20 @@ def base_image(config, machines):
     ]
     ansible.check_output(machines[0].process(config, command)[0])
 
-    # Install mahimati at the endpoint
-    command = [
-        "ansible-playbook",
-        "-i",
-        os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
-        os.path.join(
-            config["infrastructure"]["base_path"],
-            ".continuum/infrastructure/mahimati.yml",
-        ),
-    ]
-    
-    ansible.check_output(machines[0].process(config, command)[0])
+    # Install MahiMahi only for a MahiMahi-backed emulation preset.
+    if infrastructure.mahimahi_enabled(config):
+        command = [
+            "ansible-playbook",
+            "-i",
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/inventory_vms"
+            ),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/infrastructure/mahimati.yml",
+            ),
+        ]
+        ansible.check_output(machines[0].process(config, command)[0])
 
     # Install docker containers if required
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
