@@ -118,6 +118,16 @@ The files are ephemeral diagnostic and audit evidence:
 
 JSONL is not intended as the permanent transport between separate OpenDT components. A later bounded reader may select complete lines up to a fixed file boundary, filter by authoritative completion time, deduplicate by Job UID, and generate OpenDC Parquet input. Kafka or a direct API should be introduced only when there is a concrete integration requirement.
 
+## Offline run analysis
+
+The analyzer reads saved endpoint and observer evidence independently of the runtime. A command-line script producing PNGs and a combined PDF keeps the demo reproducible and easy to review or use in slides, without a notebook or browser service. Input hashes, analysis settings, and exported values allow regeneration and inspection; invalid inputs fail explicitly, while incomplete evidence remains visible.
+
+Arrival fidelity uses recorded monotonic send offsets, because endpoint log timestamps are written after the HTTP call returns. Cross-host alignment assumes synchronized clocks. Queue wait includes scheduling and container startup; execution uses worker-container start and finish. These distinctions avoid attributing startup or logging delays to computation or workload scheduling.
+
+CPU plots use raw resource samples rather than simulator-oriented OpenDT Fragments, which may clamp or extend utilization. Samples are held forward for at most ten seconds within execution; missing values remain missing, and partial sums are distinguished from full coverage. This shows workload CPU and sampling coverage, not total node utilization or a direct reporting-latency measurement. Terminal Pods are excluded from pressure using captured Pod phases, including in older captures; corrections are documented without rewriting source logs.
+
+Repetitions are compared only when their planned schedules match. Pressure curves show the median and observed range over their common captured interval, leaving gaps for missing state; the range is not a confidence interval. CPU traces remain individual. An execution timeline cannot meaningfully be averaged, so the report shows the first complete run alongside per-batch queue waits from all repetitions. Common distribution bins make runs comparable without repeating every figure. Detailed measurement conventions and evidence caveats belong in the generated report.
+
 ## Deployment and failure assumptions
 
 The observer remains a sidecar in the adapter pod through the October demo. The Deployment has one replica because multiple adapter replicas would create duplicate observers without leader election.
@@ -135,3 +145,5 @@ This is a deliberate scientific-demo trade-off: detecting an invalid run is more
 - JSONL and in-memory Job UID deduplication survive only for the lifetime of the current pod.
 - A single adapter replica and no live rollout are operational assumptions, not production scaling behavior.
 - Network trace replay, workload forecasting, OpenDC conversion/execution, policy selection, and worker actuation remain later features.
+
+The current single-host cluster remains the development setup until the closed loop works. A later two-host setup could provide more time for active Jobs to build up before saturation. Capacity and arrival intensity will need to be calibrated together: adding capacity alone could eliminate the queue instead of producing a more informative rise and fall. This expansion is deferred and does not change the current workload or topology.

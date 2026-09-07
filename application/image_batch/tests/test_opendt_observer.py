@@ -334,6 +334,11 @@ class OpenDTObserverTests(unittest.TestCase):
         )
         job = demo_job()
 
+        conditions = job.status.conditions
+        job.status.conditions = []
+        self.assertFalse(observer.handle_job(job))
+        self.assertEqual(workload.records, [])
+        job.status.conditions = conditions
         self.assertTrue(observer.handle_job(job))
         self.assertFalse(observer.handle_job(job))
         self.assertEqual(len(workload.records), 1)
@@ -424,6 +429,59 @@ class OpenDTObserverTests(unittest.TestCase):
             [worker["node_name"] for worker in record["workers"]],
             ["cloud1", "cloud2", "cloud3"],
         )
+
+    def test_terminal_pods_leave_pressure_before_job_completion(self):
+        job = demo_job()
+        job.status.conditions = []
+        job.status.completion_time = None
+        for phase, expected in (
+            (None, (1, 0)),
+            ("Pending", (1, 0)),
+            ("Running", (0, 1)),
+            ("Succeeded", (0, 0)),
+            ("Failed", (0, 0)),
+        ):
+            with self.subTest(phase=phase):
+                record = build_cluster_state_record(
+                    [job],
+                    [demo_pod(phase=phase)] if phase else [],
+                    [demo_node("cloud1")],
+                    run_id="run-test",
+                    namespace="fns-demo",
+                    label_selector="continuum.atlarge.nl/workload=image-batch",
+                    observed_at=datetime(2026, 9, 4, 10, 1, tzinfo=timezone.utc),
+                )
+                self.assertEqual(
+                    (record["counts"]["queued_jobs"], record["counts"]["active_jobs"]),
+                    expected,
+                )
+                self.assertEqual(
+                    (len(record["jobs"]["queued"]), len(record["jobs"]["active"])),
+                    expected,
+                )
+                self.assertEqual(record["workers"][0]["allocatable_cpu_count"], 4.0)
+
+    def test_terminal_pod_does_not_hide_another_pending_or_running_pod(self):
+        job = demo_job()
+        job.status.conditions = []
+        job.status.completion_time = None
+        finished = demo_pod(phase="Failed")
+        finished.metadata.name = "a-finished"
+        for phase, group in (("Pending", "queued"), ("Running", "active")):
+            with self.subTest(phase=phase):
+                live = demo_pod(phase=phase)
+                live.metadata.name = "z-live"
+                record = build_cluster_state_record(
+                    [job],
+                    [finished, live],
+                    [],
+                    run_id="run-test",
+                    namespace="fns-demo",
+                    label_selector="continuum.atlarge.nl/workload=image-batch",
+                    observed_at=datetime(2026, 9, 4, 10, 1, tzinfo=timezone.utc),
+                )
+                self.assertEqual(record["counts"][f"{group}_jobs"], 1)
+                self.assertEqual(record["jobs"][group][0]["pod_name"], "z-live")
 
     def test_resource_sampler_records_only_active_demo_jobs(self):
         active = demo_job()

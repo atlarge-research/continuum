@@ -33,32 +33,20 @@ The operator-focused usage instructions are in `README.md`. The stable design ra
 
 The implementation described here has been exercised on node3 with one control plane, three workers, and one endpoint. Three identical seeded runs each attempted and completed all 34 planned requests. All sends began within about 1.1 milliseconds of their planned time, sender queue depth remained zero, and all 102 successful Kubernetes Jobs produced a unique workload record with nonempty Fragments. Worker container execution was approximately 30--35 seconds. The manifest's 128 inference repetitions are a synthetic calibration mechanism, not realistic application behavior.
 
-The focused unit and integration-style suite contains 30 passing tests. It covers topology and CPU pinning, schedule generation and open-loop release, lineage, HTTP behavior, observer conversion and deduplication, Prometheus/Pod correlation, cluster-state completeness, timing semantics, and manifest/RBAC constraints.
+The committed runtime baseline has 30 focused unit and integration-style tests. They cover topology and CPU pinning, schedule generation and open-loop release, lineage, HTTP behavior, observer conversion and deduplication, Prometheus/Pod correlation, cluster-state completeness, timing semantics, and manifest/RBAC constraints.
 
 ## Agreed follow-up order
 
-### 1. Reproducible run analysis
-
-Add a normal command-line analysis script as the next focused change after this baseline vertical slice. It should consume captured endpoint structured logs plus the four observer JSONL streams and produce files that open directly without a local web server. Prefer individual PNG figures and a combined PDF report; HTML must not be the primary output.
-
-The initial report should include:
-
-1. Cumulative planned versus actual HTTP starts and per-request scheduling lag.
-2. Aligned cluster-pressure plots for queued Jobs, active Jobs, active requested CPU, observed image-batch CPU, and allocatable worker CPU. Label observed CPU as workload CPU rather than total node utilization.
-3. A per-Job lifecycle view separating Kubernetes queue wait from worker container execution and showing worker assignment.
-4. Execution-time and queue-delay distributions.
-5. A compact Prometheus coverage summary with sample-count distribution, minimum, median, and percentages with at least two and three samples.
-
-Keep the analyzer separate from the observer: it reads preserved evidence after a run and must not add runtime coupling to data collection.
-
-### 2. Repeated arrival cycles, deferred
+### 1. Repeated arrival cycles, deferred
 
 When forecasting work requires a longer recurring workload, add an `--arrival-cycles` parameter with a default of one. Repeat the cosine-shaped expected intensity over the full run and sample one continuous seeded Poisson process. Do not duplicate one cycle's exact sends or timestamps; stochastic arrivals should differ between cycles even when the expected pattern repeats.
 
 Defer varying peak heights, phases, or cycle lengths until the complete demo works. Do not implement repeated cycles merely as speculative functionality if the prediction experiment can proceed without them.
 
-### 3. Remaining closed-loop features
+### 2. Remaining closed-loop features
 
 Continue with the current Notion plan for bounded JSONL reading, deterministic Parquet generation, forecasting, OpenDC execution, policy selection, and actuation. Preserve the fixed-cutoff and Job UID deduplication rules described above.
 
 Do not spend demo time moving the cAdvisor configuration script into Ansible. The current small, idempotent, self-verifying script is sufficient unless it later becomes shared infrastructure.
+
+Keep the current single-node topology until a functional closed loop is available. The user's deferred capacity direction is two 20-core physical hosts: five worker VMs and one control-plane VM at six vCPUs each, plus a two-vCPU endpoint (38 assigned vCPUs). Three cloud VMs would use 18 cores per host, with the endpoint using two remaining cores on one host. Revisit workload/capacity calibration then so queue buildup occurs later without disappearing entirely. No infrastructure or arrival parameters have been changed for the report feature.

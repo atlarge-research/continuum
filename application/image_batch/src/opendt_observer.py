@@ -233,7 +233,11 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
     requested_cpu, requested_memory_mb = extract_resource_requests(job)
     owned_pods = sorted(
         (pod for pod in pods if _pod_job_uid(pod) == uid),
-        key=lambda pod: getattr(getattr(pod, "metadata", None), "name", ""),
+        key=lambda pod: (
+            getattr(getattr(pod, "status", None), "phase", None)
+            in ("Succeeded", "Failed"),
+            getattr(getattr(pod, "metadata", None), "name", ""),
+        ),
     )
     selected_pod = next(
         (
@@ -249,6 +253,8 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
         else None
     )
     state = "active" if pod_phase == "Running" else "queued"
+    if pod_phase in ("Succeeded", "Failed"):
+        state = "finished"
     start_time = getattr(status, "start_time", None)
     record = {
         "kubernetes_job_uid": uid,
@@ -292,13 +298,17 @@ def build_cluster_state_record(
     label_selector: str,
     observed_at: datetime,
 ) -> dict[str, Any]:
-    """Build a complete cutoff-ready view of unfinished Jobs and workers."""
+    """Build queued/active pressure, excluding Pods awaiting Job finalization."""
     queued = []
     active = []
     for job in jobs:
         if terminal_status(job)[0] is not None:
             continue
         state, record = _state_job_record(job, pods)
+        # A terminal Pod is neither queued nor executing. The independent Job
+        # watcher still waits for Complete/Failed before recording its outcome.
+        if state == "finished":
+            continue
         (active if state == "active" else queued).append(record)
     workers = []
     for node in nodes:

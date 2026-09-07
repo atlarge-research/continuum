@@ -105,3 +105,20 @@ kubectl cp -n fns-demo \
 The endpoint audit stream is structured stdout and should be captured from its container logs. The adapter result and events remain under its `/data` mount.
 
 These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. The application currently records the inputs needed by later OpenDC conversion but does not invoke OpenDC, predict workload, select a scaling policy, actuate Kubernetes, or configure MahiMahi trace replay.
+
+## Offline run report
+
+Generate a report from saved endpoint and observer logs using Python 3.10+:
+
+```bash
+python3 -m venv /tmp/fns-analysis-venv
+/tmp/fns-analysis-venv/bin/pip install -r application/image_batch/requirements-analysis.txt
+/tmp/fns-analysis-venv/bin/python application/image_batch/src/analyze_run.py \
+  --endpoint-log ./endpoint.jsonl \
+  --observer-dir ./opendt-audit \
+  --output-dir ./logs/image-batch-report
+```
+
+`--endpoint-log` is the endpoint's captured stdout; `--observer-dir` contains the four streams copied above. Repeat `--endpoint-log` to compare runs with matching planned arrivals, or use `--run-id ID` to select one. Choose a new output directory.
+
+Open `logs/image-batch-report/report.pdf` in VS Code or a desktop PDF reader.

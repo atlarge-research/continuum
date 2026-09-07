@@ -1,0 +1,2 @@
+# Offline reporting only; install separately from the runtime containers.
+matplotlib==3.10.6
