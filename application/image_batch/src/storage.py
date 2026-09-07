@@ -14,6 +14,7 @@ from typing import Any
 
 
 REQUEST_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 JPEG_SUFFIXES = {".jpg", ".jpeg"}
 
 
@@ -25,6 +26,12 @@ def validate_request_id(request_id: str) -> str:
     if not REQUEST_ID_PATTERN.fullmatch(request_id):
         raise BatchValidationError("invalid request ID")
     return request_id
+
+
+def validate_run_id(run_id: str) -> str:
+    if not RUN_ID_PATTERN.fullmatch(run_id):
+        raise BatchValidationError("invalid workload run ID")
+    return run_id
 
 
 def inspect_image_tar(path: str | Path, max_images: int) -> list[str]:
@@ -76,6 +83,7 @@ class BatchStore:
         payload: bytes,
         *,
         run_id: str,
+        workload_run_id: str | None = None,
         image_names: list[str],
         job_name: str,
         endpoint_batch_id: str | None = None,
@@ -90,6 +98,7 @@ class BatchStore:
                 "schema_version": 1,
                 "request_id": request_id,
                 "run_id": run_id,
+                "workload_run_id": workload_run_id or run_id,
                 "job_name": job_name,
                 "endpoint_batch_id": endpoint_batch_id,
                 "status": "accepted",

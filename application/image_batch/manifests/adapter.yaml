@@ -18,6 +18,9 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["create", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -32,6 +35,28 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: image-batch-job-submitter
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: image-batch-node-observer
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: image-batch-node-observer
+subjects:
+  - kind: ServiceAccount
+    name: image-batch-adapter
+    namespace: fns-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: image-batch-node-observer
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -72,6 +97,8 @@ spec:
               value: continuum/image-batch-worker:fns-v1
             - name: JOB_TTL_SECONDS
               value: "3600"
+            - name: WORKER_INFERENCE_REPETITIONS
+              value: "128"
           readinessProbe:
             httpGet:
               path: /healthz
@@ -79,10 +106,35 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+        - name: opendt-observer
+          image: continuum/image-batch-adapter:fns-v1
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-u", "opendt_observer.py"]
+          env:
+            - name: RUN_ID
+              value: fns-v1-manual
+            - name: JOB_NAMESPACE
+              value: fns-demo
+            - name: OPENDT_STATE_DIR
+              value: /var/lib/opendt
+            - name: PROMETHEUS_URL
+              value: http://prometheus-k8s.monitoring.svc.cluster.local:9090
+            - name: CPU_FREQUENCY_MHZ
+              value: "2400"
+            - name: RESOURCE_COLLECTION_INTERVAL_SECONDS
+              value: "5"
+            - name: CLUSTER_STATE_INTERVAL_SECONDS
+              value: "1"
+          volumeMounts:
+            - name: opendt-state
+              mountPath: /var/lib/opendt
       volumes:
         - name: data
           emptyDir:
             sizeLimit: 1Gi
+        - name: opendt-state
+          emptyDir:
+            sizeLimit: 256Mi
 ---
 apiVersion: v1
 kind: Service

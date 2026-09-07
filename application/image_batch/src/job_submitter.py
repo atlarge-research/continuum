@@ -23,8 +23,10 @@ class JobRequest:
     result_url: str
     payload_bytes: int
     image_count: int
+    workload_run_id: str | None = None
     endpoint_batch_id: str | None = None
     adapter_accepted_at_unix_ns: int | None = None
+    inference_repetitions: int = 1
 
 
 def build_job_manifest(
@@ -35,6 +37,8 @@ def build_job_manifest(
     ttl_seconds: int,
 ) -> dict[str, Any]:
     """Build the native Job observed later by Edward's OpenDT adapter."""
+    if request.inference_repetitions < 1:
+        raise ValueError("inference repetitions must be positive")
     labels = {
         "app.kubernetes.io/name": "image-batch-worker",
         LABEL_REQUEST_ID: request.request_id,
@@ -42,8 +46,13 @@ def build_job_manifest(
     }
     annotations = {
         "continuum.atlarge.nl/run-id": request.run_id,
+        "continuum.atlarge.nl/workload-run-id": request.workload_run_id
+        or request.run_id,
         "continuum.atlarge.nl/payload-bytes": str(request.payload_bytes),
         "continuum.atlarge.nl/image-count": str(request.image_count),
+        "continuum.atlarge.nl/inference-repetitions": str(
+            request.inference_repetitions
+        ),
     }
     if request.endpoint_batch_id is not None:
         annotations[
@@ -56,9 +65,14 @@ def build_job_manifest(
     environment = [
         {"name": "REQUEST_ID", "value": request.request_id},
         {"name": "RUN_ID", "value": request.run_id},
+        {"name": "WORKLOAD_RUN_ID", "value": request.workload_run_id or request.run_id},
         {"name": "PAYLOAD_URL", "value": request.payload_url},
         {"name": "RESULT_URL", "value": request.result_url},
         {"name": "CLASSIFIER_MODE", "value": "tflite"},
+        {
+            "name": "INFERENCE_REPETITIONS",
+            "value": str(request.inference_repetitions),
+        },
     ]
     if request.endpoint_batch_id is not None:
         environment.append(
@@ -156,9 +170,11 @@ class LocalJobSubmitter:
         environment.update(
             REQUEST_ID=request.request_id,
             RUN_ID=request.run_id,
+            WORKLOAD_RUN_ID=request.workload_run_id or request.run_id,
             PAYLOAD_URL=request.payload_url,
             RESULT_URL=request.result_url,
             CLASSIFIER_MODE=self.classifier_mode,
+            INFERENCE_REPETITIONS=str(request.inference_repetitions),
         )
         if request.endpoint_batch_id is not None:
             environment["ENDPOINT_BATCH_ID"] = request.endpoint_batch_id

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import configparser
 import json
+import os
 import random
+import re
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from unittest import mock
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,12 +21,30 @@ SOURCE = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE))
 
 from adapter import AdapterService, make_handler  # noqa: E402
-from endpoint import build_batch, resolve_batch_size_range, select_images  # noqa: E402
+from configure_cadvisor_scrape import cadvisor_endpoint, patch_operations  # noqa: E402
+from endpoint import (  # noqa: E402
+    FIDELITY_TOLERANCE_NS,
+    PlannedArrival,
+    PreparedBatch,
+    SendResult,
+    SenderMeasurements,
+    build_batch,
+    build_constant_schedule,
+    build_periodic_schedule,
+    build_schedule_summary,
+    emit_planned_schedule,
+    execute_schedule,
+    prepare_batches,
+    resolve_batch_size_range,
+    select_images,
+)
 from events import JsonlEventWriter, new_event  # noqa: E402
 from job_submitter import JobRequest, build_job_manifest  # noqa: E402
 from storage import BatchStore, BatchValidationError, inspect_image_tar  # noqa: E402
+from worker import classify_checksum  # noqa: E402
 from resource_manager.kubernetes import kubernetes  # noqa: E402
 from infrastructure import infrastructure  # noqa: E402
+from infrastructure.qemu import generate as qemu_generate  # noqa: E402
 
 
 class RecordingSubmitter:
@@ -50,6 +73,131 @@ class RecordingMachine:
 
 
 class ImageBatchTests(unittest.TestCase):
+    def test_cadvisor_setup_targets_one_endpoint_and_is_idempotent(self):
+        monitor = {
+            "spec": {
+                "endpoints": [
+                    {"path": "/metrics", "interval": "30s"},
+                    {"path": "/metrics/cadvisor", "interval": "30s"},
+                ]
+            }
+        }
+        operations = patch_operations(monitor)
+        self.assertEqual(
+            {operation["path"] for operation in operations},
+            {"/spec/endpoints/1/interval", "/spec/endpoints/1/scrapeTimeout"},
+        )
+        self.assertEqual(monitor["spec"]["endpoints"][0]["interval"], "30s")
+        configured = {
+            "spec": {
+                "endpoints": [
+                    {
+                        "path": "/metrics/cadvisor",
+                        "interval": "5s",
+                        "scrapeTimeout": "1s",
+                    }
+                ]
+            }
+        }
+        self.assertEqual(patch_operations(configured), [])
+        with self.assertRaises(RuntimeError):
+            cadvisor_endpoint({"spec": {"endpoints": []}})
+        with self.assertRaises(RuntimeError):
+            cadvisor_endpoint(
+                {"spec": {"endpoints": [{"path": "/metrics/cadvisor"}] * 2}}
+            )
+
+    def test_checksum_repetition_preserves_one_output_per_image(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            image = Path(temporary) / "one.jpg"
+            image.write_bytes(b"content")
+            with mock.patch(
+                "worker.hashlib.sha256", wraps=__import__("hashlib").sha256
+            ) as digest:
+                output = classify_checksum([image], repetitions=3)
+        self.assertEqual(len(output), 1)
+        self.assertEqual(digest.call_count, 3)
+
+    def test_fns_demo_topology_uses_eighteen_pinned_vcpus(self):
+        config = configparser.ConfigParser()
+        config.read(SOURCE.parents[2] / "configuration" / "fns_demo_v1.cfg")
+        infrastructure_config = config["infrastructure"]
+        cloud_nodes = infrastructure_config.getint("cloud_nodes")
+        cloud_cores = infrastructure_config.getint("cloud_cores")
+        endpoint_nodes = infrastructure_config.getint("endpoint_nodes")
+        endpoint_cores = infrastructure_config.getint("endpoint_cores")
+
+        self.assertEqual(cloud_nodes, 4)
+        self.assertEqual(endpoint_nodes, 1)
+        self.assertTrue(infrastructure_config.getboolean("cpu_pin"))
+        self.assertEqual(
+            cloud_nodes * cloud_cores + endpoint_nodes * endpoint_cores, 18
+        )
+
+    def test_qemu_topology_generates_unique_cpu_pins_zero_through_seventeen(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".tmp").mkdir()
+            ssh_key = root / "id_test"
+            ssh_key.with_suffix(".pub").write_text("ssh-ed25519 test")
+            config = {
+                "ssh_key": str(ssh_key),
+                "infrastructure": {
+                    "cloud_cores": 4,
+                    "edge_cores": 1,
+                    "endpoint_cores": 2,
+                    "cloud_memory": 16,
+                    "edge_memory": 1,
+                    "endpoint_memory": 4,
+                    "cloud_quota": 1.0,
+                    "edge_quota": 1.0,
+                    "endpoint_quota": 1.0,
+                    "cloud_read_speed": 0,
+                    "cloud_write_speed": 0,
+                    "edge_read_speed": 0,
+                    "edge_write_speed": 0,
+                    "endpoint_read_speed": 0,
+                    "endpoint_write_speed": 0,
+                    "cpu_pin": True,
+                    "base_path": "/tmp/continuum-test",
+                },
+            }
+            machine = SimpleNamespace(
+                cloud_controller_ips=["192.0.2.10"],
+                cloud_ips=["192.0.2.11", "192.0.2.12", "192.0.2.13"],
+                cloud_controller_names=["cloud0"],
+                cloud_names=["cloud1", "cloud2", "cloud3"],
+                edge_ips=[],
+                edge_names=[],
+                endpoint_ips=["192.0.2.20"],
+                endpoint_names=["endpoint0"],
+                base_ips=[],
+                base_names=[],
+                process=lambda *_args, **_kwargs: [
+                    (["default via 192.168.122.1 dev br0"], [])
+                ],
+            )
+            old_cwd = os.getcwd()
+            old_find_bridge = qemu_generate.find_bridge
+            try:
+                os.chdir(root)
+                qemu_generate.find_bridge = lambda *_args: 1
+                qemu_generate.start(config, [machine])
+            finally:
+                qemu_generate.find_bridge = old_find_bridge
+                os.chdir(old_cwd)
+
+            pins = []
+            for name in ("cloud0", "cloud1", "cloud2", "cloud3", "endpoint0"):
+                xml = (root / ".tmp" / f"domain_{name}.xml").read_text()
+                pins.extend(
+                    int(value)
+                    for value in re.findall(
+                        r'<vcpupin vcpu="\d+" cpuset="(\d+)"/>', xml
+                    )
+                )
+            self.assertEqual(pins, list(range(18)))
+
     def test_seeded_image_selection_varies_and_is_reproducible(self):
         images = [Path(f"image-{index}.jpg") for index in range(5)]
         first = random.Random(17)
@@ -78,6 +226,192 @@ class ImageBatchTests(unittest.TestCase):
                 SimpleNamespace(batch_size=4, batch_size_min=2, batch_size_max=10)
             )
 
+    def test_periodic_schedule_is_seeded_ordered_and_low_peak_low(self):
+        first = build_periodic_schedule(
+            duration_seconds=40,
+            minimum_rate_per_second=20,
+            peak_rate_per_second=100,
+            generator=random.Random(42),
+        )
+        second = build_periodic_schedule(
+            duration_seconds=40,
+            minimum_rate_per_second=20,
+            peak_rate_per_second=100,
+            generator=random.Random(42),
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(
+            [item.planned_offset_ns for item in first],
+            sorted(item.planned_offset_ns for item in first),
+        )
+        edge_rates = [
+            item.expected_rate_per_second
+            for item in first
+            if item.planned_offset_ns < 10_000_000_000
+            or item.planned_offset_ns >= 30_000_000_000
+        ]
+        middle_rates = [
+            item.expected_rate_per_second
+            for item in first
+            if 15_000_000_000 <= item.planned_offset_ns < 25_000_000_000
+        ]
+        self.assertGreater(
+            sum(middle_rates) / len(middle_rates), sum(edge_rates) / len(edge_rates)
+        )
+        self.assertLess(first[-1].planned_offset_ns, 40_000_000_000)
+        self.assertTrue(
+            all(20 <= item.expected_rate_per_second <= 100 for item in first)
+        )
+
+    def test_schedule_validation_and_fixed_payload_preparation(self):
+        self.assertEqual(
+            [item.planned_offset_ns for item in build_constant_schedule(3, 0.5)],
+            [0, 500_000_000, 1_000_000_000],
+        )
+        with self.assertRaises(ValueError):
+            build_periodic_schedule(
+                duration_seconds=0,
+                minimum_rate_per_second=1,
+                peak_rate_per_second=2,
+                generator=random.Random(1),
+            )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            images = [root / f"{index}.jpg" for index in range(3)]
+            for index, image in enumerate(images):
+                image.write_bytes(f"jpeg-{index}".encode())
+            arrivals = build_constant_schedule(4, 1)
+            first = prepare_batches(arrivals, images, 4, 4, random.Random(7))
+            second = prepare_batches(arrivals, images, 4, 4, random.Random(7))
+
+        self.assertTrue(all(batch.image_count == 4 for batch in first))
+        self.assertNotEqual(
+            [batch.endpoint_batch_id for batch in first],
+            [batch.endpoint_batch_id for batch in second],
+        )
+        self.assertEqual(
+            [batch.payload for batch in first], [batch.payload for batch in second]
+        )
+
+    def test_open_loop_releases_second_request_while_first_is_blocked(self):
+        arrivals = build_constant_schedule(2, 0.01)
+        prepared = [
+            PreparedBatch(arrival, f"batch-{index}", b"payload", 4, 1)
+            for index, arrival in enumerate(arrivals)
+        ]
+        second_started = threading.Event()
+        events = []
+
+        def fake_send(_url, _payload, batch_id, workload_run_id):
+            self.assertEqual(workload_run_id, "run-test")
+            if batch_id == "batch-0":
+                if not second_started.wait(timeout=1):
+                    raise AssertionError("second request was coupled to first response")
+            else:
+                second_started.set()
+            return {"request_id": f"request-{batch_id}", "job_name": batch_id}
+
+        start = time.monotonic_ns() + 10_000_000
+        results, measurements = execute_schedule(
+            prepared,
+            adapter_url="http://adapter",
+            run_id="run-test",
+            max_concurrency=2,
+            start_monotonic_ns=start,
+            start_wall_ns=time.time_ns() + 10_000_000,
+            emit=events.append,
+            send=fake_send,
+        )
+
+        self.assertTrue(all(result.successful for result in results))
+        self.assertEqual(measurements.peak_active, 2)
+        self.assertEqual(measurements.peak_queue_depth, 0)
+        self.assertEqual(
+            [event["event_type"] for event in events].count("batch.send_started"),
+            2,
+        )
+
+    def test_open_loop_attempts_full_schedule_after_request_failure(self):
+        arrivals = build_constant_schedule(3, 0)
+        prepared = [
+            PreparedBatch(arrival, f"batch-{index}", b"payload", 4, 1)
+            for index, arrival in enumerate(arrivals)
+        ]
+        attempted = []
+        events = []
+
+        def partly_failing_send(_url, _payload, batch_id, _workload_run_id):
+            attempted.append(batch_id)
+            if batch_id == "batch-1":
+                raise RuntimeError("deliberate failure")
+            return {"request_id": f"request-{batch_id}", "job_name": batch_id}
+
+        now = time.monotonic_ns()
+        results, _ = execute_schedule(
+            prepared,
+            adapter_url="http://adapter",
+            run_id="run-test",
+            max_concurrency=2,
+            start_monotonic_ns=now,
+            start_wall_ns=time.time_ns(),
+            emit=events.append,
+            send=partly_failing_send,
+        )
+
+        self.assertEqual(set(attempted), {"batch-0", "batch-1", "batch-2"})
+        self.assertEqual(len(results), 3)
+        self.assertEqual(sum(not result.successful for result in results), 1)
+        self.assertEqual(
+            [event["event_type"] for event in events].count("batch.send_failed"),
+            1,
+        )
+
+    def test_planned_events_and_schedule_fidelity_summary(self):
+        arrivals = build_constant_schedule(20, 1)
+        prepared = [
+            PreparedBatch(arrival, f"batch-{index}", b"payload", 4, 1)
+            for index, arrival in enumerate(arrivals)
+        ]
+        events = []
+        emit_planned_schedule(
+            prepared, run_id="run-test", start_wall_ns=1_000_000_000, emit=events.append
+        )
+        self.assertEqual(len(events), 20)
+        self.assertTrue(
+            all(event["event_type"] == "schedule.planned" for event in events)
+        )
+        self.assertEqual(events[3]["details"]["endpoint_batch_id"], "batch-3")
+
+        results = [
+            SendResult(
+                arrival,
+                f"batch-{index}",
+                arrival.planned_offset_ns + lag,
+                lag,
+                True,
+            )
+            for index, (arrival, lag) in enumerate(
+                zip(
+                    arrivals, [FIDELITY_TOLERANCE_NS] * 19 + [FIDELITY_TOLERANCE_NS + 1]
+                )
+            )
+        ]
+        summary = build_schedule_summary(
+            arrivals,
+            results,
+            measurements=SenderMeasurements(),
+        )
+        self.assertTrue(summary["fidelity_passed"])
+        self.assertEqual(summary["on_time_fraction"], 0.95)
+        missing = build_schedule_summary(
+            arrivals,
+            results[:-1],
+            measurements=SenderMeasurements(),
+        )
+        self.assertFalse(missing["fidelity_passed"])
+
     def test_events_have_correlatable_wall_clock_timestamp(self):
         event = new_event("test", component="test", run_id="run-test")
         self.assertIsInstance(event["timestamp_unix_ns"], int)
@@ -105,9 +439,9 @@ class ImageBatchTests(unittest.TestCase):
         self.assertIn("cp -r mahimahi/.", machine.commands[1])
         self.assertTrue(infrastructure.mahimahi_enabled(config))
 
-    def test_resource_manager_only_allows_one_endpoint_and_two_workers(self):
+    def test_resource_manager_only_allows_one_endpoint_and_three_workers(self):
         config = {
-            "infrastructure": {"cloud_nodes": 3, "edge_nodes": 0, "endpoint_nodes": 1},
+            "infrastructure": {"cloud_nodes": 4, "edge_nodes": 0, "endpoint_nodes": 1},
             "benchmark": {"resource_manager_only": True},
         }
         kubernetes.verify_options(RaisingParser(), config)
@@ -136,8 +470,10 @@ class ImageBatchTests(unittest.TestCase):
                 result_url="http://adapter/result",
                 payload_bytes=len(payload),
                 image_count=2,
+                workload_run_id="workload-1",
                 endpoint_batch_id="b" * 32,
                 adapter_accepted_at_unix_ns=123456,
+                inference_repetitions=8,
             )
             manifest = build_job_manifest(
                 request,
@@ -163,6 +499,14 @@ class ImageBatchTests(unittest.TestCase):
                 for item in manifest["spec"]["template"]["spec"]["containers"][0]["env"]
             }
             self.assertEqual(environment["ADAPTER_ACCEPTED_AT_UNIX_NS"], "123456")
+            self.assertEqual(environment["WORKLOAD_RUN_ID"], "workload-1")
+            self.assertEqual(environment["INFERENCE_REPETITIONS"], "8")
+            self.assertEqual(
+                manifest["metadata"]["annotations"][
+                    "continuum.atlarge.nl/inference-repetitions"
+                ],
+                "8",
+            )
 
     def test_rejects_non_image_tar(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -224,6 +568,7 @@ class ImageBatchTests(unittest.TestCase):
                     headers={
                         "Content-Type": "application/x-tar",
                         "X-Continuum-Batch-ID": "b" * 32,
+                        "X-Continuum-Workload-Run-ID": "workload-1",
                     },
                 )
                 with urlopen(request) as response:
@@ -231,6 +576,7 @@ class ImageBatchTests(unittest.TestCase):
                     receipt = json.load(response)
                 self.assertEqual(set(receipt), {"request_id", "job_name", "status"})
                 self.assertEqual(len(submitter.requests), 1)
+                self.assertEqual(submitter.requests[0].workload_run_id, "workload-1")
 
                 request_id = receipt["request_id"]
                 with urlopen(f"{base_url}/v1/batches/{request_id}/payload") as response:

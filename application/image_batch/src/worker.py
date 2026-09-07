@@ -39,16 +39,20 @@ def extract_images(payload: bytes, destination: Path) -> list[Path]:
     return images
 
 
-def classify_checksum(images: list[Path]) -> list[dict[str, Any]]:
+def classify_checksum(images: list[Path], repetitions: int = 1) -> list[dict[str, Any]]:
     """Deterministic smoke classifier; never used by the Kubernetes manifest."""
-    return [
-        {"image": image.name, "sha256": hashlib.sha256(image.read_bytes()).hexdigest()}
-        for image in images
-    ]
+    output = []
+    for image in images:
+        content = image.read_bytes()
+        digest = None
+        for _ in range(repetitions):
+            digest = hashlib.sha256(content).hexdigest()
+        output.append({"image": image.name, "sha256": digest})
+    return output
 
 
 def classify_tflite(
-    images: list[Path], model_path: Path, labels_path: Path
+    images: list[Path], model_path: Path, labels_path: Path, repetitions: int = 1
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     setup_started = time.monotonic_ns()
     import numpy as np
@@ -80,7 +84,8 @@ def classify_tflite(
         preprocessing_duration_ns += time.monotonic_ns() - preprocessing_started
         inference_started = time.monotonic_ns()
         interpreter.set_tensor(input_details["index"], pixels)
-        interpreter.invoke()
+        for _ in range(repetitions):
+            interpreter.invoke()
         scores = np.squeeze(interpreter.get_tensor(output_details["index"]))
         inference_duration_ns += time.monotonic_ns() - inference_started
         top = scores.argsort()[-5:][::-1]
@@ -124,11 +129,15 @@ def put_result(url: str, result: dict[str, Any]) -> dict[str, int]:
 def main() -> None:
     request_id = os.environ["REQUEST_ID"]
     run_id = os.environ["RUN_ID"]
+    workload_run_id = os.getenv("WORKLOAD_RUN_ID", run_id)
     payload_url = os.environ["PAYLOAD_URL"]
     result_url = os.environ["RESULT_URL"]
     endpoint_batch_id = os.getenv("ENDPOINT_BATCH_ID")
     adapter_accepted_at_unix_ns = os.getenv("ADAPTER_ACCEPTED_AT_UNIX_NS")
     mode = os.getenv("CLASSIFIER_MODE", "tflite")
+    inference_repetitions = int(os.getenv("INFERENCE_REPETITIONS", "1"))
+    if inference_repetitions < 1:
+        raise ValueError("INFERENCE_REPETITIONS must be positive")
     started = time.monotonic_ns()
     worker_started_at_unix_ns = time.time_ns()
     emit_stream(
@@ -140,6 +149,8 @@ def main() -> None:
             request_id=request_id,
             details={
                 "endpoint_batch_id": endpoint_batch_id,
+                "workload_run_id": workload_run_id,
+                "inference_repetitions": inference_repetitions,
                 "worker_started_at_unix_ns": worker_started_at_unix_ns,
                 "adapter_accepted_at_unix_ns": (
                     int(adapter_accepted_at_unix_ns)
@@ -159,7 +170,7 @@ def main() -> None:
         extraction_duration_ns = time.monotonic_ns() - extraction_started
         classify_started = time.monotonic_ns()
         if mode == "checksum":
-            outputs = classify_checksum(images)
+            outputs = classify_checksum(images, inference_repetitions)
             classifier_timings = {
                 "checksum_duration_ns": time.monotonic_ns() - classify_started
             }
@@ -168,6 +179,7 @@ def main() -> None:
                 images,
                 Path(os.getenv("MODEL_PATH", "/model/model.tflite")),
                 Path(os.getenv("LABELS_PATH", "/model/labels.txt")),
+                inference_repetitions,
             )
         else:
             raise ValueError(f"unknown CLASSIFIER_MODE {mode}")
@@ -184,10 +196,13 @@ def main() -> None:
         "schema_version": 1,
         "request_id": request_id,
         "run_id": run_id,
+        "workload_run_id": workload_run_id,
         "endpoint_batch_id": endpoint_batch_id,
         "classifier_mode": mode,
         "worker_started_at_unix_ns": worker_started_at_unix_ns,
         "image_count": len(outputs),
+        "inference_repetitions": inference_repetitions,
+        "inference_invocation_count": len(outputs) * inference_repetitions,
         "payload_bytes": len(payload),
         "classification_duration_ns": classify_ns,
         "job_duration_ns": time.monotonic_ns() - started,
@@ -207,6 +222,9 @@ def main() -> None:
                 "image_count": len(outputs),
                 "payload_bytes": len(payload),
                 "endpoint_batch_id": endpoint_batch_id,
+                "workload_run_id": workload_run_id,
+                "inference_repetitions": inference_repetitions,
+                "inference_invocation_count": len(outputs) * inference_repetitions,
                 "worker_timings_ns": {
                     **worker_timings_ns,
                     **result_timings,

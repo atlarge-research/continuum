@@ -23,6 +23,7 @@ from storage import (
     BatchValidationError,
     inspect_image_tar,
     validate_request_id,
+    validate_run_id,
 )
 
 
@@ -37,6 +38,7 @@ class AdapterService:
         run_id: str,
         max_payload_bytes: int = 50 * 1024 * 1024,
         max_images: int = 64,
+        inference_repetitions: int = 1,
     ):
         self.store = store
         self.events = events
@@ -45,6 +47,9 @@ class AdapterService:
         self.run_id = run_id
         self.max_payload_bytes = max_payload_bytes
         self.max_images = max_images
+        if inference_repetitions < 1:
+            raise ValueError("inference repetitions must be positive")
+        self.inference_repetitions = inference_repetitions
         self._metrics_lock = threading.Lock()
         self._active_requests = 0
         self._peak_active_requests = 0
@@ -102,6 +107,7 @@ class AdapterService:
         payload: bytes,
         *,
         endpoint_batch_id: str | None = None,
+        workload_run_id: str | None = None,
         ingress_timings: dict[str, int] | None = None,
         active_requests: int = 1,
     ) -> tuple[dict[str, Any], int]:
@@ -113,6 +119,7 @@ class AdapterService:
             raise BatchValidationError("payload exceeds configured byte limit")
 
         request_id = uuid.uuid4().hex
+        workload_run_id = workload_run_id or self.run_id
         job_name = self.job_name(request_id)
         validation_started = time.monotonic_ns()
         with tempfile.NamedTemporaryFile(suffix=".tar") as temporary:
@@ -126,6 +133,7 @@ class AdapterService:
             request_id,
             payload,
             run_id=self.run_id,
+            workload_run_id=workload_run_id,
             image_names=image_names,
             job_name=job_name,
             endpoint_batch_id=endpoint_batch_id,
@@ -135,6 +143,8 @@ class AdapterService:
         common_details = {
             "job_name": job_name,
             "endpoint_batch_id": endpoint_batch_id,
+            "workload_run_id": workload_run_id,
+            "inference_repetitions": self.inference_repetitions,
             "payload_bytes": len(payload),
             "image_count": len(image_names),
             "active_requests": active_requests,
@@ -155,6 +165,7 @@ class AdapterService:
         request = JobRequest(
             request_id=request_id,
             run_id=self.run_id,
+            workload_run_id=workload_run_id,
             job_name=job_name,
             payload_url=f"{self.public_base_url}/v1/batches/{request_id}/payload",
             result_url=f"{self.public_base_url}/v1/batches/{request_id}/result",
@@ -162,6 +173,7 @@ class AdapterService:
             image_count=len(image_names),
             endpoint_batch_id=endpoint_batch_id,
             adapter_accepted_at_unix_ns=accepted_at_unix_ns,
+            inference_repetitions=self.inference_repetitions,
         )
         submission_started = time.monotonic_ns()
         try:
@@ -360,6 +372,10 @@ def make_handler(service: AdapterService):
                 endpoint_batch_id = self.headers.get("X-Continuum-Batch-ID")
                 if endpoint_batch_id is not None:
                     endpoint_batch_id = validate_request_id(endpoint_batch_id)
+                workload_run_id = self.headers.get(
+                    "X-Continuum-Workload-Run-ID", service.run_id
+                )
+                workload_run_id = validate_run_id(workload_run_id)
                 read_started = time.monotonic_ns()
                 payload = self.rfile.read(content_length)
                 body_read_duration_ns = time.monotonic_ns() - read_started
@@ -367,6 +383,7 @@ def make_handler(service: AdapterService):
                 receipt, status = service.accept(
                     payload,
                     endpoint_batch_id=endpoint_batch_id,
+                    workload_run_id=workload_run_id,
                     ingress_timings={
                         "body_read_duration_ns": body_read_duration_ns,
                     },
@@ -451,6 +468,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--job-ttl-seconds", type=int, default=int(os.getenv("JOB_TTL_SECONDS", "3600"))
     )
+    parser.add_argument(
+        "--worker-inference-repetitions",
+        type=int,
+        default=int(os.getenv("WORKER_INFERENCE_REPETITIONS", "1")),
+    )
     return parser.parse_args()
 
 
@@ -473,6 +495,7 @@ def main() -> None:
         submitter=submitter,
         public_base_url=public_base_url,
         run_id=args.run_id,
+        inference_repetitions=args.worker_inference_repetitions,
     )
     server = ThreadingHTTPServer((args.host, args.port), make_handler(service))
 
