@@ -16,6 +16,8 @@ from typing import Any, Callable
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+from kubernetes import client, config, watch
+
 from events import JsonlEventWriter, new_event
 from job_submitter import LABEL_REQUEST_ID, LABEL_WORKLOAD
 
@@ -256,6 +258,13 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
     if pod_phase in ("Succeeded", "Failed"):
         state = "finished"
     start_time = getattr(status, "start_time", None)
+    execution_start = None
+    for container in (
+        getattr(getattr(selected_pod, "status", None), "container_statuses", None) or []
+    ):
+        if getattr(container, "name", None) == "classifier":
+            running = getattr(getattr(container, "state", None), "running", None)
+            execution_start = getattr(running, "started_at", None)
     record = {
         "kubernetes_job_uid": uid,
         "job_name": name,
@@ -271,6 +280,7 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
         ),
         "creation_time": utc_iso(created),
         "start_time": utc_iso(start_time) if start_time is not None else None,
+        "execution_start_time": utc_iso(execution_start) if execution_start else None,
         "requested_cpu_count": requested_cpu,
         "requested_memory_mb": requested_memory_mb,
         "pod_name": (
@@ -603,6 +613,7 @@ class ResourceSampler:
         self.emit_diagnostic = emit_diagnostic
         self._snapshots: dict[str, list[ResourceSnapshot]] = {}
         self._sample_keys: set[tuple[str, float]] = set()
+        self._observed_uids: set[str] = set()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(
@@ -647,6 +658,30 @@ class ResourceSampler:
                         next_resource += self.resource_interval_seconds
             self._stop.wait(max(0.0, min(next_state, next_resource) - time.monotonic()))
 
+    def observe_job(self, job: Any) -> None:
+        """Record existence separately from successful completion and pressure."""
+        metadata = getattr(job, "metadata", None)
+        uid = getattr(metadata, "uid", None)
+        created = getattr(metadata, "creation_timestamp", None)
+        annotations = getattr(metadata, "annotations", None) or {}
+        workload_run = annotations.get(ANNOTATION_WORKLOAD_RUN_ID) or annotations.get(
+            ANNOTATION_RUN_ID
+        )
+        if not uid or not created or not workload_run:
+            return
+        with self._lock:
+            if uid in self._observed_uids:
+                return
+            self.emit_diagnostic(
+                "job.observed",
+                {
+                    "kubernetes_job_uid": uid,
+                    "workload_run_id": workload_run,
+                    "creation_time": utc_iso(created),
+                },
+            )
+            self._observed_uids.add(uid)
+
     def collect_once(self, *, collect_resources: bool = True) -> None:
         try:
             jobs = self.batch_api.list_namespaced_job(
@@ -658,6 +693,9 @@ class ResourceSampler:
                 {"stage": "list_jobs", "error": str(exc)},
             )
             return
+
+        for job in jobs.items:
+            self.observe_job(job)
 
         try:
             pods = self.core_api.list_namespaced_pod(
@@ -838,6 +876,8 @@ class OpenDTObserver:
         )
 
     def handle_job(self, job: Any) -> bool:
+        if hasattr(self.sampler, "observe_job"):
+            self.sampler.observe_job(job)
         state, _ = terminal_status(job)
         if state is None:
             return False
@@ -952,8 +992,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    from kubernetes import client, config, watch
-
     args = parse_args()
     if args.cpu_frequency_mhz <= 0:
         raise ValueError("CPU frequency must be positive")

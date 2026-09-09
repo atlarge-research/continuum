@@ -1,7 +1,7 @@
 """Offline PNG/PDF reports from captured image-batch endpoint and observer JSONL.
 
-Compact comparison of captured runs. No runtime imports or cluster access.
-Requires Python 3.10+ and Matplotlib; matching planned arrivals across runs.
+Compact comparison of captured runs; no cluster access.
+Requires Python 3.10+ and requirements-analysis.txt; matching planned arrivals.
 """
 
 from __future__ import annotations
@@ -20,6 +20,16 @@ import statistics
 import sys
 import textwrap
 
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+
+from forecast_report import prepare_forecasts, render_forecasts
+
+matplotlib.use("Agg")
 
 STREAMS = ("workload", "resource-snapshots", "cluster-state", "observer-events")
 
@@ -604,11 +614,6 @@ def range_series(aligned, key):
 
 
 def compact_figures(reports, output, save, max_sample_age, alignment):
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
-
     grid, aligned, representative = alignment
     colors = [plt.get_cmap("tab10")(i % 10) for i in range(len(reports))]
     labels = [f"Run {i+1}" for i in range(len(reports))]
@@ -927,14 +932,7 @@ def compact_figures(reports, output, save, max_sample_age, alignment):
     )
 
 
-def render(reports, output, provenance, max_sample_age):
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
-    from matplotlib.patches import Patch
-
+def render(reports, output, provenance, max_sample_age, forecast_report=None):
     plt.rcParams.update(
         {
             "font.size": 10,
@@ -959,9 +957,10 @@ def render(reports, output, provenance, max_sample_age):
     pdf_meta = {"Title": "FNS image-batch run analysis", "CreationDate": None, "ModDate": None}
     with PdfPages(output / "report.pdf", metadata=pdf_meta) as pdf:
 
-        def save(fig, directory, name, title):
+        def save(fig, directory, name, title, layout=True):
             fig.suptitle(title, fontsize=14, fontweight="bold")
-            fig.tight_layout(rect=(0, 0.055, 1, 0.94))
+            if layout:
+                fig.tight_layout(rect=(0, 0.055, 1, 0.94))
             fig.savefig(directory / f"{name}.png")
             pdf.savefig(fig)
             plt.close(fig)
@@ -1109,6 +1108,13 @@ def render(reports, output, provenance, max_sample_age):
                 f"diagnostics-{page // 32 + 1:02d}",
                 "Evidence warnings and collection diagnostics",
             )
+        if forecast_report is not None:
+            render_forecasts(forecast_report, output, save)
+            notes += [
+                "Forecast pages describe a separate run; see forecast-evaluation.json, "
+                "forecast-report.json and forecast-scores.csv for evidence and plotted values.",
+                "",
+            ]
     notes += [
         "## Interpretation",
         "",
@@ -1179,8 +1185,32 @@ def main(argv=None):
         default=10,
         help="maximum forward hold of CPU source samples (default: 10 seconds)",
     )
+    parser.add_argument(
+        "--forecast-dir", type=Path, help="append saved forecast accuracy pages"
+    )
+    parser.add_argument(
+        "--forecast-observer-dir",
+        type=Path,
+        help="observer capture for the forecast run",
+    )
+    parser.add_argument(
+        "--forecast-until", help="UTC arrival-experiment end; exclude shutdown/drain"
+    )
+    parser.add_argument(
+        "--forecast-rate-bin-seconds", type=int, default=10, choices=(10, 20, 30),
+        help="average observed and predicted rates over matching bins (display only)",
+    )
     args = parser.parse_args(argv)
     try:
+        forecast_args = (
+            args.forecast_dir,
+            args.forecast_observer_dir,
+            args.forecast_until,
+        )
+        require(
+            not any(forecast_args) or all(forecast_args),
+            "supply --forecast-dir, --forecast-observer-dir and --forecast-until together",
+        )
         require(
             math.isfinite(args.max_sample_age_seconds) and args.max_sample_age_seconds > 0,
             "max sample age must be finite and positive",
@@ -1211,7 +1241,18 @@ def main(argv=None):
             "analyzer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "python_version": sys.version.split()[0],
         }
-        render(reports, args.output_dir, provenance, args.max_sample_age_seconds)
+        forecast_report = None
+        if args.forecast_dir:
+            forecast_report = prepare_forecasts(
+                *forecast_args, rate_bin_seconds=args.forecast_rate_bin_seconds
+            )
+        render(
+            reports,
+            args.output_dir,
+            provenance,
+            args.max_sample_age_seconds,
+            forecast_report,
+        )
         for report in reports:
             print(summary_text(report))
             for warning in report["summary"]["warnings"]:

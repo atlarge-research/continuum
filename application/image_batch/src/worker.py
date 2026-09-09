@@ -14,6 +14,18 @@ from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+# The checksum smoke classifier uses only the standard library.
+try:
+    import numpy as np
+    from PIL import Image
+    import tflite_runtime.interpreter as tflite
+except ModuleNotFoundError as exc:
+    if exc.name.split(".")[0] not in {"numpy", "PIL", "tflite_runtime"}:
+        raise
+    TFLITE_IMPORT_ERROR = exc
+else:
+    TFLITE_IMPORT_ERROR = None
+
 from events import emit_stream, new_event
 
 
@@ -54,11 +66,9 @@ def classify_checksum(images: list[Path], repetitions: int = 1) -> list[dict[str
 def classify_tflite(
     images: list[Path], model_path: Path, labels_path: Path, repetitions: int = 1
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    if TFLITE_IMPORT_ERROR is not None:
+        raise RuntimeError("install requirements-worker.txt for the TFLite classifier") from TFLITE_IMPORT_ERROR
     setup_started = time.monotonic_ns()
-    import numpy as np
-    from PIL import Image
-    import tflite_runtime.interpreter as tflite
-
     labels = [
         line.strip() for line in labels_path.read_text(encoding="utf-8").splitlines()
     ]

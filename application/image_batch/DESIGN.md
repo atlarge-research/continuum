@@ -6,7 +6,7 @@ This document records the architectural and experimental reasoning behind the im
 
 The demo is a scientific vertical slice of an eventual closed-loop digital twin. It must create real endpoint-to-cloud traffic, execute measurable work on Kubernetes, and preserve enough evidence to reconstruct completed work and the cluster state at a chosen cutoff. Later features can use that evidence to forecast workload, prepare OpenDC input, simulate policies, and scale workers.
 
-This implementation deliberately stops before forecasting, OpenDC execution, policy selection, and Kubernetes actuation. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
+The current implementation forecasts arrivals and exports traces, but stops before OpenDC execution, policy selection, and Kubernetes actuation. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
 
 ## Component and data flow
 
@@ -60,9 +60,9 @@ A seed makes the sampled schedule and image selection reproducible. Batch IDs re
 
 The endpoint records the complete plan, every actual send start and outcome, and a final fidelity summary. Fidelity passes only when every planned request was attempted and at least 95 percent began no more than 250 milliseconds late. A timing miss is reported separately from HTTP submission failures because a workload-fidelity problem and an application failure have different meanings.
 
-### Future repeated cycles
+### Repeated cycles for forecasting
 
-A later forecasting experiment may repeat the expected low-peak-low intensity over a longer run to approximate a compressed diurnal pattern. It should add a cycle-count parameter to the continuous rate function and sample one stochastic process over the full duration. It must not copy and paste one cycle's request timestamps: repeated expected intensity plus independently sampled arrivals provides predictability without making every cycle identical.
+Forecasting repeats the expected low-peak-low intensity over a longer run to approximate a compressed diurnal pattern. Cycle length and cycle count are explicit: adding cycles extends the run without changing its period or rate bounds. This keeps the period aligned with forecasting and Job execution time. The generator samples one continuous stochastic process over the full duration; it must not copy and paste one cycle's request timestamps.
 
 Changing peak height or cycle length can add realism later, but it is deferred until the complete closed loop works. Beginning with a stable recurring mean separates forecasting or policy errors from unnecessary workload variation.
 
@@ -83,7 +83,7 @@ Completed Jobs and unfinished Jobs answer different simulation questions.
 - A completed Job has an authoritative execution interval and can be emitted as an OpenDT Task with zero or more resource Fragments.
 - A queued or running Job is part of the current cluster state but does not yet have an authoritative duration or complete resource history.
 
-The observer therefore writes completed Tasks to `workload.jsonl` and periodic full snapshots of non-terminal Jobs and worker capacity to `cluster-state.jsonl`. A future OpenDC reader can deduplicate completed records and combine them with the last complete state snapshot at or before a fixed trace cutoff.
+The observer therefore writes completed Tasks to `workload.jsonl` and periodic full snapshots of non-terminal Jobs and worker capacity to `cluster-state.jsonl`. The bounded reader deduplicates completed records and retains the last complete state snapshot at or before a fixed trace cutoff.
 
 ### Kubernetes timing semantics
 
@@ -116,7 +116,7 @@ The files are ephemeral diagnostic and audit evidence:
 - `cluster-state.jsonl` contains complete current-state snapshots.
 - `observer-events.jsonl` contains failures and degraded observations.
 
-JSONL is not intended as the permanent transport between separate OpenDT components. A later bounded reader may select complete lines up to a fixed file boundary, filter by authoritative completion time, deduplicate by Job UID, and generate OpenDC Parquet input. Kafka or a direct API should be introduced only when there is a concrete integration requirement.
+JSONL is not intended as the permanent transport between separate OpenDT components. The bounded reader selects complete lines up to frozen file boundaries, requires authoritative completion and observed emission by its cutoff, deduplicates by Job UID, and generates OpenDC Parquet input. Kafka or a direct API should be introduced only when there is a concrete integration requirement.
 
 ## Offline run analysis
 
@@ -127,6 +127,20 @@ Arrival fidelity uses recorded monotonic send offsets, because endpoint log time
 CPU plots use raw resource samples rather than simulator-oriented OpenDT Fragments, which may clamp or extend utilization. Samples are held forward for at most ten seconds within execution; missing values remain missing, and partial sums are distinguished from full coverage. This shows workload CPU and sampling coverage, not total node utilization or a direct reporting-latency measurement. Terminal Pods are excluded from pressure using captured Pod phases, including in older captures; corrections are documented without rewriting source logs.
 
 Repetitions are compared only when their planned schedules match. Pressure curves show the median and observed range over their common captured interval, leaving gaps for missing state; the range is not a confidence interval. CPU traces remain individual. An execution timeline cannot meaningfully be averaged, so the report shows the first complete run alongside per-batch queue waits from all repetitions. Common distribution bins make runs comparable without repeating every figure. Detailed measurement conventions and evidence caveats belong in the generated report.
+
+## Arrival forecasting and calibration
+
+The service has homogeneous computational work and a known recurring period. Only arriving Job counts are predicted; response time may vary with queueing and contention. Poisson regression uses an intercept and sine/cosine features with fixed light regularization. It learns from observed creation times, never the planned schedule, generator rates, or seed. Future counts are sampled per bin, with uniform timestamps within bins. This represents arrival randomness conditional on the fitted model, not full model/parameter uncertainty. No second certainty weight is applied.
+
+First-observation events preserve Job existence independently of terminal status. The reader accumulates these events and historical snapshots, including completed Jobs whose emission was observable by the cutoff. Zero bins require continuous state coverage; bins crossing gaps or incomplete at cutoff are excluded. Readiness requires the configured number of covered observations of every phase bin, an eligible template, and fresh state. Gap tolerance is configurable and evaluated during calibration. Not-ready and fitting failures remain distinct from zero demand.
+
+Calibration selects the adequately sampled completed Job nearest the eligible median execution duration, breaking ties by UID. Its duration, CPU/memory requirements, and full fragment sequence stay together and are frozen. Every future Job copies this profile; only arrival times and counts vary. The template's selection cutoff must also precede each forecast cutoff, even if its selected Job completed earlier. Identical scenarios will be reused for capacity comparisons.
+
+Current-state records retain Job start time and separately capture the running classifier container's actual start time; missing timing stays unknown. Later remaining-work estimation must use container timing rather than scheduler waiting. Historical Tasks and current state are exported separately. Empty and nonempty Parquet tables share the pinned writer's populated, non-nullable schema.
+
+Forecasting first passes captured-prefix reproduction, then runs read-only beside the observer. Source hashes, input boundaries, package versions, seeds, and the frozen template make outputs auditable. Byte reproduction targets the same runtime and CPU; other environments may differ in floating-point model metadata. Forecast evaluation remains separate from the accepted report; overlapping predictive horizons are not independent runs. Control cadence will be chosen after measuring OpenDC evaluation cost.
+
+Node3 calibration uses 0.02–0.30 Jobs/second as a starting profile. Daemon and monitoring reservations leave three whole one-CPU Job slots per worker, and container startup occupies a slot too. Higher average demand can therefore accumulate queues despite the nominal twelve worker vCPUs. Recovery is checked across cycles; stochastic bursts can still carry a queue into the next cycle.
 
 ## Deployment and failure assumptions
 
@@ -139,11 +153,11 @@ This is a deliberate scientific-demo trade-off: detecting an invalid run is more
 ## Known limitations relevant to interpretation
 
 - Repeated inference produces a useful compute profile but is not realistic application behavior.
-- The current schedule contains one expected low-peak-low cycle; forecasting experiments may later require several stochastic cycles.
+- Forecast calibration needs enough covered history across every cycle phase; elapsed warm-up alone is insufficient.
 - Observed workload CPU covers the image-batch containers, not all Kubernetes and operating-system activity on each worker.
 - The five-second cadence provides samples rather than a continuous ground-truth resource trace.
 - JSONL and in-memory Job UID deduplication survive only for the lifetime of the current pod.
 - A single adapter replica and no live rollout are operational assumptions, not production scaling behavior.
-- Network trace replay, workload forecasting, OpenDC conversion/execution, policy selection, and worker actuation remain later features.
+- Network trace replay, OpenDC execution, remaining-work estimation, policy selection, and worker actuation remain later features.
 
 The current single-host cluster remains the development setup until the closed loop works. A later two-host setup could provide more time for active Jobs to build up before saturation. Capacity and arrival intensity will need to be calibrated together: adding capacity alone could eliminate the queue instead of producing a more informative rise and fall. This expansion is deferred and does not change the current workload or topology.

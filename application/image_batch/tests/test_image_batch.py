@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import io
 import json
 import os
 import random
@@ -21,6 +22,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE))
 
 from adapter import AdapterService, make_handler  # noqa: E402
+import endpoint  # noqa: E402
 from configure_cadvisor_scrape import cadvisor_endpoint, patch_operations  # noqa: E402
 from endpoint import (  # noqa: E402
     FIDELITY_TOLERANCE_NS,
@@ -228,13 +230,13 @@ class ImageBatchTests(unittest.TestCase):
 
     def test_periodic_schedule_is_seeded_ordered_and_low_peak_low(self):
         first = build_periodic_schedule(
-            duration_seconds=40,
+            period_seconds=40,
             minimum_rate_per_second=20,
             peak_rate_per_second=100,
             generator=random.Random(42),
         )
         second = build_periodic_schedule(
-            duration_seconds=40,
+            period_seconds=40,
             minimum_rate_per_second=20,
             peak_rate_per_second=100,
             generator=random.Random(42),
@@ -264,6 +266,96 @@ class ImageBatchTests(unittest.TestCase):
             all(20 <= item.expected_rate_per_second <= 100 for item in first)
         )
 
+    def test_period_and_cycles_cli_and_environment(self):
+        base_args = ["endpoint", "--adapter-url", "http://unused"]
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+            sys, "argv", base_args
+        ):
+            args = endpoint.parse_args()
+            self.assertEqual((args.period_seconds, args.arrival_cycles), (60, 1))
+        environment = {"ARRIVAL_PERIOD_SECONDS": "120", "ARRIVAL_CYCLES": "6"}
+        with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(
+            sys, "argv", base_args
+        ):
+            args = endpoint.parse_args()
+            self.assertEqual((args.period_seconds, args.arrival_cycles), (120, 6))
+        with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(
+            sys, "argv", base_args + ["--period-seconds", "30", "--arrival-cycles", "2"]
+        ):
+            args = endpoint.parse_args()
+            self.assertEqual((args.period_seconds, args.arrival_cycles), (30, 2))
+        for extra_args, environment in [
+            (["--duration-seconds", "720"], {}),
+            ([], {"SCHEDULE_DURATION_SECONDS": "720"}),
+        ]:
+            with self.subTest(
+                extra_args=extra_args, environment=environment
+            ), mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(
+                sys, "argv", base_args + extra_args
+            ), mock.patch.object(
+                sys, "stderr", io.StringIO()
+            ):
+                with self.assertRaises(SystemExit) as error:
+                    endpoint.parse_args()
+                self.assertEqual(error.exception.code, 2)
+
+    def test_periodic_main_records_and_waits_for_all_cycles(self):
+        emitted = []
+        with tempfile.TemporaryDirectory() as temporary:
+            (Path(temporary) / "image.jpg").write_bytes(b"checksum test image")
+            args = [
+                "endpoint",
+                "--adapter-url",
+                "http://unused",
+                "--images",
+                temporary,
+                "--arrival-pattern",
+                "periodic",
+                "--period-seconds",
+                "120",
+                "--arrival-cycles",
+                "6",
+                "--minimum-rate",
+                "0.02",
+                "--peak-rate",
+                "0.30",
+                "--random-seed",
+                "44",
+            ]
+            with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+                sys, "argv", args
+            ), mock.patch(
+                "endpoint.ThreadSafeEmitter", return_value=emitted.append
+            ), mock.patch(
+                "endpoint.execute_schedule", return_value=([], None)
+            ) as execute, mock.patch(
+                "endpoint.build_schedule_summary", return_value={"failed_count": 0}
+            ), mock.patch(
+                "endpoint.time.monotonic_ns", side_effect=[0, 0, 7_000_000_000]
+            ), mock.patch(
+                "endpoint.time.sleep"
+            ) as sleep:
+                endpoint.main()
+            ready = next(
+                e["details"] for e in emitted if e["event_type"] == "schedule.ready"
+            )
+            self.assertEqual(
+                ready["profile"],
+                {
+                    "period_seconds": 120,
+                    "arrival_cycles": 6,
+                    "duration_seconds": 720,
+                    "minimum_rate_per_second": 0.02,
+                    "peak_rate_per_second": 0.30,
+                },
+            )
+            self.assertEqual(ready["planned_count"], 141)
+            prepared = execute.call_args.args[0]
+            self.assertGreater(prepared[-1].arrival.planned_offset_ns, 600_000_000_000)
+            self.assertLess(prepared[-1].arrival.planned_offset_ns, 720_000_000_000)
+            # Start is at t=2 s; return at t=7 s leaves 715 s of the 720 s run.
+            sleep.assert_called_once_with(715)
+
     def test_schedule_validation_and_fixed_payload_preparation(self):
         self.assertEqual(
             [item.planned_offset_ns for item in build_constant_schedule(3, 0.5)],
@@ -271,7 +363,7 @@ class ImageBatchTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             build_periodic_schedule(
-                duration_seconds=0,
+                period_seconds=0,
                 minimum_rate_per_second=1,
                 peak_rate_per_second=2,
                 generator=random.Random(1),

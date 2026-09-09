@@ -179,9 +179,7 @@ def demo_pod(
                 SimpleNamespace(kind="Job", controller=True, uid=job_uid)
             ],
         ),
-        status=SimpleNamespace(
-            phase=phase, container_statuses=container_statuses
-        ),
+        status=SimpleNamespace(phase=phase, container_statuses=container_statuses),
         spec=SimpleNamespace(node_name=node_name),
     )
 
@@ -430,6 +428,69 @@ class OpenDTObserverTests(unittest.TestCase):
             ["cloud1", "cloud2", "cloud3"],
         )
 
+    def test_running_container_start_is_distinct_from_job_start(self):
+        job = demo_job()
+        job.status.conditions = []
+        pod = demo_pod(phase="Running")
+        actual = job.status.start_time + timedelta(seconds=20)
+        pod.status.container_statuses = [
+            SimpleNamespace(
+                name="classifier",
+                state=SimpleNamespace(running=SimpleNamespace(started_at=actual)),
+            )
+        ]
+        record = build_cluster_state_record(
+            [job],
+            [pod],
+            [],
+            run_id="run-test",
+            namespace="fns-demo",
+            label_selector="test",
+            observed_at=actual,
+        )
+        active = record["jobs"]["active"][0]
+        self.assertEqual(active["execution_start_time"], actual.isoformat())
+        self.assertNotEqual(active["execution_start_time"], active["start_time"])
+        pod.status.container_statuses = []
+        record = build_cluster_state_record(
+            [job],
+            [pod],
+            [],
+            run_id="run-test",
+            namespace="fns-demo",
+            label_selector="test",
+            observed_at=actual,
+        )
+        self.assertIsNone(record["jobs"]["active"][0]["execution_start_time"])
+
+    def test_first_observation_includes_terminal_jobs_and_is_deduplicated(self):
+        diagnostics = []
+        job = demo_job(state="Failed")
+        sampler = ResourceSampler(
+            batch_api=FakeBatchApi([job]),
+            core_api=FakeCoreApi(),
+            prometheus=FakePrometheus(),
+            namespace="fns-demo",
+            label_selector="test",
+            run_id="run-test",
+            state_interval_seconds=1,
+            resource_interval_seconds=5,
+            snapshot_writer=RecordingWriter(),
+            state_writer=RecordingWriter(),
+            emit_diagnostic=lambda event, details: diagnostics.append((event, details)),
+        )
+        sampler.observe_job(job)
+        sampler.collect_once(collect_resources=False)
+        observations = [
+            details for event, details in diagnostics if event == "job.observed"
+        ]
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(
+            observations[0]["creation_time"],
+            job.metadata.creation_timestamp.isoformat(),
+        )
+        self.assertEqual(observations[0]["kubernetes_job_uid"], job.metadata.uid)
+
     def test_terminal_pods_leave_pressure_before_job_completion(self):
         job = demo_job()
         job.status.conditions = []
@@ -547,6 +608,7 @@ class OpenDTObserverTests(unittest.TestCase):
         sampler.collect_once()
 
         self.assertEqual(states.records, [])
+        diagnostics = [d for d in diagnostics if d[0] != "job.observed"]
         self.assertEqual(diagnostics[0][0], "cluster_state.capture_failed")
         self.assertEqual(diagnostics[0][1]["stage"], "build_snapshot")
 
@@ -582,6 +644,7 @@ class OpenDTObserverTests(unittest.TestCase):
         sampler.collect_once()
 
         self.assertEqual(snapshots.records, [])
+        diagnostics = [d for d in diagnostics if d[0] != "job.observed"]
         self.assertEqual(diagnostics[0][0], "prometheus.sample_incomplete")
         self.assertEqual(diagnostics[0][1]["missing_fields"], ["memory"])
 

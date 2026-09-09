@@ -25,7 +25,9 @@ See [DESIGN.md](DESIGN.md) for the reasoning behind the workload schedule, sende
 
 ## Local smoke run
 
-The local submitter runs the worker as a child process with a deterministic checksum classifier. It validates the endpoint, payload, receipt, worker, result, and event contracts without Kubernetes or TensorFlow Lite.
+The local submitter runs the worker as a child process with a deterministic checksum classifier. It validates the endpoint, payload, receipt, worker, result, and event contracts without a cluster or TensorFlow Lite.
+
+Use Python 3.10+ and install `requirements-adapter.txt` first. The Kubernetes client package is required; the checksum run needs no cluster or worker packages.
 
 Start the adapter:
 
@@ -41,7 +43,7 @@ python3 application/image_batch/src/endpoint.py \
   --adapter-url http://127.0.0.1:8080 \
   --images application/image_classification/src/images \
   --batch-size 4 --arrival-pattern periodic \
-  --duration-seconds 60 \
+  --period-seconds 60 \
   --minimum-rate 0.2 --peak-rate 1 \
   --max-concurrency 16 --random-seed 42
 ```
@@ -73,6 +75,8 @@ docker build -f application/image_batch/docker/endpoint.Dockerfile \
   -t continuum/image-batch-endpoint:fns-v1 .
 ```
 
+When updating an existing cluster, preserve its calibrated `WORKER_IMAGE` setting and verify loaded image IDs. Use a new adapter/observer tag rather than reusing a cached tag.
+
 After Kubernetes and its monitoring stack are available, configure cAdvisor sampling and deploy the adapter and observer:
 
 ```bash
@@ -93,7 +97,7 @@ The observer continuously flushes four audit streams in its dedicated `emptyDir`
 - `workload.jsonl`: completed OpenDT-compatible Tasks and Fragments.
 - `resource-snapshots.jsonl`: accepted per-Job CPU and memory samples.
 - `cluster-state.jsonl`: queued/running Jobs and worker availability.
-- `observer-events.jsonl`: failed Jobs and collection diagnostics.
+- `observer-events.jsonl`: first-observed Job arrivals, emission times, failures, and collection diagnostics.
 
 Copy them after a run:
 
@@ -104,7 +108,7 @@ kubectl cp -n fns-demo \
 
 The endpoint audit stream is structured stdout and should be captured from its container logs. The adapter result and events remain under its `/data` mount.
 
-These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. The application currently records the inputs needed by later OpenDC conversion but does not invoke OpenDC, predict workload, select a scaling policy, actuate Kubernetes, or configure MahiMahi trace replay.
+These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. Forecasting consumes bounded prefixes; OpenDC execution, policy selection, actuation, and MahiMahi remain separate phases.
 
 ## Offline run report
 
@@ -122,3 +126,25 @@ python3 -m venv /tmp/fns-analysis-venv
 `--endpoint-log` is the endpoint's captured stdout; `--observer-dir` contains the four streams copied above. Repeat `--endpoint-log` to compare runs with matching planned arrivals, or use `--run-id ID` to select one. Choose a new output directory.
 
 Open `logs/image-batch-report/report.pdf` in VS Code or a desktop PDF reader.
+
+## Arrival forecasting
+
+Forecasting reads observer logs and produces future arrival scenarios as OpenDC-compatible Parquet files. Use Python 3.10+:
+
+```bash
+python3 -m venv /tmp/fns-forecast-venv
+/tmp/fns-forecast-venv/bin/pip install -r application/image_batch/requirements-forecast.txt
+/tmp/fns-forecast-venv/bin/python application/image_batch/src/forecast_workload.py \
+  --observer-dir ./opendt-audit --run-id WORKLOAD_RUN_ID --period-seconds 120 \
+  --phase-origin ORIGIN_UTC --cutoff CUTOFF_UTC --output-dir ./logs/forecast-one
+```
+
+Set `ORIGIN_UTC` to the endpoint's `schedule.ready.details.schedule_start_timestamp` and `CUTOFF_UTC` to the UTC forecast time. Choose a new output directory; `forecast.json` reports readiness.
+
+For calibration, start the endpoint with `--period-seconds 120 --arrival-cycles 6 --minimum-rate 0.02 --peak-rate 0.30`. Keep endpoint and forecast periods equal.
+
+For periodic forecasts, replace `--cutoff CUTOFF_UTC` with `--interval-seconds 10` and read live observer files.
+
+Use `evaluate_forecasts.py` to score saved forecasts, or add forecast pages with `analyze_run.py`. Their `--help` lists the required inputs; specify the arrival-run end to exclude shutdown time.
+
+See [DESIGN.md](DESIGN.md#arrival-forecasting-and-calibration) for model and calibration decisions, and `forecast_workload.py --help` for other options.

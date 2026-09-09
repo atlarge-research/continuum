@@ -144,17 +144,27 @@ def build_constant_schedule(
 
 def build_periodic_schedule(
     *,
-    duration_seconds: float,
+    period_seconds: float,
     minimum_rate_per_second: float,
     peak_rate_per_second: float,
     generator: random.Random,
+    arrival_cycles: int = 1,
 ) -> list[PlannedArrival]:
-    """Build one seeded low-peak-low non-homogeneous Poisson cycle."""
-    values = (duration_seconds, minimum_rate_per_second, peak_rate_per_second)
+    """Sample continuous arrivals for fixed-length cycles; more cycles extend the run."""
+    if (
+        isinstance(arrival_cycles, bool)
+        or not isinstance(arrival_cycles, int)
+        or arrival_cycles < 1
+    ):
+        raise ValueError("arrival cycles must be a positive integer")
+    values = (period_seconds, minimum_rate_per_second, peak_rate_per_second)
     if not all(math.isfinite(value) for value in values):
         raise ValueError("periodic schedule values must be finite")
-    if duration_seconds <= 0:
-        raise ValueError("periodic duration must be positive")
+    if period_seconds <= 0:
+        raise ValueError("periodic cycle length must be positive")
+    duration_seconds = period_seconds * arrival_cycles
+    if not math.isfinite(duration_seconds):
+        raise ValueError("total periodic duration must be finite")
     if (
         minimum_rate_per_second < 0
         or peak_rate_per_second < minimum_rate_per_second
@@ -174,7 +184,7 @@ def build_periodic_schedule(
         if offset >= duration_seconds:
             break
         rate = minimum_rate_per_second + rate_range / 2.0 * (
-            1.0 - math.cos(2.0 * math.pi * offset / duration_seconds)
+            1.0 - math.cos(2.0 * math.pi * offset / period_seconds)
         )
         if generator.random() <= rate / peak_rate_per_second:
             generated.append((offset, rate))
@@ -509,9 +519,16 @@ def parse_args() -> argparse.Namespace:
         default=float(os.getenv("BATCH_INTERVAL_SECONDS", "1")),
     )
     parser.add_argument(
-        "--duration-seconds",
+        "--period-seconds",
         type=float,
-        default=float(os.getenv("SCHEDULE_DURATION_SECONDS", "60")),
+        default=float(os.getenv("ARRIVAL_PERIOD_SECONDS", "60")),
+        help="length of each arrival cycle in seconds (periodic mode)",
+    )
+    parser.add_argument(
+        "--arrival-cycles",
+        type=int,
+        default=int(os.getenv("ARRIVAL_CYCLES", "1")),
+        help="number of arrival cycles; total duration is period times cycles (periodic mode)",
     )
     parser.add_argument(
         "--minimum-rate",
@@ -536,7 +553,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run-id", default=os.getenv("RUN_ID") or f"workload-{uuid.uuid4().hex}"
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if "SCHEDULE_DURATION_SECONDS" in os.environ:
+        parser.error(
+            "SCHEDULE_DURATION_SECONDS was replaced by ARRIVAL_PERIOD_SECONDS "
+            "(one cycle's length)"
+        )
+    return args
 
 
 def resolve_batch_size_range(args: argparse.Namespace) -> tuple[int, int]:
@@ -572,13 +595,16 @@ def main() -> None:
             }
         else:
             arrivals = build_periodic_schedule(
-                duration_seconds=args.duration_seconds,
+                period_seconds=args.period_seconds,
                 minimum_rate_per_second=args.minimum_rate,
                 peak_rate_per_second=args.peak_rate,
                 generator=generator,
+                arrival_cycles=args.arrival_cycles,
             )
             profile = {
-                "duration_seconds": args.duration_seconds,
+                "period_seconds": args.period_seconds,
+                "arrival_cycles": args.arrival_cycles,
+                "duration_seconds": args.period_seconds * args.arrival_cycles,
                 "minimum_rate_per_second": args.minimum_rate,
                 "peak_rate_per_second": args.peak_rate,
             }
@@ -639,7 +665,7 @@ def main() -> None:
     if args.arrival_pattern == "periodic":
         remaining_ns = (
             start_monotonic_ns
-            + round(args.duration_seconds * NANOSECONDS_PER_SECOND)
+            + round(profile["duration_seconds"] * NANOSECONDS_PER_SECOND)
             - time.monotonic_ns()
         )
         if remaining_ns > 0:

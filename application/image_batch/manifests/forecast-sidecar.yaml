@@ -1,0 +1,27 @@
+# Optional strategic merge patch, applied before starting a fresh experiment.
+# Start the read-only forecast CLI with kubectl exec after choosing run/phase.
+spec:
+  template:
+    spec:
+      containers:
+        - name: forecast
+          image: continuum/image-batch-forecast:fns-forecast-v1
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: opendt-state
+              mountPath: /var/lib/opendt
+              readOnly: true
+            - name: forecast-output
+              mountPath: /var/lib/fns-forecast
+      volumes:
+        - name: forecast-output
+          emptyDir:
+            sizeLimit: 256Mi

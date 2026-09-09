@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from kubernetes import client, config
+
 
 LABEL_REQUEST_ID = "continuum.atlarge.nl/request-id"
 LABEL_WORKLOAD = "continuum.atlarge.nl/workload"
@@ -128,13 +130,6 @@ class KubernetesJobSubmitter:
         ttl_seconds: int,
         kubeconfig: str | None = None,
     ):
-        try:
-            from kubernetes import client, config
-        except ImportError as exc:
-            raise RuntimeError(
-                "install the kubernetes package for Kubernetes submission"
-            ) from exc
-
         if kubeconfig:
             config.load_kube_config(config_file=kubeconfig)
         else:
