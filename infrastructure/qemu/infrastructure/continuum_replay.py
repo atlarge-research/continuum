@@ -240,7 +240,11 @@ def routing_commands(endpoint, targets, tun):
 def undo_routing(state, path):
     failed = []
     for command in reversed(state["undo"]):
-        result = run(command, check=False)
+        try:
+            result = run(command, check=False)
+        except OSError:
+            failed.insert(0, command)
+            continue
         absent = any(
             message in result.stderr
             for message in (
@@ -356,12 +360,22 @@ def stop_service():
 
 
 def stop(state, path):
-    if undo_routing(state, path):
+    errors = []
+    try:
+        if undo_routing(state, path):
+            errors.append("some replay rules could not be removed")
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        errors.append("routing cleanup: " + str(error))
+    # Even a full state filesystem must not leave the service running.
+    try:
+        stop_service()
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        errors.append("service shutdown: " + str(error))
+    if errors:
         raise RuntimeError(
-            "some replay rules could not be removed; retained state.json for inspection"
+            "; ".join(errors) + "; retained state.json for inspection and retry"
         )
-    stop_service()
-    path.unlink()
+    path.unlink(missing_ok=True)
     (RUNTIME / "namespace-ready").unlink(missing_ok=True)
 
 
@@ -382,9 +396,6 @@ def start(endpoint, targets, uplink, downlink, path):
     if user.pw_uid == 0:
         raise RuntimeError("invoke start through sudo from the endpoint VM user")
     traces = [validate_trace(Path(p).resolve(strict=True)) for p in (uplink, downlink)]
-    logs = RUNTIME / ("logs-" + str(time.time_ns()))
-    logs.mkdir(mode=0o755)
-    os.chown(logs, user.pw_uid, user.pw_gid)
     (RUNTIME / "namespace-ready").unlink(missing_ok=True)
     state = {
         "revision": REVISION,
@@ -392,7 +403,6 @@ def start(endpoint, targets, uplink, downlink, path):
         "endpoint": endpoint,
         "targets": targets,
         "traces": traces,
-        "logs": str(logs),
         "undo": [],
     }
     save_state(path, state)
@@ -412,8 +422,6 @@ def start(endpoint, targets, uplink, downlink, path):
                 "SRC_TO_IGNORE=" + OUTER,
                 "DEST_TO_IGNORE=" + OUTER,
                 "/usr/local/bin/mm-link",
-                "--uplink-log=" + str(logs / "uplink.log"),
-                "--downlink-log=" + str(logs / "downlink.log"),
                 traces[0]["path"],
                 traces[1]["path"],
                 "--",
@@ -433,12 +441,14 @@ def start(endpoint, targets, uplink, downlink, path):
         check(state)
         state["status"] = "ready"
         save_state(path, state)
-    except Exception:
+    except Exception as error:
         # Retain state if cleanup needs inspection, and never claim readiness.
-        if not undo_routing(state, path):
-            stop_service()
-            path.unlink(missing_ok=True)
-            (RUNTIME / "namespace-ready").unlink(missing_ok=True)
+        try:
+            stop(state, path)
+        except (OSError, RuntimeError, subprocess.SubprocessError) as cleanup_error:
+            raise RuntimeError(
+                f"startup failed: {error}; cleanup failed: {cleanup_error}"
+            ) from error
         raise
 
 
