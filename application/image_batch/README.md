@@ -145,7 +145,9 @@ Set `ORIGIN_UTC` to the endpoint's `schedule.ready.details.schedule_start_timest
 
 For calibration, start the endpoint with `--period-seconds 120 --arrival-cycles 6 --minimum-rate 0.02 --peak-rate 0.30`. Keep endpoint and forecast periods equal.
 
-For periodic forecasts, replace `--cutoff CUTOFF_UTC` with `--interval-seconds 10` and read live observer files.
+Set `--scenarios X` for the number of sampled futures (default 100) and `--horizon-seconds H` for the future arrival window (default 60 seconds, a multiple of the bin width). Every ready forecast writes `tasks.parquet` and `fragments.parquet` under each `scenarios/NNNN/` directory; historical Tasks and current cluster state are exported separately.
+
+For periodic forecasts, replace `--cutoff CUTOFF_UTC` with `--interval-seconds 10` and read live observer files. This repeats forecasting and export only; OpenDC execution and actuation are not connected yet. `--period-seconds` describes the recurring workload cycle, not the control interval.
 
 Use `evaluate_forecasts.py` to score saved forecasts, or add forecast pages with `analyze_run.py`. Their `--help` lists the required inputs; specify the arrival-run end to exclude shutdown time.
 

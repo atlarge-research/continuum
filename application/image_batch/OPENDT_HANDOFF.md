@@ -27,7 +27,7 @@ The sidecar writes `workload.jsonl`, `resource-snapshots.jsonl`, `cluster-state.
 
 Application duration fields use process-local monotonic clocks, while `timestamp_unix_ns` supports cross-component ordering when VM clocks are synchronized. The observer uses Job creation as submission time, the worker container's Kubernetes start/finish timestamps as its execution interval, and Job completion as fixed-cutoff provenance. This keeps scheduler queueing out of the Task's compute duration.
 
-The operator-focused usage instructions are in `README.md`. The stable design rationale and experiment limitations are in `DESIGN.md`; update that document when later implementation decisions change the meaning of collected evidence.
+The operator-focused usage instructions are in `README.md`. The stable design rationale and experiment limitations are in `DESIGN.md`; update that document when later implementation decisions change the meaning of collected evidence. Persistent scope, priorities, and delivery gates live in the [Notion demo task](https://app.notion.com/p/374dc985c5868055a157df2a6d95f1bb).
 
 ## Validated current state
 
@@ -35,10 +35,15 @@ The implementation described here has been exercised on node3 with one control p
 
 The runtime baseline has focused unit and integration-style tests. They cover topology and CPU pinning, schedule generation and open-loop release, lineage, HTTP behavior, observer conversion and deduplication, Prometheus/Pod correlation, cluster-state completeness, timing semantics, and manifest/RBAC constraints.
 
+Arrival forecasting already samples multiple futures (`--scenarios`, default 100), bounds future arrivals with `--horizon-seconds` (default 60), and supports periodic forecasting with `--interval-seconds`. Each ready cutoff exports historical and per-scenario `tasks.parquet`/`fragments.parquet`, plus separate `state.json`. These are not yet complete simulator inputs for queued/running work, and the interval does not invoke OpenDC or actuate.
+
+The September 17 capture matches the current application source: 141/141 Jobs completed with unique workload records and nonempty Fragments, no sidecar restarts, and 50 ready forecasts after warm-up. It exercises the observer-finalization and retrospective-evaluation fixes with cellular replay. Evidence is under `logs/fns-network-review/logging-20260917/fresh-forecast/`; earlier unshaped runs remain baseline evidence.
+
 ## Remaining closed-loop work
 
-1. Define remaining work from observed container start times and the fixed execution profile. Preserve backlog, active work, and worker availability consistently across candidates; never encode scheduler waiting as computation.
-2. Execute OpenDC for the same scenarios at valid one-to-three-worker capacities. Account for daemon/monitoring reservations: the current deployment fits three whole one-CPU Jobs per worker, despite four allocatable CPUs. Startup also occupies scheduling capacity. Measure evaluation cost before fixing scenario count and control cadence.
-3. Select capacity against the agreed performance SLO, then apply and verify cordon/uncordon. Cordoning returns capacity to the modeled provider pool; it does not physically power off a VM.
+1. Combine queued work, remaining running work, and future arrivals into simulator inputs at one cutoff. Use observed container start times and the fixed execution profile; never encode scheduler waiting as computation. Bound new arrivals by the forecast horizon, and define how completion beyond that horizon is scored.
+2. Package OpenDC as a Kubernetes runner, initially one long-lived container executing traces sequentially. Measure CPU/memory and reserve placement/capacity before workload saturation, including when only one worker is schedulable. Recalibrate workload capacity after this reservation: the existing deployment fits three whole one-CPU Jobs per worker, despite four allocatable CPUs; startup also occupies a slot.
+3. Extend periodic forecasting into a complete control cycle. Reuse the same X futures and observed state for each valid current-worker-count + {-1, 0, +1} candidate within one to three workers: 3X simulations at two workers, 2X at either boundary. Measure total cycle cost to choose X and cadence; define timeout/overrun handling so decisions do not overlap or use stale state.
+4. Agree the performance SLO and required confidence, process results, then apply and verify cordon/uncordon and observe the outcome. Model running Jobs finishing on a cordoned worker; cordoning does not evict them or physically power off the VM. Account consistently for this transition when returning capacity to the modeled provider pool.
 
-Keep the single-host topology until the loop works. Later two-host exploration remains five six-vCPU workers, one six-vCPU control plane, and a two-vCPU endpoint, with workload/capacity recalibration. Defer varying cycle shapes, cAdvisor migration into Ansible, and MahiMahi until the functional loop is dependable.
+Keep the single-host topology until the loop works. Later two-host exploration remains five six-vCPU workers, one six-vCPU control plane, and a two-vCPU endpoint, with workload/capacity recalibration. Defer varying cycle shapes and cAdvisor migration into Ansible until the functional loop is dependable. Cellular replay is already integrated; richer network modeling remains outside the demo's compute-focused loop.
