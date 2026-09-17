@@ -489,7 +489,39 @@ def base_image(config, machines):
             logging.debug("Check output for command [%s]", " ".join(command))
             ansible.check_output((output, error))
 
-    # Install netperf (always, because base images aren't updated)
+    # Only the base VMs created above are running; cached bases stay stopped.
+    created_bases = [
+        name
+        for machine in machines
+        for name in machine.base_names
+        if name.rsplit("_", 1)[0].rstrip(string.digits) in base_names
+    ]
+    if infrastructure.mahimahi_enabled(config):
+        replay_bases = [
+            name
+            for machine in machines
+            for name in machine.base_names
+            if name in created_bases
+            and (
+                "base_endpoint" in name
+                or (config["infrastructure"]["infra_only"] and machine.endpoints)
+            )
+        ]
+        if replay_bases:
+            command = [
+                "ansible-playbook",
+                "-i",
+                os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
+                os.path.join(
+                    config["infrastructure"]["base_path"],
+                    ".continuum/infrastructure/base_mahimahi.yml",
+                ),
+                "--limit",
+                ",".join(replay_bases),
+            ]
+            ansible.check_output(machines[0].process(config, command)[0])
+
+    # Install netperf in newly created bases (cached bases aren't updated).
     command = [
         "ansible-playbook",
         "-i",
@@ -497,23 +529,10 @@ def base_image(config, machines):
         os.path.join(
             config["infrastructure"]["base_path"], ".continuum/infrastructure/netperf.yml"
         ),
+        "--limit",
+        ",".join(created_bases),
     ]
     ansible.check_output(machines[0].process(config, command)[0])
-
-    # Install MahiMahi only for a MahiMahi-backed emulation preset.
-    if infrastructure.mahimahi_enabled(config):
-        command = [
-            "ansible-playbook",
-            "-i",
-            os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/inventory_vms"
-            ),
-            os.path.join(
-                config["infrastructure"]["base_path"],
-                ".continuum/infrastructure/mahimati.yml",
-            ),
-        ]
-        ansible.check_output(machines[0].process(config, command)[0])
 
     # Install docker containers if required
     if not (config["infrastructure"]["infra_only"] or config["benchmark"]["resource_manager_only"]):
@@ -785,3 +804,18 @@ def start(config, machines):
     logging.info("Setting up the infrastructure")
     start_vms(config, machines)
     infrastructure.add_ssh(config, machines)
+
+    # Verify inherited MahiMahi and refresh its launcher; never compile in live VMs.
+    if infrastructure.mahimahi_enabled(config):
+        command = [
+            "ansible-playbook",
+            "-i",
+            os.path.join(
+                config["infrastructure"]["base_path"], ".continuum/inventory_vms"
+            ),
+            os.path.join(
+                config["infrastructure"]["base_path"],
+                ".continuum/infrastructure/mahimati.yml",
+            ),
+        ]
+        ansible.check_output(machines[0].process(config, command)[0])

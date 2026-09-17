@@ -13,12 +13,47 @@ from forecast_report import (
     prepare_forecasts,
     rebin_predictions,
 )
-from forecast_trace import iso
+from forecast_trace import iso, milliseconds
 from forecast_workload import run_once
 from test_forecast_workload import BASE, fixture, save_rows, settings
 
 
 class ForecastReportTests(unittest.TestCase):
+    def test_observed_report_bins_share_retrospective_evaluation_evidence(self):
+        rows = fixture()
+        for row in rows["cluster-state.jsonl"]:
+            row["timestamp"] = iso(milliseconds(row["timestamp"]) + 100)
+        rows["observer-events.jsonl"].append(
+            {
+                "schema_version": 1,
+                "timestamp": iso(BASE + 81000),
+                "event_type": "job.observed",
+                "details": {
+                    "kubernetes_job_uid": "late",
+                    "workload_run_id": "test",
+                    "creation_time": iso(BASE + 79900),
+                },
+            }
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            save_rows(root / "inputs", rows)
+            run_once(root / "inputs", root / "forecast", BASE + 60000, settings())
+            report = prepare_forecasts(
+                root / "forecast", root / "inputs", iso(BASE + 80000)
+            )
+            last_score = report["evaluation"]["scores"][-1]
+            last_actual = report["actual_bins"][-1]
+            self.assertEqual(last_score["bin_start_ms"], BASE + 75000)
+            self.assertEqual(last_score["observed_count"], 1)
+            self.assertEqual(
+                last_actual, {"start_ms": BASE + 75000, "count": 1, "eligible": True}
+            )
+            self.assertEqual(
+                report["rate_bins"][-1],
+                {"start_ms": BASE + 70000, "count": 1, "eligible": True},
+            )
+
     def test_future_total_error_allows_bin_errors_to_cancel_and_requires_full_prefix(
         self,
     ):

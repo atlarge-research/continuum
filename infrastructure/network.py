@@ -3,6 +3,7 @@ Use TC to control latency / throughput between VMs, and perform network benchmar
 """
 
 import logging
+import shlex
 import sys
 
 
@@ -34,6 +35,25 @@ def generate_tc_commands(config, values, ips, disk):
             ["sudo", "tc", "qdisc", "add", "dev", network, "root", "handle", "1:", "htb"]
         )
 
+    # Define a class for this disk so flowid 1:disk actually exists.
+    # The throughput component of the profile (or manual override) is used as the rate.
+    commands.append(
+        [
+            "sudo",
+            "tc",
+            "class",
+            "add",
+            "dev",
+            network,
+            "parent",
+            "1:",
+            "classid",
+            "1:%i" % (disk),
+            "htb",
+            "rate",
+            "%smbit" % (throughput),
+        ]
+    )
 
     # Filter for specific IPs
     for ip in ips:
@@ -78,74 +98,23 @@ def generate_tc_commands(config, values, ips, disk):
                 "netem",
                 "delay",
                 "%sms" % (latency_avg),
-                "%sms" % (latency_var),
-                "distribution",
-                "normal",
             ]
         )
+
+        if float(latency_var) > 0.0:
+            commands[-1] += ["%sms" % latency_var, "distribution", "normal"]
 
     return commands
 
 def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
-    """Generate Mahimati command
-    Executing this command puts application into containerized Mahimati shell.
-    Every command executed with the shell will have throughput and latecies
-    corresponding to the provided trace and progation delay
-
-    Args:
-        config (dict): Parsed configuration
-        propagation_delay (int): Propagation delay on the link measured in ms
-        trace (str): Saturate-formatted trace file
-
-    Returns:
-        str: mahimati command
-    """
-    # the path for verizon let's say is /home/mahimahi/traces/Verizon-LTE-driving.up
+    """Start checked bidirectional access replay on an endpoint VM."""
     if not uplink or not downlink:
-        return [[]]
-    
-    commands = []
+        return []
+    return [[
+        "sudo", "-n", "/usr/bin/python3", "/home/mahimahi/continuum_replay.py",
+        "start", endpoint_ip, uplink, downlink, *targets,
+    ]]
 
-    commands.append([
-        "export",
-        "SRC_TO_IGNORE=10.0.0.1"
-    ])
-
-    commands.append([
-        "export",
-        "DEST_TO_IGNORE=10.0.0.1"
-    ])
-
-    commands.append([
-        "(",
-        "mm-link",
-        f"--uplink-log=uplink.log",
-        f"--downlink-log=downlink.log",
-        uplink,
-        downlink,
-        "sudo",
-        f"/home/mahimahi/setup_container.sh {endpoint_ip} {' '.join([target for target in targets])}",
-        ">output_mahi.txt",
-        "2>&1",
-        "&",
-        ")"
-    ])
-
-
-    commands.append(["sleep", "10"])
-
-    commands.append([
-        "(",
-        "sudo",
-        f"/home/mahimahi/setup_traffic.sh {endpoint_ip} {' '.join(targets)}",
-        ">output_reroute.txt",
-        "2>&1",
-        "&",
-        ")"
-    ])
-    
-    
-    return commands
 
 def mahimahi_values(config):
     """
@@ -191,9 +160,8 @@ def tc_values(config):
     edge = [7.5, 2.5, 1000]  # Between edge nodes (wired)
     cloud_edge = [7.5, 2.5, 1000]  # Between cloud and edge (wired)
 
-    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi' or config["infrastructure"]["wireless_network_preset"] == '6g_nl_kpn_mahimahi':
-        cloud_endpoint = [0, 0, 1000]
-        edge_endpoint = [0, 0, 1000]
+    cloud_endpoint = [0, 0, 1000]  # Additional core path in replay mode
+    edge_endpoint = [0, 0, 1000]
 
     if config["infrastructure"]["edge_location"] == "aws_vodafone_edge":
         edge_endpoint = [0.07, 0.01, 10000]
@@ -265,6 +233,8 @@ def start(config, machines):
     """
     logging.info("Add network latency between VMs")
     uplink, downlink = mahimahi_values(config)
+    if uplink and config["infrastructure"]["provider"] != "qemu":
+        raise ValueError("MahiMahi replay requires the verified QEMU VM layout")
     cloud, edge, cloud_edge, cloud_endpoint, edge_endpoint = tc_values(config)
 
     commands = []
@@ -338,7 +308,7 @@ def start(config, machines):
         targets = config["control_ips_internal"] + config["cloud_ips_internal"] + config["edge_ips_internal"]
         if targets:
             command += generate_mahimati_command(endpoint_ip, targets, uplink, downlink)
-            commands.append(command)
+        commands.append(command)
 
     # Generate all TC commands and the ssh addresses where they need to be executed
     commands_final = []
@@ -350,29 +320,23 @@ def start(config, machines):
         if not command:
             continue
 
-        c = [" ".join(com) for com in command]
-        logging.debug("TC commands for node: %s\n\t%s", ssh, "\n\t".join(c))
-
-        c = ";".join(c)
-        c = '"' + c + '"'
-
-        commands_final.append(c)
+        # Quote once for the local shell; the remote shell must see set -e,
+        # so a failed tc or replay setup cannot be hidden by later commands.
+        script = "set -eu; " + "; ".join(shlex.join(com) for com in command)
+        script += "; echo CONTINUUM_NETWORK_READY"
+        logging.debug("Network commands for node %s: %s", ssh, script)
+        commands_final.append(shlex.quote(script))
         sshs.append(ssh)
 
-    # Execute TC command in parallel
     if commands_final:
-        print(commands_final, sshs)
         results = machines[0].process(config, commands_final, shell=True, ssh=sshs)
-
-        # Check output of TC commands
-        logging.info("Check output from TC operations")
-        for output, error in results:
+        if len(results) != len(sshs):
+            raise RuntimeError("Missing network setup results")
+        for ssh, (output, error) in zip(sshs, results):
+            if not any(line.strip() == "CONTINUUM_NETWORK_READY" for line in output):
+                raise RuntimeError("Network setup failed on %s: %s" % (ssh, "".join(error + output)))
             if error:
-                logging.error("".join(error))
-                sys.exit()
-            elif output:
-                logging.error("".join(output))
-                sys.exit()
+                logging.warning("Network setup on %s: %s", ssh, "".join(error))
 
 
 def netperf_commands(target_ips):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -206,6 +207,139 @@ def demo_node(name, *, uid=None, ready=True, unschedulable=False, control_plane=
 
 
 class OpenDTObserverTests(unittest.TestCase):
+    def test_finalization_waits_for_collection_and_raw_flush_then_closes_uid(self):
+        for blocked_stage in ("prometheus", "raw_flush"):
+            with self.subTest(blocked_stage=blocked_stage):
+                blocked = threading.Event()
+                release = threading.Event()
+                draining = threading.Event()
+                drained = threading.Event()
+                interval_lookup = threading.Event()
+                finish_interval = threading.Event()
+
+                def pause():
+                    blocked.set()
+                    if not release.wait(5):
+                        raise AssertionError("collection was not released")
+
+                class BlockingPrometheus(FakePrometheus):
+                    sample_offset = 0
+
+                    def query(self, promql, eval_time):
+                        if blocked_stage == "prometheus" and not blocked.is_set():
+                            pause()
+                        result = super().query(promql, eval_time)
+                        if "timestamp(" in promql:
+                            result[0]["value"][1] = str(
+                                float(result[0]["value"][1]) + self.sample_offset
+                            )
+                        return result
+
+                class BlockingWriter(RecordingWriter):
+                    def emit(self, record):
+                        if blocked_stage == "raw_flush" and not blocked.is_set():
+                            pause()
+                        super().emit(record)
+
+                finished = demo_job()
+                raw, workload = BlockingWriter(), RecordingWriter()
+                prom = BlockingPrometheus()
+                sampler = ResourceSampler(
+                    batch_api=FakeBatchApi([demo_job(state="Running")]),
+                    core_api=FakeCoreApi(
+                        pods=[
+                            demo_pod(
+                                execution_start=finished.status.start_time,
+                                execution_finish=finished.status.completion_time,
+                            )
+                        ],
+                        nodes=[demo_node("cloud1")],
+                    ),
+                    prometheus=prom,
+                    namespace="fns-demo",
+                    label_selector="x",
+                    run_id="run-test",
+                    state_interval_seconds=1,
+                    resource_interval_seconds=5,
+                    snapshot_writer=raw,
+                    state_writer=RecordingWriter(),
+                    emit_diagnostic=lambda *_args: None,
+                )
+                observer = OpenDTObserver(
+                    batch_api=FakeBatchApi([]),
+                    watch_factory=EmptyWatch,
+                    sampler=sampler,
+                    workload_writer=workload,
+                    diagnostic_writer=RecordingWriter(),
+                    namespace="fns-demo",
+                    label_selector="x",
+                    run_id="run-test",
+                    cpu_frequency_mhz=2400,
+                )
+                original_take = sampler.take_snapshots
+                original_interval = sampler.execution_interval
+
+                def take(uid):
+                    draining.set()
+                    samples = original_take(uid)
+                    drained.set()
+                    return samples
+
+                def interval(uid, request_id):
+                    interval_lookup.set()
+                    if not finish_interval.wait(5):
+                        raise AssertionError("interval lookup was not released")
+                    return original_interval(uid, request_id)
+
+                sampler.take_snapshots = take
+                sampler.execution_interval = interval
+                errors = []
+
+                def run(action):
+                    try:
+                        action()
+                    except Exception as exc:
+                        errors.append(exc)
+
+                collector = threading.Thread(target=run, args=(sampler.collect_once,))
+                finalizer = threading.Thread(
+                    target=run, args=(lambda: observer.handle_job(finished),)
+                )
+                collector.start()
+                try:
+                    self.assertTrue(blocked.wait(5))
+                    finalizer.start()
+                    self.assertTrue(draining.wait(5))
+                    self.assertFalse(drained.wait(0.1))
+                    self.assertEqual(workload.records, [])
+                    release.set()
+                    collector.join(5)
+                    self.assertFalse(collector.is_alive())
+                    self.assertTrue(interval_lookup.wait(5))
+                    self.assertEqual(len(raw.records), 1)
+                    # Stale active state and a new, valid source timestamp must
+                    # not add evidence after the terminal sample set is closed.
+                    prom.sample_offset = 1
+                    sampler.collect_once()
+                    self.assertEqual(len(raw.records), 1)
+                    self.assertEqual(workload.records, [])
+                finally:
+                    release.set()
+                    finish_interval.set()
+                    collector.join(5)
+                    if finalizer.ident is not None:
+                        finalizer.join(5)
+                self.assertFalse(finalizer.is_alive())
+                self.assertEqual(errors, [])
+                self.assertEqual(len(workload.records), 1)
+                record = workload.records[0]
+                self.assertEqual(
+                    record["source"]["resource_sample_count"], len(raw.records)
+                )
+                self.assertTrue(record["task"]["fragments"])
+                self.assertNotIn("job-uid", sampler._snapshots)
+                self.assertFalse(observer.handle_job(finished))
+
     def test_task_uses_worker_container_interval_not_job_queue_time(self):
         job = demo_job()
         execution_start = job.status.start_time + timedelta(seconds=1)

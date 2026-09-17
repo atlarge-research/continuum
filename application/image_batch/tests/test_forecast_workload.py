@@ -389,6 +389,90 @@ class ForecastTests(unittest.TestCase):
             self.assertEqual(result["scores"][0]["observed_count"], 1)
             self.assertEqual(result["scores"][1]["observed_count"], 0)
 
+    def test_evaluation_uses_late_evidence_but_excludes_arrivals_at_or_after_end(self):
+        rows = fixture()
+        # These events even arrive after the final state snapshot at 80s.
+        for index, created in enumerate((74900, 75000, 75100)):
+            rows["observer-events.jsonl"].append(
+                {
+                    "schema_version": 1,
+                    "timestamp": iso(BASE + 81000),
+                    "event_type": "job.observed",
+                    "details": {
+                        "kubernetes_job_uid": f"late-{index}",
+                        "workload_run_id": "test",
+                        "creation_time": iso(BASE + created),
+                    },
+                }
+            )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            save_rows(root / "inputs", rows)
+            run_once(root / "inputs", root / "forecast", BASE + 65000, settings())
+            result = evaluate(
+                root / "inputs", root / "forecast", until=iso(BASE + 75000)
+            )
+            self.assertEqual(result["evaluation_cutoff_ms"], BASE + 75000)
+            self.assertEqual(
+                [
+                    (s["bin_start_ms"] - BASE, s["observed_count"])
+                    for s in result["scores"]
+                ],
+                [(65000, 0), (70000, 1)],
+            )
+            self.assertEqual(result["uncovered_or_future_bins"], 2)
+            self.assertEqual(len(result["cycles"]), 3)
+            self.assertEqual(result["gap_sensitivity"][0]["eligible_bins"], 15)
+
+    def test_evaluation_brackets_unaligned_end_and_retains_missing_coverage(self):
+        for coverage in ("covered", "gap", "capture_failure", "no_following_state"):
+            with self.subTest(
+                coverage=coverage
+            ), tempfile.TemporaryDirectory() as temporary:
+                rows = fixture()
+                for row in rows["cluster-state.jsonl"]:
+                    row["timestamp"] = iso(milliseconds(row["timestamp"]) + 100)
+                if coverage == "gap":
+                    rows["cluster-state.jsonl"] = [
+                        r
+                        for r in rows["cluster-state.jsonl"]
+                        if not BASE + 71100
+                        <= milliseconds(r["timestamp"])
+                        <= BASE + 74100
+                    ]
+                elif coverage == "capture_failure":
+                    rows["observer-events.jsonl"].append(
+                        {
+                            "schema_version": 1,
+                            "timestamp": iso(BASE + 74500),
+                            "event_type": "cluster_state.capture_failed",
+                            "details": {},
+                        }
+                    )
+                elif coverage == "no_following_state":
+                    rows["cluster-state.jsonl"] = [
+                        r
+                        for r in rows["cluster-state.jsonl"]
+                        if milliseconds(r["timestamp"]) < BASE + 75000
+                    ]
+                root = Path(temporary)
+                save_rows(root / "inputs", rows)
+                run_once(root / "inputs", root / "forecast", BASE + 65000, settings())
+                result = evaluate(
+                    root / "inputs", root / "forecast", until=iso(BASE + 75000)
+                )
+                self.assertEqual(
+                    [s["bin_start_ms"] - BASE for s in result["scores"]],
+                    [65000, 70000] if coverage == "covered" else [65000],
+                )
+                # The bin ending at 75s is partial if the experiment ends at 74.9s.
+                partial = evaluate(
+                    root / "inputs", root / "forecast", until=iso(BASE + 74900)
+                )
+                self.assertEqual(
+                    [s["bin_start_ms"] - BASE for s in partial["scores"]], [65000]
+                )
+
     def test_complete_artifacts_reproduce_byte_for_byte(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

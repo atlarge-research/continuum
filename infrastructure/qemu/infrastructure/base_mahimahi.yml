@@ -1,0 +1,130 @@
+---
+- hosts: base
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/mahimahi-build.json"
+  vars:
+    mahimahi_cache: "{{ continuum_home }}/mahimahi"
+  tasks:
+    - name: Create source cache on the controller
+      file:
+        path: "{{ mahimahi_cache }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Fetch the pinned modified MahiMahi source
+      git:
+        repo: "{{ mahimahi_repository }}"
+        dest: "{{ mahimahi_cache }}/repo"
+        version: "{{ mahimahi_revision }}"
+        update: true
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Export source without Git metadata
+      command:
+        argv:
+          - git
+          - -C
+          - "{{ mahimahi_cache }}/repo"
+          - archive
+          - --format=tar
+          - "--output={{ mahimahi_cache }}/{{ mahimahi_revision }}.tar"
+          - "{{ mahimahi_revision }}"
+        creates: "{{ mahimahi_cache }}/{{ mahimahi_revision }}.tar"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Create build directory
+      file:
+        path: /home/mahimahi
+        state: directory
+        mode: '0755'
+
+    - name: Check installed source revision
+      stat:
+        path: "/home/mahimahi/.installed-{{ mahimahi_revision }}-{{ mahimahi_patch_id }}"
+      register: installed_revision
+
+    - name: Check installed replay binary
+      stat:
+        path: /usr/local/bin/mm-link
+      register: installed_binary
+
+    - name: Build and install the pinned source
+      when: not installed_revision.stat.exists or not installed_binary.stat.exists
+      block:
+        - name: Copy the pinned source to base VMs
+          unarchive:
+            src: "{{ mahimahi_cache }}/{{ mahimahi_revision }}.tar"
+            dest: /home/mahimahi
+
+        - name: Install build and replay dependencies
+          apt:
+            update_cache: true
+            state: present
+            name:
+              - protobuf-compiler
+              - libprotobuf-dev
+              - autoconf
+              - automake
+              - libtool
+              - autotools-dev
+              - dh-autoreconf
+              - iptables
+              - pkg-config
+              - dnsmasq-base
+              - apache2-bin
+              - debhelper
+              - libssl-dev
+              - ssl-cert
+              - libxcb-present-dev
+              - libcairo2-dev
+              - libpango1.0-dev
+              - apache2-dev
+              - g++-7
+              - make
+              - patch
+
+        - name: Copy the packet matcher memory correction
+          copy:
+            src: "{{ playbook_dir }}/packet-match-stack.patch"
+            dest: /home/mahimahi/packet-match-stack.patch
+            mode: '0644'
+
+        - name: Apply the correction to the pinned source
+          command: patch --batch --forward -p1 -i packet-match-stack.patch
+          args:
+            chdir: /home/mahimahi
+
+        - name: Configure, build, and install MahiMahi
+          shell: |
+            set -eu
+            if [ -f Makefile ]; then make clean; fi
+            sh ./autogen.sh
+            ./configure
+            make -j2
+            make install
+          args:
+            chdir: /home/mahimahi
+          environment:
+            CC: gcc-7
+            CXX: g++-7
+
+        - name: Record successfully installed source revision
+          copy:
+            content: "{{ mahimahi_revision }}\n"
+            dest: "/home/mahimahi/.installed-{{ mahimahi_revision }}-{{ mahimahi_patch_id }}"
+            mode: '0644'
+
+    - name: Enable IPv4 forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        reload: true

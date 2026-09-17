@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -17,6 +18,15 @@ from forecast_trace import (
     write_json,
 )
 from forecast_workload import Settings
+
+
+def evaluation_trace(rows, run_id, window_end):
+    """Use all frozen evidence, but generate bins only inside the arrival window.
+
+    A later observation can reveal an earlier arrival or bracket the final bin.
+    This retrospective reader is separate from causal forecast/template reads.
+    """
+    return replace(read_trace(rows, run_id, float("inf")), cutoff=window_end)
 
 
 def evaluate(observer_dir, forecast_dir, gap_thresholds=(1.5, 3.0, 5.0), until=None):
@@ -37,7 +47,7 @@ def evaluate(observer_dir, forecast_dir, gap_thresholds=(1.5, 3.0, 5.0), until=N
     )
     if until is not None:
         cutoff = min(cutoff, milliseconds(until))
-    trace = read_trace(rows, settings.run_id, cutoff)
+    trace = evaluation_trace(rows, settings.run_id, cutoff)
     scores = []
     skipped = 0
     for forecast in forecasts:

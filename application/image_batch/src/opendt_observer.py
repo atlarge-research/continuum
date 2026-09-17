@@ -614,6 +614,8 @@ class ResourceSampler:
         self._snapshots: dict[str, list[ResourceSnapshot]] = {}
         self._sample_keys: set[tuple[str, float]] = set()
         self._observed_uids: set[str] = set()
+        self._finalized_uids: set[str] = set()
+        self._collection_lock = threading.Lock()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(
@@ -628,7 +630,9 @@ class ResourceSampler:
         self._thread.join(timeout=max(2.0, self.state_interval_seconds + 1.0))
 
     def take_snapshots(self, job_uid: str) -> list[ResourceSnapshot]:
-        with self._lock:
+        """Wait for collection and its audit writes, then close this UID forever."""
+        with self._collection_lock, self._lock:
+            self._finalized_uids.add(job_uid)
             return self._snapshots.pop(job_uid, [])
 
     def execution_interval(
@@ -683,6 +687,12 @@ class ResourceSampler:
             self._observed_uids.add(uid)
 
     def collect_once(self, *, collect_resources: bool = True) -> None:
+        # Terminal finalization must include the whole in-flight collection,
+        # including flushed raw evidence, before detaching its sample list.
+        with self._collection_lock:
+            self._collect_once(collect_resources=collect_resources)
+
+    def _collect_once(self, *, collect_resources: bool) -> None:
         try:
             jobs = self.batch_api.list_namespaced_job(
                 namespace=self.namespace, label_selector=self.label_selector
@@ -734,7 +744,12 @@ class ResourceSampler:
         for job in jobs.items:
             name = getattr(job.metadata, "name", None)
             uid = getattr(job.metadata, "uid", None)
-            if name and uid and terminal_status(job)[0] is None:
+            if (
+                name
+                and uid
+                and uid not in self._finalized_uids
+                and terminal_status(job)[0] is None
+            ):
                 job_uids[uid] = name
         if not job_uids:
             return

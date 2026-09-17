@@ -509,7 +509,7 @@ class ImageBatchTests(unittest.TestCase):
         self.assertIsInstance(event["timestamp_unix_ns"], int)
         self.assertGreater(event["timestamp_unix_ns"], 0)
 
-    def test_mahimahi_copy_is_gated_by_network_configuration(self):
+    def test_mahimahi_selection_does_not_require_a_vendored_source_directory(self):
         machine = RecordingMachine()
         config = {
             "infrastructure": {
@@ -527,8 +527,8 @@ class ImageBatchTests(unittest.TestCase):
             wireless_network_preset="5g_nl_kpn_mahimahi",
         )
         infrastructure.create_continuum_dir(config, [machine])
-        self.assertEqual(len(machine.commands), 2)
-        self.assertIn("cp -r mahimahi/.", machine.commands[1])
+        self.assertEqual(len(machine.commands), 1)
+        self.assertNotIn("cp -r mahimahi/.", machine.commands[0])
         self.assertTrue(infrastructure.mahimahi_enabled(config))
 
     def test_resource_manager_only_allows_one_endpoint_and_three_workers(self):

@@ -1,0 +1,5 @@
+{
+  "mahimahi_repository": "https://github.com/atlarge-research/continuum-modded-mahimahi.git",
+  "mahimahi_revision": "42c0e016778e1ad61617b33a7c6758e575599b5d",
+  "mahimahi_patch_id": "packet-match-stack-v1"
+}

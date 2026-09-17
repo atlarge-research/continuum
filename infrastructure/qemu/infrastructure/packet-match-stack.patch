@@ -1,0 +1,22 @@
+--- a/src/frontend/link_queue.cc
++++ b/src/frontend/link_queue.cc
+@@ -38,17 +38,13 @@
+ 
+     // Checking for the source ip
+ 
+-    struct packet* pkt = (struct packet*)malloc(sizeof(struct packet));
+-
+-    if (pkt == NULL) {
+-        return false;
+-    }
++    struct packet packet_storage;
++    struct packet* pkt = &packet_storage;
+ 
+     const char* raw_bytes = contents.data();
+     size_t packet_len = contents.size();
+ 
+     if (packet_len < sizeof(struct ethernet_header) + sizeof(struct ip_hdr)) {
+-        free(pkt);
+         return false;
+     }
+ 

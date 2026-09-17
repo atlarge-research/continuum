@@ -32,6 +32,14 @@ One endpoint batch maps to one finite Kubernetes Job. This boundary makes submis
 
 The adapter returns an HTTP `202` after accepting and submitting the request; classification results remain cloud-side. The endpoint therefore measures submission behavior rather than waiting for Job completion.
 
+## Network emulation
+
+Cellular access uses separate uplink and downlink traces, while cloud-to-cloud, cloud-to-edge, and edge-to-edge communication uses static latency and throughput. Endpoint-to-cloud traffic combines cellular access with the static core profile, including when there is no intervening edge VM. Cellular trace selection and destination location are independent choices. Static 4G/5G presets remain available as alternatives to replay, with manual network overrides preserved.
+
+The inherited location and cellular profiles are accepted inputs from the student's benchmarking work. The [thesis](https://atlarge-research.com/pdfs/2025-gleb-network-simulation-bsc-thesis.pdf#page=35) describes wired client-to-datacenter RTT measurements and estimates one-way core delay as half the RTT, assuming symmetric paths. Deliberately high core throughput and minimal jitter are modeling defaults. These profiles approximate the selected paths rather than establishing universal properties of a region or provider. The demo combines KPN 5G access with the `eu_central_1` core profile.
+
+The demo retains four cloud VMs and one endpoint on one physical host. Replay supports QEMU addresses within `192.168.0.0/16`; endpoint-to-endpoint communication is outside its scope. Trace repetition is independent of workload arrival periods and forecast cycles. Live checks have exercised cellular traffic in both directions, static core behavior, and the image-batch path; this validates the implementation for the tested setups rather than the representativeness of every network profile. Earlier unshaped captures remain baseline evidence.
+
 ## Open-loop workload generation
 
 ### Why dispatch cannot use one blocking sender
@@ -105,6 +113,8 @@ CPU uses a rate over a short counter window, so the first observation after Pod 
 
 Resource collection uses cAdvisor's source timestamp rather than the observer's query time for Fragment ordering and deduplication. Query time is retained as separate provenance.
 
+Terminal finalization waits for the active collection, including its raw evidence writes, then closes the Job UID and detaches its samples under the same collection lock. Later collection rounds cannot accept samples for that UID, even if Kubernetes returns stale active state. Task construction can therefore use a fixed sample set while looking up the worker interval.
+
 ### Trace storage and transport boundary
 
 The observer sidecar owns a dedicated `emptyDir` mounted at `/var/lib/opendt`; it never uses the adapter's `/data` directory. Every JSONL record is appended as one flushed, newline-terminated object so a reader can consume only complete lines.
@@ -140,6 +150,8 @@ Current-state records retain Job start time and separately capture the running c
 
 Forecasting first passes captured-prefix reproduction, then runs read-only beside the observer. Source hashes, input boundaries, package versions, seeds, and the frozen template make outputs auditable. Byte reproduction targets the same runtime and CPU; other environments may differ in floating-point model metadata. Forecast evaluation remains separate from the accepted report; overlapping predictive horizons are not independent runs. Control cadence will be chosen after measuring OpenDC evaluation cost.
 
+Retrospective evaluation and its observed report series use all evidence in the frozen input prefixes, including later observations of earlier arrivals and the following snapshot needed to establish coverage. The experiment end limits scored arrival bins and full cycles, not evidence availability; gaps and capture failures still exclude bins. Forecast training and template selection retain their causal availability cutoffs.
+
 Node3 calibration uses 0.02–0.30 Jobs/second as a starting profile. Daemon and monitoring reservations leave three whole one-CPU Job slots per worker, and container startup occupies a slot too. Higher average demand can therefore accumulate queues despite the nominal twelve worker vCPUs. Recovery is checked across cycles; stochastic bursts can still carry a queue into the next cycle.
 
 ## Deployment and failure assumptions
@@ -158,6 +170,6 @@ This is a deliberate scientific-demo trade-off: detecting an invalid run is more
 - The five-second cadence provides samples rather than a continuous ground-truth resource trace.
 - JSONL and in-memory Job UID deduplication survive only for the lifetime of the current pod.
 - A single adapter replica and no live rollout are operational assumptions, not production scaling behavior.
-- Network trace replay, OpenDC execution, remaining-work estimation, policy selection, and worker actuation remain later features.
+- OpenDC execution, remaining-work estimation, policy selection, and worker actuation remain later features.
 
 The current single-host cluster remains the development setup until the closed loop works. A later two-host setup could provide more time for active Jobs to build up before saturation. Capacity and arrival intensity will need to be calibrated together: adding capacity alone could eliminate the queue instead of producing a more informative rise and fall. This expansion is deferred and does not change the current workload or topology.

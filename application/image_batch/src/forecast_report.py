@@ -10,11 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import MaxNLocator
 
-from evaluate_forecasts import evaluate
+from evaluate_forecasts import evaluate, evaluation_trace
 from forecast_trace import (
     bounded_read,
     milliseconds,
-    read_trace,
     training_bins,
     write_json,
 )
@@ -178,7 +177,7 @@ def prepare_forecasts(forecast_dir, observer_dir, until, rate_bin_seconds=10):
     settings = evaluation["settings"]
     # Reuse the evaluator's frozen prefixes even if the live files have grown.
     rows, _ = bounded_read(observer_dir, evaluation["inputs"])
-    trace = read_trace(rows, settings["run_id"], evaluation["evaluation_cutoff_ms"])
+    trace = evaluation_trace(rows, settings["run_id"], evaluation["evaluation_cutoff_ms"])
     actual = training_bins(
         trace,
         settings["origin_ms"],

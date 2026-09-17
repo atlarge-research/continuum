@@ -346,13 +346,6 @@ def create_continuum_dir(config, machines):
 
         commands.append(command)
 
-        if machine.is_local and mahimahi_enabled(config):
-            commands.append(
-                "mkdir -p %s/.continuum/mahimahi && "
-                "cp -r mahimahi/. %s/.continuum/mahimahi"
-                % ((config["infrastructure"]["base_path"],) * 2)
-            )
-
     results = machines[0].process(config, commands, shell=True)
 
     for (output, error), command in zip(results, commands):

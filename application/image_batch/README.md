@@ -90,6 +90,8 @@ The manifest's `WORKER_INFERENCE_REPETITIONS=128` setting is a deliberately synt
 
 The adapter is exposed on node port `30080`. Configure the endpoint with `ADAPTER_URL=http://<cloud-node-ip>:30080`.
 
+The demo configuration enables pinned KPN 5G access replay plus static core settings. Provisioning compiles MahiMahi into endpoint base images; VM startup checks the inherited installation and fails if it is missing or outdated. Rebuild an older endpoint base before enabling replay. Before running the workload, check `sudo python3 /home/mahimahi/continuum_replay.py check` on the endpoint and retain `/run/continuum-mahimahi/` with the audit captures. See [DESIGN](DESIGN.md#network-emulation) for the model and validation boundary.
+
 ## Observer output
 
 The observer continuously flushes four audit streams in its dedicated `emptyDir`:
@@ -108,7 +110,7 @@ kubectl cp -n fns-demo \
 
 The endpoint audit stream is structured stdout and should be captured from its container logs. The adapter result and events remain under its `/data` mount.
 
-These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. Forecasting consumes bounded prefixes; OpenDC execution, policy selection, actuation, and MahiMahi remain separate phases.
+These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. Forecasting consumes bounded prefixes; OpenDC execution, policy selection, and actuation remain separate phases.
 
 ## Offline run report
 
