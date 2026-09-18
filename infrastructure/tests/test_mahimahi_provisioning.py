@@ -123,15 +123,11 @@ class ReplayProvisioningTests(unittest.TestCase):
                         else ["base_cloud_kubernetes0_test", "base_endpoint0_test"]
                     )
                     base_ips = (
-                        ["192.168.211.2"]
-                        if infra_only
-                        else ["192.168.211.2", "192.168.211.3"]
+                        ["192.168.211.2"] if infra_only else ["192.168.211.2", "192.168.211.3"]
                     )
 
                     def process(self, _config, command, **_kwargs):
-                        commands = (
-                            command if isinstance(command[0], list) else [command]
-                        )
+                        commands = command if isinstance(command[0], list) else [command]
                         results = []
                         for item in commands:
                             calls.append(item)
@@ -139,17 +135,13 @@ class ReplayProvisioningTests(unittest.TestCase):
                                 present = cached_cloud and "base_cloud" in item[-1]
                                 results.append(([item[-1]] if present else [], []))
                             elif isinstance(item, list) and item[:2] == ["ls", "-alh"]:
-                                results.append(
-                                    (["/etc/localtime -> /usr/share/zoneinfo/UTC"], [])
-                                )
+                                results.append((["/etc/localtime -> /usr/share/zoneinfo/UTC"], []))
                             elif isinstance(item, list) and item[:2] == ["sudo", "ln"]:
                                 results.append(([], []))
                             else:
                                 results.append(
                                     (
-                                        [
-                                            "Domain test created from config and is being shutdown"
-                                        ],
+                                        ["Domain test created from config and is being shutdown"],
                                         [],
                                     )
                                 )
@@ -176,8 +168,7 @@ class ReplayProvisioningTests(unittest.TestCase):
                 installs = [
                     c
                     for c in calls
-                    if isinstance(c, list)
-                    and any(str(v).endswith("base_mahimahi.yml") for v in c)
+                    if isinstance(c, list) and any(str(v).endswith("base_mahimahi.yml") for v in c)
                 ]
                 self.assertEqual(len(installs), int(enabled))
                 if enabled:
@@ -189,26 +180,21 @@ class ReplayProvisioningTests(unittest.TestCase):
                 netperf = next(
                     c
                     for c in calls
-                    if isinstance(c, list)
-                    and any(str(v).endswith("netperf.yml") for v in c)
+                    if isinstance(c, list) and any(str(v).endswith("netperf.yml") for v in c)
                 )
                 expected_bases = [
                     name
                     for name in Machine.base_names
                     if not (cached_cloud and "base_cloud" in name)
                 ]
-                self.assertEqual(
-                    netperf[netperf.index("--limit") + 1], ",".join(expected_bases)
-                )
+                self.assertEqual(netperf[netperf.index("--limit") + 1], ",".join(expected_bases))
 
     @unittest.skipUnless(shutil.which("ansible-playbook"), "Ansible is required")
     def test_playbook_targets_live_endpoints_not_cached_base_images(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             inventory = root / "inventory"
-            inventory.write_text(
-                "[endpoints]\nendpoint-under-test\n[base]\nbase-not-running\n"
-            )
+            inventory.write_text("[endpoints]\nendpoint-under-test\n[base]\nbase-not-running\n")
             result = subprocess.run(
                 [
                     "ansible-playbook",

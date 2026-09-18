@@ -39,16 +39,12 @@ class ForecastReportTests(unittest.TestCase):
             root = Path(temporary)
             save_rows(root / "inputs", rows)
             run_once(root / "inputs", root / "forecast", BASE + 60000, settings())
-            report = prepare_forecasts(
-                root / "forecast", root / "inputs", iso(BASE + 80000)
-            )
+            report = prepare_forecasts(root / "forecast", root / "inputs", iso(BASE + 80000))
             last_score = report["evaluation"]["scores"][-1]
             last_actual = report["actual_bins"][-1]
             self.assertEqual(last_score["bin_start_ms"], BASE + 75000)
             self.assertEqual(last_score["observed_count"], 1)
-            self.assertEqual(
-                last_actual, {"start_ms": BASE + 75000, "count": 1, "eligible": True}
-            )
+            self.assertEqual(last_actual, {"start_ms": BASE + 75000, "count": 1, "eligible": True})
             self.assertEqual(
                 report["rate_bins"][-1],
                 {"start_ms": BASE + 70000, "count": 1, "eligible": True},
@@ -88,9 +84,7 @@ class ForecastReportTests(unittest.TestCase):
         summary, totals = horizon_summary([forecast], scores, 5)
         self.assertEqual(totals, [])
         self.assertTrue(all(row["eligible_forecasts"] == 0 for row in summary))
-        self.assertTrue(
-            all(row["cyclic"]["mean_absolute_count_error"] is None for row in summary)
-        )
+        self.assertTrue(all(row["cyclic"]["mean_absolute_count_error"] is None for row in summary))
 
     def test_rate_rebinning_matches_absolute_windows_and_omits_partial_windows(self):
         predictions = [
@@ -159,15 +153,9 @@ class ForecastReportTests(unittest.TestCase):
             root = Path(temporary)
             save_rows(root / "inputs", rows)
             run_once(root / "inputs", root / "forecast", BASE + 40000, settings())
-            result = prepare_forecasts(
-                root / "forecast", root / "inputs", iso(BASE + 55000)
-            )
-            self.assertEqual(
-                [s["observed_count"] for s in result["evaluation"]["scores"]], [1, 0]
-            )
-            self.assertEqual(
-                [r["lead_end_seconds"] for r in result["lead_summary"]], [5, 15]
-            )
+            result = prepare_forecasts(root / "forecast", root / "inputs", iso(BASE + 55000))
+            self.assertEqual([s["observed_count"] for s in result["evaluation"]["scores"]], [1, 0])
+            self.assertEqual([r["lead_end_seconds"] for r in result["lead_summary"]], [5, 15])
             self.assertEqual(result["evaluation"]["uncovered_or_future_bins"], 2)
             actual = {b["start_ms"] - BASE: b for b in result["actual_bins"]}
             self.assertFalse(actual[45000]["eligible"])

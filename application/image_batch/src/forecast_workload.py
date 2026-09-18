@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from importlib.metadata import version
 import json
 import math
@@ -62,10 +62,7 @@ class Settings:
             raise ValueError("nonnegative seed and workload run ID required")
         if not math.isfinite(self.max_gap_seconds) or self.max_gap_seconds <= 0:
             raise ValueError("max_gap_seconds must be finite and positive")
-        if (
-            self.period_seconds % self.bin_seconds
-            or self.horizon_seconds % self.bin_seconds
-        ):
+        if self.period_seconds % self.bin_seconds or self.horizon_seconds % self.bin_seconds:
             raise ValueError("period and horizon must be multiples of bin width")
 
 
@@ -95,9 +92,7 @@ def eligible_profile(record, settings):
 
 
 def select_template(trace, settings):
-    eligible = [
-        record for record in trace.completed if eligible_profile(record, settings)
-    ]
+    eligible = [record for record in trace.completed if eligible_profile(record, settings)]
     if not eligible:
         return None
     median = statistics.median(record["task"]["duration"] for record in eligible)
@@ -134,10 +129,7 @@ def check_template(template, cutoff, settings):
         template["record"], settings
     ):
         raise ValueError("template does not match the homogeneous workload")
-    if (
-        observed_milliseconds(template["record"]["source"]["completion_time"])
-        > selection
-    ):
+    if observed_milliseconds(template["record"]["source"]["completion_time"]) > selection:
         raise ValueError("template completed after selection")
     return None
 
@@ -155,15 +147,11 @@ def features(timestamps, settings):
 def forecast(trace, settings, template=None):
     settings.validate()
     bin_ms = settings.bin_seconds * 1000
-    bins = training_bins(
-        trace, settings.origin_ms, bin_ms, round(settings.max_gap_seconds * 1000)
-    )
+    bins = training_bins(trace, settings.origin_ms, bin_ms, round(settings.max_gap_seconds * 1000))
     eligible = [row for row in bins if row["eligible"]]
     phase_counts = [0] * (settings.period_seconds // settings.bin_seconds)
     for row in eligible:
-        phase_counts[
-            ((row["start_ms"] - settings.origin_ms) // bin_ms) % len(phase_counts)
-        ] += 1
+        phase_counts[((row["start_ms"] - settings.origin_ms) // bin_ms) % len(phase_counts)] += 1
     summary = {
         "schema_version": 1,
         "status": "not_ready",
@@ -181,7 +169,10 @@ def forecast(trace, settings, template=None):
             "phase_bin_observations": phase_counts,
             "observed_unique_jobs": len(trace.arrivals),
         },
-        "uncertainty": "Poisson arrival randomness conditional on fitted model; excludes full model/parameter uncertainty",
+        "uncertainty": (
+            "Poisson arrival randomness conditional on fitted model; "
+            "excludes full model/parameter uncertainty"
+        ),
     }
     reasons = summary["reasons"]
     if trace.state is None:
@@ -233,7 +224,7 @@ def forecast(trace, settings, template=None):
 
     rng = np.random.default_rng(np.random.SeedSequence([settings.seed, trace.cutoff]))
     scenarios = []
-    for scenario_index in range(settings.scenarios):
+    for _ in range(settings.scenarios):
         arrivals = []
         for start, mean in zip(target_starts, means):
             count = int(rng.poisson(mean))
@@ -265,8 +256,14 @@ def forecast(trace, settings, template=None):
 
 
 def run_once(
-    observer_dir, output_dir, cutoff, settings, template=None, boundaries=None,
-    *, simulation_inputs=False,
+    observer_dir,
+    output_dir,
+    cutoff,
+    settings,
+    template=None,
+    boundaries=None,
+    *,
+    simulation_inputs=False,
 ):
     """One reproducible cutoff. An existing output directory is never overwritten."""
     output = Path(output_dir)
@@ -310,12 +307,18 @@ def run_once(
         summary["requested_cutoff"] = iso(requested_cutoff)
         if state_problem or summary["status"] != "ready":
             reasons = ([state_problem] if state_problem else []) + summary["reasons"]
-            simulation = ({"schema_version": SIMULATION_SCHEMA_VERSION, "status": "not_ready",
-                           "reasons": list(dict.fromkeys(reasons)), "diagnostics": []}, None, [])
-        else:
-            simulation = build_simulation_inputs(
-                trace, selected, scenarios, settings
+            simulation = (
+                {
+                    "schema_version": SIMULATION_SCHEMA_VERSION,
+                    "status": "not_ready",
+                    "reasons": list(dict.fromkeys(reasons)),
+                    "diagnostics": [],
+                },
+                None,
+                [],
             )
+        else:
+            simulation = build_simulation_inputs(trace, selected, scenarios, settings)
         simulation_manifest = simulation[0]
         simulation_manifest.update(
             requested_cutoff=iso(requested_cutoff),
@@ -381,7 +384,8 @@ def parser():
     )
     result.add_argument("--cutoff", help="UTC cutoff for one-shot mode")
     result.add_argument(
-        "--simulation-inputs", action="store_true",
+        "--simulation-inputs",
+        action="store_true",
         help="also export initial state and combined traces at the latest fresh snapshot",
     )
     result.add_argument(
@@ -423,17 +427,15 @@ def main():
     try:
         settings = Settings(
             **{
-                name: getattr(args, name)
-                for name in Settings.__dataclass_fields__
-                if name != "origin_ms"
+                field.name: getattr(args, field.name)
+                for field in fields(Settings)
+                if field.name != "origin_ms"
             },
             origin_ms=milliseconds(args.phase_origin),
         )
         settings.validate()
         template = json.loads(args.template.read_text()) if args.template else None
-        boundaries = (
-            json.loads(args.boundaries.read_text()) if args.boundaries else None
-        )
+        boundaries = json.loads(args.boundaries.read_text()) if args.boundaries else None
         if args.interval_seconds is None:
             if not args.cutoff:
                 raise ValueError("one-shot mode requires --cutoff")
@@ -452,8 +454,11 @@ def main():
                         "status": summary["status"],
                         "reasons": summary["reasons"],
                         "history": summary["history"],
-                        **({"simulation_inputs": summary["simulation_inputs"]}
-                           if args.simulation_inputs else {}),
+                        **(
+                            {"simulation_inputs": summary["simulation_inputs"]}
+                            if args.simulation_inputs
+                            else {}
+                        ),
                     }
                 )
             )
@@ -469,7 +474,8 @@ def main():
             or args.iterations < 0
         ):
             raise ValueError(
-                "periodic mode requires a positive interval, nonnegative iterations, and no cutoff/boundaries"
+                "periodic mode requires a positive interval, nonnegative iterations, and no "
+                "cutoff/boundaries"
             )
         args.output_dir.mkdir(parents=True, exist_ok=False)
         index = 0
@@ -495,9 +501,14 @@ def main():
                         "reasons": summary["reasons"],
                         "history": summary["history"],
                         "elapsed_seconds": time.monotonic() - started,
-                        **({"effective_cutoff": summary["cutoff"],
-                            "simulation_inputs": summary["simulation_inputs"]}
-                           if args.simulation_inputs else {}),
+                        **(
+                            {
+                                "effective_cutoff": summary["cutoff"],
+                                "simulation_inputs": summary["simulation_inputs"],
+                            }
+                            if args.simulation_inputs
+                            else {}
+                        ),
                     }
                 ),
                 flush=True,

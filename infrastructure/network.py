@@ -4,7 +4,6 @@ Use TC to control latency / throughput between VMs, and perform network benchmar
 
 import logging
 import shlex
-import sys
 
 
 def generate_tc_commands(config, values, ips, disk):
@@ -106,14 +105,24 @@ def generate_tc_commands(config, values, ips, disk):
 
     return commands
 
+
 def generate_mahimati_command(endpoint_ip, targets, uplink, downlink):
     """Start checked bidirectional access replay on an endpoint VM."""
     if not uplink or not downlink:
         return []
-    return [[
-        "sudo", "-n", "/usr/bin/python3", "/home/mahimahi/continuum_replay.py",
-        "start", endpoint_ip, uplink, downlink, *targets,
-    ]]
+    return [
+        [
+            "sudo",
+            "-n",
+            "/usr/bin/python3",
+            "/home/mahimahi/continuum_replay.py",
+            "start",
+            endpoint_ip,
+            uplink,
+            downlink,
+            *targets,
+        ]
+    ]
 
 
 def mahimahi_values(config):
@@ -127,22 +136,38 @@ def mahimahi_values(config):
     Returns:
         2x list(str): Path to the MahiMahi traces
     """
-    if config["infrastructure"]["wireless_network_preset"] == '4g_us_verizon_mahimahi':
-        return ["/home/mahimahi/traces/Verizon-LTE-driving.up", "/home/mahimahi/traces/Verizon-LTE-driving.down",]
-    
-    elif config["infrastructure"]["wireless_network_preset"] == '5g_nl_kpn_mahimahi':
-        return ["/home/mahimahi/traces/KPN_5G.up", "/home/mahimahi/traces/KPN_5G.down",]
+    if config["infrastructure"]["wireless_network_preset"] == "4g_us_verizon_mahimahi":
+        return [
+            "/home/mahimahi/traces/Verizon-LTE-driving.up",
+            "/home/mahimahi/traces/Verizon-LTE-driving.down",
+        ]
 
-    elif config["infrastructure"]["wireless_network_preset"] == 'lte_nl_kpn_mahimahi':
-        return ["/home/mahimahi/traces/KPN_4G.up", "/home/mahimahi/traces/KPN_4G.down",]
-    
-    elif config["infrastructure"]["wireless_network_preset"] == '5g_obstacled_nl_kpn_mahimahi':
-        return ["/home/mahimahi/traces/KPN_5G_low_band.up", "/home/mahimahi/traces/KPN_5G_low_band.down",]
-    
-    elif config["infrastructure"]["wireless_network_preset"] == 'evdo_us_verizon_mahimahi':
-        return ["/home/mahimahi/traces/Verizon-EVDO-driving.up", "/home/mahimahi/traces/Verizon-EVDO-driving.down",]
+    if config["infrastructure"]["wireless_network_preset"] == "5g_nl_kpn_mahimahi":
+        return [
+            "/home/mahimahi/traces/KPN_5G.up",
+            "/home/mahimahi/traces/KPN_5G.down",
+        ]
+
+    if config["infrastructure"]["wireless_network_preset"] == "lte_nl_kpn_mahimahi":
+        return [
+            "/home/mahimahi/traces/KPN_4G.up",
+            "/home/mahimahi/traces/KPN_4G.down",
+        ]
+
+    if config["infrastructure"]["wireless_network_preset"] == "5g_obstacled_nl_kpn_mahimahi":
+        return [
+            "/home/mahimahi/traces/KPN_5G_low_band.up",
+            "/home/mahimahi/traces/KPN_5G_low_band.down",
+        ]
+
+    if config["infrastructure"]["wireless_network_preset"] == "evdo_us_verizon_mahimahi":
+        return [
+            "/home/mahimahi/traces/Verizon-EVDO-driving.up",
+            "/home/mahimahi/traces/Verizon-EVDO-driving.down",
+        ]
 
     return [None, None]
+
 
 def tc_values(config):
     """Set latency/throughput values to be used for tc
@@ -222,7 +247,7 @@ def start(config, machines):
     """Set network latency/throughput between VMs to emulate edge continuum networking
 
     Whenever the network emulation is set to MahiMahi (name should end with _mahimahi),
-    mobile network emulation is a responsibility of MahiMahi and the core network emulation 
+    mobile network emulation is a responsibility of MahiMahi and the core network emulation
     is the responsibility of tc.
 
     Otherwise tc performs end-to-end network emulation
@@ -305,7 +330,11 @@ def start(config, machines):
         if targets:
             command += generate_tc_commands(config, edge_endpoint, targets, disk)
 
-        targets = config["control_ips_internal"] + config["cloud_ips_internal"] + config["edge_ips_internal"]
+        targets = (
+            config["control_ips_internal"]
+            + config["cloud_ips_internal"]
+            + config["edge_ips_internal"]
+        )
         if targets:
             command += generate_mahimati_command(endpoint_ip, targets, uplink, downlink)
         commands.append(command)
@@ -334,7 +363,9 @@ def start(config, machines):
             raise RuntimeError("Missing network setup results")
         for ssh, (output, error) in zip(sshs, results):
             if not any(line.strip() == "CONTINUUM_NETWORK_READY" for line in output):
-                raise RuntimeError("Network setup failed on %s: %s" % (ssh, "".join(error + output)))
+                raise RuntimeError(
+                    "Network setup failed on %s: %s" % (ssh, "".join(error + output))
+                )
             if error:
                 logging.warning("Network setup on %s: %s", ssh, "".join(error))
 

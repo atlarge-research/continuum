@@ -14,7 +14,9 @@ import sys
 import time
 
 
-BUILD_IDENTITY = json.loads(Path(__file__).with_name("mahimahi-build.json").read_text())
+BUILD_IDENTITY = json.loads(
+    Path(__file__).with_name("mahimahi-build.json").read_text(encoding="utf-8")
+)
 REVISION = BUILD_IDENTITY["mahimahi_revision"]
 PATCH_ID = BUILD_IDENTITY["mahimahi_patch_id"]
 BUILD = Path("/home/mahimahi")
@@ -32,7 +34,7 @@ COMMENT = "continuum-mahimahi"
 
 
 def run(command, check=True):
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
     if check and result.returncode:
         raise subprocess.CalledProcessError(
             result.returncode, command, result.stdout, result.stderr
@@ -58,14 +60,10 @@ def validate_trace(path):
             digest.update(line)
             text = line.strip()
             if not text.isdigit():
-                raise ValueError(
-                    f"invalid trace timestamp in {path} at line {count + 1}"
-                )
+                raise ValueError(f"invalid trace timestamp in {path} at line {count + 1}")
             value = int(text)
             if value < previous:
-                raise ValueError(
-                    f"trace timestamps decrease in {path} at line {count + 1}"
-                )
+                raise ValueError(f"trace timestamps decrease in {path} at line {count + 1}")
             previous, count = value, count + 1
     if not count or previous <= 0:
         raise ValueError(f"empty or zero-duration trace: {path}")
@@ -87,9 +85,7 @@ def preflight(endpoint, targets):
             raise ValueError(f"target is not another VM on {CORE}: {target}")
     addresses = read_json(["ip", "-j", "-4", "address", "show"])
     expected = any(
-        link["ifname"] == INTERFACE
-        and address["local"] == endpoint
-        and address["prefixlen"] == 16
+        link["ifname"] == INTERFACE and address["local"] == endpoint and address["prefixlen"] == 16
         for link in addresses
         for address in link.get("addr_info", [])
     )
@@ -97,11 +93,7 @@ def preflight(endpoint, targets):
         raise RuntimeError(
             f"VM layout differs: expected {endpoint}/16 on {INTERFACE}; no routing changed"
         )
-    if any(
-        a["local"] in (OUTER, INNER)
-        for link in addresses
-        for a in link.get("addr_info", [])
-    ):
+    if any(a["local"] in (OUTER, INNER) for link in addresses for a in link.get("addr_info", [])):
         raise RuntimeError("MahiMahi namespace addresses are already occupied")
     routes = read_json(["ip", "-N", "-j", "-4", "route", "show", "table", "all"])
     for route in routes:
@@ -110,18 +102,12 @@ def preflight(endpoint, targets):
             raise RuntimeError("policy table 200 is already in use")
         if destination != "default":
             network = ipaddress.IPv4Network(destination, strict=False)
-            if (
-                ipaddress.IPv4Address(OUTER) in network
-                or ipaddress.IPv4Address(INNER) in network
-            ):
+            if ipaddress.IPv4Address(OUTER) in network or ipaddress.IPv4Address(INNER) in network:
                 raise RuntimeError("routes already cover MahiMahi namespace addresses")
             if network.prefixlen == 32 and str(network.network_address) in targets:
                 raise RuntimeError(f"target already has a host route: {destination}")
     rules = read_json(["ip", "-N", "-j", "-4", "rule", "show"])
-    if any(
-        str(r.get("table")) == TABLE or str(r.get("priority")) == PRIORITY
-        for r in rules
-    ):
+    if any(str(r.get("table")) == TABLE or str(r.get("priority")) == PRIORITY for r in rules):
         raise RuntimeError("replay policy table or rule priority is already in use")
     if run(["sysctl", "-n", "net.ipv4.ip_forward"]).stdout.strip() != "1":
         raise RuntimeError("IPv4 forwarding is disabled")
@@ -130,14 +116,10 @@ def preflight(endpoint, targets):
         for name in ("all", INTERFACE)
     ]
     if max(reverse_filters) == 1:
-        raise RuntimeError(
-            "strict reverse-path filtering conflicts with replay host routes"
-        )
+        raise RuntimeError("strict reverse-path filtering conflicts with replay host routes")
     for table in ("nat", "filter"):
         if COMMENT in run(["iptables", "-t", table, "-S"]).stdout:
-            raise RuntimeError(
-                "orphaned Continuum replay rules; inspect before restarting"
-            )
+            raise RuntimeError("orphaned Continuum replay rules; inspect before restarting")
 
 
 def routing_commands(endpoint, targets, tun):
@@ -218,9 +200,7 @@ def routing_commands(endpoint, targets, tun):
                 ["MASQUERADE"],
             ),
         ):
-            rule = (
-                [chain] + match + ["-m", "comment", "--comment", COMMENT, "-j"] + action
-            )
+            rule = [chain] + match + ["-m", "comment", "--comment", COMMENT, "-j"] + action
             pairs.append(
                 (
                     ["iptables", "-w", "-t", "nat", "-A"] + rule,
@@ -282,9 +262,7 @@ def wait_ready(directory, timeout=20):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if run(["systemctl", "is-active", "--quiet", UNIT], check=False).returncode:
-            raise RuntimeError(
-                "MahiMahi exited before readiness; inspect journalctl -u " + UNIT
-            )
+            raise RuntimeError("MahiMahi exited before readiness; inspect journalctl -u " + UNIT)
         if (directory / "namespace-ready").exists():
             return
         time.sleep(0.1)
@@ -310,9 +288,7 @@ def check(state):
 
 def namespace_setup():
     addresses = read_json(["ip", "-j", "-4", "address", "show", "dev", "ingress"])
-    if not any(
-        a["local"] == INNER for link in addresses for a in link.get("addr_info", [])
-    ):
+    if not any(a["local"] == INNER for link in addresses for a in link.get("addr_info", [])):
         raise RuntimeError("unexpected MahiMahi inner address; expected 10.0.0.2")
     run(
         [
@@ -352,9 +328,7 @@ def namespace_setup():
 def stop_service():
     result = run(["systemctl", "stop", UNIT], check=False)
     if result.returncode:
-        loaded = run(
-            ["systemctl", "show", "--property=LoadState", "--value", UNIT], check=False
-        )
+        loaded = run(["systemctl", "show", "--property=LoadState", "--value", UNIT], check=False)
         if loaded.stdout.strip() != "not-found":
             raise RuntimeError("could not stop replay service: " + result.stderr)
 
@@ -372,9 +346,7 @@ def stop(state, path):
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         errors.append("service shutdown: " + str(error))
     if errors:
-        raise RuntimeError(
-            "; ".join(errors) + "; retained state.json for inspection and retry"
-        )
+        raise RuntimeError("; ".join(errors) + "; retained state.json for inspection and retry")
     path.unlink(missing_ok=True)
     (RUNTIME / "namespace-ready").unlink(missing_ok=True)
 
@@ -384,13 +356,9 @@ def start(endpoint, targets, uplink, downlink, path):
         path.exists()
         or run(["systemctl", "is-active", "--quiet", UNIT], check=False).returncode == 0
     ):
-        raise RuntimeError(
-            "replay already started or needs cleanup; use the stop subcommand first"
-        )
+        raise RuntimeError("replay already started or needs cleanup; use the stop subcommand first")
     preflight(endpoint, targets)
-    if (
-        BUILD / (".installed-" + REVISION + "-" + PATCH_ID)
-    ).read_text().strip() != REVISION:
+    if (BUILD / (".installed-" + REVISION + "-" + PATCH_ID)).read_text().strip() != REVISION:
         raise RuntimeError("pinned MahiMahi installation marker is missing or differs")
     user = pwd.getpwuid(int(os.environ["SUDO_UID"]))
     if user.pw_uid == 0:

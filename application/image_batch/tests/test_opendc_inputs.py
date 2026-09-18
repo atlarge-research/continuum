@@ -25,13 +25,20 @@ class InputTests(unittest.TestCase):
             self.assertEqual(source.num_rows, 13)
             self.assertEqual(source["mem_capacity"].to_pylist(), [512] * 13)
             self.assertEqual(native["mem_capacity"].to_pylist(), [512000] * 13)
-            self.assertEqual(native["submission_time"].cast(pa.int64()).to_pylist(), [0] * 12 + [1000])
-            self.assertEqual(native.schema.field("submission_time").type, pa.timestamp("ms", tz="UTC"))
+            self.assertEqual(
+                native["submission_time"].cast(pa.int64()).to_pylist(), [0] * 12 + [1000]
+            )
+            self.assertEqual(
+                native.schema.field("submission_time").type, pa.timestamp("ms", tz="UTC")
+            )
             fragments = pq.read_table(target / "trace/fragments.parquet").to_pylist()
-            self.assertEqual(fragments[:2], [
-                {"id": 0, "duration": 5000, "cpu_count": 1, "cpu_usage": 2400.0},
-                {"id": 0, "duration": 5000, "cpu_count": 1, "cpu_usage": 1200.0},
-            ])
+            self.assertEqual(
+                fragments[:2],
+                [
+                    {"id": 0, "duration": 5000, "cpu_count": 1, "cpu_usage": 2400.0},
+                    {"id": 0, "duration": 5000, "cpu_count": 1, "cpu_usage": 1200.0},
+                ],
+            )
             self.assertEqual(fragments[-1]["id"], 12)
             self.assertEqual(verify_inputs(target)["fixture"], "controlled")
 
@@ -73,7 +80,9 @@ class InputTests(unittest.TestCase):
     def test_simulation_bundle_cannot_be_used_as_controlled_input(self):
         """Keep live-state bundles outside the controlled execution contract."""
         with tempfile.TemporaryDirectory() as root:
-            (Path(root) / "manifest.json").write_text(json.dumps({"schema_version": 2, "status": "ready"}))
+            (Path(root) / "manifest.json").write_text(
+                json.dumps({"schema_version": 2, "status": "ready"})
+            )
             with self.assertRaisesRegex(ValueError, "controlled"):
                 verify_inputs(Path(root))
 

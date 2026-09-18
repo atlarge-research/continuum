@@ -218,7 +218,8 @@ def analyze(records, evidence, run_id, max_sample_age):
         if record["source"]["request_id"] in receipts:
             require(
                 record["source"].get("workload_run_id") == run_id,
-                "workload_run_id missing or inconsistent for a matching receipt; older evidence is unsupported",
+                "workload_run_id missing or inconsistent for a matching receipt; older "
+                "evidence is unsupported",
             )
     tasks = unique(
         [r for r in evidence["workload"] if r["source"].get("workload_run_id") == run_id],
@@ -280,7 +281,8 @@ def analyze(records, evidence, run_id, max_sample_age):
     unfinished = receipts.keys() - {j["request_id"] for j in jobs.values()}
     if unfinished:
         warnings.append(
-            f"{len(unfinished)} accepted Job(s) have no completed workload record; lifecycle/distributions exclude them."
+            f"{len(unfinished)} accepted Job(s) have no completed workload record; "
+            f"lifecycle/distributions exclude them."
         )
     if not jobs:
         warnings.append(
@@ -311,7 +313,8 @@ def analyze(records, evidence, run_id, max_sample_age):
     states = states[begin_index:end_index]
     if times[0] > origin or times[-1] < end:
         warnings.append(
-            "Cluster-state capture does not bracket the full run; pressure plots have incomplete boundaries."
+            "Cluster-state capture does not bracket the full run; pressure plots have "
+            "incomplete boundaries."
         )
     selected = []
     overlap = 0
@@ -405,11 +408,14 @@ def analyze(records, evidence, run_id, max_sample_age):
         )
     if overlap:
         warnings.append(
-            f"Up to {overlap} other-run Job(s) overlap the report window; Job/CPU curves show only the selected run."
+            f"Up to {overlap} other-run Job(s) overlap the report window; Job/CPU curves show "
+            f"only the selected run."
         )
     if finalizing:
         warnings.append(
-            f"{len(finalizing)} distinct Job(s) appeared queued after recorded worker finish without a terminal Pod phase. These ambiguous observations remain in pressure counts; inspect the captured state."
+            f"{len(finalizing)} distinct Job(s) appeared queued after recorded worker finish "
+            f"without a terminal Pod phase. These ambiguous observations remain in pressure "
+            f"counts; inspect the captured state."
         )
     if any(j["worker"] is None for j in jobs.values()):
         warnings.append(
@@ -447,7 +453,8 @@ def analyze(records, evidence, run_id, max_sample_age):
         job["sample_count"] = len(job["samples"])
         require(
             job["sample_count"] == job["reported_samples"],
-            f"{job['job_uid']}: raw in-execution samples ({job['sample_count']}) disagree with workload ({job['reported_samples']})",
+            f"{job['job_uid']}: raw in-execution samples ({job['sample_count']}) disagree with "
+            f"workload ({job['reported_samples']})",
         )
     # A causal bounded hold makes samples comparable on the state time axis.
     # Partial sums are kept separate from a fully covered workload CPU estimate.
@@ -484,7 +491,8 @@ def analyze(records, evidence, run_id, max_sample_age):
         if kind == "prometheus.sample_incomplete":
             warnings.append(
                 f"Incomplete resource observations ({kind}): {count} per-Job collection attempts "
-                "were skipped because CPU, memory, or source time was missing. This is not a count of failed Jobs."
+                "were skipped because CPU, memory, or source time was missing. This is not a "
+                "count of failed Jobs."
             )
         elif kind != "task.emitted":
             warnings.append(f"Observer diagnostic {kind}: {count} in run window.")
@@ -548,12 +556,17 @@ def summary_text(report):
         f"{s['run_id']} | {s['schedule_start_utc']}\n"
         f"Requests: {f['planned_count']} planned / {f['attempted_count']} started / "
         f"{f['successful_count']} accepted / {s['completed_jobs']} completed Jobs\n"
-        f"Scheduling lag median / max: {format_value(f['lag_ms']['median'])} / {format_value(f['lag_ms']['max'])} ms; "
+        f"Scheduling lag median / max: {format_value(f['lag_ms']['median'])} / "
+        f"{format_value(f['lag_ms']['max'])} ms; "
         f"fidelity: {f['fidelity_passed']}\n"
-        f"Queue wait median / p95: {format_value(s['queue_seconds']['median'])} / {format_value(s['queue_seconds']['p95'])} s; "
-        f"execution median / p95: {format_value(s['execution_seconds']['median'])} / {format_value(s['execution_seconds']['p95'])} s\n"
-        f"Samples per completed Job min / median: {format_value(c['min'])} / {format_value(c['median'])}; "
-        f">=2: {format_value(c['at_least_2_percent'])}%; >=3: {format_value(c['at_least_3_percent'])}%\n"
+        f"Queue wait median / p95: {format_value(s['queue_seconds']['median'])} / "
+        f"{format_value(s['queue_seconds']['p95'])} s; "
+        f"execution median / p95: {format_value(s['execution_seconds']['median'])} / "
+        f"{format_value(s['execution_seconds']['p95'])} s\n"
+        f"Samples per completed Job min / median: {format_value(c['min'])} / "
+        f"{format_value(c['median'])}; "
+        f">=2: {format_value(c['at_least_2_percent'])}%; >=3: "
+        f"{format_value(c['at_least_3_percent'])}%\n"
     )
 
 
@@ -564,7 +577,8 @@ def compact_alignment(reports):
     ]
     require(
         all(plan == plans[0] for plan in plans),
-        "compact comparison requires matching batch indices and planned offsets; analyze different schedules individually with --run-id",
+        "compact comparison requires matching batch indices and planned offsets; analyze "
+        "different schedules individually with --run-id",
     )
     complete = [
         i
@@ -697,8 +711,10 @@ def compact_figures(reports, output, save, max_sample_age, alignment):
         ax.legend(loc="upper left", fontsize=8, ncol=2)
     footer(
         fig,
-        f"{n} independent runs with matching planned offsets. Gray bars: observed min–max; black ticks: median; colored points: actual runs.",
-        "Ranges describe these repetitions, not confidence intervals. Lag comes from monotonic offsets, not event log time.",
+        f"{n} independent runs with matching planned offsets. Gray bars: observed min–max; "
+        f"black ticks: median; colored points: actual runs.",
+        "Ranges describe these repetitions, not confidence intervals. Lag comes from monotonic "
+        "offsets, not event log time.",
     )
     save(fig, output, "arrivals", f"Arrival fidelity | all {n} repetitions")
 
@@ -756,10 +772,12 @@ def compact_figures(reports, output, save, max_sample_age, alignment):
         ax.legend(loc="lower left", bbox_to_anchor=(0, 1.01), fontsize=7.5, ncol=3, frameon=False)
     footer(
         fig,
-        f"Terminal Pods excluded. Counts/requested CPU: median + min–max across {n} runs; 1 s grid; common capture interval; state holds <=3 s.",
-        f"Workload CPU, not node utilization: per-run lines = all executing Jobs sampled; crosses = subset sum; samples held <={max_sample_age:g} s.",
+        f"Terminal Pods excluded. Counts/requested CPU: median + min–max across {n} runs; 1 s "
+        f"grid; common capture interval; state holds <=3 s.",
+        f"Workload CPU, not node utilization: per-run lines = all executing Jobs sampled; "
+        f"crosses = subset sum; samples held <={max_sample_age:g} s.",
     )
-    save(fig, output, "pressure", f"Cluster pressure | repetition ranges and individual CPU traces")
+    save(fig, output, "pressure", "Cluster pressure | repetition ranges and individual CPU traces")
     write_csv(output / "pressure-ranges.csv", aggregate_rows, list(aggregate_rows[0]))
 
     example = reports[representative]
@@ -840,8 +858,10 @@ def compact_figures(reports, output, save, max_sample_age, alignment):
     )
     footer(
         fig,
-        f"Timeline: {labels[representative]}, the first complete run. Later Jobs can overtake earlier Jobs under Kubernetes scheduling policy.",
-        "Right: individual queue waits with min–max and median where every run completed the batch. Gray timeline bars include container startup.",
+        f"Timeline: {labels[representative]}, the first complete run. Later Jobs can overtake "
+        f"earlier Jobs under Kubernetes scheduling policy.",
+        "Right: individual queue waits with min–max and median where every run completed the "
+        "batch. Gray timeline bars include container startup.",
     )
     save(
         fig,
@@ -921,8 +941,10 @@ def compact_figures(reports, output, save, max_sample_age, alignment):
     table.set_fontsize(8)
     footer(
         fig,
-        "Timing histograms use identical bins across repetitions. Coverage includes zero-sample completed Jobs; incomplete Jobs are excluded.",
-        "Statistics retain two decimal places for consistency; individual lifecycle durations have one-second resolution and sample counts are integers.",
+        "Timing histograms use identical bins across repetitions. Coverage includes "
+        "zero-sample completed Jobs; incomplete Jobs are excluded.",
+        "Statistics retain two decimal places for consistency; individual lifecycle durations "
+        "have one-second resolution and sample counts are integers.",
     )
     save(
         fig,
@@ -947,9 +969,12 @@ def render(reports, output, provenance, max_sample_age, forecast_report=None):
     output.mkdir(parents=True, exist_ok=False)
     notes = [
         "# Image-batch compact comparison",
-        "Matched plans; ranges describe repetitions, not confidence intervals. CPU traces retain individual-run coverage. "
-        "Pressure ranges use the common capture interval and a one-second grid without bridging state gaps over three seconds. "
-        "Lifecycle shows the first complete run in report order, with per-batch queue waits across repetitions.",
+        "Matched plans; ranges describe repetitions, not confidence intervals. CPU traces "
+        "retain individual-run coverage. "
+        "Pressure ranges use the common capture interval and a one-second grid without "
+        "bridging state gaps over three seconds. "
+        "Lifecycle shows the first complete run in report order, with per-batch queue waits "
+        "across repetitions.",
         "",
         "Captured runtime evidence; no simulation or synthetic report data.",
         "",
@@ -988,7 +1013,8 @@ def render(reports, output, provenance, max_sample_age, forecast_report=None):
                     format_value(s["queue_seconds"]["median"]),
                     format_value(s["execution_seconds"]["median"]),
                     f"{format_value(c['min'])} / {format_value(c['median'])}",
-                    f"{format_value(c['at_least_2_percent'])} / {format_value(c['at_least_3_percent'])}",
+                    f"{format_value(c['at_least_2_percent'])} / "
+                    f"{format_value(c['at_least_3_percent'])}",
                 ]
             )
         table = ax.table(
@@ -1011,17 +1037,24 @@ def render(reports, output, provenance, max_sample_age, forecast_report=None):
         interpretation = (
             "Each row is an independently executed run. Matching seeds reproduce planned arrivals; "
             "runtime timing and CPU remain measured.\n\n"
-            "Queue wait = Job creation to worker-container start (includes scheduling and startup). "
-            "Execution = worker-container start to finish. Completed Jobs only in distributions.\n\n"
-            "Precision: captured Kubernetes lifecycle timestamps have one-second resolution; sample counts "
-            "are integers. Statistics use two decimal places consistently, including fractional medians; "
-            "trailing zeros do not imply finer measurement resolution. HTTP-start lag uses finer-resolution "
+            "Queue wait = Job creation to worker-container start (includes scheduling and "
+            "startup). "
+            "Execution = worker-container start to finish. Completed Jobs only in "
+            "distributions.\n\n"
+            "Precision: captured Kubernetes lifecycle timestamps have one-second resolution; "
+            "sample counts "
+            "are integers. Statistics use two decimal places consistently, including "
+            "fractional medians; "
+            "trailing zeros do not imply finer measurement resolution. HTTP-start lag uses "
+            "finer-resolution "
             "monotonic timestamps.\n\n"
             "CPU is observed image-batch workload CPU, not total node utilization. "
             f"Raw CPU rates are held forward at most {max_sample_age:g} s within execution; "
             "partial sums are marked separately and missing samples are not zero.\n\n"
-            "Synthetic repeated inference lengthens this demo workload. These runs do not establish "
-            "Digital Twin policy performance. Warnings and provenance follow in summary.md / summary.json."
+            "Synthetic repeated inference lengthens this demo workload. These runs do not "
+            "establish "
+            "Digital Twin policy performance. Warnings and provenance follow in summary.md / "
+            "summary.json."
         )
         ax.text(
             0,
@@ -1041,7 +1074,8 @@ def render(reports, output, provenance, max_sample_age, forecast_report=None):
             notes += [
                 "Pressure correction: excluded "
                 f"{correction['excluded_terminal_pod_observations']} terminal-Pod appearances "
-                f"across {correction['affected_jobs']} Jobs using captured Succeeded/Failed phases. "
+                f"across {correction['affected_jobs']} Jobs using captured Succeeded/Failed "
+                f"phases. "
                 "Original input files are unchanged.",
                 "",
             ]
@@ -1118,19 +1152,30 @@ def render(reports, output, provenance, max_sample_age, forecast_report=None):
     notes += [
         "## Interpretation",
         "",
-        "Queue wait includes scheduling and container startup. Distributions include completed Jobs only. "
+        "Queue wait includes scheduling and container startup. Distributions include completed "
+        "Jobs only. "
         "CPU is selected-run image-batch workload CPU, not total node utilization. "
-        f"Raw source samples are held forward for at most {max_sample_age:g} seconds within execution. "
-        "Partial sums are marked separately; gaps do not mean zero. CPU rates are not clamped to requests. "
-        "Pressure is sampled; peaks between snapshots can be missed. Cross-host alignment assumes synchronized VM clocks. "
-        "Quantile p95 uses the nearest rank. Synthetic repeated inference is a demo load multiplier.",
-        "Pressure excludes captured Succeeded/Failed Pods, correcting older observer classifications. "
-        "Per-run pressure_corrections in summary.json record the exclusions; input logs remain unchanged.",
-        "Kubernetes lifecycle timestamps have one-second resolution and sample counts are integers. "
-        "Two decimal places are a consistent display convention for statistics, not additional measurement precision. "
-        "The sampling-coverage gap includes startup delay and stale/missing samples; it is not a direct latency measurement.",
+        f"Raw source samples are held forward for at most {max_sample_age:g} seconds within "
+        f"execution. "
+        "Partial sums are marked separately; gaps do not mean zero. CPU rates are not clamped "
+        "to requests. "
+        "Pressure is sampled; peaks between snapshots can be missed. Cross-host alignment "
+        "assumes synchronized VM clocks. "
+        "Quantile p95 uses the nearest rank. Synthetic repeated inference is a demo load "
+        "multiplier.",
+        "Pressure excludes captured Succeeded/Failed Pods, correcting older observer "
+        "classifications. "
+        "Per-run pressure_corrections in summary.json record the exclusions; input logs remain "
+        "unchanged.",
+        "Kubernetes lifecycle timestamps have one-second resolution and sample counts are "
+        "integers. "
+        "Two decimal places are a consistent display convention for statistics, not additional "
+        "measurement precision. "
+        "The sampling-coverage gap includes startup delay and stale/missing samples; it is not "
+        "a direct latency measurement.",
         "",
-        "See summary.json for input SHA-256 hashes, paths, plotting version, and analysis settings. "
+        "See summary.json for input SHA-256 hashes, paths, plotting version, and analysis "
+        "settings. "
         "Per-run CSV files contain the plotted values; Job timestamp columns use Unix seconds.",
     ]
     (output / "summary.md").write_text("\n".join(notes) + "\n", encoding="utf-8")
@@ -1185,9 +1230,7 @@ def main(argv=None):
         default=10,
         help="maximum forward hold of CPU source samples (default: 10 seconds)",
     )
-    parser.add_argument(
-        "--forecast-dir", type=Path, help="append saved forecast accuracy pages"
-    )
+    parser.add_argument("--forecast-dir", type=Path, help="append saved forecast accuracy pages")
     parser.add_argument(
         "--forecast-observer-dir",
         type=Path,
@@ -1197,7 +1240,10 @@ def main(argv=None):
         "--forecast-until", help="UTC arrival-experiment end; exclude shutdown/drain"
     )
     parser.add_argument(
-        "--forecast-rate-bin-seconds", type=int, default=10, choices=(10, 20, 30),
+        "--forecast-rate-bin-seconds",
+        type=int,
+        default=10,
+        choices=(10, 20, 30),
         help="average observed and predicted rates over matching bins (display only)",
     )
     args = parser.parse_args(argv)
@@ -1269,7 +1315,8 @@ def main(argv=None):
         ImportError,
     ) as exc:
         print(
-            f"Analysis failed: {exc}. Check captured input fields and Python/Matplotlib dependencies.",
+            f"Analysis failed: {exc}. Check captured input fields and Python/Matplotlib "
+            f"dependencies.",
             file=sys.stderr,
         )
         return 2

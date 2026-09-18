@@ -20,8 +20,7 @@ def cadvisor_endpoint(monitor: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     ]
     if len(matches) != 1:
         raise RuntimeError(
-            f"expected one {CADVISOR_PATH} endpoint in {NAMESPACE}/{NAME}, "
-            f"found {len(matches)}"
+            f"expected one {CADVISOR_PATH} endpoint in {NAMESPACE}/{NAME}, " f"found {len(matches)}"
         )
     return matches[0]
 
@@ -54,9 +53,7 @@ def kubectl(*args: str) -> str:
 
 
 def read_monitor() -> dict[str, Any]:
-    return json.loads(
-        kubectl("get", "servicemonitor", NAME, "-n", NAMESPACE, "-o", "json")
-    )
+    return json.loads(kubectl("get", "servicemonitor", NAME, "-n", NAMESPACE, "-o", "json"))
 
 
 def main() -> None:

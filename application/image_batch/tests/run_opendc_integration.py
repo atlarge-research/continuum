@@ -15,7 +15,7 @@ import tarfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from opendc_inputs import file_hashes, write_json
+from opendc_inputs import write_json
 from opendc_kubernetes import collect, job_manifest, ssh
 
 
@@ -39,7 +39,7 @@ def command(argv, log, data=None, expected=0):
         subprocess.TimeoutExpired: The command exceeds 240 seconds.
     """
     started = time.monotonic()
-    result = subprocess.run(argv, input=data, capture_output=True, timeout=240)
+    result = subprocess.run(argv, input=data, capture_output=True, timeout=240, check=False)
     log.write_bytes(result.stdout + b"\nSTDERR:\n" + result.stderr)
     if result.returncode != expected:
         raise RuntimeError(f"unexpected exit {result.returncode}: see {log}")
@@ -65,8 +65,23 @@ def remote_input(host, key, argv, data):
         RuntimeError: SSH or the remote command returns nonzero.
         subprocess.TimeoutExpired: The SSH operation exceeds 240 seconds.
     """
-    result = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-i", str(key),
-                             host, shlex.join(argv)], input=data, capture_output=True, timeout=240)
+    result = subprocess.run(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=8",
+            "-i",
+            str(key),
+            host,
+            shlex.join(argv),
+        ],
+        input=data,
+        capture_output=True,
+        timeout=240,
+        check=False,
+    )
     if result.returncode:
         raise RuntimeError(result.stderr.decode(errors="replace"))
     return result.stdout
@@ -85,18 +100,47 @@ def local_runs(args, output):
     """
     local = output / "local"
     local.mkdir()
-    base = ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "--network", "none", "--read-only",
-            "--hostname", "opendc-controlled", "--add-host", "opendc-controlled:127.0.0.1",
-            "--tmpfs", "/tmp:rw,exec,nosuid,size=256m", "--cpus=1", "--memory=2g", "-v", f"{local}:/evidence", args.image]
+    base = [
+        "docker",
+        "run",
+        "--rm",
+        "--user",
+        f"{os.getuid()}:{os.getgid()}",
+        "--network",
+        "none",
+        "--read-only",
+        "--hostname",
+        "opendc-controlled",
+        "--add-host",
+        "opendc-controlled:127.0.0.1",
+        "--tmpfs",
+        "/tmp:rw,exec,nosuid,size=256m",
+        "--cpus=1",
+        "--memory=2g",
+        "-v",
+        f"{local}:/evidence",
+        args.image,
+    ]
     measurements = []
     for fixture in ("controlled", "memory"):
-        command(base + ["prepare", "--fixture", fixture, "--output-dir", f"/evidence/{fixture}-input"], output / f"prepare-{fixture}.log")
+        command(
+            base + ["prepare", "--fixture", fixture, "--output-dir", f"/evidence/{fixture}-input"],
+            output / f"prepare-{fixture}.log",
+        )
         for index in range(3):
             name = f"{fixture}-{index}"
-            argv = base + ["run", "--input-dir", f"/evidence/{fixture}-input", "--output-dir", f"/evidence/{name}"]
+            argv = base + [
+                "run",
+                "--input-dir",
+                f"/evidence/{fixture}-input",
+                "--output-dir",
+                f"/evidence/{name}",
+            ]
             _, elapsed = command(argv, output / f"local-{name}.log")
             execution = json.loads((local / name / "execution.json").read_text())
-            measurements.append({"name": name, "docker_wall_seconds": elapsed, "execution": execution})
+            measurements.append(
+                {"name": name, "docker_wall_seconds": elapsed, "execution": execution}
+            )
     write_json(output / "local-runs.json", measurements)
     return measurements
 
@@ -113,6 +157,7 @@ def snapshot(args):
     Returns:
         dict: Adapter Deployment spec and node identities, specs and capacities.
     """
+
     def get(*argv):
         """Fetch a Kubernetes resource as parsed JSON through the controller.
 
@@ -122,13 +167,24 @@ def snapshot(args):
         Returns:
             dict: Parsed JSON response from kubectl.
         """
-        return json.loads(ssh(args.controller, args.ssh_key, ["kubectl", "get", *argv, "-o", "json"]))
+        return json.loads(
+            ssh(args.controller, args.ssh_key, ["kubectl", "get", *argv, "-o", "json"])
+        )
+
     deployment = get("deployment", "image-batch-adapter", "-n", "fns-demo")
     nodes = get("nodes")
-    return {"deployment_spec": deployment["spec"], "nodes": [{
-        "name": node["metadata"]["name"], "uid": node["metadata"]["uid"],
-        "spec": node["spec"], "capacity": node["status"]["capacity"],
-    } for node in nodes["items"]]}
+    return {
+        "deployment_spec": deployment["spec"],
+        "nodes": [
+            {
+                "name": node["metadata"]["name"],
+                "uid": node["metadata"]["uid"],
+                "spec": node["spec"],
+                "capacity": node["status"]["capacity"],
+            }
+            for node in nodes["items"]
+        ],
+    }
 
 
 def stage_case(args, source, remote, corrupt=False):
@@ -141,15 +197,32 @@ def stage_case(args, source, remote, corrupt=False):
         corrupt (bool): Break Task Parquet and update its transport hash so the
             malformed-input case reaches the actual OpenDC loader.
     """
-    ssh(args.worker, args.ssh_key, ["python3", "-c",
-        "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.mkdir(); (p/'inputs').mkdir()", remote])
-    ssh(args.worker, args.ssh_key, ["sudo", "install", "-d", "-o", "1000", "-g", "1000", "-m", "0755", remote + "/results"])
+    ssh(
+        args.worker,
+        args.ssh_key,
+        [
+            "python3",
+            "-c",
+            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.mkdir(); (p/'inputs').mkdir()",
+            remote,
+        ],
+    )
+    ssh(
+        args.worker,
+        args.ssh_key,
+        ["sudo", "install", "-d", "-o", "1000", "-g", "1000", "-m", "0755", remote + "/results"],
+    )
     data = io.BytesIO()
     with tarfile.open(fileobj=data, mode="w") as archive:
         for path in sorted(source.rglob("*")):
             if path.is_file():
                 archive.add(path, arcname=path.relative_to(source), recursive=False)
-    remote_input(args.worker, args.ssh_key, ["tar", "-xf", "-", "-C", remote + "/inputs", "--no-same-owner"], data.getvalue())
+    remote_input(
+        args.worker,
+        args.ssh_key,
+        ["tar", "-xf", "-", "-C", remote + "/inputs", "--no-same-owner"],
+        data.getvalue(),
+    )
     if corrupt:
         # This negative fixture passes transport integrity but fails inside OpenDC.
         script = """import pathlib,json,hashlib,sys
@@ -177,10 +250,17 @@ def wait_job(args, namespace, name):
     """
     deadline = time.monotonic() + 210
     while time.monotonic() < deadline:
-        job = json.loads(ssh(args.controller, args.ssh_key,
-                             ["kubectl", "get", "job", name, "-n", namespace, "-o", "json"]))
-        if any(c["type"] in ("Complete", "Failed") and c["status"] == "True"
-               for c in job.get("status", {}).get("conditions", [])):
+        job = json.loads(
+            ssh(
+                args.controller,
+                args.ssh_key,
+                ["kubectl", "get", "job", name, "-n", namespace, "-o", "json"],
+            )
+        )
+        if any(
+            c["type"] in ("Complete", "Failed") and c["status"] == "True"
+            for c in job.get("status", {}).get("conditions", [])
+        ):
             return
         time.sleep(1)
     raise RuntimeError("Job did not become terminal; preserve namespace and remote artifacts")
@@ -202,30 +282,54 @@ def kubernetes_runs(args, output):
         list: Per-case collection records and time to observed terminal status.
     """
     namespace = args.namespace
-    existing = ssh(args.controller, args.ssh_key, ["kubectl", "get", "namespace", namespace, "--ignore-not-found", "-o", "name"])
+    existing = ssh(
+        args.controller,
+        args.ssh_key,
+        ["kubectl", "get", "namespace", namespace, "--ignore-not-found", "-o", "name"],
+    )
     if existing.strip():
         raise ValueError("integration namespace already exists")
-    jobs = json.loads(ssh(args.controller, args.ssh_key, ["kubectl", "get", "jobs", "-A", "-o", "json"]))
+    jobs = json.loads(
+        ssh(args.controller, args.ssh_key, ["kubectl", "get", "jobs", "-A", "-o", "json"])
+    )
     if any(job.get("status", {}).get("active", 0) for job in jobs["items"]):
-        raise ValueError("active Jobs exist; do not overlap controlled validation with another experiment")
+        raise ValueError(
+            "active Jobs exist; do not overlap controlled validation with another experiment"
+        )
     before = snapshot(args)
     write_json(output / "cluster-before.json", before)
     image, _ = command(["docker", "image", "inspect", args.image], output / "image-inspect.log")
     write_json(output / "image-inspect.json", json.loads(image))
     archive = output / "image.tar"
-    _, save_seconds = command(["docker", "save", "-o", str(archive), args.image], output / "image-save.log")
+    _, save_seconds = command(
+        ["docker", "save", "-o", str(archive), args.image], output / "image-save.log"
+    )
     staged_at = time.monotonic()
-    result = remote_input(args.worker, args.ssh_key, ["sudo", "ctr", "-n", "k8s.io", "images", "import", "-"], archive.read_bytes())
+    result = remote_input(
+        args.worker,
+        args.ssh_key,
+        ["sudo", "ctr", "-n", "k8s.io", "images", "import", "-"],
+        archive.read_bytes(),
+    )
     (output / "image-import.log").write_bytes(result)
     inspect = ssh(args.worker, args.ssh_key, ["sudo", "crictl", "inspecti", args.image])
     write_json(output / "worker-image.json", json.loads(inspect))
     if json.loads(inspect)["status"]["id"] != json.loads(image)[0]["Id"]:
         raise ValueError("worker image ID differs from local image")
-    write_json(output / "image-staging.json", {"docker_save_seconds": save_seconds, "transfer_import_inspect_seconds": time.monotonic() - staged_at})
+    write_json(
+        output / "image-staging.json",
+        {
+            "docker_save_seconds": save_seconds,
+            "transfer_import_inspect_seconds": time.monotonic() - staged_at,
+        },
+    )
     ssh(args.controller, args.ssh_key, ["kubectl", "create", "namespace", namespace])
     cases = [(f"controlled-{index}", "controlled", 120, "succeeded") for index in range(3)]
-    cases += [("memory", "memory", 120, "succeeded"), ("malformed", "controlled", 120, "failed"),
-              ("timeout", "controlled", 0.2, "timed_out")]
+    cases += [
+        ("memory", "memory", 120, "succeeded"),
+        ("malformed", "controlled", 120, "failed"),
+        ("timeout", "controlled", 0.2, "timed_out"),
+    ]
     collections = []
     for name, fixture, timeout, expected in cases:
         remote = f"/var/tmp/fns-opendc-{namespace}-{name}"
@@ -233,25 +337,58 @@ def kubernetes_runs(args, output):
         manifest = job_manifest(namespace, name, args.image, args.node, remote, timeout)
         write_json(output / f"job-{name}.json", manifest)
         submitted = time.monotonic()
-        remote_input(args.controller, args.ssh_key, ["kubectl", "create", "-f", "-"], json.dumps(manifest).encode())
+        remote_input(
+            args.controller,
+            args.ssh_key,
+            ["kubectl", "create", "-f", "-"],
+            json.dumps(manifest).encode(),
+        )
         wait_job(args, namespace, name)
         terminal_seconds = time.monotonic() - submitted
-        result = collect(args.controller, args.worker, args.ssh_key, namespace, name, remote, output / "kubernetes" / name)
+        result = collect(
+            args.controller,
+            args.worker,
+            args.ssh_key,
+            namespace,
+            name,
+            remote,
+            output / "kubernetes" / name,
+        )
         if result["status"] != "collected" or result["execution"]["status"] != expected:
-            raise ValueError(f"unexpected {name} result; preserve namespace and remote artifacts: {result}")
+            raise ValueError(
+                f"unexpected {name} result; preserve namespace and remote artifacts: {result}"
+            )
         # Only verified, task-owned directories and Jobs are removed.
-        ssh(args.controller, args.ssh_key, ["kubectl", "delete", "job", name, "-n", namespace, "--wait=true"])
+        ssh(
+            args.controller,
+            args.ssh_key,
+            ["kubectl", "delete", "job", name, "-n", namespace, "--wait=true"],
+        )
         ssh(args.worker, args.ssh_key, ["sudo", "rm", "-rf", "--", remote])
-        collections.append({"name": name, "job_terminal_seconds": terminal_seconds, "collection": result})
-        print(json.dumps({"case": name, "status": result["execution"]["status"], "artifacts_verified": True}), flush=True)
+        collections.append(
+            {"name": name, "job_terminal_seconds": terminal_seconds, "collection": result}
+        )
+        print(
+            json.dumps(
+                {"case": name, "status": result["execution"]["status"], "artifacts_verified": True}
+            ),
+            flush=True,
+        )
     ssh(args.controller, args.ssh_key, ["kubectl", "delete", "namespace", namespace, "--wait=true"])
     after = snapshot(args)
     write_json(output / "cluster-after.json", after)
     if before != after:
         raise ValueError("existing deployment/node configuration changed during integration")
     write_json(output / "kubernetes-runs.json", collections)
-    write_json(output / "cleanup.json", {"namespace_removed": True, "run_directories_removed": True,
-                                         "existing_deployment_and_nodes_unchanged": True, "vms_reprovisioned": False})
+    write_json(
+        output / "cleanup.json",
+        {
+            "namespace_removed": True,
+            "run_directories_removed": True,
+            "existing_deployment_and_nodes_unchanged": True,
+            "vms_reprovisioned": False,
+        },
+    )
     return collections
 
 
@@ -277,8 +414,14 @@ def main():
     kubernetes_runs(args, args.evidence_dir)
     comparisons = {}
     for fixture in ("controlled", "memory"):
-        hashes = [run["execution"]["validation"]["semantic_sha256"] for run in local if run["name"].startswith(fixture)]
-        cases = [f"controlled-{index}" for index in range(3)] if fixture == "controlled" else ["memory"]
+        hashes = [
+            run["execution"]["validation"]["semantic_sha256"]
+            for run in local
+            if run["name"].startswith(fixture)
+        ]
+        cases = (
+            [f"controlled-{index}" for index in range(3)] if fixture == "controlled" else ["memory"]
+        )
         for case in cases:
             path = args.evidence_dir / "kubernetes" / case / "artifacts/results/run/execution.json"
             hashes.append(json.loads(path.read_text())["validation"]["semantic_sha256"])

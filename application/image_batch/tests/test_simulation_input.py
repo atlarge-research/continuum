@@ -118,9 +118,7 @@ def settings(**overrides):
     return SimpleNamespace(**values)
 
 
-def trace_with_state(
-    queued=None, active=None, arrivals=None, completed=None, workers=None
-):
+def trace_with_state(queued=None, active=None, arrivals=None, completed=None, workers=None):
     state = {
         "schema_version": 1,
         "timestamp": iso(CUTOFF),
@@ -143,9 +141,7 @@ def future(task_id, arrival_ms):
 
 class SimulationInputTests(unittest.TestCase):
     def test_builds_shared_backlog_and_normalizes_each_scenario_without_mutation(self):
-        queued = state_job(
-            "queued", BASE + 2000, pod_phase="Pending", execution_state="waiting"
-        )
+        queued = state_job("queued", BASE + 2000, pod_phase="Pending", execution_state="waiting")
         startup = state_job(
             "startup",
             BASE + 3000,
@@ -229,9 +225,7 @@ class SimulationInputTests(unittest.TestCase):
         backlog = [item["task"] for item in initial["tasks"]]
         self.assertEqual(combined[0][:3], backlog)
         self.assertEqual(combined[1][:3], backlog)
-        self.assertEqual(
-            [task["submission_time"] for task in combined[0][3:]], [0, 19999]
-        )
+        self.assertEqual([task["submission_time"] for task in combined[0][3:]], [0, 19999])
         self.assertEqual([task["id"] for task in combined[1][3:]], [5])
         self.assertEqual(
             [row["task_id"] for row in manifest["scenarios"][0]["future_tasks"]],
@@ -242,9 +236,7 @@ class SimulationInputTests(unittest.TestCase):
             "template-request",
         )
         self.assertNotIn("request_id", manifest["scenarios"][0]["future_tasks"][0])
-        self.assertEqual(
-            initial["tasks"][0]["metadata"]["request_id"], "request-queued"
-        )
+        self.assertEqual(initial["tasks"][0]["metadata"]["request_id"], "request-queued")
         self.assertEqual(initial["tasks"][0]["metadata"]["run_id"], "run-test")
         self.assertEqual(initial["tasks"][0]["metadata"]["workload_run_id"], "run-test")
         self.assertEqual(initial["tasks"][0]["metadata"]["endpoint_batch_id"], "batch")
@@ -280,10 +272,7 @@ class SimulationInputTests(unittest.TestCase):
                 self.assertEqual(manifest["status"], "ready")
                 fragments = initial["tasks"][0]["task"]["fragments"]
                 self.assertEqual(
-                    [
-                        (fragment["duration"], fragment["cpu_usage"])
-                        for fragment in fragments
-                    ],
+                    [(fragment["duration"], fragment["cpu_usage"]) for fragment in fragments],
                     expected,
                 )
                 self.assertEqual(combined[0][0], initial["tasks"][0]["task"])
@@ -291,27 +280,41 @@ class SimulationInputTests(unittest.TestCase):
     def test_seven_seconds_trimmed_from_five_and_ten_second_fragments(self):
         frozen = template()
         frozen["record"]["task"] = profile(durations=(5000, 10000))
-        running = state_job("running", BASE, node_name="worker-a",
-                            pod_phase="Running", execution_state="running",
-                            execution_start_ms=CUTOFF - 7000)
+        running = state_job(
+            "running",
+            BASE,
+            node_name="worker-a",
+            pod_phase="Running",
+            execution_state="running",
+            execution_start_ms=CUTOFF - 7000,
+        )
         manifest, _, combined = build_simulation_inputs(
             trace_with_state(active=[running], arrivals={"running": {"creation_ms": BASE}}),
-            frozen, [[]], settings())
+            frozen,
+            [[]],
+            settings(),
+        )
         self.assertEqual(manifest["status"], "ready")
         self.assertEqual(combined[0][0]["duration"], 8000)
-        self.assertEqual(combined[0][0]["fragments"], [
-            {"id": 1, "duration": 8000, "cpu_count": 1, "cpu_usage": 1200.0}])
+        self.assertEqual(
+            combined[0][0]["fragments"],
+            [{"id": 1, "duration": 8000, "cpu_count": 1, "cpu_usage": 1200.0}],
+        )
 
     def test_profile_exhaustion_is_model_evidence_not_executable_or_completed(self):
         for elapsed in (5999, 6000, 6001, 7000):
             with self.subTest(elapsed=elapsed):
                 running = state_job(
-                    "running", BASE + 1000, node_name="worker-a",
-                    pod_phase="Running", execution_state="running",
+                    "running",
+                    BASE + 1000,
+                    node_name="worker-a",
+                    pod_phase="Running",
+                    execution_state="running",
                     execution_start_ms=CUTOFF - elapsed,
                 )
                 trace = trace_with_state(
-                    active=[running], arrivals={"running": {"creation_ms": BASE + 1000}},
+                    active=[running],
+                    arrivals={"running": {"creation_ms": BASE + 1000}},
                 )
                 original = copy.deepcopy(trace.state)
                 manifest, initial, combined = build_simulation_inputs(
@@ -324,8 +327,10 @@ class SimulationInputTests(unittest.TestCase):
                     self.assertEqual(initial["model_exhausted_jobs"], [])
                     task = initial["tasks"][0]["task"]
                     self.assertEqual(task["duration"], 1)
-                    self.assertEqual(task["fragments"], [
-                        {"id": 1, "duration": 1, "cpu_count": 1, "cpu_usage": 1800.0}])
+                    self.assertEqual(
+                        task["fragments"],
+                        [{"id": 1, "duration": 1, "cpu_count": 1, "cpu_usage": 1800.0}],
+                    )
                     self.assertEqual(combined, [[task], [task]])
                     continue
                 self.assertEqual(initial["tasks"], [])
@@ -340,15 +345,19 @@ class SimulationInputTests(unittest.TestCase):
                 self.assertEqual(evidence["metadata"]["kubernetes_job_uid"], "running")
                 self.assertEqual(evidence["metadata"]["original_creation_ms"], BASE + 1000)
                 self.assertEqual(evidence["metadata"]["elapsed_ms"], elapsed)
-                self.assertEqual(evidence["metadata"]["execution_start_time"], running["execution_start_time"])
-                diagnostic = next(d for d in manifest["diagnostics"]
-                                  if d["code"] == "running_profile_exhausted")
+                self.assertEqual(
+                    evidence["metadata"]["execution_start_time"], running["execution_start_time"]
+                )
+                diagnostic = next(
+                    d for d in manifest["diagnostics"] if d["code"] == "running_profile_exhausted"
+                )
                 self.assertEqual(diagnostic["remaining_ms"], 0)
                 self.assertEqual(diagnostic["elapsed_ms"], elapsed)
 
     def test_simulation_completion_does_not_select_an_evaluation_policy(self):
         manifest, initial, _ = build_simulation_inputs(
-            trace_with_state(), template(), [[]], settings())
+            trace_with_state(), template(), [[]], settings()
+        )
         self.assertEqual(manifest["schema_version"], 2)
         self.assertEqual(initial["schema_version"], 2)
         self.assertNotIn("drain_scoring", manifest)
@@ -374,22 +383,16 @@ class SimulationInputTests(unittest.TestCase):
                 "completed": {"creation_ms": BASE + 1000},
                 "terminated": {"creation_ms": BASE + 2000},
             },
-            completed=[
-                {"task": profile(), "source": {"kubernetes_job_uid": "completed"}}
-            ],
+            completed=[{"task": profile(), "source": {"kubernetes_job_uid": "completed"}}],
         )
-        manifest, initial, combined = build_simulation_inputs(
-            trace, template(), [[]], settings()
-        )
+        manifest, initial, combined = build_simulation_inputs(trace, template(), [[]], settings())
         self.assertEqual(manifest["status"], "ready")
         self.assertEqual(initial["tasks"], [])
         self.assertEqual(combined, [[]])
 
     def test_legacy_pending_and_running_states_are_classified(self):
         pending = state_job("pending", BASE + 1000, pod_phase="Pending")
-        startup = state_job(
-            "startup", BASE + 2000, node_name="worker-a", pod_phase="Pending"
-        )
+        startup = state_job("startup", BASE + 2000, node_name="worker-a", pod_phase="Pending")
         running = state_job(
             "running",
             BASE + 3000,
@@ -406,9 +409,7 @@ class SimulationInputTests(unittest.TestCase):
                 "running": {"creation_ms": BASE + 3000},
             },
         )
-        manifest, initial, _ = build_simulation_inputs(
-            trace, template(), [[]], settings()
-        )
+        manifest, initial, _ = build_simulation_inputs(trace, template(), [[]], settings())
         self.assertEqual(manifest["status"], "ready")
         self.assertEqual(
             [item["metadata"]["phase"] for item in initial["tasks"]],
@@ -432,18 +433,14 @@ class SimulationInputTests(unittest.TestCase):
             },
         )
 
-        manifest, initial, _ = build_simulation_inputs(
-            trace, template(), [[]], settings()
-        )
+        manifest, initial, _ = build_simulation_inputs(trace, template(), [[]], settings())
 
         self.assertEqual(manifest["status"], "ready")
         self.assertEqual(
             [item["metadata"]["kubernetes_job_uid"] for item in initial["tasks"]],
             ["pending", "no-pod"],
         )
-        self.assertEqual(
-            [item["metadata"]["queue_order"] for item in initial["tasks"]], [0, 1]
-        )
+        self.assertEqual([item["metadata"]["queue_order"] for item in initial["tasks"]], [0, 1])
         self.assertEqual(
             [item["metadata"]["phase"] for item in initial["tasks"]],
             ["startup", "queued"],
@@ -481,13 +478,9 @@ class SimulationInputTests(unittest.TestCase):
             with self.subTest(uid=job["kubernetes_job_uid"]):
                 trace = trace_with_state(
                     **{group: [job]},
-                    arrivals={
-                        job["kubernetes_job_uid"]: {"creation_ms": BASE + 1000}
-                    },
+                    arrivals={job["kubernetes_job_uid"]: {"creation_ms": BASE + 1000}},
                 )
-                manifest, _, combined = build_simulation_inputs(
-                    trace, template(), [[]], settings()
-                )
+                manifest, _, combined = build_simulation_inputs(trace, template(), [[]], settings())
                 self.assertEqual(manifest["status"], "not_ready")
                 self.assertIn(expected, manifest["reasons"])
                 self.assertEqual(combined, [])
@@ -584,9 +577,7 @@ class SimulationInputTests(unittest.TestCase):
                 )
                 self.assertEqual(manifest["status"], "not_ready")
                 self.assertIn(expected_code, manifest["reasons"])
-                self.assertIn(
-                    expected_code, [row["code"] for row in manifest["diagnostics"]]
-                )
+                self.assertIn(expected_code, [row["code"] for row in manifest["diagnostics"]])
                 self.assertEqual(combined, [])
                 self.assertEqual(initial["schema_version"], 2)
 
@@ -630,9 +621,7 @@ class SimulationInputTests(unittest.TestCase):
         malformed = future(1, CUTOFF)
         malformed["fragments"][1]["id"] = 99
         with self.assertRaisesRegex(ValueError, "Fragment id"):
-            build_simulation_inputs(
-                trace_with_state(), template(), [[malformed]], settings()
-            )
+            build_simulation_inputs(trace_with_state(), template(), [[malformed]], settings())
 
 
 if __name__ == "__main__":

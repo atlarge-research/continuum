@@ -17,7 +17,6 @@ from forecast_trace import (
     STREAMS,
     bounded_read,
     canonical,
-    digest,
     iso,
     milliseconds,
     parquet_tasks,
@@ -26,7 +25,6 @@ from forecast_trace import (
 )
 from forecast_workload import (
     Settings,
-    check_template,
     forecast,
     run_once,
     select_template,
@@ -127,22 +125,14 @@ def save_rows(root, rows):
 
 class ForecastTests(unittest.TestCase):
     def test_more_cycles_extend_the_run_preserving_the_period_and_existing_arrivals(self):
-        common = dict(
-            period_seconds=120, minimum_rate_per_second=0.2, peak_rate_per_second=1.0
-        )
+        common = dict(period_seconds=120, minimum_rate_per_second=0.2, peak_rate_per_second=1.0)
         old = build_periodic_schedule(**common, generator=random.Random(42))
         self.assertEqual(
             old,
-            build_periodic_schedule(
-                **common, arrival_cycles=1, generator=random.Random(42)
-            ),
+            build_periodic_schedule(**common, arrival_cycles=1, generator=random.Random(42)),
         )
-        multi = build_periodic_schedule(
-            **common, arrival_cycles=2, generator=random.Random(42)
-        )
-        first = [
-            a for a in multi if a.planned_offset_ns < 120_000_000_000
-        ]
+        multi = build_periodic_schedule(**common, arrival_cycles=2, generator=random.Random(42))
+        first = [a for a in multi if a.planned_offset_ns < 120_000_000_000]
         second = [
             a.planned_offset_ns - 120_000_000_000
             for a in multi
@@ -154,14 +144,10 @@ class ForecastTests(unittest.TestCase):
         self.assertNotEqual([a.planned_offset_ns for a in first], second)
         self.assertEqual(
             multi,
-            build_periodic_schedule(
-                **common, arrival_cycles=2, generator=random.Random(42)
-            ),
+            build_periodic_schedule(**common, arrival_cycles=2, generator=random.Random(42)),
         )
         with self.assertRaises(ValueError):
-            build_periodic_schedule(
-                **common, arrival_cycles=0, generator=random.Random(42)
-            )
+            build_periodic_schedule(**common, arrival_cycles=0, generator=random.Random(42))
 
     def test_bounded_prefix_survives_appends_and_ignores_partial_line(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -192,9 +178,7 @@ class ForecastTests(unittest.TestCase):
         rows = fixture()
         rows["observer-events.jsonl"][0]["timestamp"] = iso(BASE + 60000)
         rows["observer-events.jsonl"] = [
-            r
-            for r in rows["observer-events.jsonl"]
-            if r["event_type"] != "task.emitted"
+            r for r in rows["observer-events.jsonl"] if r["event_type"] != "task.emitted"
         ]
         trace = read_trace(rows, "test", BASE + 40000)
         self.assertNotIn("job-0", trace.arrivals)
@@ -219,9 +203,7 @@ class ForecastTests(unittest.TestCase):
     def test_completion_and_emission_are_both_required(self):
         rows = fixture()
         trace = read_trace(rows, "test", BASE + 18000)
-        self.assertEqual(
-            len(trace.completed), 1
-        )  # second completion=18s, emission=18.1s
+        self.assertEqual(len(trace.completed), 1)  # second completion=18s, emission=18.1s
         rows["workload.jsonl"][0]["source"]["completion_time"] = iso(BASE + 70000)
         self.assertEqual(len(read_trace(rows, "test", BASE + 18000).completed), 0)
 
@@ -230,9 +212,7 @@ class ForecastTests(unittest.TestCase):
         event = rows["observer-events.jsonl"][0]
         event["timestamp_unix_ns"] = (BASE + 40000) * 1_000_000 + 1
         rows["observer-events.jsonl"] = [
-            r
-            for r in rows["observer-events.jsonl"]
-            if r["event_type"] != "task.emitted"
+            r for r in rows["observer-events.jsonl"] if r["event_type"] != "task.emitted"
         ]
         self.assertNotIn("job-0", read_trace(rows, "test", BASE + 40000).arrivals)
         self.assertIn("job-0", read_trace(rows, "test", BASE + 40001).arrivals)
@@ -251,8 +231,7 @@ class ForecastTests(unittest.TestCase):
         rows["cluster-state.jsonl"] = [
             r
             for r in rows["cluster-state.jsonl"]
-            if milliseconds(r["timestamp"])
-            not in (BASE + 21000, BASE + 22000, BASE + 23000)
+            if milliseconds(r["timestamp"]) not in (BASE + 21000, BASE + 22000, BASE + 23000)
         ]
         trace = read_trace(rows, "test", BASE + 42000)
         summary, _, _, bins = forecast(trace, settings())
@@ -262,9 +241,7 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(summary["history"]["excluded_bins"], 1)
         self.assertEqual(summary["history"]["incomplete_bins"], 1)
         self.assertTrue(any(b["eligible"] and b["count"] == 0 for b in bins))
-        self.assertEqual(
-            forecast(trace, settings(max_gap_seconds=4))[0]["status"], "ready"
-        )
+        self.assertEqual(forecast(trace, settings(max_gap_seconds=4))[0]["status"], "ready")
         # A third elapsed period supplies the missing phase's second usable bin.
         self.assertEqual(
             forecast(read_trace(rows, "test", BASE + 60000), settings())[0]["status"],
@@ -314,9 +291,7 @@ class ForecastTests(unittest.TestCase):
         changed["cluster-state.jsonl"][-1]["workers"] = [
             {"invalid": "future state must not be read"}
         ]
-        self.assertEqual(
-            before, forecast(read_trace(changed, "test", cutoff), settings())
-        )
+        self.assertEqual(before, forecast(read_trace(changed, "test", cutoff), settings()))
         later = select_template(read_trace(rows, "test", BASE + 60000), settings())
         self.assertEqual(later["record"], before[1]["record"])
         result = forecast(read_trace(rows, "test", cutoff), settings(), later)
@@ -330,9 +305,7 @@ class ForecastTests(unittest.TestCase):
             "forecast_workload.PoissonRegressor.fit",
             side_effect=ValueError("fit error"),
         ):
-            self.assertEqual(
-                forecast(trace, settings(), template)[0]["status"], "fit_failed"
-            )
+            self.assertEqual(forecast(trace, settings(), template)[0]["status"], "fit_failed")
         trace.arrivals = {}
         summary, _, scenarios, _ = forecast(trace, settings(), template)
         self.assertEqual(summary["status"], "ready")
@@ -340,14 +313,10 @@ class ForecastTests(unittest.TestCase):
         trace.completed = []
         self.assertIn("template_unavailable", forecast(trace, settings())[0]["reasons"])
         trace.state = None
-        self.assertIn(
-            "state_missing", forecast(trace, settings(), template)[0]["reasons"]
-        )
+        self.assertIn("state_missing", forecast(trace, settings(), template)[0]["reasons"])
         trace.state = {}
         trace.cutoff += 4000
-        self.assertIn(
-            "state_stale", forecast(trace, settings(), template)[0]["reasons"]
-        )
+        self.assertIn("state_stale", forecast(trace, settings(), template)[0]["reasons"])
 
     def test_parquet_empty_and_full_have_identical_required_schema(self):
         task = fixture()["workload.jsonl"][0]["task"]
@@ -357,9 +326,7 @@ class ForecastTests(unittest.TestCase):
             parquet_tasks([task], root / "full")
             for name in ("tasks", "fragments"):
                 empty = pq.read_schema(root / "empty" / f"{name}.parquet")
-                self.assertEqual(
-                    empty, pq.read_schema(root / "full" / f"{name}.parquet")
-                )
+                self.assertEqual(empty, pq.read_schema(root / "full" / f"{name}.parquet"))
                 self.assertTrue(all(not field.nullable for field in empty))
                 self.assertEqual(str(empty.field("id").type), "int32")
 
@@ -381,9 +348,7 @@ class ForecastTests(unittest.TestCase):
             root = Path(temporary)
             save_rows(root / "inputs", rows)
             run_once(root / "inputs", root / "forecast", BASE + 40000, settings())
-            result = evaluate(
-                root / "inputs", root / "forecast", until=iso(BASE + 50000)
-            )
+            result = evaluate(root / "inputs", root / "forecast", until=iso(BASE + 50000))
             self.assertEqual(result["scored_bins"], 2)
             self.assertEqual(result["uncovered_or_future_bins"], 2)
             self.assertEqual(result["scores"][0]["observed_count"], 1)
@@ -409,15 +374,10 @@ class ForecastTests(unittest.TestCase):
             root = Path(temporary)
             save_rows(root / "inputs", rows)
             run_once(root / "inputs", root / "forecast", BASE + 65000, settings())
-            result = evaluate(
-                root / "inputs", root / "forecast", until=iso(BASE + 75000)
-            )
+            result = evaluate(root / "inputs", root / "forecast", until=iso(BASE + 75000))
             self.assertEqual(result["evaluation_cutoff_ms"], BASE + 75000)
             self.assertEqual(
-                [
-                    (s["bin_start_ms"] - BASE, s["observed_count"])
-                    for s in result["scores"]
-                ],
+                [(s["bin_start_ms"] - BASE, s["observed_count"]) for s in result["scores"]],
                 [(65000, 0), (70000, 1)],
             )
             self.assertEqual(result["uncovered_or_future_bins"], 2)
@@ -426,9 +386,7 @@ class ForecastTests(unittest.TestCase):
 
     def test_evaluation_brackets_unaligned_end_and_retains_missing_coverage(self):
         for coverage in ("covered", "gap", "capture_failure", "no_following_state"):
-            with self.subTest(
-                coverage=coverage
-            ), tempfile.TemporaryDirectory() as temporary:
+            with self.subTest(coverage=coverage), tempfile.TemporaryDirectory() as temporary:
                 rows = fixture()
                 for row in rows["cluster-state.jsonl"]:
                     row["timestamp"] = iso(milliseconds(row["timestamp"]) + 100)
@@ -436,9 +394,7 @@ class ForecastTests(unittest.TestCase):
                     rows["cluster-state.jsonl"] = [
                         r
                         for r in rows["cluster-state.jsonl"]
-                        if not BASE + 71100
-                        <= milliseconds(r["timestamp"])
-                        <= BASE + 74100
+                        if not BASE + 71100 <= milliseconds(r["timestamp"]) <= BASE + 74100
                     ]
                 elif coverage == "capture_failure":
                     rows["observer-events.jsonl"].append(
@@ -458,20 +414,14 @@ class ForecastTests(unittest.TestCase):
                 root = Path(temporary)
                 save_rows(root / "inputs", rows)
                 run_once(root / "inputs", root / "forecast", BASE + 65000, settings())
-                result = evaluate(
-                    root / "inputs", root / "forecast", until=iso(BASE + 75000)
-                )
+                result = evaluate(root / "inputs", root / "forecast", until=iso(BASE + 75000))
                 self.assertEqual(
                     [s["bin_start_ms"] - BASE for s in result["scores"]],
                     [65000, 70000] if coverage == "covered" else [65000],
                 )
                 # The bin ending at 75s is partial if the experiment ends at 74.9s.
-                partial = evaluate(
-                    root / "inputs", root / "forecast", until=iso(BASE + 74900)
-                )
-                self.assertEqual(
-                    [s["bin_start_ms"] - BASE for s in partial["scores"]], [65000]
-                )
+                partial = evaluate(root / "inputs", root / "forecast", until=iso(BASE + 74900))
+                self.assertEqual([s["bin_start_ms"] - BASE for s in partial["scores"]], [65000])
 
     def test_complete_artifacts_reproduce_byte_for_byte(self):
         with tempfile.TemporaryDirectory() as temporary:

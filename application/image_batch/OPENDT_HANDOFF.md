@@ -2,7 +2,7 @@
 
 ## Where to resume
 
-Start the next thread with the formatting and lint cleanup below, before the next simulation feature. This ordering supersedes the later feature steps; they remain queued afterward.
+The branch-wide formatting and lint cleanup is complete and approved by the user; see [the cleanup report](LINT_CLEANUP.md). Resume the provisional scenario workflow below, including the agreed worker-capacity and control-plane runner placement. Do not repeat the branch-wide lint pass.
 
 Simulator inputs and direct controlled OpenDC execution are implemented. The execution milestone precedes assigned-work integration and bypasses OpenDT entirely: use `opendc_run.py` and the container built from pinned upstream master commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad`. It executes synthetic empty-state fixtures, not live simulation bundles. Feeding only live Parquet traces into this runner would lose existing placement and startup occupancy.
 
@@ -12,17 +12,19 @@ The next implementation also uses the worker-capacity and control-plane runner d
 
 The entry point is [forecast_workload.py](src/forecast_workload.py) with `--simulation-inputs`; [simulation_input.py](src/simulation_input.py) builds the shared initial state and combined scenarios. Use the [README](README.md#arrival-forecasting) for invocation and [DESIGN](DESIGN.md#simulation-input-semantics) for modeling decisions. Scope and delivery priorities remain in the [Notion demo task](https://app.notion.com/p/374dc985c5868055a157df2a6d95f1bb).
 
-## First task in the next thread: formatting and lint cleanup
+## Formatting and lint cleanup completed
 
-Apply Black and Pylint to all Python files added or modified on this branch relative to its branch base, including current uncommitted and untracked Python work. Establish the correct comparison base from branch history; `884c30b` is the OpenDC feature's starting point, not necessarily the base of the entire branch. Exclude deleted files, generated output, captures, vendored dependencies and virtual environments. Do not expand this into a repository-wide reformat of untouched files.
+The cleanup covers all 52 surviving Python files changed since recorded branch creation at `39022508131df910a2a92562e5528d234b34a7c9`, plus one new registry regression. The starting workspace was clean at reviewed commit `f47b36a39b01dcca8fcf83d3f6c282aca07bdab6`. See [LINT_CLEANUP.md](LINT_CLEANUP.md) for the scope rationale, actual tool versions, full finding-type counts, narrow exceptions and saved validation evidence.
 
-1. Inspect the working tree and identify the complete branch file set. Preserve the user's review edits and removals, including the removed checksum catalogues and version JSON. Keep feature changes distinguishable from the cleanup.
-2. Use the existing tool versions in `requirements.txt`. Run Black with a 100-character line length, then Pylint with `sysconfig/pylintrc` from the repository root and the appropriate import environment. No new lint framework or automatic hook setup is required for this pass.
-3. Fix clear defects and straightforward findings such as unused imports. Review module/function length, argument count and complexity warnings individually. Keep coherent functions together, explain narrow exceptions, and discuss substantial refactors or broad configuration changes with the user before including them. Do not suppress all warnings just to achieve a score.
-4. Recheck formatting and lint on the affected files after fixes, inspect the diff for unintended behavior changes, and run the relevant regression suites. Report actual results and any remaining findings or justified exceptions.
-5. Prepare the cleanup as a separate reviewable change intended for its own commit after feature review. Do not stage, commit or push without the user's authorization. Record completion here so later threads proceed to simulation work rather than repeat the branch-wide pass.
+Black 22.12.0 checks pass at 100 characters. With the user's version allowance, Pylint 3.3.9 replaced 2.15.8 after the latter crashed on existing code. Final Pylint has no errors or fatal findings; 468 reviewed convention/refactoring/warning messages remain, so the strict lint gate still exits nonzero. No broad rule changes or metric-driven refactors were made. The small behavioral fix gives unsupported Kubernetes image versions an explicit ValueError instead of undefined-variable failure.
 
-The persistent [repository agent rule](../../AGENTS.md) makes Black, Pylint and useful docstrings part of future Python editing tasks. Routine tasks check their changed files; this first pass deliberately covers the broader branch. Documentation-only and read-only work do not trigger formatting changes. Markdown paragraphs remain unwrapped.
+All 141 image-batch tests pass. Infrastructure discovery passes 27 tests and skips four existing opt-in checks. The new registry regression reproduced the old failure before the fix. The diff and executable AST changes received independent review and the user approved the cleanup for commit and push. Existing evidence and the packaging simplifications remain intact; no VM, deployment or workload changes were made.
+
+Pre-commit verification also corrected a test-only process-disappearance race in the timeout regression. The process suite passed five consecutive runs and the full image-batch suite passed afterward; production process cleanup behavior is unchanged.
+
+The remaining lint findings are accepted for the demo; no further lint milestone is planned. During future implementation, improve documentation when touching functions whose input contracts, modeling assumptions or failure behavior need clarification. Investigate new correctness-related lint findings and concrete test failures as they arise, and run regressions appropriate to each change. These are ongoing development practices, not prerequisites before the next feature; the persistent rules are in [AGENTS.md](../../AGENTS.md).
+
+The persistent [repository agent rule](../../AGENTS.md) applies Black, Pylint and useful docstrings to future Python changes. Routine tasks check their changed files; this completed milestone deliberately covered the broader branch. Documentation-only and read-only work do not trigger formatting changes. Markdown paragraphs remain unwrapped.
 
 ## Evidence and OpenDT compatibility
 
@@ -117,7 +119,7 @@ The direct container-execution milestone has sufficient validation. Additional O
 
 ## Validation evidence
 
-The [final review validation](../../logs/fns-opendc-execution/final-review-20260918T152410Z/VALIDATION.md) covers the reviewed implementation after packaging simplification and documentation cleanup: 141 image-batch tests pass, the current Dockerfile builds without the removed version JSON or checksum catalogues, and both offline simulator fixtures reproduce the earlier native records. The final review changed no executable Python statements. The separate branch-wide Black/Pylint pass remains the next task.
+The [final review validation](../../logs/fns-opendc-execution/final-review-20260918T152410Z/VALIDATION.md) covers the reviewed implementation after packaging simplification and documentation cleanup: 141 image-batch tests pass, the current Dockerfile builds without the removed version JSON or checksum catalogues, and both offline simulator fixtures reproduce the earlier native records. The final review changed no executable Python statements. The subsequent [branch-wide cleanup](LINT_CLEANUP.md) records its own checks and reviewed remaining lint findings.
 
 The reports below describe the images tested at the time. During review, the Gradle dependency checksum catalogue, compiled JAR inventory and archive-normalization script were removed; dependency verification is disabled. The OpenDC source revision remains pinned. The [simplified-build validation](../../logs/fns-opendc-execution/simplified-build-20260918T125614Z/VALIDATION.md) covers the rebuilt image, 41 passing OpenDC tests, and offline controlled/memory smoke runs whose native records match the earlier validated image. Kubernetes integration was not repeated for this packaging simplification.
 

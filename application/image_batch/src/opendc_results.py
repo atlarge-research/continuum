@@ -37,8 +37,10 @@ def _near(actual, expected, tolerance, description):
     Raises:
         ValueError: The observed value is missing or outside tolerance.
     """
-    _require(actual is not None and abs(actual - expected) <= tolerance,
-             f"{description}: expected {expected} +/- {tolerance}, got {actual}")
+    _require(
+        actual is not None and abs(actual - expected) <= tolerance,
+        f"{description}: expected {expected} +/- {tolerance}, got {actual}",
+    )
 
 
 def _read_table(path):
@@ -98,8 +100,10 @@ def _check_tasks(rows, fixture):
         ValueError: Task identities, resources, lifecycle or fragment demand do not match.
     """
     expected_tasks = fixture_tasks(fixture)
-    _require({row["task_id"] for row in rows} == {task["id"] for task in expected_tasks},
-             "simulator task identities differ from the controlled input")
+    _require(
+        {row["task_id"] for row in rows} == {task["id"] for task in expected_tasks},
+        "simulator task identities differ from the controlled input",
+    )
     tolerance = fixture["expected"]["scheduler_tolerance_ms"]
     completed = []
     for task in expected_tasks:
@@ -108,27 +112,57 @@ def _check_tasks(rows, fixture):
         _require(len(terminal) == 1, f'task {task["id"]} needs exactly one completed record')
         record = terminal[0]
         _require(bool(record["host_name"]), f'task {task["id"]} has no placement')
-        _require(record["mem_capacity"] == task["mem_capacity"], f'task {task["id"]} memory conversion failed')
+        _require(
+            record["mem_capacity"] == task["mem_capacity"],
+            f'task {task["id"]} memory conversion failed',
+        )
         _require(record["cpu_count"] == 1, "unexpected task CPU count")
         _near(record["submission_time"], task["submission_time"], 0, "submission time")
-        _near(record["finish_time"] - record["schedule_time"], task["duration"], tolerance, "execution duration")
-        expected_start = fixture["expected"]["last_start_ms"] if task["id"] == fixture["expected"]["last_task_id"] else 0
+        _near(
+            record["finish_time"] - record["schedule_time"],
+            task["duration"],
+            tolerance,
+            "execution duration",
+        )
+        expected_start = (
+            fixture["expected"]["last_start_ms"]
+            if task["id"] == fixture["expected"]["last_task_id"]
+            else 0
+        )
         _near(record["schedule_time"], expected_start, tolerance, "schedule time")
         offset = 0
         for fragment in task["fragments"]:
             # Avoid interval edges; one-second exports can straddle a transition.
-            middle = [row for row in samples if
-                      offset + 1000 < row["timestamp"] - record["schedule_time"] < offset + fragment["duration"] - 1000]
+            middle = [
+                row
+                for row in samples
+                if offset + 1000
+                < row["timestamp"] - record["schedule_time"]
+                < offset + fragment["duration"] - 1000
+            ]
             _require(bool(middle), f'task {task["id"]} fragment has no interior telemetry')
             for row in middle:
                 _near(row["cpu_demand"], fragment["cpu_usage"], 0.01, "fragment CPU demand")
                 _near(row["cpu_usage"], fragment["cpu_usage"], 0.01, "fragment CPU supply")
             offset += fragment["duration"]
-        completed.append({key: record[key] for key in
-                          ("task_id", "submission_time", "schedule_time", "finish_time", "host_name", "mem_capacity")})
+        completed.append(
+            {
+                key: record[key]
+                for key in (
+                    "task_id",
+                    "submission_time",
+                    "schedule_time",
+                    "finish_time",
+                    "host_name",
+                    "mem_capacity",
+                )
+            }
+        )
     last = completed[-1]
-    _require(last["schedule_time"] >= max(task["finish_time"] for task in completed[:-1]),
-             "queued task started before occupied capacity was released")
+    _require(
+        last["schedule_time"] >= max(task["finish_time"] for task in completed[:-1]),
+        "queued task started before occupied capacity was released",
+    )
     _near(last["finish_time"], fixture["expected"]["last_finish_ms"], tolerance, "final completion")
     return completed
 
@@ -152,29 +186,60 @@ def validate_results(directory, fixture):
     """
     directory = Path(directory)
     raw = directory / "controlled" / "raw-output" / "0" / "seed=0"
-    tables = {name: _read_table(raw / f"{name}.parquet") for name in ("task", "host", "service", "powerSource")}
+    tables = {
+        name: _read_table(raw / f"{name}.parquet")
+        for name in ("task", "host", "service", "powerSource")
+    }
     try:
         completed = _check_tasks(tables["task"], fixture)
         service = max(tables["service"], key=lambda row: row["timestamp"])
         expected = fixture["expected"]
-        _require(service["tasks_completed"] == expected["task_count"], "service completion count mismatch")
+        _require(
+            service["tasks_completed"] == expected["task_count"],
+            "service completion count mismatch",
+        )
         _require(service["tasks_total"] == expected["task_count"], "service total count mismatch")
-        _require(service["tasks_pending"] == service["tasks_active"] == service["tasks_terminated"] == 0,
-                 "service still has unfinished or failed tasks")
-        _require(max(row["tasks_active"] for row in tables["service"]) == expected["concurrent_tasks"],
-                 "unexpected maximum task concurrency")
-        _require(any(row["tasks_pending"] > 0 for row in tables["service"]), "expected queued work was not observed")
+        _require(
+            service["tasks_pending"] == service["tasks_active"] == service["tasks_terminated"] == 0,
+            "service still has unfinished or failed tasks",
+        )
+        _require(
+            max(row["tasks_active"] for row in tables["service"]) == expected["concurrent_tasks"],
+            "unexpected maximum task concurrency",
+        )
+        _require(
+            any(row["tasks_pending"] > 0 for row in tables["service"]),
+            "expected queued work was not observed",
+        )
         host_names = {f"test-host-{index}" for index in range(fixture["host_count"])}
-        _require({row["host_name"] for row in tables["host"]} == host_names, "host identity mismatch")
+        _require(
+            {row["host_name"] for row in tables["host"]} == host_names, "host identity mismatch"
+        )
         for row in tables["host"]:
             _require(row["core_count"] == fixture["cores_per_host"], "host CPU capacity mismatch")
-            _require(row["mem_capacity"] == fixture["memory_mib_per_host"], "host memory capacity mismatch")
+            _require(
+                row["mem_capacity"] == fixture["memory_mib_per_host"],
+                "host memory capacity mismatch",
+            )
             _require(0 <= row["tasks_running"] <= fixture["cores_per_host"], "host overcommitted")
-            _require(math.isfinite(row["energy_usage"]) and row["energy_usage"] >= 0, "invalid raw host energy")
+            _require(
+                math.isfinite(row["energy_usage"]) and row["energy_usage"] >= 0,
+                "invalid raw host energy",
+            )
     except (KeyError, TypeError, OSError) as exc:
         raise ValueError(f"incomplete simulator output: {exc}") from exc
-    semantic = {name: sorted((_json_values(row) for row in rows), key=canonical) for name, rows in tables.items()}
-    return {"status": "passed", "task_count": len(completed), "tasks": completed,
-            "table_rows": {name: len(rows) for name, rows in tables.items()},
-            "semantic_sha256": hashlib.sha256(canonical(semantic)).hexdigest(),
-            "interpretation": "controlled execution oracle; raw energy is not a scoring window or calibrated prediction"}
+    semantic = {
+        name: sorted((_json_values(row) for row in rows), key=canonical)
+        for name, rows in tables.items()
+    }
+    return {
+        "status": "passed",
+        "task_count": len(completed),
+        "tasks": completed,
+        "table_rows": {name: len(rows) for name, rows in tables.items()},
+        "semantic_sha256": hashlib.sha256(canonical(semantic)).hexdigest(),
+        "interpretation": (
+            "controlled execution oracle; raw energy is not a scoring window "
+            "or calibrated prediction"
+        ),
+    }

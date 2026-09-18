@@ -189,11 +189,11 @@ def set_ip_names(config, machines, nodes_per_machine):
             middle_ip_base, postfix_ip_base = update_ip(config, middle_ip_base, postfix_ip_base)
         else:
             # Base images for resource manager images
-            if "resource_manager" in config["benchmark"]:
-                # Use Kubeedge setup code for mist computing
-                rm = config["benchmark"]["resource_manager"]
-                if config["benchmark"]["resource_manager"] == "mist":
-                    rm = "kubeedge"
+            # Non-infrastructure-only configurations require a resource manager.
+            rm = config["benchmark"]["resource_manager"]
+            # Use Kubeedge setup code for mist computing
+            if rm == "mist":
+                rm = "kubeedge"
 
             if machine.cloud_controller + machine.clouds > 0:
                 ip = "%s.%s.%s" % (
@@ -810,9 +810,7 @@ def start(config, machines):
         command = [
             "ansible-playbook",
             "-i",
-            os.path.join(
-                config["infrastructure"]["base_path"], ".continuum/inventory_vms"
-            ),
+            os.path.join(config["infrastructure"]["base_path"], ".continuum/inventory_vms"),
             os.path.join(
                 config["infrastructure"]["base_path"],
                 ".continuum/infrastructure/mahimati.yml",

@@ -1,5 +1,4 @@
 """Process failures and resource measurements must remain observable."""
-import os
 from pathlib import Path
 import sys
 import tempfile
@@ -16,7 +15,15 @@ class ProcessTests(unittest.TestCase):
     def test_nonzero_exit_preserves_logs_and_resource_measurements(self):
         """Retain diagnostics and measured execution cost when the child exits with code 7."""
         with tempfile.TemporaryDirectory() as root:
-            result = run_process([sys.executable, "-c", "import sys; print('started'); print('failed', file=sys.stderr); sys.exit(7)"], Path(root), 5)
+            result = run_process(
+                [
+                    sys.executable,
+                    "-c",
+                    "import sys; print('started'); print('failed', file=sys.stderr); sys.exit(7)",
+                ],
+                Path(root),
+                5,
+            )
             self.assertEqual(result["exit_code"], 7)
             self.assertFalse(result["timed_out"])
             self.assertEqual((Path(root) / "stdout.log").read_text(), "started\n")
@@ -28,9 +35,12 @@ class ProcessTests(unittest.TestCase):
     def test_timeout_terminates_process_group_including_term_ignoring_child(self):
         """Ensure a descendant ignoring SIGTERM cannot continue running after timeout."""
         with tempfile.TemporaryDirectory() as root:
-            script = ("import subprocess,sys,time; "
-                      "p=subprocess.Popen([sys.executable,'-c','import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)']); "
-                      "print(p.pid,flush=True); time.sleep(60)")
+            script = (
+                "import subprocess,sys,time; "
+                "p=subprocess.Popen([sys.executable,'-c','import signal,time; "
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)']); "
+                "print(p.pid,flush=True); time.sleep(60)"
+            )
             start = time.monotonic()
             result = run_process([sys.executable, "-c", script], Path(root), 0.5)
             self.assertTrue(result["timed_out"])
@@ -39,7 +49,12 @@ class ProcessTests(unittest.TestCase):
             child_pid = int((Path(root) / "stdout.log").read_text())
             stat = Path(f"/proc/{child_pid}/stat")
             for _ in range(50):
-                if not stat.exists() or stat.read_text().split()[2] == "Z":
+                try:
+                    state = stat.read_text(encoding="utf-8").split()[2]
+                except (FileNotFoundError, ProcessLookupError):
+                    # The child can disappear while procfs opens or reads its status.
+                    break
+                if state == "Z":
                     break
                 time.sleep(0.02)
             else:

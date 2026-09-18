@@ -24,8 +24,17 @@ def finished_pod(code, reason="Completed"):
     Returns:
         dict: Minimal Pod status containing one terminated OpenDC container.
     """
-    return {"status": {"containerStatuses": [{"name": "opendc", "imageID": "sha256:test",
-        "state": {"terminated": {"exitCode": code, "reason": reason}}}]}}
+    return {
+        "status": {
+            "containerStatuses": [
+                {
+                    "name": "opendc",
+                    "imageID": "sha256:test",
+                    "state": {"terminated": {"exitCode": code, "reason": reason}},
+                }
+            ]
+        }
+    }
 
 
 class KubernetesTests(unittest.TestCase):
@@ -33,16 +42,31 @@ class KubernetesTests(unittest.TestCase):
 
     def test_success_requires_complete_execution_evidence(self):
         """Require contract, process, validation and container exit evidence to agree."""
-        valid = {"contract": CONTRACT, "status": "succeeded", "runner_exit_code": 0,
-                 "process": {"exit_code": 0, "timed_out": False, "received_signal": None, "launch_error": None},
-                 "validation": {"status": "passed"}}
+        valid = {
+            "contract": CONTRACT,
+            "status": "succeeded",
+            "runner_exit_code": 0,
+            "process": {
+                "exit_code": 0,
+                "timed_out": False,
+                "received_signal": None,
+                "launch_error": None,
+            },
+            "validation": {"status": "passed"},
+        }
         self.assertEqual(classify_execution(finished_pod(0), valid)["status"], "succeeded")
-        for field, value in (("contract", "other"), ("validation", {"status": "not_run"}),
-                             ("process", {"exit_code": 1}), ("runner_exit_code", 1)):
+        for field, value in (
+            ("contract", "other"),
+            ("validation", {"status": "not_run"}),
+            ("process", {"exit_code": 1}),
+            ("runner_exit_code", 1),
+        ):
             with self.subTest(field=field):
                 manifest = copy.deepcopy(valid)
                 manifest[field] = value
-                self.assertEqual(classify_execution(finished_pod(0), manifest)["status"], "inconsistent")
+                self.assertEqual(
+                    classify_execution(finished_pod(0), manifest)["status"], "inconsistent"
+                )
 
     def test_oom_without_final_manifest_is_interrupted(self):
         """Preserve the Kubernetes OOM reason when the runner could not finalize its record."""
@@ -53,21 +77,34 @@ class KubernetesTests(unittest.TestCase):
 
     def test_container_failure_overrides_success_manifest(self):
         """Mark conflicting container and runner exits as inconsistent."""
-        result = classify_execution(finished_pod(1, "Error"), {"status": "succeeded", "runner_exit_code": 0})
+        result = classify_execution(
+            finished_pod(1, "Error"), {"status": "succeeded", "runner_exit_code": 0}
+        )
         self.assertEqual(result["status"], "inconsistent")
 
     def test_manifest_timeout_is_preserved(self):
         """Keep timed_out when the manifest and Kubernetes both report exit 124."""
-        result = classify_execution(finished_pod(124, "Error"), {"status": "timed_out", "runner_exit_code": 124})
+        result = classify_execution(
+            finished_pod(124, "Error"), {"status": "timed_out", "runner_exit_code": 124}
+        )
         self.assertEqual(result["status"], "timed_out")
 
     def test_job_is_bounded_and_pins_node_without_bypassing_scheduler(self):
         """Check resource bounds and node selection while retaining scheduler admission."""
-        job = job_manifest("test-run", "test-job", "continuum/opendc:test", "cloud0matthijs", "/var/tmp/fns-opendc-test")
+        job = job_manifest(
+            "test-run",
+            "test-job",
+            "continuum/opendc:test",
+            "cloud0matthijs",
+            "/var/tmp/fns-opendc-test",
+        )
         pod = job["spec"]["template"]["spec"]
         self.assertNotIn("nodeName", pod)
         self.assertEqual(pod["nodeSelector"]["kubernetes.io/hostname"], "cloud0matthijs")
-        self.assertEqual(pod["containers"][0]["resources"], {"requests": {"cpu": "1", "memory": "2Gi"}, "limits": {"cpu": "1", "memory": "2Gi"}})
+        self.assertEqual(
+            pod["containers"][0]["resources"],
+            {"requests": {"cpu": "1", "memory": "2Gi"}, "limits": {"cpu": "1", "memory": "2Gi"}},
+        )
         self.assertEqual(job["spec"]["backoffLimit"], 0)
         self.assertEqual(job["spec"]["activeDeadlineSeconds"], 180)
         self.assertFalse(pod["automountServiceAccountToken"])
@@ -93,7 +130,8 @@ class CollectionTests(unittest.TestCase):
 
     def setUp(self):
         """Create finalized output and matching Job/Pod ownership for each collection test."""
-        self.temporary = tempfile.TemporaryDirectory()
+        # unittest owns cleanup across setUp and the test, including failed setup.
+        self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.remote = self.root / "remote"
@@ -101,9 +139,19 @@ class CollectionTests(unittest.TestCase):
         self.run.mkdir(parents=True)
         prepare("memory", self.run / "inputs")
         (self.run / "output.parquet").write_bytes(b"recorded simulator output")
-        self.manifest = {"contract": CONTRACT, "status": "succeeded", "runner_exit_code": 0,
-                         "process": {"exit_code": 0, "timed_out": False, "received_signal": None, "launch_error": None},
-                         "validation": {"status": "passed"}, "sha256": file_hashes(self.run)}
+        self.manifest = {
+            "contract": CONTRACT,
+            "status": "succeeded",
+            "runner_exit_code": 0,
+            "process": {
+                "exit_code": 0,
+                "timed_out": False,
+                "received_signal": None,
+                "launch_error": None,
+            },
+            "validation": {"status": "passed"},
+            "sha256": file_hashes(self.run),
+        }
         write_json(self.run / "execution.json", self.manifest)
         self.remote_dir = "/var/tmp/fns-opendc-test"
         self.hostname = "cloud0matthijs"
@@ -111,8 +159,10 @@ class CollectionTests(unittest.TestCase):
         self.job["metadata"]["uid"] = "job-uid"
         self.job["status"] = {"conditions": [{"type": "Complete", "status": "True"}]}
         self.pod = finished_pod(0)
-        self.pod["metadata"] = {"name": "run-pod", "ownerReferences": [
-            {"kind": "Job", "uid": "job-uid", "controller": True}]}
+        self.pod["metadata"] = {
+            "name": "run-pod",
+            "ownerReferences": [{"kind": "Job", "uid": "job-uid", "controller": True}],
+        }
         self.pod["spec"] = copy.deepcopy(self.job["spec"]["template"]["spec"])
         self.pod["spec"]["nodeName"] = self.hostname
 
@@ -125,6 +175,7 @@ class CollectionTests(unittest.TestCase):
         Returns:
             dict: Collection record produced using the fixture SSH transport.
         """
+
         def remote_command(host, key, command, timeout=45):
             """Serve fixture Kubernetes records and local artifacts as SSH response bytes.
 
@@ -151,13 +202,21 @@ class CollectionTests(unittest.TestCase):
             if "pods" in command:
                 return json.dumps({"items": [self.pod]}).encode()
             if "events" in command or "node" in command:
-                return b'{}'
+                return b"{}"
             if "logs" in command:
                 return b"container evidence\n"
             raise AssertionError(command)
 
         with patch("opendc_kubernetes.ssh", side_effect=remote_command):
-            return collect("controller", "worker", Path("/key"), "test", "run", self.remote_dir, self.root / "collected")
+            return collect(
+                "controller",
+                "worker",
+                Path("/key"),
+                "test",
+                "run",
+                self.remote_dir,
+                self.root / "collected",
+            )
 
     def test_successful_collection_preserves_verified_evidence(self):
         """Require a verified local copy and a consistent successful execution record."""
@@ -236,7 +295,9 @@ class CollectionTests(unittest.TestCase):
 
     def test_job_storage_path_must_match_requested_directory(self):
         """Reject artifacts from a staging path not referenced by the retrieved Job."""
-        self.job["spec"]["template"]["spec"]["volumes"][1]["hostPath"]["path"] = "/var/tmp/fns-opendc-other/results"
+        self.job["spec"]["template"]["spec"]["volumes"][1]["hostPath"][
+            "path"
+        ] = "/var/tmp/fns-opendc-other/results"
         self.assertEqual(self.collect()["status"], "incomplete")
 
     def test_pod_storage_path_must_match_requested_directory(self):

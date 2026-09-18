@@ -88,9 +88,7 @@ def build_batch(image_paths: list[Path]) -> bytes:
     return output.getvalue()
 
 
-def select_images(
-    images: list[Path], batch_size: int, generator: random.Random
-) -> list[Path]:
+def select_images(images: list[Path], batch_size: int, generator: random.Random) -> list[Path]:
     """Select a fresh batch, avoiding repeats until all source images are used."""
     if not images:
         raise ValueError("cannot select images from an empty collection")
@@ -123,14 +121,10 @@ def send_batch(
     return receipt
 
 
-def build_constant_schedule(
-    batches: int, interval_seconds: float
-) -> list[PlannedArrival]:
+def build_constant_schedule(batches: int, interval_seconds: float) -> list[PlannedArrival]:
     """Build the backwards-compatible constant-interval schedule."""
     if batches < 1 or interval_seconds < 0 or not math.isfinite(interval_seconds):
-        raise ValueError(
-            "batch count must be positive and interval finite/non-negative"
-        )
+        raise ValueError("batch count must be positive and interval finite/non-negative")
     expected_rate = 1.0 / interval_seconds if interval_seconds > 0 else None
     return [
         PlannedArrival(
@@ -170,9 +164,7 @@ def build_periodic_schedule(
         or peak_rate_per_second < minimum_rate_per_second
         or peak_rate_per_second <= 0
     ):
-        raise ValueError(
-            "periodic rates must satisfy 0 <= minimum <= peak and peak > 0"
-        )
+        raise ValueError("periodic rates must satisfy 0 <= minimum <= peak and peak > 0")
 
     # Draw a homogeneous process at the peak rate, then thin each candidate by
     # the cosine-shaped instantaneous rate. This directly produces timestamps.
@@ -283,7 +275,8 @@ class SenderMeasurements:
             available_workers = max(0, self.max_concurrency - self.active)
             self.peak_queue_depth = max(
                 self.peak_queue_depth,
-                max(0, self.submitted - self.started - available_workers),
+                0,
+                self.submitted - self.started - available_workers,
             )
 
     def start(self) -> tuple[int, int]:
@@ -478,9 +471,7 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("ADAPTER_URL"),
         required=os.getenv("ADAPTER_URL") is None,
     )
-    parser.add_argument(
-        "--images", type=Path, default=Path(os.getenv("IMAGE_DIR", "/images"))
-    )
+    parser.add_argument("--images", type=Path, default=Path(os.getenv("IMAGE_DIR", "/images")))
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -490,29 +481,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size-min",
         type=int,
-        default=(
-            int(os.environ["BATCH_SIZE_MIN"])
-            if "BATCH_SIZE_MIN" in os.environ
-            else None
-        ),
+        default=(int(os.environ["BATCH_SIZE_MIN"]) if "BATCH_SIZE_MIN" in os.environ else None),
     )
     parser.add_argument(
         "--batch-size-max",
         type=int,
-        default=(
-            int(os.environ["BATCH_SIZE_MAX"])
-            if "BATCH_SIZE_MAX" in os.environ
-            else None
-        ),
+        default=(int(os.environ["BATCH_SIZE_MAX"]) if "BATCH_SIZE_MAX" in os.environ else None),
     )
     parser.add_argument(
         "--arrival-pattern",
         choices=("constant", "periodic"),
         default=os.getenv("ARRIVAL_PATTERN", "constant"),
     )
-    parser.add_argument(
-        "--batches", type=int, default=int(os.getenv("BATCH_COUNT", "1"))
-    )
+    parser.add_argument("--batches", type=int, default=int(os.getenv("BATCH_COUNT", "1")))
     parser.add_argument(
         "--interval-seconds",
         type=float,
@@ -547,12 +528,8 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=int(os.getenv("MAX_SENDER_CONCURRENCY", "16")),
     )
-    parser.add_argument(
-        "--random-seed", type=int, default=int(os.getenv("RANDOM_SEED", "0"))
-    )
-    parser.add_argument(
-        "--run-id", default=os.getenv("RUN_ID") or f"workload-{uuid.uuid4().hex}"
-    )
+    parser.add_argument("--random-seed", type=int, default=int(os.getenv("RANDOM_SEED", "0")))
+    parser.add_argument("--run-id", default=os.getenv("RUN_ID") or f"workload-{uuid.uuid4().hex}")
     args = parser.parse_args()
     if "SCHEDULE_DURATION_SECONDS" in os.environ:
         parser.error(
@@ -620,18 +597,14 @@ def main() -> None:
     )
     if not images:
         raise SystemExit(f"no JPEG images found in {args.images}")
-    prepared = prepare_batches(
-        arrivals, images, batch_size_min, batch_size_max, generator
-    )
+    prepared = prepare_batches(arrivals, images, batch_size_min, batch_size_max, generator)
     emit = ThreadSafeEmitter(sys.stdout)
 
     # Leave enough lead time to flush the full plan before the first release.
     lead_ns = round(max(2.0, len(prepared) * 0.005) * NANOSECONDS_PER_SECOND)
     start_monotonic_ns = time.monotonic_ns() + lead_ns
     start_wall_ns = time.time_ns() + lead_ns
-    emit_planned_schedule(
-        prepared, run_id=args.run_id, start_wall_ns=start_wall_ns, emit=emit
-    )
+    emit_planned_schedule(prepared, run_id=args.run_id, start_wall_ns=start_wall_ns, emit=emit)
     emit(
         new_event(
             "schedule.ready",

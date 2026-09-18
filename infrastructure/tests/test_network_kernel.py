@@ -1,6 +1,7 @@
 """Opt-in Linux tests: run only inside a disposable network namespace.
 
-FNS_PARENT_NETNS=$(readlink /proc/self/ns/net) FNS_NETWORK_NAMESPACE=1 unshare --user --map-root-user --net \
+FNS_PARENT_NETNS=$(readlink /proc/self/ns/net) FNS_NETWORK_NAMESPACE=1 \
+    unshare --user --map-root-user --net \
     python -m unittest discover -s infrastructure/tests -p test_network_kernel.py -v
 """
 import importlib.util
@@ -12,8 +13,9 @@ import subprocess
 import tempfile
 import unittest
 
-from infrastructure.network import generate_tc_commands, tc_values
 from test_network import config
+
+from infrastructure.network import generate_tc_commands, tc_values
 
 
 def run(*command):
@@ -54,9 +56,7 @@ class KernelNetworkTests(unittest.TestCase):
             with self.subTest(preset=preset):
                 cfg = config(preset)
                 for disk, values in enumerate(tc_values(cfg), 1):
-                    for command in generate_tc_commands(
-                        cfg, values, [f"192.168.210.{disk}"], disk
-                    ):
+                    for command in generate_tc_commands(cfg, values, [f"192.168.210.{disk}"], disk):
                         run(*command[1:])  # already root inside this user namespace
                 # The VM-era iproute2 emits text for classes, and invalid JSON
                 # for u32 filters, even with -j. Inspect their stable handles.
@@ -84,17 +84,14 @@ class KernelNetworkTests(unittest.TestCase):
         # These are isolated fixtures, not addresses of live Continuum VMs.
         spec = importlib.util.spec_from_file_location(
             "replay",
-            Path(__file__).resolve().parents[1]
-            / "qemu/infrastructure/continuum_replay.py",
+            Path(__file__).resolve().parents[1] / "qemu/infrastructure/continuum_replay.py",
         )
         replay = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(replay)
         run("ip", "address", "add", endpoint + "/16", "dev", "ens2")
         run("ip", "link", "add", "mm-test", "type", "dummy")
         try:
-            run(
-                "ip", "address", "add", "10.0.0.1", "peer", "10.0.0.2", "dev", "mm-test"
-            )
+            run("ip", "address", "add", "10.0.0.1", "peer", "10.0.0.2", "dev", "mm-test")
             run("ip", "link", "set", "mm-test", "up")
             run(
                 "iptables",

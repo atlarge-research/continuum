@@ -42,9 +42,7 @@ def evaluate(observer_dir, forecast_dir, gap_thresholds=(1.5, 3.0, 5.0), until=N
     rows, boundaries = bounded_read(observer_dir)
     if not rows["cluster-state.jsonl"]:
         raise ValueError("no subsequent state observations")
-    cutoff = max(
-        observed_milliseconds(row["timestamp"]) for row in rows["cluster-state.jsonl"]
-    )
+    cutoff = max(observed_milliseconds(row["timestamp"]) for row in rows["cluster-state.jsonl"])
     if until is not None:
         cutoff = min(cutoff, milliseconds(until))
     trace = evaluation_trace(rows, settings.run_id, cutoff)
@@ -91,9 +89,7 @@ def evaluate(observer_dir, forecast_dir, gap_thresholds=(1.5, 3.0, 5.0), until=N
             )
             if scores
             else None,
-            "predictive_coverage_90": float(
-                np.mean([s[model]["covered_90"] for s in scores])
-            )
+            "predictive_coverage_90": float(np.mean([s[model]["covered_90"] for s in scores]))
             if scores
             else None,
         }
@@ -120,15 +116,11 @@ def evaluate(observer_dir, forecast_dir, gap_thresholds=(1.5, 3.0, 5.0), until=N
         cycles.append(
             {
                 "cycle": cycle + 1,
-                "peak_queued": max(
-                    (s["counts"]["queued_jobs"] for _, s in captured), default=None
-                ),
+                "peak_queued": max((s["counts"]["queued_jobs"] for _, s in captured), default=None),
                 "low_tail_min_queued": min(
                     (s["counts"]["queued_jobs"] for _, s in tail), default=None
                 ),
-                "low_tail_zero_snapshots": sum(
-                    s["counts"]["queued_jobs"] == 0 for _, s in tail
-                ),
+                "low_tail_zero_snapshots": sum(s["counts"]["queued_jobs"] == 0 for _, s in tail),
                 "all_three_workers_available": bool(captured)
                 and all(
                     sum(w["ready"] and w["schedulable"] for w in s["workers"]) == 3
@@ -148,7 +140,10 @@ def evaluate(observer_dir, forecast_dir, gap_thresholds=(1.5, 3.0, 5.0), until=N
         "gap_sensitivity": sensitivity,
         "cycles": cycles,
         "scores": scores,
-        "interpretation": "90% central Poisson predictive intervals conditional on each fitted mean; overlapping horizons are not independent repetitions",
+        "interpretation": (
+            "90% central Poisson predictive intervals conditional on each fitted mean; "
+            "overlapping horizons are not independent repetitions"
+        ),
     }
 
 
@@ -160,22 +155,15 @@ def main():
     parser.add_argument(
         "--until", help="UTC end of the arrival experiment; exclude shutdown/drain time"
     )
-    parser.add_argument(
-        "--gap-thresholds", nargs="+", type=float, default=[1.5, 3.0, 5.0]
-    )
+    parser.add_argument("--gap-thresholds", nargs="+", type=float, default=[1.5, 3.0, 5.0])
     args = parser.parse_args()
     if args.output.exists():
         parser.error("choose a new output path")
-    result = evaluate(
-        args.observer_dir, args.forecast_dir, args.gap_thresholds, args.until
-    )
+    result = evaluate(args.observer_dir, args.forecast_dir, args.gap_thresholds, args.until)
     write_json(args.output, result)
     print(
         json.dumps(
-            {
-                key: result[key]
-                for key in ("scored_bins", "aggregate", "gap_sensitivity", "cycles")
-            }
+            {key: result[key] for key in ("scored_bins", "aggregate", "gap_sensitivity", "cycles")}
         )
     )
 

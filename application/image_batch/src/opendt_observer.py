@@ -163,9 +163,7 @@ def _pod_job_uid(pod: Any) -> str | None:
     return None
 
 
-def pod_execution_interval(
-    pods: list[Any], job_uid: str
-) -> tuple[datetime, datetime]:
+def pod_execution_interval(pods: list[Any], job_uid: str) -> tuple[datetime, datetime]:
     """Return the worker container's Kubernetes execution interval."""
     intervals = []
     for pod in pods:
@@ -197,15 +195,12 @@ def _worker_record(node: Any) -> dict[str, Any] | None:
         raise MalformedJobError("worker Node is missing UID or name")
     status = getattr(node, "status", None)
     ready = any(
-        getattr(condition, "type", None) == "Ready"
-        and getattr(condition, "status", None) == "True"
+        getattr(condition, "type", None) == "Ready" and getattr(condition, "status", None) == "True"
         for condition in (getattr(status, "conditions", None) or [])
     )
     allocatable = getattr(status, "allocatable", None) or {}
     if allocatable.get("cpu") is None or allocatable.get("memory") is None:
-        raise MalformedJobError(
-            f"worker Node {name!r} is missing allocatable resources"
-        )
+        raise MalformedJobError(f"worker Node {name!r} is missing allocatable resources")
     spec = getattr(node, "spec", None)
     return {
         "kubernetes_node_uid": uid,
@@ -236,8 +231,7 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
     owned_pods = sorted(
         (pod for pod in pods if _pod_job_uid(pod) == uid),
         key=lambda pod: (
-            getattr(getattr(pod, "status", None), "phase", None)
-            in ("Succeeded", "Failed"),
+            getattr(getattr(pod, "status", None), "phase", None) in ("Succeeded", "Failed"),
             getattr(getattr(pod, "metadata", None), "name", ""),
         ),
     )
@@ -294,16 +288,12 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
         "endpoint_batch_id": annotations.get(ANNOTATION_ENDPOINT_BATCH_ID),
         "image_count": _required_int(annotations, ANNOTATION_IMAGE_COUNT),
         "payload_bytes": _required_int(annotations, ANNOTATION_PAYLOAD_BYTES),
-        "inference_repetitions": _positive_int(
-            annotations, ANNOTATION_INFERENCE_REPETITIONS
-        ),
+        "inference_repetitions": _positive_int(annotations, ANNOTATION_INFERENCE_REPETITIONS),
         "creation_time": utc_iso(created),
         "start_time": utc_iso(start_time) if start_time is not None else None,
         "execution_state": execution_state,
         "execution_start_time": utc_iso(execution_start) if execution_start else None,
-        "execution_finish_time": (
-            utc_iso(execution_finish) if execution_finish else None
-        ),
+        "execution_finish_time": (utc_iso(execution_finish) if execution_finish else None),
         "requested_cpu_count": requested_cpu,
         "requested_memory_mb": requested_memory_mb,
         "pod_name": (
@@ -384,9 +374,7 @@ def terminal_status(job: Any) -> tuple[str | None, datetime | None]:
         kind = getattr(condition, "type", None)
         if kind == "Complete":
             completion = getattr(status, "completion_time", None)
-            return "Complete", completion or getattr(
-                condition, "last_transition_time", None
-            )
+            return "Complete", completion or getattr(condition, "last_transition_time", None)
         if kind == "Failed":
             return "Failed", getattr(condition, "last_transition_time", None)
     return None, None
@@ -420,11 +408,7 @@ def build_fragments(
 ) -> list[dict[str, Any]]:
     """Convert ordered CPU observations into duration-covering fragments."""
     samples = sorted(
-        (
-            sample
-            for sample in snapshots
-            if start_time <= sample.capture_time <= finish_time
-        ),
+        (sample for sample in snapshots if start_time <= sample.capture_time <= finish_time),
         key=lambda sample: sample.capture_time,
     )
     if not samples:
@@ -532,9 +516,7 @@ def build_workload_record(
     payload_bytes = _required_int(annotations, ANNOTATION_PAYLOAD_BYTES)
     inference_repetitions = _positive_int(annotations, ANNOTATION_INFERENCE_REPETITIONS)
     cpu_count, memory_mb = extract_resource_capacity(job)
-    duration_ms = math.ceil(
-        (execution_finish_time - execution_start_time).total_seconds() * 1000
-    )
+    duration_ms = math.ceil((execution_finish_time - execution_start_time).total_seconds() * 1000)
     task_snapshots = [
         sample
         for sample in snapshots
@@ -658,9 +640,7 @@ class ResourceSampler:
             self._finalized_uids.add(job_uid)
             return self._snapshots.pop(job_uid, [])
 
-    def execution_interval(
-        self, job_uid: str, request_id: str
-    ) -> tuple[datetime, datetime]:
+    def execution_interval(self, job_uid: str, request_id: str) -> tuple[datetime, datetime]:
         pods = self.core_api.list_namespaced_pod(
             namespace=self.namespace,
             label_selector=f"{LABEL_REQUEST_ID}={request_id}",
@@ -767,12 +747,7 @@ class ResourceSampler:
         for job in jobs.items:
             name = getattr(job.metadata, "name", None)
             uid = getattr(job.metadata, "uid", None)
-            if (
-                name
-                and uid
-                and uid not in self._finalized_uids
-                and terminal_status(job)[0] is None
-            ):
+            if name and uid and uid not in self._finalized_uids and terminal_status(job)[0] is None:
                 job_uids[uid] = name
         if not job_uids:
             return
@@ -795,8 +770,7 @@ class ResourceSampler:
             f"[{CPU_RATE_WINDOW}]))"
         )
         memory_query = (
-            "sum by (pod) ("
-            f"container_memory_working_set_bytes{{{container_selector}}})"
+            "sum by (pod) (" f"container_memory_working_set_bytes{{{container_selector}}})"
         )
         sample_time_query = (
             "max by (pod) (timestamp("
@@ -804,9 +778,7 @@ class ResourceSampler:
         )
         merged: dict[str, dict[str, float]] = {}
         try:
-            self._merge_vector(
-                merged, self.prometheus.query(cpu_query, observation_time), "cpu"
-            )
+            self._merge_vector(merged, self.prometheus.query(cpu_query, observation_time), "cpu")
             self._merge_vector(
                 merged,
                 self.prometheus.query(memory_query, observation_time),
@@ -826,11 +798,7 @@ class ResourceSampler:
             if job is None:
                 continue
             job_uid, job_name = job
-            missing = [
-                field
-                for field in ("cpu", "memory", "sample_time")
-                if field not in values
-            ]
+            missing = [field for field in ("cpu", "memory", "sample_time") if field not in values]
             if missing:
                 self.emit_diagnostic(
                     "prometheus.sample_incomplete",
@@ -927,9 +895,7 @@ class OpenDTObserver:
         if uid is not None:
             self._handled_uids.add(uid)
         if state == "Failed":
-            self.emit_diagnostic(
-                "job.failed", {"kubernetes_job_uid": uid, "job_name": name}
-            )
+            self.emit_diagnostic("job.failed", {"kubernetes_job_uid": uid, "job_name": name})
             return False
 
         try:
@@ -999,9 +965,7 @@ class OpenDTObserver:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--state-dir", default=os.getenv("OPENDT_STATE_DIR", "/var/lib/opendt")
-    )
+    parser.add_argument("--state-dir", default=os.getenv("OPENDT_STATE_DIR", "/var/lib/opendt"))
     parser.add_argument("--namespace", default=os.getenv("JOB_NAMESPACE", "fns-demo"))
     parser.add_argument(
         "--prometheus-url",

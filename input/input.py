@@ -6,7 +6,9 @@ import logging
 import os
 
 from .configuration import configuration_parser
-from .dsl import dsl_parser
+
+# input.dsl is a namespace package; Pylint cannot resolve this relative import.
+from .dsl import dsl_parser  # pylint: disable=import-error
 
 
 def print_input(config):

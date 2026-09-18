@@ -180,8 +180,9 @@ def cache_worker(config, machines, app_vars):
         "app_name": config["benchmark"]["application"].replace("_", "-"),
         "image": "%s/%s" % (config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
-        "cpu_req": float(cores * 0.5),
-        "replicas": worker_apps,
+        # Parsed Kubernetes worker configurations use cloud or edge mode.
+        "cpu_req": float(cores * 0.5),  # pylint: disable=possibly-used-before-assignment
+        "replicas": worker_apps,  # pylint: disable=possibly-used-before-assignment
         "pull_policy": "IfNotPresent",
     }
 
@@ -435,6 +436,8 @@ def wait_worker_ready(config, machines, get_starttime):
             + status_entry["Succeeded"]
             + status_entry["ContainerCreating"]
         )
+        # Parsed Kubernetes worker configurations use cloud or edge mode.
+        # pylint: disable-next=possibly-used-before-assignment
         status_entry["Arriving"] = worker_apps - pods_in_system
         status.append(status_entry)
 
@@ -606,7 +609,8 @@ def start_worker_kube(config, machines, app_vars, get_starttime):
         "image": os.path.join(config["registry"], config["images"]["worker"].split(":")[1]),
         "memory_req": int(config["benchmark"]["application_worker_memory"] * 1000),
         "cpu_req": config["benchmark"]["application_worker_cpu"],
-        "replicas": worker_apps,
+        # Parsed Kubernetes worker configurations use cloud or edge mode.
+        "replicas": worker_apps,  # pylint: disable=possibly-used-before-assignment
         "pull_policy": "Never",
     }
 

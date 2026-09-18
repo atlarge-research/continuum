@@ -1,5 +1,4 @@
 """Reject plausible-looking outputs with missing tasks or wrong scheduling."""
-import copy
 import json
 from pathlib import Path
 import sys
@@ -25,18 +24,54 @@ def memory_output(directory, early=False, missing=False):
     raw = directory / "controlled/raw-output/0/seed=0"
     raw.mkdir(parents=True)
     tasks = [
-        {"task_id": 0, "timestamp": 2000, "submission_time": 0, "schedule_time": 1,
-         "finish_time": 0, "host_name": "test-host-0", "mem_capacity": 384, "cpu_count": 1,
-         "cpu_demand": 2400.0, "cpu_usage": 2400.0},
-        {"task_id": 0, "timestamp": 10001, "submission_time": 0, "schedule_time": 1,
-         "finish_time": 10001, "host_name": "test-host-0", "mem_capacity": 384, "cpu_count": 1,
-         "cpu_demand": 0.0, "cpu_usage": 0.0},
-        {"task_id": 1, "timestamp": 12000, "submission_time": 1000, "schedule_time": 10002,
-         "finish_time": 0, "host_name": "test-host-0", "mem_capacity": 384, "cpu_count": 1,
-         "cpu_demand": 2400.0, "cpu_usage": 2400.0},
-        {"task_id": 1, "timestamp": 15002, "submission_time": 1000, "schedule_time": 10002,
-         "finish_time": 15002, "host_name": "test-host-0", "mem_capacity": 384, "cpu_count": 1,
-         "cpu_demand": 0.0, "cpu_usage": 0.0},
+        {
+            "task_id": 0,
+            "timestamp": 2000,
+            "submission_time": 0,
+            "schedule_time": 1,
+            "finish_time": 0,
+            "host_name": "test-host-0",
+            "mem_capacity": 384,
+            "cpu_count": 1,
+            "cpu_demand": 2400.0,
+            "cpu_usage": 2400.0,
+        },
+        {
+            "task_id": 0,
+            "timestamp": 10001,
+            "submission_time": 0,
+            "schedule_time": 1,
+            "finish_time": 10001,
+            "host_name": "test-host-0",
+            "mem_capacity": 384,
+            "cpu_count": 1,
+            "cpu_demand": 0.0,
+            "cpu_usage": 0.0,
+        },
+        {
+            "task_id": 1,
+            "timestamp": 12000,
+            "submission_time": 1000,
+            "schedule_time": 10002,
+            "finish_time": 0,
+            "host_name": "test-host-0",
+            "mem_capacity": 384,
+            "cpu_count": 1,
+            "cpu_demand": 2400.0,
+            "cpu_usage": 2400.0,
+        },
+        {
+            "task_id": 1,
+            "timestamp": 15002,
+            "submission_time": 1000,
+            "schedule_time": 10002,
+            "finish_time": 15002,
+            "host_name": "test-host-0",
+            "mem_capacity": 384,
+            "cpu_count": 1,
+            "cpu_demand": 0.0,
+            "cpu_usage": 0.0,
+        },
     ]
     for row in tasks:
         row["task_state"] = "COMPLETED" if row["finish_time"] > 0 else "RUNNING"
@@ -48,15 +83,49 @@ def memory_output(directory, early=False, missing=False):
     if missing:
         tasks = tasks[:2]
     pq.write_table(pa.Table.from_pylist(tasks), raw / "task.parquet")
-    pq.write_table(pa.Table.from_pylist([
-        {"timestamp": 2000, "tasks_total": 2, "tasks_active": 1, "tasks_pending": 1, "tasks_completed": 0, "tasks_terminated": 0},
-        {"timestamp": 15002, "tasks_total": 2, "tasks_active": 0, "tasks_pending": 0, "tasks_completed": 2, "tasks_terminated": 0},
-    ]), raw / "service.parquet")
-    pq.write_table(pa.Table.from_pylist([
-        {"timestamp": 2000, "host_name": "test-host-0", "core_count": 2, "mem_capacity": 512,
-         "tasks_running": 1, "cpu_usage": 2400.0, "energy_usage": 150.0},
-    ]), raw / "host.parquet")
-    pq.write_table(pa.Table.from_pylist([{"timestamp": 2000, "power_draw": 150.0}]), raw / "powerSource.parquet")
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "timestamp": 2000,
+                    "tasks_total": 2,
+                    "tasks_active": 1,
+                    "tasks_pending": 1,
+                    "tasks_completed": 0,
+                    "tasks_terminated": 0,
+                },
+                {
+                    "timestamp": 15002,
+                    "tasks_total": 2,
+                    "tasks_active": 0,
+                    "tasks_pending": 0,
+                    "tasks_completed": 2,
+                    "tasks_terminated": 0,
+                },
+            ]
+        ),
+        raw / "service.parquet",
+    )
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "timestamp": 2000,
+                    "host_name": "test-host-0",
+                    "core_count": 2,
+                    "mem_capacity": 512,
+                    "tasks_running": 1,
+                    "cpu_usage": 2400.0,
+                    "energy_usage": 150.0,
+                },
+            ]
+        ),
+        raw / "host.parquet",
+    )
+    pq.write_table(
+        pa.Table.from_pylist([{"timestamp": 2000, "power_draw": 150.0}]),
+        raw / "powerSource.parquet",
+    )
 
 
 class ResultTests(unittest.TestCase):

@@ -48,18 +48,13 @@ def build_job_manifest(
     }
     annotations = {
         "continuum.atlarge.nl/run-id": request.run_id,
-        "continuum.atlarge.nl/workload-run-id": request.workload_run_id
-        or request.run_id,
+        "continuum.atlarge.nl/workload-run-id": request.workload_run_id or request.run_id,
         "continuum.atlarge.nl/payload-bytes": str(request.payload_bytes),
         "continuum.atlarge.nl/image-count": str(request.image_count),
-        "continuum.atlarge.nl/inference-repetitions": str(
-            request.inference_repetitions
-        ),
+        "continuum.atlarge.nl/inference-repetitions": str(request.inference_repetitions),
     }
     if request.endpoint_batch_id is not None:
-        annotations[
-            "continuum.atlarge.nl/endpoint-batch-id"
-        ] = request.endpoint_batch_id
+        annotations["continuum.atlarge.nl/endpoint-batch-id"] = request.endpoint_batch_id
     if request.adapter_accepted_at_unix_ns is not None:
         annotations["continuum.atlarge.nl/accepted-at-unix-ns"] = str(
             request.adapter_accepted_at_unix_ns
@@ -77,9 +72,7 @@ def build_job_manifest(
         },
     ]
     if request.endpoint_batch_id is not None:
-        environment.append(
-            {"name": "ENDPOINT_BATCH_ID", "value": request.endpoint_batch_id}
-        )
+        environment.append({"name": "ENDPOINT_BATCH_ID", "value": request.endpoint_batch_id})
     if request.adapter_accepted_at_unix_ns is not None:
         environment.append(
             {
@@ -174,10 +167,9 @@ class LocalJobSubmitter:
         if request.endpoint_batch_id is not None:
             environment["ENDPOINT_BATCH_ID"] = request.endpoint_batch_id
         if request.adapter_accepted_at_unix_ns is not None:
-            environment["ADAPTER_ACCEPTED_AT_UNIX_NS"] = str(
-                request.adapter_accepted_at_unix_ns
-            )
-        subprocess.Popen(
+            environment["ADAPTER_ACCEPTED_AT_UNIX_NS"] = str(request.adapter_accepted_at_unix_ns)
+        # Submission is asynchronous; a context manager would wait for the worker here.
+        subprocess.Popen(  # pylint: disable=consider-using-with
             [sys.executable, "-u", self.worker_path],
             env=environment,
             close_fds=True,

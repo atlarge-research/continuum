@@ -18,13 +18,28 @@ class RunTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             status, manifest, output = self._run(root, "exit 0")
             command = manifest["process"]["command"]
-            self.assertEqual(command[1:], ["--strict", "run", str(output / "experiment.json"),
-                                          "--output", str(output / "simulator"), "--parallelism", "1",
-                                          "--no-progress", "--no-summary"])
+            self.assertEqual(
+                command[1:],
+                [
+                    "--strict",
+                    "run",
+                    str(output / "experiment.json"),
+                    "--output",
+                    str(output / "simulator"),
+                    "--parallelism",
+                    "1",
+                    "--no-progress",
+                    "--no-summary",
+                ],
+            )
             config = json.loads((output / "experiment.json").read_text())
-            self.assertEqual(config["topologies"], [{"importFrom": str(output / "inputs/topology.json")}])
-            self.assertEqual(config["workloads"][0]["source"],
-                             {"type": "uri", "uri": (output / "inputs/trace").as_uri()})
+            self.assertEqual(
+                config["topologies"], [{"importFrom": str(output / "inputs/topology.json")}]
+            )
+            self.assertEqual(
+                config["workloads"][0]["source"],
+                {"type": "uri", "uri": (output / "inputs/trace").as_uri()},
+            )
             self.assertEqual(config["exportModels"][0]["exportInterval"], "1 s")
             self.assertEqual(status, 1)  # Exit zero without native tables remains a failure.
 

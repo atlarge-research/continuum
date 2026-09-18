@@ -44,12 +44,9 @@ def lead_summary(evaluation):
         }
         for model, _, _ in MODELS:
             row[model] = {
-                "mean_absolute_count_error": sum(
-                    s[model]["absolute_error"] for s in scores
-                )
+                "mean_absolute_count_error": sum(s[model]["absolute_error"] for s in scores)
                 / len(scores),
-                "predictive_coverage_90": sum(s[model]["covered_90"] for s in scores)
-                / len(scores),
+                "predictive_coverage_90": sum(s[model]["covered_90"] for s in scores) / len(scores),
             }
         result.append(row)
     return result
@@ -57,11 +54,7 @@ def lead_summary(evaluation):
 
 def cumulative_counts(forecast, scores, bin_seconds):
     """A missing bin invalidates every later cumulative observed total."""
-    lookup = {
-        s["bin_start_ms"]: s
-        for s in scores
-        if s["forecast_cutoff"] == forecast["cutoff"]
-    }
+    lookup = {s["bin_start_ms"]: s for s in scores if s["forecast_cutoff"] == forecast["cutoff"]}
     observed = [0]
     cyclic, constant = [0.0], [0.0]
     for prediction in forecast["predictions"]:
@@ -120,9 +113,7 @@ def horizon_summary(forecasts, scores, bin_seconds, horizons=(10, 20, 60)):
         }
         for model, _, _ in MODELS:
             summary[model] = {
-                "mean_absolute_count_error": sum(
-                    g[model]["absolute_error"] for g in group
-                )
+                "mean_absolute_count_error": sum(g[model]["absolute_error"] for g in group)
                 / len(group)
                 if group
                 else None
@@ -144,8 +135,7 @@ def rebin_predictions(predictions, source_seconds, starts, target_seconds):
             (
                 max(
                     0,
-                    min(start + target_ms, p["start_ms"] + source_ms)
-                    - max(start, p["start_ms"]),
+                    min(start + target_ms, p["start_ms"] + source_ms) - max(start, p["start_ms"]),
                 ),
                 p,
             )
@@ -154,9 +144,7 @@ def rebin_predictions(predictions, source_seconds, starts, target_seconds):
         if sum(length for length, _ in overlaps) != target_ms:
             continue
         count = sum(length / source_ms * p["mean_count"] for length, p in overlaps)
-        result.append(
-            {"start_ms": start, "mean_count": count, "rate": count / target_seconds}
-        )
+        result.append({"start_ms": start, "mean_count": count, "rate": count / target_seconds})
     return result
 
 
@@ -196,17 +184,12 @@ def prepare_forecasts(forecast_dir, observer_dir, until, rate_bin_seconds=10):
     }
     # Coverage determines eligibility, never forecast error. Do not resume a
     # cumulative observed curve after a missing interval.
-    complete = [
-        f for f in ready if cumulative[f["cutoff"]]["observed_count"][-1] is not None
-    ]
+    complete = [f for f in ready if cumulative[f["cutoff"]]["observed_count"][-1] is not None]
     candidates = complete or ready
     examples = [
-        candidates[i]["cutoff"]
-        for i in sorted({0, len(candidates) // 2, len(candidates) - 1})
+        candidates[i]["cutoff"] for i in sorted({0, len(candidates) // 2, len(candidates) - 1})
     ]
-    horizons, totals = horizon_summary(
-        ready, evaluation["scores"], settings["bin_seconds"]
-    )
+    horizons, totals = horizon_summary(ready, evaluation["scores"], settings["bin_seconds"])
     return {
         "evaluation": evaluation,
         "forecasts": ready,
@@ -238,9 +221,7 @@ def prepare_forecasts(forecast_dir, observer_dir, until, rate_bin_seconds=10):
             ],
             "observer_directory": str(Path(observer_dir).resolve()),
             "implementation": {
-                name: hashlib.sha256(
-                    Path(__file__).with_name(name).read_bytes()
-                ).hexdigest()
+                name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
                 for name in (
                     "forecast_report.py",
                     "evaluate_forecasts.py",
@@ -298,8 +279,7 @@ def render_forecasts(report, output, save):
     for forecast in forecasts:
         if (
             not shown
-            or milliseconds(forecast["cutoff"]) - milliseconds(shown[-1]["cutoff"])
-            >= 30000
+            or milliseconds(forecast["cutoff"]) - milliseconds(shown[-1]["cutoff"]) >= 30000
         ):
             shown.append(forecast)
     for index, forecast in enumerate(shown):
@@ -374,9 +354,10 @@ def render_forecasts(report, output, save):
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         if index == 0:
             handles, labels = ax.get_legend_handles_labels()
+    # prepare_forecasts requires ready scores and supplies at least one example cutoff.
     fig.legend(
-        handles,
-        labels,
+        handles,  # pylint: disable=possibly-used-before-assignment
+        labels,  # pylint: disable=possibly-used-before-assignment
         loc="lower center",
         bbox_to_anchor=(0.5, 0.12),
         ncol=3,
@@ -386,19 +367,23 @@ def render_forecasts(report, output, save):
     fig.text(
         0.075,
         0.905,
-        f"Separate {forecasts[0]['cutoff'][:10]} run | {settings['run_id']} | {len(forecasts)} ready forecasts",
+        f"Separate {forecasts[0]['cutoff'][:10]} run | {settings['run_id']} | {len(forecasts)} "
+        f"ready forecasts",
         fontsize=9,
     )
     example_note = (
         "Examples: first, middle and last fully observed horizons (selected by coverage)."
         if report["examples_have_full_coverage"]
-        else "First, middle and last issued forecasts; observed totals stop at the first missing interval."
+        else "First, middle and last issued forecasts; observed totals stop at the first missing "
+        "interval."
     )
     fig.text(
         0.075,
         0.035,
-        f"Top: each point is a {rate_width}-second count divided by {rate_width}, plotted at the bin centre; lines join points. Gaps mean missing coverage.\n"
-        "Bottom: each curve starts at zero. At 20 s, read the total arrivals in the next 20 seconds; the vertical difference is count error.\n"
+        f"Top: each point is a {rate_width}-second count divided by {rate_width}, plotted at "
+        f"the bin centre; lines join points. Gaps mean missing coverage.\n"
+        "Bottom: each curve starts at zero. At 20 s, read the total arrivals in the next 20 "
+        "seconds; the vertical difference is count error.\n"
         f"{example_note} Points show totals every {width} s; lines join them.",
         fontsize=9,
         linespacing=1.5,
@@ -414,9 +399,7 @@ def render_forecasts(report, output, save):
     ax.axis("off")
     intervals = [str(row["horizon_seconds"]) for row in report["horizon_summary"]]
     horizon_label = (
-        ", ".join(intervals[:-1]) + " and " + intervals[-1]
-        if len(intervals) > 1
-        else intervals[0]
+        ", ".join(intervals[:-1]) + " and " + intervals[-1] if len(intervals) > 1 else intervals[0]
     )
     rows = []
     for row in report["horizon_summary"]:
@@ -457,17 +440,26 @@ def render_forecasts(report, output, save):
         (
             0.51,
             "What is being predicted?",
-            "The total number of Jobs arriving between forecast issue and the end of each listed future interval.\nThe observed and predicted totals cover exactly the same interval; lower error is better.",
+            "The total number of Jobs arriving between forecast issue and the end of each "
+            "listed future interval.\nThe observed and predicted totals cover exactly the same "
+            "interval; lower error is better.",
         ),
         (
             0.35,
             "What does the error mean?",
-            "MAE means mean absolute error: take the size of each predicted-versus-actual count difference, then average.\nAn MAE of 1.9 Jobs means the forecast total was off by about 1.9 Jobs on average. Zero is perfect; there is no fixed maximum.\nThis is a count, not a percentage. Random arrivals still produce errors even when their expected rate is known.",
+            "MAE means mean absolute error: take the size of each predicted-versus-actual "
+            "count difference, then average.\nAn MAE of 1.9 Jobs means the forecast total was "
+            "off by about 1.9 Jobs on average. Zero is perfect; there is no fixed "
+            "maximum.\nThis is a count, not a percentage. Random arrivals still produce errors "
+            "even when their expected rate is known.",
         ),
         (
             0.14,
             "How to read this comparison",
-            "Both models use the same historical observations and are scored on the same forecasts within each row.\nOnly fully observed future intervals count. Longer intervals can have fewer eligible forecasts.\nThe horizons overlap and reuse arrivals: this is descriptive evidence from one run, not independent repetitions.",
+            "Both models use the same historical observations and are scored on the same "
+            "forecasts within each row.\nOnly fully observed future intervals count. Longer "
+            "intervals can have fewer eligible forecasts.\nThe horizons overlap and reuse "
+            "arrivals: this is descriptive evidence from one run, not independent repetitions.",
         ),
     ]
     for y, title, text in explanations:
@@ -503,7 +495,8 @@ def render_forecasts(report, output, save):
         0.075,
         0.025,
         f"Excluded forecasts for missing coverage or experiment end — {excluded}.\n"
-        f"Observation-gap limit: {settings['max_gap_seconds']:g} s. Original {width}-second scores and interval-coverage diagnostics remain in the JSON/CSV files.",
+        f"Observation-gap limit: {settings['max_gap_seconds']:g} s. Original {width}-second "
+        f"scores and interval-coverage diagnostics remain in the JSON/CSV files.",
         fontsize=9,
     )
     save_page(
@@ -535,8 +528,7 @@ def render_forecasts(report, output, save):
                         "forecast_cutoff": score["forecast_cutoff"],
                         "bin_start_ms": score["bin_start_ms"],
                         "lead_end_seconds": (
-                            score["bin_start_ms"]
-                            - milliseconds(score["forecast_cutoff"])
+                            score["bin_start_ms"] - milliseconds(score["forecast_cutoff"])
                         )
                         / 1000
                         + width,

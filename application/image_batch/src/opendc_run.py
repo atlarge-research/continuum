@@ -15,7 +15,16 @@ import time
 
 import pyarrow as pa
 
-from opendc_inputs import COMMIT, CONTRACT, SOURCE_ARCHIVE_SHA256, VERSION, file_hashes, prepare, verify_inputs, write_json
+from opendc_inputs import (
+    COMMIT,
+    CONTRACT,
+    SOURCE_ARCHIVE_SHA256,
+    VERSION,
+    file_hashes,
+    prepare,
+    verify_inputs,
+    write_json,
+)
 from opendc_process import run_process
 from opendc_results import validate_results
 
@@ -39,11 +48,19 @@ def runtime_provenance():
     """
     root = Path(__file__).resolve().parent
     sources = list(root.glob("opendc_*.py")) + [root / "forecast_trace.py"]
-    result = {"opendc_version": VERSION, "opendc_commit": COMMIT, "opendc_source_archive_sha256": SOURCE_ARCHIVE_SHA256,
-              "python_version": platform.python_version(), "pyarrow_version": pa.__version__,
-              "platform": platform.platform(), "machine": platform.machine(),
-              "java_opts": os.environ.get("JAVA_OPTS", ""),
-              "source_sha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}}
+    result = {
+        "opendc_version": VERSION,
+        "opendc_commit": COMMIT,
+        "opendc_source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        "python_version": platform.python_version(),
+        "pyarrow_version": pa.__version__,
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "java_opts": os.environ.get("JAVA_OPTS", ""),
+        "source_sha256": {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sources
+        },
+    }
     java_release = Path(os.environ.get("JAVA_HOME", "/opt/java/openjdk")) / "release"
     if java_release.is_file():
         result["java_release"] = java_release.read_text()
@@ -77,8 +94,18 @@ def _run_prepared(inputs, output, timeout_seconds, runner, manifest):
     config["workloads"][0]["source"] = {"type": "uri", "uri": (output / "inputs/trace").as_uri()}
     write_json(output / "experiment.json", config)
     write_json(output / "execution.json", manifest)
-    command = [runner, "--strict", "run", str(output / "experiment.json"),
-               "--output", str(output / "simulator"), "--parallelism", "1", "--no-progress", "--no-summary"]
+    command = [
+        runner,
+        "--strict",
+        "run",
+        str(output / "experiment.json"),
+        "--output",
+        str(output / "simulator"),
+        "--parallelism",
+        "1",
+        "--no-progress",
+        "--no-summary",
+    ]
     manifest["process"] = run_process(command, output, timeout_seconds)
     process = manifest["process"]
     write_json(output / "resources.json", process)
@@ -131,9 +158,15 @@ def execute(input_dir, output_dir, timeout_seconds=120, runner="/opt/opendc/bin/
         raise ValueError("input and output directories must be separate")
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
-    manifest = {"contract": CONTRACT, "status": "started", "started_at": utc_now(),
-                "timeout_seconds": timeout_seconds, "process": None,
-                "validation": {"status": "not_run"}, "provenance": runtime_provenance()}
+    manifest = {
+        "contract": CONTRACT,
+        "status": "started",
+        "started_at": utc_now(),
+        "timeout_seconds": timeout_seconds,
+        "process": None,
+        "validation": {"status": "not_run"},
+        "provenance": runtime_provenance(),
+    }
     write_json(output / "execution.json", manifest)
     try:
         code = _run_prepared(inputs, output, timeout_seconds, runner, manifest)
@@ -141,8 +174,14 @@ def execute(input_dir, output_dir, timeout_seconds=120, runner="/opt/opendc/bin/
         code = 2 if manifest["process"] is None else 1
         manifest["status"] = "invalid_input" if code == 2 else "failed"
         manifest["error"] = str(exc)
-    manifest.update({"finished_at": utc_now(), "elapsed_seconds": time.monotonic() - started,
-                     "runner_exit_code": code, "sha256": file_hashes(output, exclude=("execution.json",))})
+    manifest.update(
+        {
+            "finished_at": utc_now(),
+            "elapsed_seconds": time.monotonic() - started,
+            "runner_exit_code": code,
+            "sha256": file_hashes(output, exclude=("execution.json",)),
+        }
+    )
     write_json(output / "execution.json", manifest)
     return code
 
@@ -172,12 +211,28 @@ def main(argv=None):
     try:
         if args.command == "prepare":
             result = prepare(args.fixture, args.output_dir)
-            print(json.dumps({"status": result["status"], "fixture": args.fixture, "output_dir": str(args.output_dir)}))
+            print(
+                json.dumps(
+                    {
+                        "status": result["status"],
+                        "fixture": args.fixture,
+                        "output_dir": str(args.output_dir),
+                    }
+                )
+            )
             return 0
         code = execute(args.input_dir, args.output_dir, args.timeout_seconds)
         manifest = json.loads((args.output_dir / "execution.json").read_text())
-        print(json.dumps({"status": manifest["status"], "output_dir": str(args.output_dir), "exit_code": code,
-                          "error": manifest.get("error") or manifest["validation"].get("error")}))
+        print(
+            json.dumps(
+                {
+                    "status": manifest["status"],
+                    "output_dir": str(args.output_dir),
+                    "exit_code": code,
+                    "error": manifest.get("error") or manifest["validation"].get("error"),
+                }
+            )
+        )
         return code
     except (OSError, ValueError) as exc:
         print(json.dumps({"status": "invalid_input", "error": str(exc)}), file=sys.stderr)

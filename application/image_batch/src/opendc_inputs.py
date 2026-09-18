@@ -75,16 +75,25 @@ def fixture_tasks(fixture):
     for group in fixture["tasks"]:
         for _ in range(group["count"]):
             task_id = len(tasks)
-            tasks.append({
-                "id": task_id, "submission_time": group["submission_ms"],
-                "duration": sum(fragment[0] for fragment in group["fragments"]),
-                "cpu_count": 1, "cpu_capacity": float(fixture["frequency_mhz"]),
-                "mem_capacity": group["memory_mib"],
-                "fragments": [
-                    {"id": task_id, "duration": duration, "cpu_count": 1, "cpu_usage": float(usage)}
-                    for duration, usage in group["fragments"]
-                ],
-            })
+            tasks.append(
+                {
+                    "id": task_id,
+                    "submission_time": group["submission_ms"],
+                    "duration": sum(fragment[0] for fragment in group["fragments"]),
+                    "cpu_count": 1,
+                    "cpu_capacity": float(fixture["frequency_mhz"]),
+                    "mem_capacity": group["memory_mib"],
+                    "fragments": [
+                        {
+                            "id": task_id,
+                            "duration": duration,
+                            "cpu_count": 1,
+                            "cpu_usage": float(usage),
+                        }
+                        for duration, usage in group["fragments"]
+                    ],
+                }
+            )
     return tasks
 
 
@@ -99,13 +108,30 @@ def topology_for(fixture):
     Returns:
         dict: OpenDC SDK topology with synthetic hosts and a grid power source.
     """
-    return {"clusters": [{"name": "synthetic", "hosts": [
-        {"name": f"test-host-{index}",
-         "cpu": {"coreCount": fixture["cores_per_host"], "coreSpeed": f'{fixture["frequency_mhz"]} MHz'},
-         "memory": {"size": f'{fixture["memory_mib_per_host"]} MiB'},
-         "cpuPowerModel": {"type": "linear", "idlePower": "100 W", "maxPower": "200 W"}}
-        for index in range(fixture["host_count"])
-    ], "powerSource": {"name": "grid", "maxPower": "10000 W"}}]}
+    return {
+        "clusters": [
+            {
+                "name": "synthetic",
+                "hosts": [
+                    {
+                        "name": f"test-host-{index}",
+                        "cpu": {
+                            "coreCount": fixture["cores_per_host"],
+                            "coreSpeed": f'{fixture["frequency_mhz"]} MHz',
+                        },
+                        "memory": {"size": f'{fixture["memory_mib_per_host"]} MiB'},
+                        "cpuPowerModel": {
+                            "type": "linear",
+                            "idlePower": "100 W",
+                            "maxPower": "200 W",
+                        },
+                    }
+                    for index in range(fixture["host_count"])
+                ],
+                "powerSource": {"name": "grid", "maxPower": "10000 W"},
+            }
+        ]
+    }
 
 
 def experiment_config():
@@ -117,16 +143,40 @@ def experiment_config():
         dict: Single-run SDK configuration with seed zero and native table exports.
     """
     return {
-        "name": "controlled", "runs": 1, "initialSeed": 0,
+        "name": "controlled",
+        "runs": 1,
+        "initialSeed": 0,
         "topologies": [{"importFrom": "topology.json"}],
-        "workloads": [{"source": {"type": "named", "name": "trace"}, "type": "trace",
-                       "sampleFraction": 1.0, "scalingPolicy": "NoDelay", "deferAll": False}],
-        "allocationPolicies": [{"type": "filter", "filters": [
-            {"type": "compute"}, {"type": "vcpu", "allocationRatio": 1.0},
-            {"type": "ram", "allocationRatio": 1.0}], "weighers": [], "subsetSize": 1}],
-        "failureModels": [{"type": "none"}], "checkpointModels": [None],
-        "exportModels": [{"exportInterval": "1 s", "printFrequency": None,
-                          "filesToExport": ["task", "host", "service", "powerSource"]}],
+        "workloads": [
+            {
+                "source": {"type": "named", "name": "trace"},
+                "type": "trace",
+                "sampleFraction": 1.0,
+                "scalingPolicy": "NoDelay",
+                "deferAll": False,
+            }
+        ],
+        "allocationPolicies": [
+            {
+                "type": "filter",
+                "filters": [
+                    {"type": "compute"},
+                    {"type": "vcpu", "allocationRatio": 1.0},
+                    {"type": "ram", "allocationRatio": 1.0},
+                ],
+                "weighers": [],
+                "subsetSize": 1,
+            }
+        ],
+        "failureModels": [{"type": "none"}],
+        "checkpointModels": [None],
+        "exportModels": [
+            {
+                "exportInterval": "1 s",
+                "printFrequency": None,
+                "filesToExport": ["task", "host", "service", "powerSource"],
+            }
+        ],
     }
 
 
@@ -151,11 +201,17 @@ def adapt_trace(source, destination):
     memory = tasks["mem_capacity"].to_pylist()
     if any(value <= 0 or value > (2**63 - 1) // 1000 for value in memory):
         raise ValueError("Task memory cannot be represented by the pinned reader")
-    tasks = tasks.set_column(names.index("mem_capacity"), pa.field("mem_capacity", pa.int64(), nullable=False),
-                             pa.array([value * 1000 for value in memory], type=pa.int64()))
+    tasks = tasks.set_column(
+        names.index("mem_capacity"),
+        pa.field("mem_capacity", pa.int64(), nullable=False),
+        pa.array([value * 1000 for value in memory], type=pa.int64()),
+    )
     timestamp = pa.timestamp("ms", tz="UTC")
-    tasks = tasks.set_column(names.index("submission_time"), pa.field("submission_time", timestamp, nullable=False),
-                             tasks["submission_time"].cast(timestamp))
+    tasks = tasks.set_column(
+        names.index("submission_time"),
+        pa.field("submission_time", timestamp, nullable=False),
+        tasks["submission_time"].cast(timestamp),
+    )
     pq.write_table(tasks, destination / "tasks.parquet", compression="NONE", use_dictionary=False)
     (destination / "fragments.parquet").write_bytes((source / "fragments.parquet").read_bytes())
 
@@ -188,13 +244,20 @@ def prepare(fixture_name, output_dir):
     parquet_tasks(fixture_tasks(fixture), directory / "source")
     adapt_trace(directory / "source", directory / "trace")
     manifest = {
-        "contract": CONTRACT, "status": "ready", "fixture": fixture_name,
-        "initial_state": "empty_synthetic", "opendc_version": VERSION,
-        "opendc_commit": COMMIT, "opendc_source_archive_sha256": SOURCE_ARCHIVE_SHA256,
-        "transformations": {"submission_time": "int64 milliseconds -> timestamp[ms, UTC], no time shift",
-                            "mem_capacity": "exported MiB * 1000; pinned SDK ComputeWorkloadLoader divides by 1000",
-                            "fragments": "byte-preserved; reader ignores extra cpu_count column"},
-        "python_version": platform.python_version(), "pyarrow_version": pa.__version__,
+        "contract": CONTRACT,
+        "status": "ready",
+        "fixture": fixture_name,
+        "initial_state": "empty_synthetic",
+        "opendc_version": VERSION,
+        "opendc_commit": COMMIT,
+        "opendc_source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        "transformations": {
+            "submission_time": "int64 milliseconds -> timestamp[ms, UTC], no time shift",
+            "mem_capacity": "exported MiB * 1000; pinned SDK ComputeWorkloadLoader divides by 1000",
+            "fragments": "byte-preserved; reader ignores extra cpu_count column",
+        },
+        "python_version": platform.python_version(),
+        "pyarrow_version": pa.__version__,
         "preparation_seconds": time.monotonic() - started,
         "sha256": file_hashes(directory),
     }
@@ -220,12 +283,17 @@ def verify_inputs(directory):
     """
     directory = Path(directory)
     manifest = json.loads((directory / "manifest.json").read_text())
-    if (manifest.get("contract") != CONTRACT or manifest.get("status") != "ready"
-            or manifest.get("fixture") not in ("controlled", "memory")
-            or manifest.get("initial_state") != "empty_synthetic"):
+    if (
+        manifest.get("contract") != CONTRACT
+        or manifest.get("status") != "ready"
+        or manifest.get("fixture") not in ("controlled", "memory")
+        or manifest.get("initial_state") != "empty_synthetic"
+    ):
         raise ValueError("expected a ready controlled experiment, not a live simulation bundle")
-    if (manifest.get("opendc_commit") != COMMIT
-            or manifest.get("opendc_source_archive_sha256") != SOURCE_ARCHIVE_SHA256):
+    if (
+        manifest.get("opendc_commit") != COMMIT
+        or manifest.get("opendc_source_archive_sha256") != SOURCE_ARCHIVE_SHA256
+    ):
         raise ValueError("controlled input version differs from the pinned runner")
     if file_hashes(directory, exclude=("manifest.json",)) != manifest.get("sha256"):
         raise ValueError("controlled input hash mismatch")

@@ -69,9 +69,17 @@ def read_cgroup(root=Path("/sys/fs/cgroup")):
         current = number("memory/memory.usage_in_bytes")
         limits = {"memory": read("memory/memory.limit_in_bytes")}
         events = read("memory/memory.failcnt")
-    return {"version": version, "scope": "mounted cgroup root", "cpu_usage_seconds": usage,
-            "memory_peak_bytes": peak, "memory_current_bytes": current,
-            "cpu_stat": cpu, "memory_events": events, "limits": limits, "unavailable": unavailable}
+    return {
+        "version": version,
+        "scope": "mounted cgroup root",
+        "cpu_usage_seconds": usage,
+        "memory_peak_bytes": peak,
+        "memory_current_bytes": current,
+        "cpu_stat": cpu,
+        "memory_events": events,
+        "limits": limits,
+        "unavailable": unavailable,
+    }
 
 
 def _signal_group(pid, signum):
@@ -112,8 +120,15 @@ def run_process(command, directory, timeout_seconds):
         raise ValueError("timeout must be positive")
     directory = Path(directory)
     started = time.monotonic()
-    result = {"command": command, "exit_code": None, "signal": None, "timed_out": False,
-              "launch_error": None, "received_signal": None, "cgroup_before": read_cgroup()}
+    result = {
+        "command": command,
+        "exit_code": None,
+        "signal": None,
+        "timed_out": False,
+        "launch_error": None,
+        "received_signal": None,
+        "cgroup_before": read_cgroup(),
+    }
     process = None
     handlers = {}
     received = []
@@ -127,11 +142,16 @@ def run_process(command, directory, timeout_seconds):
         """
         received.append(signum)
 
-    with (directory / "stdout.log").open("wb") as stdout, (directory / "stderr.log").open("wb") as stderr:
+    with (directory / "stdout.log").open("wb") as stdout, (directory / "stderr.log").open(
+        "wb"
+    ) as stderr:
         try:
             for signum in (signal.SIGTERM, signal.SIGINT):
                 handlers[signum] = signal.signal(signum, handle_signal)
-            process = subprocess.Popen(command, cwd=directory, stdout=stdout, stderr=stderr, start_new_session=True)
+            # wait4 below reaps the process and collects usage; Popen must not reap it first.
+            process = subprocess.Popen(  # pylint: disable=consider-using-with
+                command, cwd=directory, stdout=stdout, stderr=stderr, start_new_session=True
+            )
             termination_started = None
             reaped = None
             while True:
@@ -156,10 +176,15 @@ def run_process(command, directory, timeout_seconds):
                 time.sleep(0.02)
             status, usage = reaped
             process.returncode = os.waitstatus_to_exitcode(status)
-            result.update({"exit_code": process.returncode,
-                           "signal": -process.returncode if process.returncode < 0 else None,
-                           "user_cpu_seconds": usage.ru_utime, "system_cpu_seconds": usage.ru_stime,
-                           "max_rss_bytes": usage.ru_maxrss * 1024})
+            result.update(
+                {
+                    "exit_code": process.returncode,
+                    "signal": -process.returncode if process.returncode < 0 else None,
+                    "user_cpu_seconds": usage.ru_utime,
+                    "system_cpu_seconds": usage.ru_stime,
+                    "max_rss_bytes": usage.ru_maxrss * 1024,
+                }
+            )
         except OSError as exc:
             result["launch_error"] = str(exc)
             stderr.write((str(exc) + "\n").encode())
@@ -174,6 +199,8 @@ def run_process(command, directory, timeout_seconds):
     result["cgroup_after"] = read_cgroup()
     before = result["cgroup_before"]["cpu_usage_seconds"]
     after = result["cgroup_after"]["cpu_usage_seconds"]
-    result["cgroup_cpu_seconds"] = after - before if before is not None and after is not None else None
-    result["cgroup_membership"] = Path("/proc/self/cgroup").read_text()
+    result["cgroup_cpu_seconds"] = (
+        after - before if before is not None and after is not None else None
+    )
+    result["cgroup_membership"] = Path("/proc/self/cgroup").read_text(encoding="utf-8")
     return result

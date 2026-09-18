@@ -1,3 +1,5 @@
+"""Regression coverage for observer timing, workload state and evidence retention."""
+
 from __future__ import annotations
 
 import json
@@ -59,9 +61,7 @@ class FakeBatchApi:
         self.jobs = jobs
 
     def list_namespaced_job(self, **_kwargs):
-        return SimpleNamespace(
-            items=self.jobs, metadata=SimpleNamespace(resource_version="17")
-        )
+        return SimpleNamespace(items=self.jobs, metadata=SimpleNamespace(resource_version="17"))
 
 
 class EmptyWatch:
@@ -186,17 +186,15 @@ def demo_pod(
                     running=None,
                     terminated=SimpleNamespace(
                         started_at=execution_start, finished_at=execution_finish
-                    )
-                )
+                    ),
+                ),
             )
         )
     return SimpleNamespace(
         metadata=SimpleNamespace(
             uid=f"pod-{job_uid}",
             name=f"pod-{job_uid}",
-            owner_references=[
-                SimpleNamespace(kind="Job", controller=True, uid=job_uid)
-            ],
+            owner_references=[SimpleNamespace(kind="Job", controller=True, uid=job_uid)],
         ),
         status=SimpleNamespace(phase=phase, container_statuses=container_statuses),
         spec=SimpleNamespace(node_name=node_name),
@@ -215,9 +213,7 @@ def demo_node(name, *, uid=None, ready=True, unschedulable=False, control_plane=
             ),
         ),
         status=SimpleNamespace(
-            conditions=[
-                SimpleNamespace(type="Ready", status="True" if ready else "False")
-            ],
+            conditions=[SimpleNamespace(type="Ready", status="True" if ready else "False")],
             allocatable={"cpu": "4", "memory": "16Gi"},
         ),
         spec=SimpleNamespace(unschedulable=unschedulable),
@@ -351,9 +347,7 @@ class OpenDTObserverTests(unittest.TestCase):
                 self.assertEqual(errors, [])
                 self.assertEqual(len(workload.records), 1)
                 record = workload.records[0]
-                self.assertEqual(
-                    record["source"]["resource_sample_count"], len(raw.records)
-                )
+                self.assertEqual(record["source"]["resource_sample_count"], len(raw.records))
                 self.assertTrue(record["task"]["fragments"])
                 self.assertNotIn("job-uid", sampler._snapshots)
                 self.assertFalse(observer.handle_job(finished))
@@ -362,9 +356,7 @@ class OpenDTObserverTests(unittest.TestCase):
         job = demo_job()
         execution_start = job.status.start_time + timedelta(seconds=1)
         execution_finish = execution_start + timedelta(seconds=1)
-        pod = demo_pod(
-            execution_start=execution_start, execution_finish=execution_finish
-        )
+        pod = demo_pod(execution_start=execution_start, execution_finish=execution_finish)
         self.assertEqual(
             pod_execution_interval([pod], "job-uid"),
             (execution_start, execution_finish),
@@ -388,9 +380,7 @@ class OpenDTObserverTests(unittest.TestCase):
             execution_finish_time=execution_finish,
         )
         self.assertEqual(record["task"]["duration"], 1000)
-        self.assertEqual(
-            sum(item["duration"] for item in record["task"]["fragments"]), 1000
-        )
+        self.assertEqual(sum(item["duration"] for item in record["task"]["fragments"]), 1000)
         self.assertEqual(
             record["source"]["completion_time"],
             job.status.completion_time.isoformat(),
@@ -425,9 +415,7 @@ class OpenDTObserverTests(unittest.TestCase):
                 256.0,
             ),
         ]
-        record = build_workload_record(
-            job, task_id=7, snapshots=snapshots, cpu_frequency_mhz=2400
-        )
+        record = build_workload_record(job, task_id=7, snapshots=snapshots, cpu_frequency_mhz=2400)
 
         self.assertEqual(record["message_type"], "task")
         self.assertEqual(
@@ -579,13 +567,9 @@ class OpenDTObserverTests(unittest.TestCase):
         self.assertEqual(record["counts"]["active_jobs"], 1)
         self.assertEqual(record["counts"]["workers"], 3)
         self.assertEqual(record["counts"]["ready_schedulable_workers"], 1)
-        self.assertEqual(
-            record["jobs"]["active"][0]["kubernetes_job_uid"], "active-uid"
-        )
+        self.assertEqual(record["jobs"]["active"][0]["kubernetes_job_uid"], "active-uid")
         self.assertEqual(record["jobs"]["active"][0]["node_name"], "cloud2")
-        self.assertEqual(
-            record["jobs"]["queued"][0]["kubernetes_job_uid"], "queued-uid"
-        )
+        self.assertEqual(record["jobs"]["queued"][0]["kubernetes_job_uid"], "queued-uid")
         self.assertEqual(
             [worker["node_name"] for worker in record["workers"]],
             ["cloud1", "cloud2", "cloud3"],
@@ -595,9 +579,7 @@ class OpenDTObserverTests(unittest.TestCase):
         job = demo_job()
         job.status.conditions = []
         actual = job.status.start_time + timedelta(seconds=20)
-        pod = demo_pod(
-            phase="Running", classifier_state="running", execution_start=actual
-        )
+        pod = demo_pod(phase="Running", classifier_state="running", execution_start=actual)
         record = build_cluster_state_record(
             [job],
             [pod],
@@ -684,12 +666,8 @@ class OpenDTObserverTests(unittest.TestCase):
 
         self.assertEqual(state, "finished")
         self.assertEqual(state_job["execution_state"], "terminated")
-        self.assertEqual(
-            state_job["execution_start_time"], execution_start.isoformat()
-        )
-        self.assertEqual(
-            state_job["execution_finish_time"], execution_finish.isoformat()
-        )
+        self.assertEqual(state_job["execution_start_time"], execution_start.isoformat())
+        self.assertEqual(state_job["execution_finish_time"], execution_finish.isoformat())
         self.assertEqual(record["counts"]["queued_jobs"], 0)
         self.assertEqual(record["counts"]["active_jobs"], 0)
         self.assertEqual(record["jobs"], {"queued": [], "active": []})
@@ -712,9 +690,7 @@ class OpenDTObserverTests(unittest.TestCase):
         )
         sampler.observe_job(job)
         sampler.collect_once(collect_resources=False)
-        observations = [
-            details for event, details in diagnostics if event == "job.observed"
-        ]
+        observations = [details for event, details in diagnostics if event == "job.observed"]
         self.assertEqual(len(observations), 1)
         self.assertEqual(
             observations[0]["creation_time"],
@@ -763,12 +739,8 @@ class OpenDTObserverTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 live = demo_pod(
                     phase=phase,
-                    classifier_state=(
-                        "waiting" if phase == "Pending" else "running"
-                    ),
-                    execution_start=(
-                        job.status.start_time if phase == "Running" else None
-                    ),
+                    classifier_state=("waiting" if phase == "Pending" else "running"),
+                    execution_start=(job.status.start_time if phase == "Running" else None),
                 )
                 live.metadata.name = "z-live"
                 record = build_cluster_state_record(
@@ -820,9 +792,7 @@ class OpenDTObserverTests(unittest.TestCase):
         self.assertEqual(states.records[0]["counts"]["active_jobs"], 1)
         self.assertEqual(captured[0].observation_time is not None, True)
         self.assertTrue(any("[15s]" in query for query in prometheus.queries))
-        self.assertTrue(
-            all("kube_pod_owner" not in query for query in prometheus.queries)
-        )
+        self.assertTrue(all("kube_pod_owner" not in query for query in prometheus.queries))
 
     def test_incomplete_cluster_state_is_diagnosed_and_not_written(self):
         active = demo_job()
@@ -908,9 +878,7 @@ class OpenDTObserverTests(unittest.TestCase):
 
     def test_manifest_keeps_observer_state_separate(self):
         manifest = (SOURCE.parent / "manifests" / "adapter.yaml").read_text()
-        observer_section = manifest.split("- name: opendt-observer", 1)[1].split(
-            "volumes:", 1
-        )[0]
+        observer_section = manifest.split("- name: opendt-observer", 1)[1].split("volumes:", 1)[0]
 
         self.assertIn("replicas: 1", manifest)
         self.assertIn('command: ["python", "-u", "opendt_observer.py"]', manifest)

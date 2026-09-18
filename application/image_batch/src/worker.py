@@ -20,6 +20,8 @@ try:
     from PIL import Image
     import tflite_runtime.interpreter as tflite
 except ModuleNotFoundError as exc:
+    # Import machinery sets name to the missing module; Astroid infers its descriptor instead.
+    # pylint: disable-next=no-member
     if exc.name.split(".")[0] not in {"numpy", "PIL", "tflite_runtime"}:
         raise
     TFLITE_IMPORT_ERROR = exc
@@ -30,9 +32,7 @@ from events import emit_stream, new_event
 
 
 def fetch_payload(url: str) -> bytes:
-    with urlopen(
-        url, timeout=60
-    ) as response:  # nosec: URL comes from trusted Job manifest
+    with urlopen(url, timeout=60) as response:  # nosec: URL comes from trusted Job manifest
         return response.read()
 
 
@@ -67,11 +67,11 @@ def classify_tflite(
     images: list[Path], model_path: Path, labels_path: Path, repetitions: int = 1
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     if TFLITE_IMPORT_ERROR is not None:
-        raise RuntimeError("install requirements-worker.txt for the TFLite classifier") from TFLITE_IMPORT_ERROR
+        raise RuntimeError(
+            "install requirements-worker.txt for the TFLite classifier"
+        ) from TFLITE_IMPORT_ERROR
     setup_started = time.monotonic_ns()
-    labels = [
-        line.strip() for line in labels_path.read_text(encoding="utf-8").splitlines()
-    ]
+    labels = [line.strip() for line in labels_path.read_text(encoding="utf-8").splitlines()]
     interpreter = tflite.Interpreter(model_path=str(model_path), num_threads=1)
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()[0]
@@ -86,9 +86,7 @@ def classify_tflite(
     for image_path in images:
         preprocessing_started = time.monotonic_ns()
         with Image.open(image_path) as image:
-            pixels = np.expand_dims(
-                image.resize((width, height)).convert("RGB"), axis=0
-            )
+            pixels = np.expand_dims(image.resize((width, height)).convert("RGB"), axis=0)
         if floating_model:
             pixels = (np.float32(pixels) - 127.5) / 127.5
         preprocessing_duration_ns += time.monotonic_ns() - preprocessing_started
@@ -120,13 +118,9 @@ def put_result(url: str, result: dict[str, Any]) -> dict[str, int]:
     serialization_started = time.monotonic_ns()
     body = json.dumps(result, separators=(",", ":")).encode("utf-8")
     serialization_duration_ns = time.monotonic_ns() - serialization_started
-    request = Request(
-        url, data=body, method="PUT", headers={"Content-Type": "application/json"}
-    )
+    request = Request(url, data=body, method="PUT", headers={"Content-Type": "application/json"})
     request_started = time.monotonic_ns()
-    with urlopen(
-        request, timeout=60
-    ) as response:  # nosec: URL comes from trusted Job manifest
+    with urlopen(request, timeout=60) as response:  # nosec: URL comes from trusted Job manifest
         if response.status != 200:
             raise RuntimeError(f"adapter rejected result with HTTP {response.status}")
     return {
@@ -181,9 +175,7 @@ def main() -> None:
         classify_started = time.monotonic_ns()
         if mode == "checksum":
             outputs = classify_checksum(images, inference_repetitions)
-            classifier_timings = {
-                "checksum_duration_ns": time.monotonic_ns() - classify_started
-            }
+            classifier_timings = {"checksum_duration_ns": time.monotonic_ns() - classify_started}
         elif mode == "tflite":
             outputs, classifier_timings = classify_tflite(
                 images,

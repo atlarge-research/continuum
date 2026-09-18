@@ -7,14 +7,10 @@ import tempfile
 import unittest
 
 
-PATCH = (
-    Path(__file__).resolve().parents[1] / "qemu/infrastructure/packet-match-stack.patch"
-)
+PATCH = Path(__file__).resolve().parents[1] / "qemu/infrastructure/packet-match-stack.patch"
 
 
-@unittest.skipUnless(
-    os.environ.get("FNS_MAHIMAHI_SOURCE"), "requires pinned source checkout"
-)
+@unittest.skipUnless(os.environ.get("FNS_MAHIMAHI_SOURCE"), "requires pinned source checkout")
 class PinnedSourceTests(unittest.TestCase):
     def test_address_matcher_preserves_bypass_without_per_packet_heap_growth(self):
         self.assertTrue(PATCH.exists(), "packet matcher compatibility patch is missing")
@@ -23,9 +19,7 @@ class PinnedSourceTests(unittest.TestCase):
             root = Path(temporary)
             directory = root / "src/frontend"
             directory.mkdir(parents=True)
-            shutil.copyfile(
-                source / "src/frontend/link_queue.cc", directory / "link_queue.cc"
-            )
+            shutil.copyfile(source / "src/frontend/link_queue.cc", directory / "link_queue.cc")
             subprocess.run(
                 ["patch", "--batch", "-p1", "-i", str(PATCH)],
                 cwd=root,
@@ -94,6 +88,6 @@ int main() {
                 capture_output=True,
             )
             result = subprocess.run(
-                [str(root / "matcher")], capture_output=True, text=True
+                [str(root / "matcher")], capture_output=True, text=True, check=False
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

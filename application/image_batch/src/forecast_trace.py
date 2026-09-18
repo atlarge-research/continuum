@@ -23,10 +23,7 @@ STREAMS = (
 
 def canonical(value):
     return (
-        json.dumps(
-            value, sort_keys=True, separators=(",", ":"), allow_nan=False
-        ).encode()
-        + b"\n"
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode() + b"\n"
     )
 
 
@@ -47,9 +44,7 @@ def milliseconds(value):
 
 
 def iso(value):
-    return datetime.fromtimestamp(value / 1000, timezone.utc).isoformat(
-        timespec="milliseconds"
-    )
+    return datetime.fromtimestamp(value / 1000, timezone.utc).isoformat(timespec="milliseconds")
 
 
 def observed_milliseconds(value):
@@ -75,9 +70,7 @@ def bounded_read(directory, boundaries=None):
     try:
         for name in STREAMS:
             handles[name] = (directory / name).open("rb")
-        sizes = {
-            name: os.fstat(handle.fileno()).st_size for name, handle in handles.items()
-        }
+        sizes = {name: os.fstat(handle.fileno()).st_size for name, handle in handles.items()}
         for name, handle in handles.items():
             limit = boundaries[name]["bytes"] if boundaries else sizes[name]
             if not isinstance(limit, int) or limit < 0 or limit > sizes[name]:
@@ -98,10 +91,7 @@ def bounded_read(directory, boundaries=None):
             for number, line in enumerate(complete.splitlines(), 1):
                 try:
                     record = json.loads(line, parse_constant=_invalid_constant)
-                    if (
-                        not isinstance(record, dict)
-                        or record.get("schema_version") != 1
-                    ):
+                    if not isinstance(record, dict) or record.get("schema_version") != 1:
                         raise ValueError("expected schema_version 1 object")
                     rows[name].append(record)
                 except (ValueError, UnicodeError) as exc:
@@ -139,11 +129,7 @@ def validate_task(task):
         if type(value) is not int or not minimum <= value <= maximum:
             raise ValueError(f"invalid Task {key}")
     capacity = task["cpu_capacity"]
-    if (
-        not isinstance(capacity, (int, float))
-        or not math.isfinite(capacity)
-        or capacity <= 0
-    ):
+    if not isinstance(capacity, (int, float)) or not math.isfinite(capacity) or capacity <= 0:
         raise ValueError("invalid Task cpu_capacity")
     milliseconds(task["submission_time"])
     fragments = task["fragments"]
@@ -159,10 +145,7 @@ def validate_task(task):
             or not 0 <= usage <= capacity
         ):
             raise ValueError("invalid Fragment cpu_usage")
-    if (
-        fragments
-        and sum(fragment["duration"] for fragment in fragments) != task["duration"]
-    ):
+    if fragments and sum(fragment["duration"] for fragment in fragments) != task["duration"]:
         raise ValueError("Fragments do not cover Task duration")
 
 
@@ -272,9 +255,7 @@ def read_trace(rows, run_id, cutoff):
             r["source"]["kubernetes_job_uid"],
         ),
     )
-    return Trace(
-        cutoff, arrivals, ordered, states, failures, states[-1][1] if states else None
-    )
+    return Trace(cutoff, arrivals, ordered, states, failures, states[-1][1] if states else None)
 
 
 def training_bins(trace, origin, bin_ms, gap_ms):

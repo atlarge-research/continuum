@@ -35,15 +35,11 @@ class StaticNetworkTests(unittest.TestCase):
                 with self.subTest(preset=preset, provider=provider):
                     cfg = config(preset, provider)
                     profiles = tc_values(cfg)
-                    self.assertEqual(
-                        [p[2] for p in profiles], [1000, 1000, 1000, rate, rate]
-                    )
+                    self.assertEqual([p[2] for p in profiles], [1000, 1000, 1000, rate, rate])
                     commands = []
                     for disk, profile in enumerate(profiles, 1):
                         commands.extend(
-                            generate_tc_commands(
-                                cfg, profile, ["10.0.0.2", "10.0.0.3"], disk
-                            )
+                            generate_tc_commands(cfg, profile, ["10.0.0.2", "10.0.0.3"], disk)
                         )
                     self.assertEqual(
                         commands[0],
@@ -120,9 +116,7 @@ class StaticNetworkTests(unittest.TestCase):
             for profile in profiles[3:]:
                 commands = generate_tc_commands(cfg, profile, ["10.0.0.2"], 1)
                 self.assertEqual(commands[1][-2:], ["rate", f"{profile[2]}mbit"])
-                self.assertEqual(
-                    commands[-1][-4:-2], [f"{profile[0]}ms", f"{profile[1]}ms"]
-                )
+                self.assertEqual(commands[-1][-4:-2], [f"{profile[0]}ms", f"{profile[1]}ms"])
 
     def test_replay_keeps_static_core_classes_and_delays(self):
         cfg = config("5g_nl_kpn_mahimahi")
@@ -165,9 +159,7 @@ class StaticNetworkTests(unittest.TestCase):
 
     def test_replay_start_uses_checked_launcher_with_every_target(self):
         targets = ["192.168.210.2", "192.168.210.3", "192.168.210.4"]
-        commands = generate_mahimati_command(
-            "192.168.210.6", targets, "/a.up", "/a.down"
-        )
+        commands = generate_mahimati_command("192.168.210.6", targets, "/a.up", "/a.down")
         self.assertEqual(
             commands,
             [
@@ -184,9 +176,7 @@ class StaticNetworkTests(unittest.TestCase):
                 ]
             ],
         )
-        self.assertEqual(
-            generate_mahimati_command("192.168.210.6", targets, None, None), []
-        )
+        self.assertEqual(generate_mahimati_command("192.168.210.6", targets, None, None), [])
 
     def test_topologies_apply_core_rules_everywhere_and_replay_only_at_endpoint(self):
         for clouds, edges in (
@@ -215,12 +205,8 @@ class StaticNetworkTests(unittest.TestCase):
             start(cfg, [Machine()])
             for ssh, script in calls:
                 self.assertIn(" class add ", script)
-                self.assertIn(
-                    "10000mbit" if ssh == "vm@192.168.210.6" else "1000mbit", script
-                )
-                self.assertEqual(
-                    "continuum_replay.py" in script, ssh == "vm@192.168.210.6"
-                )
+                self.assertIn("10000mbit" if ssh == "vm@192.168.210.6" else "1000mbit", script)
+                self.assertEqual("continuum_replay.py" in script, ssh == "vm@192.168.210.6")
             endpoint = shlex.split(calls[-1][1])[0]
             for target in groups["control"] + clouds + edges:
                 self.assertIn(target, endpoint)
@@ -238,7 +224,7 @@ class StaticNetworkTests(unittest.TestCase):
         )
 
         class Machine:
-            def process(self, _config, command, **kwargs):
+            def process(self, _config, command, **_kwargs):
                 results = []
                 for script in command:
                     # Execute the actual generated shell flow; tc itself is the
@@ -246,11 +232,9 @@ class StaticNetworkTests(unittest.TestCase):
                     body = shlex.split(script)[0]
                     body = "sudo() { return 1; }; " + body
                     result = subprocess.run(
-                        ["bash", "-c", body], capture_output=True, text=True
+                        ["bash", "-c", body], capture_output=True, text=True, check=False
                     )
-                    results.append(
-                        (result.stdout.splitlines(), result.stderr.splitlines())
-                    )
+                    results.append((result.stdout.splitlines(), result.stderr.splitlines()))
                 return results
 
         with self.assertRaises(RuntimeError):

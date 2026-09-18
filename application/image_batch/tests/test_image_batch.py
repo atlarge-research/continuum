@@ -1,3 +1,5 @@
+"""Regression coverage for finite image batches and their Continuum configuration."""
+
 from __future__ import annotations
 
 import configparser
@@ -26,7 +28,6 @@ import endpoint  # noqa: E402
 from configure_cadvisor_scrape import cadvisor_endpoint, patch_operations  # noqa: E402
 from endpoint import (  # noqa: E402
     FIDELITY_TOLERANCE_NS,
-    PlannedArrival,
     PreparedBatch,
     SendResult,
     SenderMeasurements,
@@ -105,17 +106,13 @@ class ImageBatchTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             cadvisor_endpoint({"spec": {"endpoints": []}})
         with self.assertRaises(RuntimeError):
-            cadvisor_endpoint(
-                {"spec": {"endpoints": [{"path": "/metrics/cadvisor"}] * 2}}
-            )
+            cadvisor_endpoint({"spec": {"endpoints": [{"path": "/metrics/cadvisor"}] * 2}})
 
     def test_checksum_repetition_preserves_one_output_per_image(self):
         with tempfile.TemporaryDirectory() as temporary:
             image = Path(temporary) / "one.jpg"
             image.write_bytes(b"content")
-            with mock.patch(
-                "worker.hashlib.sha256", wraps=__import__("hashlib").sha256
-            ) as digest:
+            with mock.patch("worker.hashlib.sha256", wraps=__import__("hashlib").sha256) as digest:
                 output = classify_checksum([image], repetitions=3)
         self.assertEqual(len(output), 1)
         self.assertEqual(digest.call_count, 3)
@@ -132,9 +129,7 @@ class ImageBatchTests(unittest.TestCase):
         self.assertEqual(cloud_nodes, 4)
         self.assertEqual(endpoint_nodes, 1)
         self.assertTrue(infrastructure_config.getboolean("cpu_pin"))
-        self.assertEqual(
-            cloud_nodes * cloud_cores + endpoint_nodes * endpoint_cores, 18
-        )
+        self.assertEqual(cloud_nodes * cloud_cores + endpoint_nodes * endpoint_cores, 18)
 
     def test_qemu_topology_generates_unique_cpu_pins_zero_through_seventeen(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -175,9 +170,7 @@ class ImageBatchTests(unittest.TestCase):
                 endpoint_names=["endpoint0"],
                 base_ips=[],
                 base_names=[],
-                process=lambda *_args, **_kwargs: [
-                    (["default via 192.168.122.1 dev br0"], [])
-                ],
+                process=lambda *_args, **_kwargs: [(["default via 192.168.122.1 dev br0"], [])],
             )
             old_cwd = os.getcwd()
             old_find_bridge = qemu_generate.find_bridge
@@ -193,10 +186,7 @@ class ImageBatchTests(unittest.TestCase):
             for name in ("cloud0", "cloud1", "cloud2", "cloud3", "endpoint0"):
                 xml = (root / ".tmp" / f"domain_{name}.xml").read_text()
                 pins.extend(
-                    int(value)
-                    for value in re.findall(
-                        r'<vcpupin vcpu="\d+" cpuset="(\d+)"/>', xml
-                    )
+                    int(value) for value in re.findall(r'<vcpupin vcpu="\d+" cpuset="(\d+)"/>', xml)
                 )
             self.assertEqual(pins, list(range(18)))
 
@@ -250,27 +240,20 @@ class ImageBatchTests(unittest.TestCase):
         edge_rates = [
             item.expected_rate_per_second
             for item in first
-            if item.planned_offset_ns < 10_000_000_000
-            or item.planned_offset_ns >= 30_000_000_000
+            if item.planned_offset_ns < 10_000_000_000 or item.planned_offset_ns >= 30_000_000_000
         ]
         middle_rates = [
             item.expected_rate_per_second
             for item in first
             if 15_000_000_000 <= item.planned_offset_ns < 25_000_000_000
         ]
-        self.assertGreater(
-            sum(middle_rates) / len(middle_rates), sum(edge_rates) / len(edge_rates)
-        )
+        self.assertGreater(sum(middle_rates) / len(middle_rates), sum(edge_rates) / len(edge_rates))
         self.assertLess(first[-1].planned_offset_ns, 40_000_000_000)
-        self.assertTrue(
-            all(20 <= item.expected_rate_per_second <= 100 for item in first)
-        )
+        self.assertTrue(all(20 <= item.expected_rate_per_second <= 100 for item in first))
 
     def test_period_and_cycles_cli_and_environment(self):
         base_args = ["endpoint", "--adapter-url", "http://unused"]
-        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
-            sys, "argv", base_args
-        ):
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(sys, "argv", base_args):
             args = endpoint.parse_args()
             self.assertEqual((args.period_seconds, args.arrival_cycles), (60, 1))
         environment = {"ARRIVAL_PERIOD_SECONDS": "120", "ARRIVAL_CYCLES": "6"}
@@ -288,11 +271,9 @@ class ImageBatchTests(unittest.TestCase):
             (["--duration-seconds", "720"], {}),
             ([], {"SCHEDULE_DURATION_SECONDS": "720"}),
         ]:
-            with self.subTest(
-                extra_args=extra_args, environment=environment
-            ), mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(
-                sys, "argv", base_args + extra_args
-            ), mock.patch.object(
+            with self.subTest(extra_args=extra_args, environment=environment), mock.patch.dict(
+                os.environ, environment, clear=True
+            ), mock.patch.object(sys, "argv", base_args + extra_args), mock.patch.object(
                 sys, "stderr", io.StringIO()
             ):
                 with self.assertRaises(SystemExit) as error:
@@ -324,9 +305,7 @@ class ImageBatchTests(unittest.TestCase):
             ]
             with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
                 sys, "argv", args
-            ), mock.patch(
-                "endpoint.ThreadSafeEmitter", return_value=emitted.append
-            ), mock.patch(
+            ), mock.patch("endpoint.ThreadSafeEmitter", return_value=emitted.append), mock.patch(
                 "endpoint.execute_schedule", return_value=([], None)
             ) as execute, mock.patch(
                 "endpoint.build_schedule_summary", return_value={"failed_count": 0}
@@ -336,9 +315,7 @@ class ImageBatchTests(unittest.TestCase):
                 "endpoint.time.sleep"
             ) as sleep:
                 endpoint.main()
-            ready = next(
-                e["details"] for e in emitted if e["event_type"] == "schedule.ready"
-            )
+            ready = next(e["details"] for e in emitted if e["event_type"] == "schedule.ready")
             self.assertEqual(
                 ready["profile"],
                 {
@@ -383,9 +360,7 @@ class ImageBatchTests(unittest.TestCase):
             [batch.endpoint_batch_id for batch in first],
             [batch.endpoint_batch_id for batch in second],
         )
-        self.assertEqual(
-            [batch.payload for batch in first], [batch.payload for batch in second]
-        )
+        self.assertEqual([batch.payload for batch in first], [batch.payload for batch in second])
 
     def test_open_loop_releases_second_request_while_first_is_blocked(self):
         arrivals = build_constant_schedule(2, 0.01)
@@ -471,9 +446,7 @@ class ImageBatchTests(unittest.TestCase):
             prepared, run_id="run-test", start_wall_ns=1_000_000_000, emit=events.append
         )
         self.assertEqual(len(events), 20)
-        self.assertTrue(
-            all(event["event_type"] == "schedule.planned" for event in events)
-        )
+        self.assertTrue(all(event["event_type"] == "schedule.planned" for event in events))
         self.assertEqual(events[3]["details"]["endpoint_batch_id"], "batch-3")
 
         results = [
@@ -485,9 +458,7 @@ class ImageBatchTests(unittest.TestCase):
                 True,
             )
             for index, (arrival, lag) in enumerate(
-                zip(
-                    arrivals, [FIDELITY_TOLERANCE_NS] * 19 + [FIDELITY_TOLERANCE_NS + 1]
-                )
+                zip(arrivals, [FIDELITY_TOLERANCE_NS] * 19 + [FIDELITY_TOLERANCE_NS + 1])
             )
         ]
         summary = build_schedule_summary(
@@ -581,9 +552,7 @@ class ImageBatchTests(unittest.TestCase):
                 request.request_id,
             )
             self.assertEqual(
-                manifest["metadata"]["annotations"][
-                    "continuum.atlarge.nl/endpoint-batch-id"
-                ],
+                manifest["metadata"]["annotations"]["continuum.atlarge.nl/endpoint-batch-id"],
                 "b" * 32,
             )
             environment = {
@@ -594,9 +563,7 @@ class ImageBatchTests(unittest.TestCase):
             self.assertEqual(environment["WORKLOAD_RUN_ID"], "workload-1")
             self.assertEqual(environment["INFERENCE_REPETITIONS"], "8")
             self.assertEqual(
-                manifest["metadata"]["annotations"][
-                    "continuum.atlarge.nl/inference-repetitions"
-                ],
+                manifest["metadata"]["annotations"]["continuum.atlarge.nl/inference-repetitions"],
                 "8",
             )
 
@@ -630,9 +597,7 @@ class ImageBatchTests(unittest.TestCase):
             )
             self.assertEqual(metadata["status"], "completed")
             self.assertEqual(metadata["submitted_at_unix_ns"], 456)
-            self.assertEqual(
-                metadata["adapter_timings_ns"]["job_submission_duration_ns"], 123
-            )
+            self.assertEqual(metadata["adapter_timings_ns"]["job_submission_duration_ns"], 123)
 
     def test_http_receipt_payload_and_cloud_side_result(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -691,9 +656,7 @@ class ImageBatchTests(unittest.TestCase):
                     metadata = json.load(response)
                 self.assertEqual(metadata["status"], "completed")
                 self.assertEqual(metadata["endpoint_batch_id"], "b" * 32)
-                self.assertIn(
-                    "job_submission_duration_ns", metadata["adapter_timings_ns"]
-                )
+                self.assertIn("job_submission_duration_ns", metadata["adapter_timings_ns"])
                 self.assertNotIn("outputs", metadata)
 
                 with urlopen(f"{base_url}/v1/metrics") as response:
@@ -703,9 +666,7 @@ class ImageBatchTests(unittest.TestCase):
 
                 event_types = {
                     json.loads(line)["event_type"]
-                    for line in (root / "data" / "events.jsonl")
-                    .read_text()
-                    .splitlines()
+                    for line in (root / "data" / "events.jsonl").read_text().splitlines()
                 }
                 self.assertEqual(
                     event_types,

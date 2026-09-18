@@ -19,9 +19,7 @@ def mahimahi_enabled(config):
     """Return whether this run selected a MahiMahi-backed network preset."""
     infrastructure_config = config["infrastructure"]
     preset = infrastructure_config.get("wireless_network_preset", "")
-    return infrastructure_config["network_emulation"] and preset.endswith(
-        "_mahimahi"
-    )
+    return infrastructure_config["network_emulation"] and preset.endswith("_mahimahi")
 
 
 def delete_vms(config, machines):
@@ -416,6 +414,9 @@ def docker_registry(config, machines):
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
+
+    Raises:
+        ValueError: The Kubernetes version has no supported etcd and pause image mapping.
     """
     logging.info("Create local Docker registry")
     need_pull = [True for _ in range(len(config["images"]))]
@@ -484,6 +485,7 @@ def docker_registry(config, machines):
             pause = "3.6"
         else:
             logging.error("Continuum supports Kubernetes v1.[23-27].0, not: %s", version)
+            raise ValueError("Unsupported Kubernetes version: %s" % version)
 
         images_kube = [
             "redplanet00/kube-proxy:" + version,

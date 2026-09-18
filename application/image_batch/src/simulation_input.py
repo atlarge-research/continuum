@@ -34,9 +34,7 @@ def _validate_profile(task, label):
         if any(fragment.get("id") != task_id for fragment in task["fragments"]):
             raise ValueError("Fragment id differs from Task id")
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(
-            "malformed {} physical profile: {}".format(label, exc)
-        ) from exc
+        raise ValueError("malformed {} physical profile: {}".format(label, exc)) from exc
 
 
 def _profile_signature(task):
@@ -46,10 +44,7 @@ def _profile_signature(task):
         "cpu_capacity": task["cpu_capacity"],
         "mem_capacity": task["mem_capacity"],
         "fragments": [
-            {
-                key: copy.deepcopy(fragment[key])
-                for key in ("duration", "cpu_count", "cpu_usage")
-            }
+            {key: copy.deepcopy(fragment[key]) for key in ("duration", "cpu_count", "cpu_usage")}
             for fragment in task["fragments"]
         ],
     }
@@ -117,11 +112,7 @@ def _phase(job, group):
         if group != "active":
             return None, "execution_state_invalid"
         return "running", None
-    if (
-        execution_state == "unknown"
-        and group == "queued"
-        and pod_phase in (None, "Pending")
-    ):
+    if execution_state == "unknown" and group == "queued" and pod_phase in (None, "Pending"):
         return ("startup" if node_name else "queued"), None
     if execution_state is not None:
         return None, "execution_state_unknown"
@@ -173,9 +164,7 @@ def _simulation_model(trace, template, settings):
         if template_source.get(field) != expected:
             raise ValueError("template {} does not match settings".format(field))
 
-    return _SimulationModel(
-        template_task, template_source, expected_source, cutoff, horizon_ms
-    )
+    return _SimulationModel(template_task, template_source, expected_source, cutoff, horizon_ms)
 
 
 def _history_identities(trace, report):
@@ -207,9 +196,7 @@ def _history_identities(trace, report):
         try:
             completed.add(record["source"]["kubernetes_job_uid"])
         except (KeyError, TypeError):
-            report(
-                "completed_identity_invalid", "completed Task is missing its Job UID"
-            )
+            report("completed_identity_invalid", "completed Task is missing its Job UID")
 
     return job_ids, completed
 
@@ -263,9 +250,7 @@ def _validate_workers(workers, report):
         except (KeyError, TypeError):
             valid = False
             name = worker.get("node_name") if isinstance(worker, dict) else None
-            uid = (
-                worker.get("kubernetes_node_uid") if isinstance(worker, dict) else None
-            )
+            uid = worker.get("kubernetes_node_uid") if isinstance(worker, dict) else None
         if not valid:
             report(
                 "worker_invalid",
@@ -514,29 +499,27 @@ def _build_backlog(trace, groups, job_ids, completed, worker_names, model, repor
     seen_jobs = set()
     queue_order = 0
     for group, _, job in _ordered_jobs(groups, trace.arrivals):
-        if isinstance(job, dict) and (
-            job.get("kubernetes_job_uid") in completed or _terminal(job)
-        ):
+        if isinstance(job, dict) and (job.get("kubernetes_job_uid") in completed or _terminal(job)):
             continue
         position = queue_order
         queue_order += 1
         if not _valid_job_identity(job, job_ids, seen_jobs, report):
             continue
-        metadata = _validated_job_metadata(
-            job, group, position, trace, model, worker_names, report
-        )
+        metadata = _validated_job_metadata(job, group, position, trace, model, worker_names, report)
         if metadata is None:
             continue
         task_id = job_ids[job["kubernetes_job_uid"]]
         task = _remaining_task(model.task, task_id, metadata, report)
         if task is None:
-            model_exhausted_jobs.append({
-                "task_id": task_id,
-                "metadata": metadata,
-                "template_duration_ms": model.task["duration"],
-                "remaining_execution_ms": 0,
-                "observed_completed": False,
-            })
+            model_exhausted_jobs.append(
+                {
+                    "task_id": task_id,
+                    "metadata": metadata,
+                    "template_duration_ms": model.task["duration"],
+                    "remaining_execution_ms": 0,
+                    "observed_completed": False,
+                }
+            )
         else:
             initial_tasks.append({"task": task, "metadata": metadata})
     return initial_tasks, model_exhausted_jobs
@@ -644,9 +627,7 @@ def _normalize_scenarios(scenarios, configured_scenarios, model, job_ids, report
     scenario_metadata = []
     historical_ids = set(job_ids.values())
     for index, tasks in enumerate(scenarios):
-        normalized, metadata = _normalize_scenario(
-            tasks, index, model, historical_ids, report
-        )
+        normalized, metadata = _normalize_scenario(tasks, index, model, historical_ids, report)
         normalized_scenarios.append(normalized)
         scenario_metadata.append(metadata)
     return normalized_scenarios, scenario_metadata
@@ -670,14 +651,20 @@ def _manifest(cutoff, horizon_ms, job_ids, scenario_metadata, diagnostics):
         "normalization": {
             "time_origin": "cutoff",
             "submission_time_unit": "milliseconds",
-            "backlog_submission_time": "0 (present at cutoff; original creation retained in metadata)",
+            "backlog_submission_time": (
+                "0 (present at cutoff; original creation retained in metadata)"
+            ),
             "future_arrival_window": "[0, horizon_ms)",
             "running_remaining_profile": "fragments split at classifier elapsed time",
         },
-        "remaining_execution_model": "max(0, template_duration_ms - elapsed_classifier_execution_ms)",
+        "remaining_execution_model": (
+            "max(0, template_duration_ms - elapsed_classifier_execution_ms)"
+        ),
         "simulation_completion": {
             "arrival_horizon_ms": horizon_ms,
-            "simulation_end": "complete all included executable work, including beyond the arrival horizon",
+            "simulation_end": (
+                "complete all included executable work, including beyond the arrival horizon"
+            ),
         },
         "evaluation_policy": {
             "status": "unresolved",
@@ -713,9 +700,7 @@ def build_simulation_inputs(trace, template, scenarios, settings):
     normalized_scenarios, scenario_metadata = _normalize_scenarios(
         scenarios, getattr(settings, "scenarios", None), model, job_ids, report
     )
-    manifest = _manifest(
-        model.cutoff, model.horizon_ms, job_ids, scenario_metadata, diagnostics
-    )
+    manifest = _manifest(model.cutoff, model.horizon_ms, job_ids, scenario_metadata, diagnostics)
     initial_state = {
         "schema_version": SIMULATION_SCHEMA_VERSION,
         "cutoff": iso(model.cutoff),

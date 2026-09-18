@@ -61,9 +61,7 @@ class AdapterService:
         with self._metrics_lock:
             self._request_count += 1
             self._active_requests += 1
-            self._peak_active_requests = max(
-                self._peak_active_requests, self._active_requests
-            )
+            self._peak_active_requests = max(self._peak_active_requests, self._active_requests)
             return self._active_requests
 
     def request_finished(self, duration_ns: int) -> None:
@@ -74,9 +72,7 @@ class AdapterService:
     def observe(self, name: str, value: int) -> None:
         """Record an aggregate count, total, and maximum for one measurement."""
         with self._metrics_lock:
-            measurement = self._measurements.setdefault(
-                name, {"count": 0, "total": 0, "max": 0}
-            )
+            measurement = self._measurements.setdefault(name, {"count": 0, "total": 0, "max": 0})
             measurement["count"] += 1
             measurement["total"] += value
             measurement["max"] = max(measurement["max"], value)
@@ -328,12 +324,8 @@ def make_handler(service: AdapterService):
                 write_started = time.monotonic_ns()
                 self.wfile.write(body)
                 response_write_duration_ns = time.monotonic_ns() - write_started
-                service.observe(
-                    "payload_storage_read_duration_ns", storage_read_duration_ns
-                )
-                service.observe(
-                    "payload_response_write_duration_ns", response_write_duration_ns
-                )
+                service.observe("payload_storage_read_duration_ns", storage_read_duration_ns)
+                service.observe("payload_response_write_duration_ns", response_write_duration_ns)
                 service.events.emit(
                     new_event(
                         "batch.payload_served",
@@ -356,9 +348,7 @@ def make_handler(service: AdapterService):
                 self._error(HTTPStatus.NOT_FOUND, "not found")
                 return
             if self.headers.get_content_type() != "application/x-tar":
-                self._error(
-                    HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "expected application/x-tar"
-                )
+                self._error(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "expected application/x-tar")
                 return
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -372,9 +362,7 @@ def make_handler(service: AdapterService):
                 endpoint_batch_id = self.headers.get("X-Continuum-Batch-ID")
                 if endpoint_batch_id is not None:
                     endpoint_batch_id = validate_request_id(endpoint_batch_id)
-                workload_run_id = self.headers.get(
-                    "X-Continuum-Workload-Run-ID", service.run_id
-                )
+                workload_run_id = self.headers.get("X-Continuum-Workload-Run-ID", service.run_id)
                 workload_run_id = validate_run_id(workload_run_id)
                 read_started = time.monotonic_ns()
                 payload = self.rfile.read(content_length)
@@ -393,17 +381,11 @@ def make_handler(service: AdapterService):
             except BatchValidationError as exc:
                 self._error(HTTPStatus.BAD_REQUEST, str(exc))
             except Exception as exc:  # submission error is retained in cloud metadata
-                self._error(
-                    HTTPStatus.SERVICE_UNAVAILABLE, f"Job submission failed: {exc}"
-                )
+                self._error(HTTPStatus.SERVICE_UNAVAILABLE, f"Job submission failed: {exc}")
 
         def do_PUT(self) -> None:  # pylint: disable=invalid-name
             parts = self._parts()
-            if (
-                len(parts) != 4
-                or parts[:2] != ["v1", "batches"]
-                or parts[3] != "result"
-            ):
+            if len(parts) != 4 or parts[:2] != ["v1", "batches"] or parts[3] != "result":
                 self._error(HTTPStatus.NOT_FOUND, "not found")
                 return
             try:
@@ -417,10 +399,7 @@ def make_handler(service: AdapterService):
                 parse_started = time.monotonic_ns()
                 result = json.loads(body)
                 parse_duration_ns = time.monotonic_ns() - parse_started
-                if (
-                    not isinstance(result, dict)
-                    or result.get("request_id") != request_id
-                ):
+                if not isinstance(result, dict) or result.get("request_id") != request_id:
                     raise ValueError("result request ID does not match path")
                 metadata = service.record_result(
                     request_id,
@@ -449,9 +428,7 @@ def make_handler(service: AdapterService):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=os.getenv("ADAPTER_HOST", "0.0.0.0"))
-    parser.add_argument(
-        "--port", type=int, default=int(os.getenv("ADAPTER_PORT", "8080"))
-    )
+    parser.add_argument("--port", type=int, default=int(os.getenv("ADAPTER_PORT", "8080")))
     parser.add_argument("--data-dir", default=os.getenv("DATA_DIR", "/data"))
     parser.add_argument("--run-id", default=os.getenv("RUN_ID", "fns-v1-local"))
     parser.add_argument(
@@ -505,9 +482,7 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, request_shutdown)
     signal.signal(signal.SIGINT, request_shutdown)
-    print(
-        f"adapter listening on {args.host}:{args.port} as run {args.run_id}", flush=True
-    )
+    print(f"adapter listening on {args.host}:{args.port} as run {args.run_id}", flush=True)
     try:
         server.serve_forever()
     finally:

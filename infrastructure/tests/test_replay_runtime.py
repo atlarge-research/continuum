@@ -30,9 +30,7 @@ class ReplayRuntimeTests(unittest.TestCase):
             root = Path(temporary)
             runtime = root / "run"
             runtime.mkdir()
-            marker = root / (
-                ".installed-" + self.runtime.REVISION + "-" + self.runtime.PATCH_ID
-            )
+            marker = root / (".installed-" + self.runtime.REVISION + "-" + self.runtime.PATCH_ID)
             marker.write_text(self.runtime.REVISION)
             trace = root / "trace"
             trace.write_text("1\n10\n")
@@ -61,9 +59,7 @@ class ReplayRuntimeTests(unittest.TestCase):
                 patch.object(
                     self.runtime.pwd,
                     "getpwuid",
-                    return_value=SimpleNamespace(
-                        pw_uid=1000, pw_gid=1000, pw_name="endpoint"
-                    ),
+                    return_value=SimpleNamespace(pw_uid=1000, pw_gid=1000, pw_name="endpoint"),
                 )
             )
             yield runtime / "state.json", trace, commands
@@ -72,9 +68,7 @@ class ReplayRuntimeTests(unittest.TestCase):
         with self.launcher() as (path, trace, commands):
             self.runtime.start("192.168.210.6", ["192.168.210.3"], trace, trace, path)
             launch = next(c for c in commands if c[0] == "systemd-run")
-            self.assertFalse(
-                any(c.startswith(("--uplink-log", "--downlink-log")) for c in launch)
-            )
+            self.assertFalse(any(c.startswith(("--uplink-log", "--downlink-log")) for c in launch))
             self.assertEqual(list(path.parent.glob("logs-*")), [])
             state = json.loads(path.read_text())
             self.assertNotIn("logs", state)
@@ -91,7 +85,7 @@ class ReplayRuntimeTests(unittest.TestCase):
             )
 
     def test_stop_retains_recovery_state_when_service_shutdown_fails(self):
-        with self.launcher() as (path, trace, commands):
+        with self.launcher() as (path, _trace, commands):
             state = {"undo": [["undo-route"]]}
             self.runtime.save_state(path, state)
             original_run = self.runtime.run
@@ -104,9 +98,7 @@ class ReplayRuntimeTests(unittest.TestCase):
                 return original_run(command, check)
 
             with patch.object(self.runtime, "run", run):
-                with self.assertRaisesRegex(
-                    RuntimeError, "service shutdown.*denied.*retained"
-                ):
+                with self.assertRaisesRegex(RuntimeError, "service shutdown.*denied.*retained"):
                     self.runtime.stop(state, path)
             self.assertIn(["undo-route"], commands)
             self.assertEqual(json.loads(path.read_text())["undo"], [])
@@ -117,7 +109,7 @@ class ReplayRuntimeTests(unittest.TestCase):
         self,
     ):
         for error in (errno.ENOSPC, errno.EACCES):
-            with self.subTest(error=error), self.launcher() as (path, trace, commands):
+            with self.subTest(error=error), self.launcher() as (path, _trace, commands):
                 state = {
                     "undo": [["undo-route"]],
                     "logs": str(path.parent / "old-logs"),
@@ -138,12 +130,10 @@ class ReplayRuntimeTests(unittest.TestCase):
                 self.assertEqual(json.loads(path.read_text())["undo"], [["undo-route"]])
                 self.runtime.stop(json.loads(path.read_text()), path)
                 self.assertFalse(path.exists())
-                self.assertEqual(
-                    (historical / "uplink.log").read_text(), "retained evidence\n"
-                )
+                self.assertEqual((historical / "uplink.log").read_text(), "retained evidence\n")
 
     def test_cleanup_continues_after_command_launch_failure(self):
-        with self.launcher() as (path, trace, commands):
+        with self.launcher() as (path, _trace, commands):
             state = {"undo": [["other-rule"], ["missing-command"]]}
             self.runtime.save_state(path, state)
             original_run = self.runtime.run
@@ -158,9 +148,7 @@ class ReplayRuntimeTests(unittest.TestCase):
                     self.runtime.stop(state, path)
             self.assertIn(["other-rule"], commands)
             self.assertIn(["systemctl", "stop", self.runtime.UNIT], commands)
-            self.assertEqual(
-                json.loads(path.read_text())["undo"], [["missing-command"]]
-            )
+            self.assertEqual(json.loads(path.read_text())["undo"], [["missing-command"]])
             self.runtime.stop(json.loads(path.read_text()), path)
             self.assertFalse(path.exists())
 
@@ -175,9 +163,7 @@ class ReplayRuntimeTests(unittest.TestCase):
 
             with patch.object(self.runtime, "save_state", save_until_ready):
                 with self.assertRaisesRegex(RuntimeError, "No space left on device"):
-                    self.runtime.start(
-                        "192.168.210.6", ["192.168.210.3"], trace, trace, path
-                    )
+                    self.runtime.start("192.168.210.6", ["192.168.210.3"], trace, trace, path)
             self.assertIn(["systemctl", "stop", self.runtime.UNIT], commands)
             persisted = json.loads(path.read_text())
             self.assertTrue(persisted["undo"])
@@ -187,13 +173,9 @@ class ReplayRuntimeTests(unittest.TestCase):
             self.assertFalse(path.exists())
 
     def test_scoped_rules_preserve_direction_and_have_exact_undo(self):
-        pairs = self.runtime.routing_commands(
-            "192.168.210.6", ["192.168.210.3"], "mm-link-123"
-        )
+        pairs = self.runtime.routing_commands("192.168.210.6", ["192.168.210.3"], "mm-link-123")
         additions = [add for add, _undo in pairs]
-        self.assertIn(
-            ["ip", "route", "add", "192.168.210.3/32", "via", "10.0.0.2"], additions
-        )
+        self.assertIn(["ip", "route", "add", "192.168.210.3/32", "via", "10.0.0.2"], additions)
         self.assertIn(
             [
                 "iptables",
@@ -245,9 +227,7 @@ class ReplayRuntimeTests(unittest.TestCase):
             self.assertNotIn("flush", add)
             self.assertNotIn("flush", undo)
             if add[0] == "iptables":
-                self.assertEqual(
-                    undo, ["-D" if token in ("-A", "-I") else token for token in add]
-                )
+                self.assertEqual(undo, ["-D" if token in ("-A", "-I") else token for token in add])
 
     def test_failed_install_rolls_back_partial_routes_and_nat(self):
         calls = []
@@ -258,9 +238,7 @@ class ReplayRuntimeTests(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, command)
             return subprocess.CompletedProcess(command, 0, "", "")
 
-        with tempfile.TemporaryDirectory() as temporary, patch.object(
-            self.runtime, "run", run
-        ):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(self.runtime, "run", run):
             state = {"undo": []}
             with self.assertRaises(subprocess.CalledProcessError):
                 self.runtime.apply_routing(
@@ -285,9 +263,7 @@ class ReplayRuntimeTests(unittest.TestCase):
         def run(command, check=True):
             return subprocess.CompletedProcess(command, 3, "", "")
 
-        with tempfile.TemporaryDirectory() as temporary, patch.object(
-            self.runtime, "run", run
-        ):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(self.runtime, "run", run):
             with self.assertRaisesRegex(RuntimeError, "exited"):
                 self.runtime.wait_ready(Path(temporary), timeout=0.01)
 
@@ -300,9 +276,7 @@ class ReplayRuntimeTests(unittest.TestCase):
             )
             return subprocess.CompletedProcess(command, 2, "", message)
 
-        with tempfile.TemporaryDirectory() as temporary, patch.object(
-            self.runtime, "run", run
-        ):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(self.runtime, "run", run):
             state = {"undo": [["absent"], ["denied"]]}
             failed = self.runtime.undo_routing(state, Path(temporary) / "state.json")
             self.assertEqual(failed, [["denied"]])
@@ -331,9 +305,7 @@ class ReplayRuntimeTests(unittest.TestCase):
                 output = load_state if "show" in command else ""
                 return subprocess.CompletedProcess(command, 1, output, "stop failed")
 
-            with self.subTest(load_state=load_state), patch.object(
-                self.runtime, "run", run
-            ):
+            with self.subTest(load_state=load_state), patch.object(self.runtime, "run", run):
                 if load_state == "not-found":
                     self.runtime.stop_service()
                 else:

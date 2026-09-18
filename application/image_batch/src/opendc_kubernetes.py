@@ -57,7 +57,9 @@ def _remote_directory(value):
         ValueError: The path does not match the dedicated staging-directory convention.
     """
     path = PurePosixPath(value)
-    if path.parent != PurePosixPath("/var/tmp") or not re.fullmatch(r"fns-opendc-[a-zA-Z0-9-]+", path.name):
+    if path.parent != PurePosixPath("/var/tmp") or not re.fullmatch(
+        r"fns-opendc-[a-zA-Z0-9-]+", path.name
+    ):
         raise ValueError("remote directory must be a unique /var/tmp/fns-opendc-NAME directory")
     return str(path)
 
@@ -113,10 +115,26 @@ def ssh(host, key, command, timeout=45):
     """
     if not host or host.startswith("-"):
         raise ValueError("invalid SSH host")
-    result = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-i", str(key),
-                             host, shlex.join(command)], capture_output=True, timeout=timeout)
+    result = subprocess.run(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=8",
+            "-i",
+            str(key),
+            host,
+            shlex.join(command),
+        ],
+        capture_output=True,
+        timeout=timeout,
+        check=False,
+    )
     if result.returncode:
-        raise RuntimeError(result.stderr.decode(errors="replace") or f"SSH exit {result.returncode}")
+        raise RuntimeError(
+            result.stderr.decode(errors="replace") or f"SSH exit {result.returncode}"
+        )
     return result.stdout
 
 
@@ -176,15 +194,25 @@ def classify_execution(pod, manifest):
     elif status == "succeeded":
         process = manifest.get("process") or {}
         validation = manifest.get("validation") or {}
-        if (manifest.get("contract") != CONTRACT or exit_code != 0
-                or not isinstance(validation, dict) or validation.get("status") != "passed"
-                or not isinstance(process, dict)
-                or process.get("exit_code") != 0 or process.get("timed_out") is not False
-                or process.get("received_signal") is not None or process.get("launch_error") is not None):
+        if (
+            manifest.get("contract") != CONTRACT
+            or exit_code != 0
+            or not isinstance(validation, dict)
+            or validation.get("status") != "passed"
+            or not isinstance(process, dict)
+            or process.get("exit_code") != 0
+            or process.get("timed_out") is not False
+            or process.get("received_signal") is not None
+            or process.get("launch_error") is not None
+        ):
             status = "inconsistent"
-    return {"status": status, "container_exit_code": exit_code,
-            "termination_reason": terminated.get("reason"), "image_id": container.get("imageID"),
-            "termination": terminated}
+    return {
+        "status": status,
+        "container_exit_code": exit_code,
+        "termination_reason": terminated.get("reason"),
+        "image_id": container.get("imageID"),
+        "termination": terminated,
+    }
 
 
 def verify_collection_source(job, pods, remote_dir, worker_hostname):
@@ -214,8 +242,10 @@ def verify_collection_source(job, pods, remote_dir, worker_hostname):
     if len(pods) != 1 or not job_uid:
         raise ValueError("expected one Pod owned by the retrieved Job")
     pod = pods[0]
-    if not any(owner.get("kind") == "Job" and owner.get("uid") == job_uid and owner.get("controller")
-               for owner in pod.get("metadata", {}).get("ownerReferences", [])):
+    if not any(
+        owner.get("kind") == "Job" and owner.get("uid") == job_uid and owner.get("controller")
+        for owner in pod.get("metadata", {}).get("ownerReferences", [])
+    ):
         raise ValueError("Pod does not belong to the retrieved Job")
     pod_spec = pod.get("spec", {})
     if pod_spec.get("nodeName") and pod_spec["nodeName"] != worker_hostname:
@@ -228,7 +258,9 @@ def verify_collection_source(job, pods, remote_dir, worker_hostname):
         volumes = {volume["name"]: volume for volume in spec.get("volumes", [])}
         for name in ("inputs", "results"):
             if volumes.get(name, {}).get("hostPath", {}).get("path") != remote_dir + "/" + name:
-                raise ValueError(f"{description} {name} hostPath differs from the requested artifact directory")
+                raise ValueError(
+                    f"{description} {name} hostPath differs from the requested artifact directory"
+                )
     return pod
 
 
@@ -250,8 +282,13 @@ def verify_execution_artifacts(directory, manifest):
         raise ValueError("expected an execution manifest object")
     if not manifest or manifest.get("status") == "started":
         return
-    if (manifest.get("contract") != CONTRACT
-            or manifest.get("status") not in ("succeeded", "failed", "timed_out", "interrupted", "invalid_input")):
+    if manifest.get("contract") != CONTRACT or manifest.get("status") not in (
+        "succeeded",
+        "failed",
+        "timed_out",
+        "interrupted",
+        "invalid_input",
+    ):
         raise ValueError("unrecognized finalized execution manifest")
     if file_hashes(directory, exclude=("execution.json",)) != manifest.get("sha256"):
         raise ValueError("execution artifact hash mismatch: finalized files changed or are missing")
@@ -288,28 +325,49 @@ def collect(controller, worker, key, namespace, job_name, remote_dir, output_dir
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
-    record = {"status": "collecting", "started_at": utc_now(), "namespace": namespace,
-              "job": job_name, "worker": worker, "remote_dir": remote_dir, "errors": []}
+    record = {
+        "status": "collecting",
+        "started_at": utc_now(),
+        "namespace": namespace,
+        "job": job_name,
+        "worker": worker,
+        "remote_dir": remote_dir,
+        "errors": [],
+    }
     write_json(output / "collection.json", record)
     try:
         base = ["kubectl", "-n", namespace]
         job = json.loads(ssh(controller, key, base + ["get", "job", job_name, "-o", "json"]))
         write_json(output / "job.json", job)
         conditions = job.get("status", {}).get("conditions", [])
-        if not any(c["type"] in ("Complete", "Failed") and c["status"] == "True" for c in conditions):
-            raise ValueError("Job is not terminal; preserve it and collect after completion or deadline")
-        pods = json.loads(ssh(controller, key, base + ["get", "pods", "-l", f"job-name={job_name}", "-o", "json"]))
+        if not any(
+            c["type"] in ("Complete", "Failed") and c["status"] == "True" for c in conditions
+        ):
+            raise ValueError(
+                "Job is not terminal; preserve it and collect after completion or deadline"
+            )
+        pods = json.loads(
+            ssh(controller, key, base + ["get", "pods", "-l", f"job-name={job_name}", "-o", "json"])
+        )
         write_json(output / "pods.json", pods)
         events = json.loads(ssh(controller, key, base + ["get", "events", "-o", "json"]))
         write_json(output / "events.json", events)
         for pod in pods["items"]:
             name = pod["metadata"]["name"]
             try:
-                (output / f"{name}.log").write_bytes(ssh(controller, key, base + ["logs", name, "-c", "opendc", "--timestamps"]))
+                (output / f"{name}.log").write_bytes(
+                    ssh(controller, key, base + ["logs", name, "-c", "opendc", "--timestamps"])
+                )
             except RuntimeError as exc:
                 record["errors"].append(f"container logs unavailable: {exc}")
             if pod.get("spec", {}).get("nodeName"):
-                node = json.loads(ssh(controller, key, ["kubectl", "get", "node", pod["spec"]["nodeName"], "-o", "json"]))
+                node = json.loads(
+                    ssh(
+                        controller,
+                        key,
+                        ["kubectl", "get", "node", pod["spec"]["nodeName"], "-o", "json"],
+                    )
+                )
                 write_json(output / "node.json", node)
         record["worker_hostname"] = ssh(worker, key, ["hostname"]).decode().strip()
         pod = verify_collection_source(job, pods["items"], remote_dir, record["worker_hostname"])
@@ -328,14 +386,30 @@ def collect(controller, worker, key, namespace, job_name, remote_dir, output_dir
         verify_execution_artifacts(execution.parent, manifest)
         record["execution"] = classify_execution(pod, manifest)
         if record["execution"]["status"] == "inconsistent":
-            raise ValueError("execution manifest is inconsistent with successful validation or container termination")
+            raise ValueError(
+                "execution manifest is inconsistent with successful validation or container "
+                "termination"
+            )
         record["artifacts_verified"] = True
         record["status"] = "collected" if not record["errors"] else "incomplete"
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.TimeoutExpired, tarfile.TarError) as exc:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        RuntimeError,
+        subprocess.TimeoutExpired,
+        tarfile.TarError,
+    ) as exc:
         record["status"] = "incomplete"
         record["errors"].append(str(exc))
-    record.update({"finished_at": utc_now(), "collection_seconds": time.monotonic() - started,
-                   "sha256": file_hashes(output, exclude=("collection.json",))})
+    record.update(
+        {
+            "finished_at": utc_now(),
+            "collection_seconds": time.monotonic() - started,
+            "sha256": file_hashes(output, exclude=("collection.json",)),
+        }
+    )
     write_json(output / "collection.json", record)
     return record
 
@@ -372,11 +446,35 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "manifest":
-            print(json.dumps(job_manifest(args.namespace, args.job, args.image, args.node, args.remote_dir, args.timeout_seconds), indent=2))
+            print(
+                json.dumps(
+                    job_manifest(
+                        args.namespace,
+                        args.job,
+                        args.image,
+                        args.node,
+                        args.remote_dir,
+                        args.timeout_seconds,
+                    ),
+                    indent=2,
+                )
+            )
             return 0
-        result = collect(args.controller, args.worker, args.ssh_key, args.namespace, args.job, args.remote_dir, args.output_dir)
+        result = collect(
+            args.controller,
+            args.worker,
+            args.ssh_key,
+            args.namespace,
+            args.job,
+            args.remote_dir,
+            args.output_dir,
+        )
         print(json.dumps(result))
-        return 0 if result["status"] == "collected" and result["execution"]["status"] == "succeeded" else 1
+        return (
+            0
+            if result["status"] == "collected" and result["execution"]["status"] == "succeeded"
+            else 1
+        )
     except (ValueError, OSError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
