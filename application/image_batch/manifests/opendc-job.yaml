@@ -1,0 +1,36 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {"name": "opendc", "namespace": "fns-opendc"},
+  "spec": {
+    "backoffLimit": 0,
+    "activeDeadlineSeconds": 180,
+    "template": {
+      "metadata": {"labels": {"app.kubernetes.io/name": "opendc-controlled"}},
+      "spec": {
+        "restartPolicy": "Never",
+        "automountServiceAccountToken": false,
+        "nodeSelector": {"kubernetes.io/hostname": "cloud0matthijs"},
+        "securityContext": {"runAsNonRoot": true, "runAsUser": 1000, "runAsGroup": 1000},
+        "containers": [{
+          "name": "opendc",
+          "image": "continuum/opendc:RENDER-AN-IMMUTABLE-TAG",
+          "imagePullPolicy": "Never",
+          "args": ["run", "--input-dir", "/inputs", "--output-dir", "/results/run", "--timeout-seconds", "120"],
+          "resources": {"requests": {"cpu": "1", "memory": "2Gi"}, "limits": {"cpu": "1", "memory": "2Gi"}},
+          "securityContext": {"readOnlyRootFilesystem": true, "allowPrivilegeEscalation": false, "capabilities": {"drop": ["ALL"]}},
+          "volumeMounts": [
+            {"name": "inputs", "mountPath": "/inputs", "readOnly": true},
+            {"name": "results", "mountPath": "/results"},
+            {"name": "scratch", "mountPath": "/tmp"}
+          ]
+        }],
+        "volumes": [
+          {"name": "inputs", "hostPath": {"path": "/var/tmp/fns-opendc-RENDER/inputs", "type": "Directory"}},
+          {"name": "results", "hostPath": {"path": "/var/tmp/fns-opendc-RENDER/results", "type": "Directory"}},
+          {"name": "scratch", "emptyDir": {"sizeLimit": "256Mi"}}
+        ]
+      }
+    }
+  }
+}

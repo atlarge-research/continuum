@@ -1,0 +1,6 @@
+# OpenDC runner Python dependency. Binary-only plus hashes prevents an
+# unreviewed source build or artifact from entering the image.
+--only-binary=:all:
+pyarrow==21.0.0 \
+    --hash=sha256:40ebfcb54a4f11bcde86bc586cbd0272bac0d516cfa539c799c2453768477569 \
+    --hash=sha256:479ee41399fcddc46159a551705b89c05f11e8b8cb8e968f7fec64f62d91985e

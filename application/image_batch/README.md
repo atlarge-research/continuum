@@ -110,7 +110,7 @@ kubectl cp -n fns-demo \
 
 The endpoint audit stream is structured stdout and should be captured from its container logs. The adapter result and events remain under its `/data` mount.
 
-These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. Forecasting consumes bounded prefixes; OpenDC execution, policy selection, and actuation remain separate phases.
+These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. Forecasting consumes bounded prefixes; controlled OpenDC execution, policy selection, and actuation are separate phases.
 
 ## Offline run report
 
@@ -159,4 +159,41 @@ Add `--simulation-inputs` to either forecast command to combine queued and remai
 
 Bundles are written under `simulation/`. Check `simulation/manifest.json` for readiness before using them. One-shot mode exits with 0 when ready, 2 when not ready, and 1 for invalid input. This prepares inputs; it does not run OpenDC or change the cluster.
 
-See [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md) for the runner integration contract, current blocker, and next steps.
+See [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md) for the future live-state runner contract and next steps.
+
+## Direct controlled OpenDC execution
+
+The direct runner builds upstream OpenDC from master commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad` without OpenDT. The build uses that exact source revision, not a moving branch. It runs synthetic empty-state fixtures; it does not execute live simulation bundles or close the control loop. Source, toolchain and runtime pins are defined in the [Dockerfile](docker/opendc.Dockerfile) and [Python requirements](requirements-opendc.txt); each execution records its OpenDC commit and runtime versions. The first build compiles OpenDC and downloads Gradle dependencies without a project-maintained dependency checksum catalogue; execution requires no downloads.
+
+Build and run from the repository root, choosing a new evidence directory:
+
+```bash
+docker build -f application/image_batch/docker/opendc.Dockerfile -t continuum/opendc:master-7db7e1a2331fd .
+mkdir -p "$PWD/logs/opendc-local"
+docker run --rm --user "$(id -u):$(id -g)" --network none --read-only \
+  --hostname opendc-controlled --add-host opendc-controlled:127.0.0.1 \
+  --tmpfs /tmp:rw,exec,nosuid,size=256m --cpus=1 --memory=2g \
+  -v "$PWD/logs/opendc-local:/evidence" continuum/opendc:master-7db7e1a2331fd \
+  prepare --fixture controlled --output-dir /evidence/inputs
+docker run --rm --user "$(id -u):$(id -g)" --network none --read-only \
+  --hostname opendc-controlled --add-host opendc-controlled:127.0.0.1 \
+  --tmpfs /tmp:rw,exec,nosuid,size=256m --cpus=1 --memory=2g \
+  -v "$PWD/logs/opendc-local:/evidence" continuum/opendc:master-7db7e1a2331fd \
+  run --input-dir /evidence/inputs --output-dir /evidence/result
+```
+
+Use `--fixture memory` for the memory-admission check. `/tmp` must allow executable mappings for OpenDC's native Parquet compression library. The root filesystem remains read-only. `execution.json` records process and validation status; `resources.json`, logs, copied inputs, and native output under `simulator/` remain available after exit. This upstream revision uses `opendc run` and no longer emits `trackr.json`; our resolved configuration and execution manifest retain run provenance. Prepare new inputs after changing the pinned revision; old prepared bundles are rejected. CLI exits are 0 for validated success, 1 for execution/output failure, 2 for invalid inputs, and 124 for timeout.
+
+The opt-in integration test repeats local runs, imports the exact image into the selected existing worker, and runs isolated Kubernetes success/failure cases with 1 CPU and 2 GiB requests and limits:
+
+```bash
+/tmp/fns-forecast-venv/bin/python application/image_batch/tests/run_opendc_integration.py \
+  --image continuum/opendc:master-7db7e1a2331fd \
+  --evidence-dir logs/fns-opendc-execution/NEW-RUN \
+  --namespace fns-opendc-NEW-RUN \
+  --controller cloud_controller_matthijs@192.168.210.2 \
+  --worker cloud0_matthijs@192.168.210.3 \
+  --ssh-key "$HOME/.ssh/id_rsa_continuum"
+```
+
+Use lowercase DNS labels for the namespace. The operator environment needs Python 3.10+ and `requirements-opendc.txt`'s PyArrow version; its wheel hashes target the Python 3.11 container. Docker, SSH, controller-side `kubectl`, and worker-side passwordless sudo are required. The test preserves existing workloads and VMs, verifies artifact copies, then removes only its Jobs, namespace, and run directories; the image remains cached on the worker. On failure it preserves remote evidence for inspection. Use `opendc_kubernetes.py collect --help` to resume collection into a new directory, and `manifest --help` to render an individual Job. Delete its remote directory only after `collection.json` reports `collected` and `artifacts_verified: true`; the execution itself may have failed.

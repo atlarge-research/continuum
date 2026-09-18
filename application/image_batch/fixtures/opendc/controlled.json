@@ -1,0 +1,13 @@
+{
+  "name": "controlled",
+  "description": "Synthetic three-host admission and fragment-timing oracle; no observed cluster state.",
+  "host_count": 3,
+  "cores_per_host": 4,
+  "memory_mib_per_host": 16384,
+  "frequency_mhz": 2400,
+  "tasks": [
+    {"count": 12, "submission_ms": 0, "memory_mib": 512, "fragments": [[5000, 2400], [5000, 1200]]},
+    {"count": 1, "submission_ms": 1000, "memory_mib": 512, "fragments": [[5000, 2400]]}
+  ],
+  "expected": {"task_count": 13, "concurrent_tasks": 12, "last_task_id": 12, "last_start_ms": 10000, "last_finish_ms": 15000, "scheduler_tolerance_ms": 2}
+}

@@ -6,7 +6,7 @@ This document records the architectural and experimental reasoning behind the im
 
 The demo is a scientific vertical slice of an eventual closed-loop digital twin. It must create real endpoint-to-cloud traffic, execute measurable work on Kubernetes, and preserve enough evidence to reconstruct completed work and the cluster state at a chosen cutoff. Later features can use that evidence to forecast workload, prepare OpenDC input, simulate policies, and scale workers.
 
-The current implementation forecasts arrivals and can export combined simulation inputs with remaining work and initial worker state, but stops before OpenDC execution, policy selection, and Kubernetes actuation. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
+The current implementation forecasts arrivals and can export combined simulation inputs with remaining work and initial worker state. A separate direct OpenDC container executes controlled synthetic experiments locally and on Kubernetes. Live-state initialization, automatic forecast execution, policy selection, and Kubernetes actuation remain unconnected. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
 
 ## Component and data flow
 
@@ -143,7 +143,7 @@ Current-state evidence distinguishes classifier execution from the surrounding J
 
 Forecasts must be reproducible from frozen observations, the selected profile, and the sampling seed, with the numerical environment recorded for audit. Exact reproduction assumes the same runtime and CPU; other environments may differ in floating-point results. Overlapping predictive horizons are not independent experimental runs. Scenario count, arrival horizon, and control cadence are separate choices; cadence must account for the cost of OpenDC evaluation.
 
-The planned loop reuses X sampled futures and one observed state for valid -1/0/+1 worker changes within the one-to-three-worker range. A single Kubernetes-hosted OpenDC runner should initially execute candidates sequentially, with measured CPU/memory reservations and placement that remains available under saturation and scale-down. Its reservation changes the capacity available to Jobs and must be modeled. Integration still needs restoration of initial work in OpenDC, cycle timeout/overrun behavior, and an SLO/confidence decision rule. Scale-down must preserve running Jobs on cordoned workers and account for their completion before treating that capacity as returned to the provider pool. Implementation steps are tracked in [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md#remaining-closed-loop-work).
+The planned loop reuses X sampled futures and one observed state for valid -1/0/+1 worker changes within the one-to-three-worker range. A single Kubernetes-hosted OpenDC runner should initially execute candidates sequentially on the control-plane VM, subject to headroom and scheduling validation. This keeps its reservation outside the simulated worker pool and avoids waiting for an application Job slot. Worker capacity and runner placement follow the planned simplifications below. Integration still needs restoration of initial work in OpenDC, cycle timeout/overrun behavior, and an SLO/confidence decision rule. Scale-down must preserve running Jobs on cordoned workers and account for their completion before treating that capacity as returned to the provider pool. Implementation steps are tracked in [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md#remaining-closed-loop-work).
 
 ### Simulation input semantics
 
@@ -151,13 +151,39 @@ Every scenario starts from the same observed state and uses one representative m
 
 Queued and starting Jobs retain their full execution profile. Starting work occupies its assigned resources, but this version makes no separate estimate of pre-container startup delay. Running work retains only the profile remaining after elapsed classifier execution; scheduler waiting is never subtracted as compute. Remaining execution is `max(0, template_duration - elapsed_classifier_execution)`. An observed-running Job whose modeled profile is exhausted consumes no further simulated capacity. That assumption does not establish observed completion or affect the real Job. More complex execution-duration modeling is outside the demo's scope.
 
-The arrival horizon bounds new arrivals, not execution duration. Included work can finish beyond it, and original arrivals remain available for response-time analysis. Backlog and future-arrival cohorts remain distinguishable so a fixed-window or cohort-based evaluation can be chosen later. Finishing the simulation does not decide which period contributes energy or throughput, how unfinished Jobs affect performance/SLO evaluation, or whether post-horizon arrivals are needed for meaningful completion predictions. These questions remain open for discussion with the OpenDC lead; no scoring policy or SLO acceptance threshold is decided here.
+The arrival horizon bounds new arrivals, not execution duration. Included work can finish beyond it, and original arrivals remain available for response-time analysis. Backlog and future-arrival cohorts remain distinguishable so a fixed-window or cohort-based evaluation can be chosen later. Finishing the simulation does not decide which period contributes energy or throughput, how unfinished Jobs affect performance/SLO evaluation, or whether post-horizon arrivals are needed for meaningful completion predictions. These are project decisions to investigate through the evaluation PDF; further OpenDC developer advice is welcome but is not a prerequisite. No scoring policy or SLO acceptance threshold is decided here.
 
-Initial placement and worker availability are part of the simulated state. Assigned work must remain on its worker, including during cordoning, until its modeled execution finishes. Observed allocatable resources are not calibrated application capacity: monitoring, system activity, and the future runner consume resources too. A simulation that starts with an empty cluster cannot represent this initial state faithfully.
+Initial placement and worker availability are part of the simulated state. Assigned work must remain on its worker, including during cordoning, until its modeled execution finishes. Observed allocatable resources are not calibrated application capacity; the planned worker model uses the explicit one-core allowance below. Runner capacity is separate and should be provided by the control plane. A simulation that starts with an empty cluster cannot represent this initial state faithfully.
 
 Retrospective evaluation may use later observations to establish what happened and whether measurement coverage was complete. The experiment end bounds the evaluated arrival period, not when evidence became available; gaps and capture failures still exclude affected intervals. Forecast training and profile selection retain their causal cutoffs.
 
 Node3 calibration uses 0.02–0.30 Jobs/second as a starting profile. Daemon and monitoring reservations leave three whole one-CPU Job slots per worker, and container startup occupies a slot too. Higher average demand can therefore accumulate queues despite the nominal twelve worker vCPUs. Recovery is checked across cycles; stochastic bursts can still carry a queue into the next cycle.
+
+## Direct OpenDC execution boundary
+
+The container builds pinned OpenDC commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad` and invokes its supported CLI directly, bypassing OpenDT. A small Python layer prepares inputs, supervises execution and checks native results. Synthetic CPU- and memory-admission fixtures establish that this path works; they do not represent the application workload or restore live cluster state.
+
+Keep original Task/Fragment exports intact. Separate simulator-facing copies annotate timestamps as UTC milliseconds and multiply memory by 1,000 to compensate for the pinned reader's division. Actual memory-admission behavior validates this version-specific adaptation.
+
+A bounded Kubernetes Job with node-local artifacts is sufficient for this milestone. Preserve inputs, native output, diagnostics and process status, and require output validation as well as a successful exit. Measure real execution cost separately from simulated resource use. Build/run details belong in [README](README.md#direct-controlled-opendc-execution); validation evidence and follow-up work belong in [OPENDT_HANDOFF](OPENDT_HANDOFF.md).
+
+## Planned worker capacity and runner placement
+
+Model each C-core worker with C - 1 application cores, a deliberate allowance for fractional system reservations. Three four-core workers therefore offer nine one-CPU Job slots. Use the frozen measured application profile; the twelve-slot synthetic fixture remains a regression test. Omit explicit daemon workload and energy overhead while retaining the worker power model's idle baseline.
+
+Prefer the control-plane VM for OpenDC so it does not wait for worker Job slots. Keep application Jobs off the control plane and verify runner headroom there before relying on loop timing. The control plane and runner remain outside simulated worker capacity and energy; no additional worker-core deduction is needed with this placement.
+
+## Provisional scenario workflow
+
+While fixed placement is pending, build the manual scenario and analysis workflow using small experiments. Permit explicitly approximate trace replay of already-running Jobs' remaining work at time zero, retaining observed assignments for the later initialization adapter. These Jobs may move or wait again, so results do not establish faithful live-state predictions. Preserve existing profile, freshness and exhausted-work semantics.
+
+Use the same sampled futures across worker-count candidates. Temporarily omit the selected scale-down worker and its assigned Jobs, retaining them for later isolated execution; report the remaining workers' results as partial. Bring forward the evaluation-window PDF to compare a few approaches, then revisit its conclusions with correct placement and complete results. Scoring and actuation remain later work.
+
+## Planned initial placement and scale-down modeling
+
+Correct initialization must preserve observed placement and occupy resources before queued or future work is scheduled. For scale-down, prefer an empty worker; otherwise select the worker whose most recent Job assignment is oldest as a simple earliest-completion heuristic.
+
+Simulate that worker's assigned remaining work separately once per cutoff, then combine it with each future on the remaining workers. This avoids needing a simulated worker that rejects new work while finishing existing Jobs. The components must have disjoint tasks, aligned time boundaries and no modeled cross-component contention. Sum additive metrics and recompute task statistics from combined records; cordoning alone does not imply power-off.
 
 ## Deployment and failure assumptions
 
@@ -175,6 +201,6 @@ This is a deliberate scientific-demo trade-off: detecting an invalid run is more
 - The five-second cadence provides samples rather than a continuous ground-truth resource trace.
 - Runtime evidence is ephemeral and must be captured before the observing deployment is removed.
 - A single adapter replica and no live rollout are operational assumptions, not production scaling behavior.
-- OpenDC execution and restoration of initial state, policy selection, and worker actuation remain later features.
+- Controlled OpenDC execution does not restore initial live state, select policies, or actuate workers; these remain later features.
 
 The current single-host cluster remains the development setup until the closed loop works. A later two-host setup could provide more time for active Jobs to build up before saturation. Capacity and arrival intensity will need to be calibrated together: adding capacity alone could eliminate the queue instead of producing a more informative rise and fall. This expansion is deferred and does not change the current workload or topology.

@@ -1,0 +1,13 @@
+{
+  "name": "memory",
+  "description": "Two CPU slots but memory for only one Task; tests the pinned trace reader's memory conversion.",
+  "host_count": 1,
+  "cores_per_host": 2,
+  "memory_mib_per_host": 512,
+  "frequency_mhz": 2400,
+  "tasks": [
+    {"count": 1, "submission_ms": 0, "memory_mib": 384, "fragments": [[10000, 2400]]},
+    {"count": 1, "submission_ms": 1000, "memory_mib": 384, "fragments": [[5000, 2400]]}
+  ],
+  "expected": {"task_count": 2, "concurrent_tasks": 1, "last_task_id": 1, "last_start_ms": 10000, "last_finish_ms": 15000, "scheduler_tolerance_ms": 2}
+}
