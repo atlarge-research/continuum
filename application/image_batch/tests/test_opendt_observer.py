@@ -18,6 +18,7 @@ from opendt_observer import (  # noqa: E402
     OpenDTObserver,
     ResourceSampler,
     ResourceSnapshot,
+    _state_job_record,
     build_cluster_state_record,
     build_workload_record,
     extract_resource_capacity,
@@ -160,12 +161,29 @@ def demo_pod(
     node_name="cloud1",
     execution_start=None,
     execution_finish=None,
+    classifier_state=None,
 ):
     container_statuses = []
-    if execution_start is not None and execution_finish is not None:
+    if classifier_state is not None:
+        state = SimpleNamespace(waiting=None, running=None, terminated=None)
+        if classifier_state == "waiting":
+            state.waiting = SimpleNamespace(reason="ContainerCreating")
+        elif classifier_state == "running":
+            state.running = SimpleNamespace(started_at=execution_start)
+        elif classifier_state == "terminated":
+            state.terminated = SimpleNamespace(
+                started_at=execution_start, finished_at=execution_finish
+            )
+        else:
+            raise ValueError(f"unsupported classifier state: {classifier_state}")
+        container_statuses.append(SimpleNamespace(name="classifier", state=state))
+    elif execution_start is not None and execution_finish is not None:
         container_statuses.append(
             SimpleNamespace(
+                name="classifier",
                 state=SimpleNamespace(
+                    waiting=None,
+                    running=None,
                     terminated=SimpleNamespace(
                         started_at=execution_start, finished_at=execution_finish
                     )
@@ -530,8 +548,19 @@ class OpenDTObserverTests(unittest.TestCase):
         record = build_cluster_state_record(
             [queued, demo_job(uid="completed-uid"), active],
             [
-                demo_pod(job_uid="active-uid", phase="Running", node_name="cloud2"),
-                demo_pod(job_uid="queued-uid", phase="Pending", node_name=None),
+                demo_pod(
+                    job_uid="active-uid",
+                    phase="Running",
+                    node_name="cloud2",
+                    classifier_state="running",
+                    execution_start=active.status.start_time,
+                ),
+                demo_pod(
+                    job_uid="queued-uid",
+                    phase="Pending",
+                    node_name=None,
+                    classifier_state="waiting",
+                ),
             ],
             [
                 demo_node("cloud0", control_plane=True),
@@ -565,14 +594,10 @@ class OpenDTObserverTests(unittest.TestCase):
     def test_running_container_start_is_distinct_from_job_start(self):
         job = demo_job()
         job.status.conditions = []
-        pod = demo_pod(phase="Running")
         actual = job.status.start_time + timedelta(seconds=20)
-        pod.status.container_statuses = [
-            SimpleNamespace(
-                name="classifier",
-                state=SimpleNamespace(running=SimpleNamespace(started_at=actual)),
-            )
-        ]
+        pod = demo_pod(
+            phase="Running", classifier_state="running", execution_start=actual
+        )
         record = build_cluster_state_record(
             [job],
             [pod],
@@ -583,9 +608,17 @@ class OpenDTObserverTests(unittest.TestCase):
             observed_at=actual,
         )
         active = record["jobs"]["active"][0]
+        self.assertEqual(active["execution_state"], "running")
         self.assertEqual(active["execution_start_time"], actual.isoformat())
+        self.assertIsNone(active["execution_finish_time"])
         self.assertNotEqual(active["execution_start_time"], active["start_time"])
-        pod.status.container_statuses = []
+
+    def test_waiting_classifier_stays_queued_while_pod_is_running(self):
+        job = demo_job()
+        job.status.conditions = []
+        pod = demo_pod(phase="Running", classifier_state="waiting")
+        observed_at = datetime(2026, 9, 4, 10, 1, tzinfo=timezone.utc)
+
         record = build_cluster_state_record(
             [job],
             [pod],
@@ -593,9 +626,73 @@ class OpenDTObserverTests(unittest.TestCase):
             run_id="run-test",
             namespace="fns-demo",
             label_selector="test",
-            observed_at=actual,
+            observed_at=observed_at,
         )
-        self.assertIsNone(record["jobs"]["active"][0]["execution_start_time"])
+
+        self.assertEqual(record["counts"]["queued_jobs"], 1)
+        self.assertEqual(record["counts"]["active_jobs"], 0)
+        queued = record["jobs"]["queued"][0]
+        self.assertEqual(queued["execution_state"], "waiting")
+        self.assertIsNone(queued["execution_start_time"])
+        self.assertIsNone(queued["execution_finish_time"])
+
+    def test_unknown_classifier_state_is_explicit_on_active_running_pod(self):
+        job = demo_job()
+        job.status.conditions = []
+        pod = demo_pod(phase="Running")
+        observed_at = datetime(2026, 9, 4, 10, 1, tzinfo=timezone.utc)
+
+        record = build_cluster_state_record(
+            [job],
+            [pod],
+            [],
+            run_id="run-test",
+            namespace="fns-demo",
+            label_selector="test",
+            observed_at=observed_at,
+        )
+
+        self.assertEqual(record["counts"]["queued_jobs"], 0)
+        self.assertEqual(record["counts"]["active_jobs"], 1)
+        active = record["jobs"]["active"][0]
+        self.assertEqual(active["execution_state"], "unknown")
+        self.assertIsNone(active["execution_start_time"])
+        self.assertIsNone(active["execution_finish_time"])
+
+    def test_terminated_classifier_leaves_pressure_while_pod_is_running(self):
+        job = demo_job()
+        job.status.conditions = []
+        execution_start = job.status.start_time + timedelta(seconds=20)
+        execution_finish = execution_start + timedelta(seconds=5)
+        pod = demo_pod(
+            phase="Running",
+            classifier_state="terminated",
+            execution_start=execution_start,
+            execution_finish=execution_finish,
+        )
+
+        state, state_job = _state_job_record(job, [pod])
+        record = build_cluster_state_record(
+            [job],
+            [pod],
+            [],
+            run_id="run-test",
+            namespace="fns-demo",
+            label_selector="test",
+            observed_at=execution_finish,
+        )
+
+        self.assertEqual(state, "finished")
+        self.assertEqual(state_job["execution_state"], "terminated")
+        self.assertEqual(
+            state_job["execution_start_time"], execution_start.isoformat()
+        )
+        self.assertEqual(
+            state_job["execution_finish_time"], execution_finish.isoformat()
+        )
+        self.assertEqual(record["counts"]["queued_jobs"], 0)
+        self.assertEqual(record["counts"]["active_jobs"], 0)
+        self.assertEqual(record["jobs"], {"queued": [], "active": []})
 
     def test_first_observation_includes_terminal_jobs_and_is_deduplicated(self):
         diagnostics = []
@@ -664,7 +761,15 @@ class OpenDTObserverTests(unittest.TestCase):
         finished.metadata.name = "a-finished"
         for phase, group in (("Pending", "queued"), ("Running", "active")):
             with self.subTest(phase=phase):
-                live = demo_pod(phase=phase)
+                live = demo_pod(
+                    phase=phase,
+                    classifier_state=(
+                        "waiting" if phase == "Pending" else "running"
+                    ),
+                    execution_start=(
+                        job.status.start_time if phase == "Running" else None
+                    ),
+                )
                 live.metadata.name = "z-live"
                 record = build_cluster_state_record(
                     [job],

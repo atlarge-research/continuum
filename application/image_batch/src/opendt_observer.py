@@ -254,17 +254,36 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
         if selected_pod is not None
         else None
     )
-    state = "active" if pod_phase == "Running" else "queued"
-    if pod_phase in ("Succeeded", "Failed"):
-        state = "finished"
     start_time = getattr(status, "start_time", None)
+    execution_state = "unknown"
     execution_start = None
+    execution_finish = None
     for container in (
         getattr(getattr(selected_pod, "status", None), "container_statuses", None) or []
     ):
         if getattr(container, "name", None) == "classifier":
-            running = getattr(getattr(container, "state", None), "running", None)
-            execution_start = getattr(running, "started_at", None)
+            container_state = getattr(container, "state", None)
+            terminated = getattr(container_state, "terminated", None)
+            running = getattr(container_state, "running", None)
+            waiting = getattr(container_state, "waiting", None)
+            if terminated is not None:
+                execution_state = "terminated"
+                execution_start = getattr(terminated, "started_at", None)
+                execution_finish = getattr(terminated, "finished_at", None)
+            elif running is not None:
+                execution_state = "running"
+                execution_start = getattr(running, "started_at", None)
+            elif waiting is not None:
+                execution_state = "waiting"
+            break
+    if pod_phase in ("Succeeded", "Failed") or execution_state == "terminated":
+        state = "finished"
+    elif execution_state == "waiting":
+        state = "queued"
+    elif execution_state == "running":
+        state = "active"
+    else:
+        state = "active" if pod_phase == "Running" else "queued"
     record = {
         "kubernetes_job_uid": uid,
         "job_name": name,
@@ -280,7 +299,11 @@ def _state_job_record(job: Any, pods: list[Any]) -> tuple[str, dict[str, Any]]:
         ),
         "creation_time": utc_iso(created),
         "start_time": utc_iso(start_time) if start_time is not None else None,
+        "execution_state": execution_state,
         "execution_start_time": utc_iso(execution_start) if execution_start else None,
+        "execution_finish_time": (
+            utc_iso(execution_finish) if execution_finish else None
+        ),
         "requested_cpu_count": requested_cpu,
         "requested_memory_mb": requested_memory_mb,
         "pod_name": (

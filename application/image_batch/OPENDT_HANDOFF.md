@@ -1,49 +1,65 @@
-# OpenDT handoff contract
+# OpenDT handoff
 
-Edward's pinned `closed-loop-opendt` `v1.0.0` observes native Kubernetes Jobs. Its `K8sResourceTerminalStream` waits for a Job to become terminal, and its `K8sWorkloadProducer` combines Job timing metadata with stored resource-usage snapshots. The resulting OpenDT workload message contains an OpenDC `Task` and zero or more CPU-utilization `Fragment` records.
+## Where to resume
 
-The image-batch application preserves that contract:
+Simulator inputs are implemented; OpenDC execution, candidate selection, and worker actuation are next. Start by integrating restoration of assigned work: the pinned `closed-loop-opendt` v1.0.0 wrapper accepts Tasks and topology but does not expose this capability. Feeding it only the Parquet traces would lose existing placement and startup occupancy.
 
-| Demo evidence                        | Source                                   | Later OpenDT input                      |
-| ------------------------------------ | ---------------------------------------- | --------------------------------------- |
-| request/demo/workload-run lineage    | Job labels and annotations               | state/run lineage                       |
-| submission/start/finish              | Job metadata and worker-container state  | Task timing                             |
-| requested CPU/memory                 | Job Pod specification                    | Task capacity                           |
-| observed CPU usage                   | Prometheus/container metrics             | Task fragments                          |
-| image count and payload bytes        | Job annotations + adapter JSONL          | explanatory workload metadata           |
-| endpoint batch ID                    | endpoint/adapter events + Job annotation | pre-adapter request correlation         |
-| queued/running Jobs and worker state | Kubernetes Jobs, Pods, and Nodes         | simulation initial state at cutoff      |
-| classification result                | adapter `result.json` only               | proof of real work; not simulator input |
+The entry point is [forecast_workload.py](src/forecast_workload.py) with `--simulation-inputs`; [simulation_input.py](src/simulation_input.py) builds the shared initial state and combined scenarios. Use the [README](README.md#arrival-forecasting) for invocation and [DESIGN](DESIGN.md#simulation-input-semantics) for modeling decisions. Scope and delivery priorities remain in the [Notion demo task](https://app.notion.com/p/374dc985c5868055a157df2a6d95f1bb).
 
-The adapter's `events.jsonl` is application lineage, not a substitute for Edward's resource observer. The demo sidecar now implements the minimum compatible behavior from commit `c3e1f8cd56918d8c10c4013a8b8733011323f9d7`:
+## Evidence and OpenDT compatibility
 
-1. `libs/common/odt_common/models/task.py` and `fragment.py` for the trace model.
-2. The Job event extractor and terminal stream from `libs/k8s-observability`.
-3. A Prometheus resource-usage collector that maps cAdvisor Pods to Jobs using Kubernetes owner references, constructs fragments from source timestamps, and preserves short Jobs with an empty fragment list otherwise.
-4. The workload producer's conversion logic, targeting append-only JSONL rather than requiring Kafka and the full OpenDT compose deployment.
-5. A one-second full-state collector, independent of the five-second resource cadence, for non-terminal Jobs, their Pods, and worker availability. This state is intentionally not encoded as completed Tasks because unfinished Jobs have no authoritative duration or fragments.
+| Demo evidence | Source | OpenDT use |
+| --- | --- | --- |
+| Request/demo/workload-run lineage | Job labels and annotations | State/run lineage |
+| Submission/start/finish | Job metadata and worker-container state | Task timing |
+| Requested CPU/memory | Job Pod specification | Task capacity |
+| Observed CPU usage | Prometheus/container metrics | Task fragments |
+| Image count and payload bytes | Job annotations and adapter JSONL | Explanatory workload metadata |
+| Endpoint batch ID | Endpoint/adapter events and Job annotation | Pre-adapter request correlation |
+| Queued/starting/running Jobs and worker state | Kubernetes Jobs, Pods, and Nodes | Simulation initial state at cutoff |
+| Classification result | Adapter `result.json` only | Proof of real work; not simulator input |
 
-The sidecar writes `workload.jsonl`, `resource-snapshots.jsonl`, `cluster-state.jsonl`, and `observer-events.jsonl` under its dedicated `/var/lib/opendt` `emptyDir`. The bounded reader uses Kubernetes Job UIDs to deduplicate history, select the last complete cluster snapshot at or before the cutoff, and create `tasks.parquet` and `fragments.parquet`. JSONL is ephemeral audit evidence, not a permanent service transport.
+Adapter events preserve application lineage; resource observations come from the observer. The observer's completed-work contract follows upstream commit `c3e1f8cd56918d8c10c4013a8b8733011323f9d7`, specifically the Task/Fragment models and Kubernetes workload producer. [opendt_observer.py](src/opendt_observer.py) captures classifier timing independently of Job/Pod scheduling state. Preserve that distinction when connecting the runner; scheduler waiting is not execution time.
 
-Application duration fields use process-local monotonic clocks, while `timestamp_unix_ns` supports cross-component ordering when VM clocks are synchronized. The observer uses Job creation as submission time, the worker container's Kubernetes start/finish timestamps as its execution interval, and Job completion as fixed-cutoff provenance. This keeps scheduler queueing out of the Task's compute duration.
+## Runner input contract
 
-The operator-focused usage instructions are in `README.md`. The stable design rationale and experiment limitations are in `DESIGN.md`; update that document when later implementation decisions change the meaning of collected evidence. Persistent scope, priorities, and delivery gates live in the [Notion demo task](https://app.notion.com/p/374dc985c5868055a157df2a6d95f1bb).
+Consume schema-2 bundles only when `simulation/manifest.json` reports `ready`. The manifest is written last; its absence means an incomplete export. Not-ready manifests list rejection reasons and have no executable scenario export.
 
-## Validated current state
+| Artifact under `simulation/` | Runner responsibility |
+| --- | --- |
+| `manifest.json` | Read requested/effective cutoffs, horizon, readiness, provenance, Job UID mapping, and per-scenario future lineage. |
+| `initial-state.json`: `workers` | Restore worker availability and schedulability, including cordoned workers with assigned work. |
+| `initial-state.json`: `tasks` | Restore each `{task, metadata}` entry using its phase, worker assignment, resource requests, and queue order. Queue only unassigned work. |
+| `initial-state.json`: `model_exhausted_jobs` | Retain as evidence only. These observed-running Jobs have zero modeled execution left; allocate no capacity and invent no completion record. |
+| `scenarios/NNNN/tasks.parquet` and `fragments.parquet` | Execute the shared remaining backlog plus that scenario's sampled future. Tables use the existing non-nullable Task/Fragment schema. |
 
-The implementation described here has been exercised on node3 with one control plane, three workers, and one endpoint. Three identical seeded runs each attempted and completed all 34 planned requests. All sends began within about 1.1 milliseconds of their planned time, sender queue depth remained zero, and all 102 successful Kubernetes Jobs produced a unique workload record with nonempty Fragments. Worker container execution was approximately 30--35 seconds. The manifest's 128 inference repetitions are a synthetic calibration mechanism, not realistic application behavior.
+Task IDs join the traces to lineage. Submission times are milliseconds relative to the effective cutoff; backlog releases at zero. Original creation times remain in metadata, so simulated completion can later be related to original arrival. All scenarios share the same initial work and worker state. Future arrivals stop at the horizon; included execution is not truncated there.
 
-The runtime baseline has focused unit and integration-style tests. They cover topology and CPU pinning, schedule generation and open-loop release, lineage, HTTP behavior, observer conversion and deduplication, Prometheus/Pod correlation, cluster-state completeness, timing semantics, and manifest/RBAC constraints.
+The effective cutoff is the latest complete snapshot at or before the requested cutoff, subject to `--max-gap-seconds` (default three seconds). Unknown running timing, conflicting state, or missing assigned workers blocks readiness. `model_exhausted_jobs` retains `task_id`, original lineage/timing, `template_duration_ms`, `remaining_execution_ms: 0`, and `observed_completed: false`; the manifest adds a `running_profile_exhausted` diagnostic. This assumption never changes real Job state.
 
-Arrival forecasting already samples multiple futures (`--scenarios`, default 100), bounds future arrivals with `--horizon-seconds` (default 60), and supports periodic forecasting with `--interval-seconds`. Each ready cutoff exports historical and per-scenario `tasks.parquet`/`fragments.parquet`, plus separate `state.json`. These are not yet complete simulator inputs for queued/running work, and the interval does not invoke OpenDC or actuate.
-
-The September 17 capture matches the current application source: 141/141 Jobs completed with unique workload records and nonempty Fragments, no sidecar restarts, and 50 ready forecasts after warm-up. It exercises the observer-finalization and retrospective-evaluation fixes with cellular replay. Evidence is under `logs/fns-network-review/logging-20260917/fresh-forecast/`; earlier unshaped runs remain baseline evidence.
+For reproducible replay, retain the observer files, `boundaries.json`, and `template.json`; pass the latter two through `--boundaries` and `--template`. Source hashes and dependency versions identify the implementation/runtime used. History, original state, and arrival-only traces remain outside `simulation/` for audit and comparison.
 
 ## Remaining closed-loop work
 
-1. Combine queued work, remaining running work, and future arrivals into simulator inputs at one cutoff. Use observed container start times and the fixed execution profile; never encode scheduler waiting as computation. Bound new arrivals by the forecast horizon, and define how completion beyond that horizon is scored.
-2. Package OpenDC as a Kubernetes runner, initially one long-lived container executing traces sequentially. Measure CPU/memory and reserve placement/capacity before workload saturation, including when only one worker is schedulable. Recalibrate workload capacity after this reservation: the existing deployment fits three whole one-CPU Jobs per worker, despite four allocatable CPUs; startup also occupies a slot.
-3. Extend periodic forecasting into a complete control cycle. Reuse the same X futures and observed state for each valid current-worker-count + {-1, 0, +1} candidate within one to three workers: 3X simulations at two workers, 2X at either boundary. Measure total cycle cost to choose X and cadence; define timeout/overrun handling so decisions do not overlap or use stale state.
-4. Agree the performance SLO and required confidence, process results, then apply and verify cordon/uncordon and observe the outcome. Model running Jobs finishing on a cordoned worker; cordoning does not evict them or physically power off the VM. Account consistently for this transition when returning capacity to the modeled provider pool.
+1. Add assigned-work restoration to the runner. Verify that queued Jobs are placed once, starting/running Jobs stay on their assigned worker, cordoned workers accept no new work, and exhausted-profile evidence reserves no simulated capacity.
+2. Package OpenDC as one Kubernetes runner executing candidates sequentially. Measure and reserve its CPU/memory and ensure it remains available under saturation and scale-down. Recalibrate application capacity: observed allocatable resources are not calibrated Job capacity, and startup also occupies a slot.
+3. Reuse the same X futures and observed state for each valid current-worker-count + {-1, 0, +1} candidate within one to three workers. Measure total cycle cost before choosing cadence; define timeout handling so cycles cannot overlap or use stale state.
+4. Resolve evaluation policy with the OpenDC lead, then agree SLO thresholds and scenario acceptance confidence. Only then connect candidate selection and verify cordon/uncordon outcomes, including completion of remaining work before returning worker capacity to the modeled provider pool.
 
-Keep the single-host topology until the loop works. Later two-host exploration remains five six-vCPU workers, one six-vCPU control plane, and a two-vCPU endpoint, with workload/capacity recalibration. Defer varying cycle shapes and cAdvisor migration into Ansible until the functional loop is dependable. Cellular replay is already integrated; richer network modeling remains outside the demo's compute-focused loop.
+Keep the current workload and single-host topology until this loop works. OpenDC execution and restoration still require integration validation; input-bundle validation alone does not establish runner compatibility.
+
+## Evaluation policy discussion with the OpenDC lead
+
+**Resolve before scoring or candidate selection:**
+
+- Which time window contributes energy and throughput?
+- How do unfinished Jobs affect performance and SLO evaluation?
+- Are post-horizon arrivals needed for meaningful completion predictions?
+
+Simulation completion does not decide whether to score the entire drain period. Original arrivals, full profiles, and separate backlog/future lineage support a later fixed-window or cohort-based choice. Poisson scenarios continue to sample different counts and timings from the same fitted model; SLO thresholds and acceptance confidence are separate decisions.
+
+## Validation evidence
+
+The [current validation report](../../logs/fns-simulation-inputs/review-validation-20260917T170423Z/VALIDATION.md) covers the refactored builder and schema-2 zero-remaining model: passing regressions, forecast-image checks, offline replay of 148 historical cutoffs, and a fresh six-cycle live run with 141 completed Jobs and no container restarts. It records every rejected cutoff and byte reproduction checks. Packaging and live source validation were checked separately, as detailed in the report.
+
+The earlier [six-cycle live capture](../../logs/fns-simulation-inputs/validation-20260917/) used schema 1's five-second tail; preserve it as historical evidence, not live validation of the zero-remaining model. Source hashes in each capture identify the exact revision tested.

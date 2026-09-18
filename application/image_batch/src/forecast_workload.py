@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 from dataclasses import asdict, dataclass
 from importlib.metadata import version
 import json
@@ -27,6 +28,7 @@ from forecast_trace import (
     training_bins,
     write_json,
 )
+from simulation_input import SIMULATION_SCHEMA_VERSION, build_simulation_inputs
 
 
 @dataclass(frozen=True)
@@ -263,7 +265,8 @@ def forecast(trace, settings, template=None):
 
 
 def run_once(
-    observer_dir, output_dir, cutoff, settings, template=None, boundaries=None
+    observer_dir, output_dir, cutoff, settings, template=None, boundaries=None,
+    *, simulation_inputs=False,
 ):
     """One reproducible cutoff. An existing output directory is never overwritten."""
     output = Path(output_dir)
@@ -271,6 +274,17 @@ def run_once(
         raise FileExistsError(output)
     rows, manifest = bounded_read(observer_dir, boundaries)
     trace = read_trace(rows, settings.run_id, cutoff)
+    requested_cutoff = cutoff
+    state_problem = None
+    if simulation_inputs:
+        if trace.state is None:
+            state_problem = "state_missing"
+        elif cutoff - trace.states[-1][0] > settings.max_gap_seconds * 1000:
+            state_problem = "state_stale"
+        else:
+            cutoff = trace.states[-1][0]
+            # Reuse the frozen prefixes; do not read live files a second time.
+            trace = read_trace(rows, settings.run_id, cutoff)
     summary, selected, scenarios, bins = forecast(trace, settings, template)
     summary["inputs"] = manifest
     summary["dependencies"] = {
@@ -284,12 +298,36 @@ def run_once(
             "threadpoolctl",
         )
     }
+    implementation_files = ["forecast_workload.py", "forecast_trace.py"]
+    if simulation_inputs:
+        implementation_files.append("simulation_input.py")
     summary["implementation_sha256"] = {
-        name: __import__("hashlib")
-        .sha256(Path(__file__).with_name(name).read_bytes())
-        .hexdigest()
-        for name in ("forecast_workload.py", "forecast_trace.py")
+        name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+        for name in implementation_files
     }
+    simulation = None
+    if simulation_inputs:
+        summary["requested_cutoff"] = iso(requested_cutoff)
+        if state_problem or summary["status"] != "ready":
+            reasons = ([state_problem] if state_problem else []) + summary["reasons"]
+            simulation = ({"schema_version": SIMULATION_SCHEMA_VERSION, "status": "not_ready",
+                           "reasons": list(dict.fromkeys(reasons)), "diagnostics": []}, None, [])
+        else:
+            simulation = build_simulation_inputs(
+                trace, selected, scenarios, settings
+            )
+        simulation_manifest = simulation[0]
+        simulation_manifest.update(
+            requested_cutoff=iso(requested_cutoff),
+            effective_cutoff=iso(cutoff) if not state_problem else None,
+            inputs=manifest,
+            template_sha256=selected["sha256"] if selected else None,
+            implementation_sha256=summary["implementation_sha256"],
+            dependencies=summary["dependencies"],
+        )
+        summary["simulation_inputs"] = {
+            key: simulation_manifest[key] for key in ("status", "reasons", "diagnostics")
+        }
     output.mkdir(parents=True)
     write_json(output / "forecast.json", summary)
     write_json(output / "boundaries.json", manifest)
@@ -318,6 +356,16 @@ def run_once(
         write_json(output / "template.json", selected)
     for index, tasks in enumerate(scenarios):
         parquet_tasks(tasks, output / "scenarios" / f"{index:04d}")
+    if simulation is not None:
+        simulation_manifest, initial_state, combined = simulation
+        directory = output / "simulation"
+        directory.mkdir()
+        if simulation_manifest["status"] == "ready":
+            write_json(directory / "initial-state.json", initial_state)
+            for index, tasks in enumerate(combined):
+                parquet_tasks(tasks, directory / "scenarios" / f"{index:04d}")
+        # The manifest is the commit marker; failed writes cannot publish ready.
+        write_json(directory / "manifest.json", simulation_manifest)
     return summary, selected
 
 
@@ -332,6 +380,10 @@ def parser():
         help="UTC service cycle origin, not a planned schedule",
     )
     result.add_argument("--cutoff", help="UTC cutoff for one-shot mode")
+    result.add_argument(
+        "--simulation-inputs", action="store_true",
+        help="also export initial state and combined traces at the latest fresh snapshot",
+    )
     result.add_argument(
         "--template",
         type=Path,
@@ -392,6 +444,7 @@ def main():
                 settings,
                 template,
                 boundaries,
+                simulation_inputs=args.simulation_inputs,
             )
             print(
                 json.dumps(
@@ -399,10 +452,15 @@ def main():
                         "status": summary["status"],
                         "reasons": summary["reasons"],
                         "history": summary["history"],
+                        **({"simulation_inputs": summary["simulation_inputs"]}
+                           if args.simulation_inputs else {}),
                     }
                 )
             )
-            raise SystemExit(0 if summary["status"] == "ready" else 2)
+            ready = summary["status"] == "ready" and (
+                not args.simulation_inputs or summary["simulation_inputs"]["status"] == "ready"
+            )
+            raise SystemExit(0 if ready else 2)
         if (
             args.cutoff
             or args.boundaries
@@ -424,6 +482,7 @@ def main():
                 cutoff,
                 settings,
                 template,
+                simulation_inputs=args.simulation_inputs,
             )
             if template is None and selected is not None:
                 template = selected
@@ -436,6 +495,9 @@ def main():
                         "reasons": summary["reasons"],
                         "history": summary["history"],
                         "elapsed_seconds": time.monotonic() - started,
+                        **({"effective_cutoff": summary["cutoff"],
+                            "simulation_inputs": summary["simulation_inputs"]}
+                           if args.simulation_inputs else {}),
                     }
                 ),
                 flush=True,

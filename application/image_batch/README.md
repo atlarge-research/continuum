@@ -152,3 +152,11 @@ For periodic forecasts, replace `--cutoff CUTOFF_UTC` with `--interval-seconds 1
 Use `evaluate_forecasts.py` to score saved forecasts, or add forecast pages with `analyze_run.py`. Their `--help` lists the required inputs; specify the arrival-run end to exclude shutdown time.
 
 See [DESIGN.md](DESIGN.md#arrival-forecasting-and-calibration) for model and calibration decisions, and `forecast_workload.py --help` for other options.
+
+## Simulation input bundles
+
+Add `--simulation-inputs` to either forecast command to combine queued and remaining running work, worker state, and sampled arrivals into reproducible simulator inputs.
+
+Bundles are written under `simulation/`. Check `simulation/manifest.json` for readiness before using them. One-shot mode exits with 0 when ready, 2 when not ready, and 1 for invalid input. This prepares inputs; it does not run OpenDC or change the cluster.
+
+See [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md) for the runner integration contract, current blocker, and next steps.

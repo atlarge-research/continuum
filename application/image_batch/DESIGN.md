@@ -6,7 +6,7 @@ This document records the architectural and experimental reasoning behind the im
 
 The demo is a scientific vertical slice of an eventual closed-loop digital twin. It must create real endpoint-to-cloud traffic, execute measurable work on Kubernetes, and preserve enough evidence to reconstruct completed work and the cluster state at a chosen cutoff. Later features can use that evidence to forecast workload, prepare OpenDC input, simulate policies, and scale workers.
 
-The current implementation forecasts arrivals and exports traces, but stops before OpenDC execution, policy selection, and Kubernetes actuation. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
+The current implementation forecasts arrivals and can export combined simulation inputs with remaining work and initial worker state, but stops before OpenDC execution, policy selection, and Kubernetes actuation. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
 
 ## Component and data flow
 
@@ -15,22 +15,22 @@ endpoint
   |  image archive + workload/run lineage
   v
 adapter
-  |  persists request, creates one Job
+  |  accepts request, creates one Job
   v
 Kubernetes worker Job
   |  fetches images, runs inference, uploads result
   v
-adapter data directory
+cloud-side result storage
 
 observer sidecar
   |-- Kubernetes Jobs/Pods/Nodes
   |-- Prometheus cAdvisor samples
-  `-- OpenDT and cluster-state JSONL
+  `-- completed execution profiles and current cluster state
 ```
 
-One endpoint batch maps to one finite Kubernetes Job. This boundary makes submission, queueing, execution, completion, and resource evidence directly correlatable. The endpoint batch ID, adapter request ID, workload run ID, Kubernetes Job UID, Pod UID, and worker name preserve lineage through the pipeline.
+One endpoint batch maps to one finite Kubernetes Job. This boundary makes submission, queueing, execution, completion, and resource evidence directly correlatable. Stable identities preserve lineage across the endpoint, adapter, and cluster.
 
-The adapter returns an HTTP `202` after accepting and submitting the request; classification results remain cloud-side. The endpoint therefore measures submission behavior rather than waiting for Job completion.
+The adapter acknowledges accepted submissions without waiting for execution; classification results remain cloud-side. The endpoint therefore measures submission behavior rather than Job completion.
 
 ## Network emulation
 
@@ -38,7 +38,7 @@ Cellular access uses separate uplink and downlink traces, while cloud-to-cloud, 
 
 The inherited location and cellular profiles are accepted inputs from the student's benchmarking work. The [thesis](https://atlarge-research.com/pdfs/2025-gleb-network-simulation-bsc-thesis.pdf#page=35) describes wired client-to-datacenter RTT measurements and estimates one-way core delay as half the RTT, assuming symmetric paths. Deliberately high core throughput and minimal jitter are modeling defaults. These profiles approximate the selected paths rather than establishing universal properties of a region or provider. The demo combines KPN 5G access with the `eu_central_1` core profile.
 
-The demo retains four cloud VMs and one endpoint on one physical host. Replay supports QEMU addresses within `192.168.0.0/16`; endpoint-to-endpoint communication is outside its scope. Trace repetition is independent of workload arrival periods and forecast cycles. Live checks have exercised cellular traffic in both directions, static core behavior, and the image-batch path; this validates the implementation for the tested setups rather than the representativeness of every network profile. Earlier unshaped captures remain baseline evidence.
+The demo retains four cloud VMs and one endpoint on one physical host. Endpoint-to-endpoint communication is outside the network model. Trace repetition is independent of workload arrival periods and forecast cycles. Validation of replay behavior does not establish the representativeness of every network profile; unshaped captures remain a distinct baseline.
 
 ## Open-loop workload generation
 
@@ -46,11 +46,11 @@ The demo retains four cloud VMs and one endpoint on one physical host. Replay su
 
 An open-loop workload defines arrival times independently of response times. If request A is planned at zero seconds, request B is planned at five seconds, and A's blocking HTTP call lasts ten seconds, a single sender would incorrectly delay B until ten seconds. The measured workload would then depend on adapter latency and behave like a closed-loop generator.
 
-The endpoint instead has one scheduler and a bounded pool of ordinary blocking HTTP senders. At each planned time the scheduler releases the prepared request without waiting for earlier responses. Slow responses affect future arrivals only if all sender slots are occupied; that saturation is recorded as queue depth and scheduling lag. A bounded standard-library pool is sufficient and avoids custom asynchronous networking code.
+A scheduler releases planned arrivals to a bounded pool of blocking HTTP senders without waiting for earlier responses. This separates scheduling from submission without requiring custom asynchronous networking. The pool bounds resource use; if every sender is occupied, saturation remains visible through queue depth and scheduling lag. This preserves open-loop behavior within the generator's measured capacity.
 
 ### Preparing work before the timed run
 
-Image selection, archive construction, identifier allocation, and structured logging all consume time. Performing them between arrivals would contaminate the schedule. The endpoint therefore constructs every payload and emits every `schedule.planned` record before starting the experiment clock.
+Image selection, archive construction, identifier allocation, and structured logging all consume time. Performing them between arrivals would contaminate the schedule. The endpoint therefore prepares payloads and records the full schedule before starting the experiment clock.
 
 The planned schedule and actual send starts use the same monotonic clock for lag calculations. UTC timestamps are also recorded for correlation with other hosts, assuming their clocks are synchronized.
 
@@ -78,9 +78,9 @@ Changing peak height or cycle length can add realism later, but it is deferred u
 
 The October invocation uses four images per Job to keep endpoint-to-cloud data volume fixed and interpretable. Fixed and ranged batch-size modes are both retained so later experiments can introduce heterogeneous payloads without a redesign.
 
-The MobileNet workload would otherwise finish too quickly for useful five-second Prometheus sampling. `INFERENCE_REPETITIONS` repeats model invocation on each already-preprocessed image while still returning one classification per image. This increases compute without increasing transferred data, which helps avoid hiding future latency and bandwidth effects behind an arbitrarily larger network payload.
+The MobileNet workload would otherwise finish too quickly for useful five-second Prometheus sampling. Repeated inference on each preprocessed image extends execution while still returning one classification per image. This increases compute without increasing transferred data, which helps avoid hiding future latency and bandwidth effects behind an arbitrarily larger network payload.
 
-The manifest value of 128 was calibrated specifically on node3 to produce roughly 30--35 seconds of worker execution and several resource samples. It is not a realistic application algorithm or generally meaningful parameter. It is a synthetic experimental load multiplier. A later credible FNS/6G workload or heavier model should replace this mechanism when available.
+A repetition count of 128 was calibrated specifically on node3 to produce roughly 30--35 seconds of worker execution and several resource samples. It is not a realistic application algorithm or generally meaningful parameter. It is a synthetic experimental load multiplier. A later credible FNS/6G workload or heavier model should replace this mechanism when available.
 
 ## Observability model
 
@@ -91,7 +91,7 @@ Completed Jobs and unfinished Jobs answer different simulation questions.
 - A completed Job has an authoritative execution interval and can be emitted as an OpenDT Task with zero or more resource Fragments.
 - A queued or running Job is part of the current cluster state but does not yet have an authoritative duration or complete resource history.
 
-The observer therefore writes completed Tasks to `workload.jsonl` and periodic full snapshots of non-terminal Jobs and worker capacity to `cluster-state.jsonl`. The bounded reader deduplicates completed records and retains the last complete state snapshot at or before a fixed trace cutoff.
+Completed execution profiles and periodic snapshots of unfinished work are separate evidence. Historical work must not be counted twice, and each simulation starts from the latest complete state observation available at its cutoff.
 
 ### Kubernetes timing semantics
 
@@ -105,34 +105,27 @@ Kubernetes Job start time can include scheduler queueing. Using it as compute st
 
 ### Prometheus cadence and correlation
 
-Only the kubelet cAdvisor endpoint is changed to a five-second scrape interval with a one-second timeout. Other monitoring targets retain their existing cadence. This provides several observations for a 20--40-second Job without needlessly increasing the entire monitoring stack's load.
+Workload resource usage is sampled every five seconds. This provides several observations for a 20--40-second Job without needlessly increasing the entire monitoring stack's load. Other monitoring retains its existing cadence.
 
-cAdvisor identifies resource series by Pod but does not provide sufficiently timely Job ownership for these short-lived Pods. Rather than depending on a slower `kube_pod_owner` metric, the observer lists Pods through the Kubernetes API and follows their owner references to Job UIDs. This is the authoritative relationship used to associate CPU and memory samples with Jobs.
+Resource metrics identify Pods, while the workload unit is a Job. Correlation therefore uses authoritative Kubernetes ownership rather than delayed monitoring metadata, which can miss the relationship for short-lived Pods.
 
-CPU uses a rate over a short counter window, so the first observation after Pod startup may not yet be calculable. CPU and memory series may also disappear at slightly different times during shutdown. The observer diagnoses and skips an incomplete combination instead of inventing a zero value. A successfully completed Job is still emitted with `fragments: []` and degraded sampling metadata if no valid samples exist.
+CPU uses a rate over a short counter window, so the first observation after Pod startup may not yet be calculable. CPU and memory series may also disappear at slightly different times during shutdown. Incomplete observations remain missing rather than becoming invented zero values. Successful completion is retained even when resource sampling is inadequate; sampling quality and execution outcome are separate facts.
 
-Resource collection uses cAdvisor's source timestamp rather than the observer's query time for Fragment ordering and deduplication. Query time is retained as separate provenance.
+Resource observations are timed at their measurement source, separately from collection time, so query delays cannot shift the apparent execution profile.
 
-Terminal finalization waits for the active collection, including its raw evidence writes, then closes the Job UID and detaches its samples under the same collection lock. Later collection rounds cannot accept samples for that UID, even if Kubernetes returns stale active state. Task construction can therefore use a fixed sample set while looking up the worker interval.
+A completed execution profile must describe a fixed set of accepted observations. Later stale cluster state must not change that profile or add resource evidence after finalization.
 
 ### Trace storage and transport boundary
 
-The observer sidecar owns a dedicated `emptyDir` mounted at `/var/lib/opendt`; it never uses the adapter's `/data` directory. Every JSONL record is appended as one flushed, newline-terminated object so a reader can consume only complete lines.
+Observer evidence is isolated from application results so that workload measurement does not depend on application logging. Completed execution profiles, raw resource samples, current state, and collection diagnostics remain distinguishable.
 
-The files are ephemeral diagnostic and audit evidence:
-
-- `workload.jsonl` contains completed Task/Fragment records.
-- `resource-snapshots.jsonl` contains accepted raw Job samples.
-- `cluster-state.jsonl` contains complete current-state snapshots.
-- `observer-events.jsonl` contains failures and degraded observations.
-
-JSONL is not intended as the permanent transport between separate OpenDT components. The bounded reader selects complete lines up to frozen file boundaries, requires authoritative completion and observed emission by its cutoff, deduplicates by Job UID, and generates OpenDC Parquet input. Kafka or a direct API should be introduced only when there is a concrete integration requirement.
+A forecast uses a frozen, complete evidence boundary and only observations available by its cutoff. This supports causal reconstruction and reproducibility while keeping retrospective analysis separate. Local audit files are sufficient for the demo; a durable transport between OpenDT components should be introduced only when integration requires it.
 
 ## Offline run analysis
 
-The analyzer reads saved endpoint and observer evidence independently of the runtime. A command-line script producing PNGs and a combined PDF keeps the demo reproducible and easy to review or use in slides, without a notebook or browser service. Input hashes, analysis settings, and exported values allow regeneration and inspection; invalid inputs fail explicitly, while incomplete evidence remains visible.
+Analysis runs offline from saved endpoint and observer evidence so reporting does not interfere with the measured workload. Reports must be reproducible and inspectable, with their evidence and analysis assumptions retained. Invalid inputs and incomplete observations remain visible.
 
-Arrival fidelity uses recorded monotonic send offsets, because endpoint log timestamps are written after the HTTP call returns. Cross-host alignment assumes synchronized clocks. Queue wait includes scheduling and container startup; execution uses worker-container start and finish. These distinctions avoid attributing startup or logging delays to computation or workload scheduling.
+Arrival fidelity measures actual send starts on a monotonic clock rather than using logging time. Cross-host alignment assumes synchronized clocks. Queue wait includes scheduling and container startup; execution uses worker-container start and finish. These distinctions avoid attributing startup or logging delays to computation or workload scheduling.
 
 CPU plots use raw resource samples rather than simulator-oriented OpenDT Fragments, which may clamp or extend utilization. Samples are held forward for at most ten seconds within execution; missing values remain missing, and partial sums are distinguished from full coverage. This shows workload CPU and sampling coverage, not total node utilization or a direct reporting-latency measurement. Terminal Pods are excluded from pressure using captured Pod phases, including in older captures; corrections are documented without rewriting source logs.
 
@@ -146,21 +139,31 @@ First-observation events preserve Job existence independently of terminal status
 
 Calibration selects the adequately sampled completed Job nearest the eligible median execution duration, breaking ties by UID. Its duration, CPU/memory requirements, and full fragment sequence stay together and are frozen. Every future Job copies this profile; only arrival times and counts vary. The template's selection cutoff must also precede each forecast cutoff, even if its selected Job completed earlier. Identical scenarios will be reused for capacity comparisons.
 
-Current-state records retain Job start time and separately capture the running classifier container's actual start time; missing timing stays unknown. Later remaining-work estimation must use container timing rather than scheduler waiting. Historical Tasks and current state are exported separately. Empty and nonempty Parquet tables share the pinned writer's populated, non-nullable schema.
+Current-state evidence distinguishes classifier execution from the surrounding Job and Pod lifecycle. A terminated classifier is no longer unfinished compute even if its Pod is still running; missing execution timing remains unknown.
 
-Forecasting first passes captured-prefix reproduction, then runs read-only beside the observer. Source hashes, input boundaries, package versions, seeds, and the frozen template make outputs auditable. Byte reproduction targets the same runtime and CPU; other environments may differ in floating-point model metadata. Forecast evaluation remains separate from the accepted report; overlapping predictive horizons are not independent runs. Scenario count, future arrival horizon, and forecast interval are already configurable; the full control cadence will be chosen after measuring OpenDC evaluation cost.
+Forecasts must be reproducible from frozen observations, the selected profile, and the sampling seed, with the numerical environment recorded for audit. Exact reproduction assumes the same runtime and CPU; other environments may differ in floating-point results. Overlapping predictive horizons are not independent experimental runs. Scenario count, arrival horizon, and control cadence are separate choices; cadence must account for the cost of OpenDC evaluation.
 
-The planned loop reuses X sampled futures and one observed state for valid -1/0/+1 worker changes within the one-to-three-worker range. A single Kubernetes-hosted OpenDC runner should initially execute candidates sequentially, with measured CPU/memory reservations and placement that remains available under saturation and scale-down. Its reservation changes the capacity available to Jobs and must be modeled. Integration still needs queued/remaining work, treatment of Jobs finishing beyond the arrival horizon, cycle timeout/overrun behavior, and an SLO/confidence decision rule. Scale-down must preserve running Jobs on cordoned workers and account for their completion before treating that capacity as returned to the provider pool. Implementation steps are tracked in [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md#remaining-closed-loop-work).
+The planned loop reuses X sampled futures and one observed state for valid -1/0/+1 worker changes within the one-to-three-worker range. A single Kubernetes-hosted OpenDC runner should initially execute candidates sequentially, with measured CPU/memory reservations and placement that remains available under saturation and scale-down. Its reservation changes the capacity available to Jobs and must be modeled. Integration still needs restoration of initial work in OpenDC, cycle timeout/overrun behavior, and an SLO/confidence decision rule. Scale-down must preserve running Jobs on cordoned workers and account for their completion before treating that capacity as returned to the provider pool. Implementation steps are tracked in [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md#remaining-closed-loop-work).
 
-Retrospective evaluation and its observed report series use all evidence in the frozen input prefixes, including later observations of earlier arrivals and the following snapshot needed to establish coverage. The experiment end limits scored arrival bins and full cycles, not evidence availability; gaps and capture failures still exclude bins. Forecast training and template selection retain their causal availability cutoffs.
+### Simulation input semantics
+
+Every scenario starts from the same observed state and uses one representative measured execution profile. A single fresh snapshot defines the cutoff for backlog, profile eligibility, and forecasting, avoiding a mixture of states from different times. Later observations cannot repair earlier uncertainty. A completed collector observation still approximates cluster state; it is not an atomic observation of every Kubernetes object.
+
+Queued and starting Jobs retain their full execution profile. Starting work occupies its assigned resources, but this version makes no separate estimate of pre-container startup delay. Running work retains only the profile remaining after elapsed classifier execution; scheduler waiting is never subtracted as compute. Remaining execution is `max(0, template_duration - elapsed_classifier_execution)`. An observed-running Job whose modeled profile is exhausted consumes no further simulated capacity. That assumption does not establish observed completion or affect the real Job. More complex execution-duration modeling is outside the demo's scope.
+
+The arrival horizon bounds new arrivals, not execution duration. Included work can finish beyond it, and original arrivals remain available for response-time analysis. Backlog and future-arrival cohorts remain distinguishable so a fixed-window or cohort-based evaluation can be chosen later. Finishing the simulation does not decide which period contributes energy or throughput, how unfinished Jobs affect performance/SLO evaluation, or whether post-horizon arrivals are needed for meaningful completion predictions. These questions remain open for discussion with the OpenDC lead; no scoring policy or SLO acceptance threshold is decided here.
+
+Initial placement and worker availability are part of the simulated state. Assigned work must remain on its worker, including during cordoning, until its modeled execution finishes. Observed allocatable resources are not calibrated application capacity: monitoring, system activity, and the future runner consume resources too. A simulation that starts with an empty cluster cannot represent this initial state faithfully.
+
+Retrospective evaluation may use later observations to establish what happened and whether measurement coverage was complete. The experiment end bounds the evaluated arrival period, not when evidence became available; gaps and capture failures still exclude affected intervals. Forecast training and profile selection retain their causal cutoffs.
 
 Node3 calibration uses 0.02–0.30 Jobs/second as a starting profile. Daemon and monitoring reservations leave three whole one-CPU Job slots per worker, and container startup occupies a slot too. Higher average demand can therefore accumulate queues despite the nominal twelve worker vCPUs. Recovery is checked across cycles; stochastic bursts can still carry a queue into the next cycle.
 
 ## Deployment and failure assumptions
 
-The observer remains a sidecar in the adapter pod through the October demo. The Deployment has one replica because multiple adapter replicas would create duplicate observers without leader election.
+Observation remains colocated with the adapter through the October demo, with one observation owner per run. This avoids duplicate collection and the need for coordination between observers.
 
-The experiment assumes the adapter and sidecars remain healthy for one run. A container crash, Pod replacement, Deployment update, or fatal Job watch error invalidates the run; the operator stops and restarts the complete experiment. Accordingly, the implementation does not add persistent deduplication, watch reconnection, restart recovery, leader election, a PVC, or a generic sink framework.
+The experiment assumes the adapter and observer remain healthy for one run. A crash, replacement, update, or loss of observation invalidates the run. Restarting the experiment preserves interpretable evidence; transparent recovery and production fault tolerance are outside this demo's scope.
 
 This is a deliberate scientific-demo trade-off: detecting an invalid run is more important than keeping a partially corrupted run alive.
 
@@ -170,8 +173,8 @@ This is a deliberate scientific-demo trade-off: detecting an invalid run is more
 - Forecast calibration needs enough covered history across every cycle phase; elapsed warm-up alone is insufficient.
 - Observed workload CPU covers the image-batch containers, not all Kubernetes and operating-system activity on each worker.
 - The five-second cadence provides samples rather than a continuous ground-truth resource trace.
-- JSONL and in-memory Job UID deduplication survive only for the lifetime of the current pod.
+- Runtime evidence is ephemeral and must be captured before the observing deployment is removed.
 - A single adapter replica and no live rollout are operational assumptions, not production scaling behavior.
-- OpenDC execution, remaining-work estimation, policy selection, and worker actuation remain later features.
+- OpenDC execution and restoration of initial state, policy selection, and worker actuation remain later features.
 
 The current single-host cluster remains the development setup until the closed loop works. A later two-host setup could provide more time for active Jobs to build up before saturation. Capacity and arrival intensity will need to be calibrated together: adding capacity alone could eliminate the queue instead of producing a more informative rise and fall. This expansion is deferred and does not change the current workload or topology.
