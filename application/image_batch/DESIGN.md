@@ -6,7 +6,7 @@ This document records the architectural and experimental reasoning behind the im
 
 The demo is a scientific vertical slice of an eventual closed-loop digital twin. It must create real endpoint-to-cloud traffic, execute measurable work on Kubernetes, and preserve enough evidence to reconstruct completed work and the cluster state at a chosen cutoff. Later features can use that evidence to forecast workload, prepare OpenDC input, simulate policies, and scale workers.
 
-The current implementation forecasts arrivals and can export combined simulation inputs with remaining work and initial worker state. A separate direct OpenDC container executes controlled synthetic experiments locally and on Kubernetes. Live-state initialization, automatic forecast execution, policy selection, and Kubernetes actuation remain unconnected. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
+The current implementation forecasts arrivals and can export combined simulation inputs with remaining work and initial worker state. A separate direct OpenDC container executes controlled synthetic experiments locally and on Kubernetes. A manual provisional workflow also prepares worker-count candidates from schema-2 bundles, executes them sequentially, and compares evaluation windows offline. Faithful live-state initialization, automatic forecast execution, policy selection, and Kubernetes actuation remain unconnected. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
 
 ## Component and data flow
 
@@ -175,11 +175,17 @@ Prefer the control-plane VM for OpenDC so it does not wait for worker Job slots.
 
 ## Provisional scenario workflow
 
-While fixed placement is pending, build the manual scenario and analysis workflow using small experiments. Permit explicitly approximate trace replay of already-running Jobs' remaining work at time zero, retaining observed assignments for the later initialization adapter. These Jobs may move or wait again, so results do not establish faithful live-state predictions. Preserve existing profile, freshness and exhausted-work semantics.
+The manual scenario and analysis workflow uses explicitly approximate trace replay of already-running Jobs' remaining work at time zero, retaining observed assignments for the later initialization adapter. These Jobs may move or wait again, so results do not establish faithful live-state predictions. Preserve existing profile, freshness and exhausted-work semantics.
 
-Use the same sampled futures across worker-count candidates. Temporarily omit the selected scale-down worker and its assigned Jobs, retaining them for later isolated execution; report the remaining workers' results as partial. Bring forward the evaluation-window PDF to compare a few approaches, then revisit its conclusions with correct placement and complete results. Scoring and actuation remain later work.
+The same sampled futures are used across worker-count candidates. The selected scale-down worker and its assigned Jobs are omitted and retained for later isolated execution; remaining-worker results are explicitly partial. The preliminary evaluation PDF compares a fixed window with following the same included cohort through completion. Revisit its findings with correct placement and complete results before selecting a policy. Scoring and actuation remain later work.
+
+Worker selection prefers an observed-empty eligible worker, otherwise the worker whose most recent current assignment was first observed earliest, with worker identity breaking ties. Starting work and exhausted-but-observed-running Jobs count for selection. Saved captures lack exact assignment timestamps, so first-observed assignment time and left-censoring are retained as approximation evidence rather than replaced with Job creation or classifier start times.
+
+Energy uses cumulative native worker joules, interpolated at evaluation boundaries. Included workers retain their configured idle-power baseline after execution ends; the omitted worker has no assumed power-off time. The illustrative linear defaults are 100 W idle and 200 W maximum, configurable and uncalibrated. Control-plane, runner and separate daemon energy are excluded. Actual runner cost is recorded separately. A fixed window counts only released work as completed or unfinished; arrivals beyond an earlier evaluation boundary remain not-yet-arrived. Backlog response time includes its original waiting time.
 
 ## Planned initial placement and scale-down modeling
+
+The user-agreed validation milestone precedes automatic decision-making: first compare simulation with observations using known subsequent arrivals, then compare forecasts with observations using only pre-cutoff evidence, then vary modeling assumptions in controlled comparisons. Every competing configuration retains the observed backlog. The [handoff validation plan](OPENDT_HANDOFF.md#next-milestone-validate-the-twin-against-observations) defines the sequence, matched-cohort requirements, evidence and interpretation limits. This is deferred implementation work; the accepted report and current synthetic experiments do not yet establish predictive accuracy.
 
 Correct initialization must preserve observed placement and occupy resources before queued or future work is scheduled. For scale-down, prefer an empty worker; otherwise select the worker whose most recent Job assignment is oldest as a simple earliest-completion heuristic.
 

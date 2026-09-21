@@ -13,7 +13,7 @@ import sys
 import tarfile
 import time
 
-from opendc_inputs import CONTRACT, file_hashes, verify_inputs, write_json
+from opendc_inputs import EXECUTION_CONTRACTS, file_hashes, verify_inputs, write_json
 from opendc_run import utc_now
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "manifests" / "opendc-job.yaml"
@@ -64,16 +64,19 @@ def _remote_directory(value):
     return str(path)
 
 
-def job_manifest(namespace, name, image, node, remote_dir, timeout_seconds=120):
+def job_manifest(
+    namespace, name, image, node, remote_dir, timeout_seconds=120, *, control_plane=False
+):
     """Render a bounded Job without creating Kubernetes resources.
 
     Args:
         namespace (str): Namespace for the Job.
         name (str): Job name within that namespace.
         image (str): Preloaded image with a unique tag or digest.
-        node (str): Hostname label used by the scheduler to select the worker.
+        node (str): Hostname label used by the scheduler to select the artifact host.
         remote_dir (str): Existing staging root containing inputs and results.
         timeout_seconds (float): Process timeout inside the 180-second Job limit.
+        control_plane (bool): Add only the control-plane NoSchedule toleration.
 
     Returns:
         dict: Job manifest with resource limits and node-local volume paths.
@@ -90,6 +93,14 @@ def job_manifest(namespace, name, image, node, remote_dir, timeout_seconds=120):
     job["metadata"].update({"name": _name(name), "namespace": _name(namespace)})
     spec = job["spec"]["template"]["spec"]
     spec["nodeSelector"]["kubernetes.io/hostname"] = _name(node)
+    if control_plane:
+        spec["tolerations"] = [
+            {
+                "key": "node-role.kubernetes.io/control-plane",
+                "operator": "Exists",
+                "effect": "NoSchedule",
+            }
+        ]
     spec["containers"][0]["image"] = image
     spec["containers"][0]["args"][-1] = str(timeout_seconds)
     spec["volumes"][0]["hostPath"]["path"] = remote_dir + "/inputs"
@@ -195,7 +206,7 @@ def classify_execution(pod, manifest):
         process = manifest.get("process") or {}
         validation = manifest.get("validation") or {}
         if (
-            manifest.get("contract") != CONTRACT
+            manifest.get("contract") not in EXECUTION_CONTRACTS
             or exit_code != 0
             or not isinstance(validation, dict)
             or validation.get("status") != "passed"
@@ -282,7 +293,7 @@ def verify_execution_artifacts(directory, manifest):
         raise ValueError("expected an execution manifest object")
     if not manifest or manifest.get("status") == "started":
         return
-    if manifest.get("contract") != CONTRACT or manifest.get("status") not in (
+    if manifest.get("contract") not in EXECUTION_CONTRACTS or manifest.get("status") not in (
         "succeeded",
         "failed",
         "timed_out",
@@ -437,10 +448,15 @@ def main(argv=None):
         command.add_argument("--job", required=True)
         command.add_argument("--remote-dir", required=True)
     render.add_argument("--image", required=True)
-    render.add_argument("--node", default="cloud0matthijs")
+    render.add_argument("--node", default="cloudcontrollermatthijs")
+    render.add_argument(
+        "--control-plane",
+        action="store_true",
+        help="tolerate only the control-plane NoSchedule taint",
+    )
     render.add_argument("--timeout-seconds", type=float, default=120)
     retrieve.add_argument("--controller", required=True)
-    retrieve.add_argument("--worker", required=True)
+    retrieve.add_argument("--runner-host", "--worker", dest="worker", required=True)
     retrieve.add_argument("--ssh-key", type=Path, required=True)
     retrieve.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -455,6 +471,9 @@ def main(argv=None):
                         args.node,
                         args.remote_dir,
                         args.timeout_seconds,
+                        control_plane=(
+                            args.control_plane or args.node == "cloudcontrollermatthijs"
+                        ),
                     ),
                     indent=2,
                 )

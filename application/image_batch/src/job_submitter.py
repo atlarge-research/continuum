@@ -38,7 +38,20 @@ def build_job_manifest(
     worker_image: str,
     ttl_seconds: int,
 ) -> dict[str, Any]:
-    """Build the native Job observed later by Edward's OpenDT adapter."""
+    """Build a worker-only classifier Job with one CPU and bounded memory.
+
+    Args:
+        request (JobRequest): Accepted batch and application lineage.
+        namespace (str): Namespace receiving the Job.
+        worker_image (str): Calibrated classifier image reference.
+        ttl_seconds (int): Retention after completion in seconds.
+
+    Returns:
+        dict: Native Job excluding both control-plane role labels.
+
+    Raises:
+        ValueError: Inference repetitions are not positive.
+    """
     if request.inference_repetitions < 1:
         raise ValueError("inference repetitions must be positive")
     labels = {
@@ -96,6 +109,23 @@ def build_job_manifest(
                 "metadata": {"labels": labels},
                 "spec": {
                     "restartPolicy": "Never",
+                    "affinity": {
+                        "nodeAffinity": {
+                            "requiredDuringSchedulingIgnoredDuringExecution": {
+                                "nodeSelectorTerms": [
+                                    {
+                                        "matchExpressions": [
+                                            {"key": role, "operator": "DoesNotExist"}
+                                            for role in (
+                                                "node-role.kubernetes.io/control-plane",
+                                                "node-role.kubernetes.io/master",
+                                            )
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    },
                     "containers": [
                         {
                             "name": "classifier",

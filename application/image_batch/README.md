@@ -159,11 +159,11 @@ Add `--simulation-inputs` to either forecast command to combine queued and remai
 
 Bundles are written under `simulation/`. Check `simulation/manifest.json` for readiness before using them. One-shot mode exits with 0 when ready, 2 when not ready, and 1 for invalid input. This prepares inputs; it does not run OpenDC or change the cluster.
 
-See [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md) for the future live-state runner contract and next steps.
+See [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md) for the provisional runner workflow and remaining live-state limitations.
 
 ## Direct controlled OpenDC execution
 
-The direct runner builds upstream OpenDC from master commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad` without OpenDT. The build uses that exact source revision, not a moving branch. It runs synthetic empty-state fixtures; it does not execute live simulation bundles or close the control loop. Source, toolchain and runtime pins are defined in the [Dockerfile](docker/opendc.Dockerfile) and [Python requirements](requirements-opendc.txt); each execution records its OpenDC commit and runtime versions. The first build compiles OpenDC and downloads Gradle dependencies without a project-maintained dependency checksum catalogue; execution requires no downloads.
+The direct runner builds upstream OpenDC from master commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad` without OpenDT. The build uses that exact source revision, not a moving branch. The controlled mode runs synthetic empty-state fixtures; the separate provisional workflow below adapts ready schema-2 bundles with explicit initialization limitations. Neither mode closes the control loop. Source, toolchain and runtime pins are defined in the [Dockerfile](docker/opendc.Dockerfile) and [Python requirements](requirements-opendc.txt); each execution records its OpenDC commit and runtime versions. The first build compiles OpenDC and downloads Gradle dependencies without a project-maintained dependency checksum catalogue; execution requires no downloads.
 
 Build and run from the repository root, choosing a new evidence directory:
 
@@ -197,3 +197,18 @@ The opt-in integration test repeats local runs, imports the exact image into the
 ```
 
 Use lowercase DNS labels for the namespace. The operator environment needs Python 3.10+ and `requirements-opendc.txt`'s PyArrow version; its wheel hashes target the Python 3.11 container. Docker, SSH, controller-side `kubectl`, and worker-side passwordless sudo are required. The test preserves existing workloads and VMs, verifies artifact copies, then removes only its Jobs, namespace, and run directories; the image remains cached on the worker. On failure it preserves remote evidence for inspection. Use `opendc_kubernetes.py collect --help` to resume collection into a new directory, and `manifest --help` to render an individual Job. Delete its remote directory only after `collection.json` reports `collected` and `artifacts_verified: true`; the execution itself may have failed.
+
+## Manual provisional scenario workflow
+
+Use [opendc_scenarios.py](src/opendc_scenarios.py) to prepare forecast scenarios, then [opendc_batch.py](src/opendc_batch.py) to run them locally or on the Continuum control plane. Each command provides `--help`. Use Python 3.10+ with [requirements-analysis.txt](requirements-analysis.txt) and new output directories.
+
+Generate the PDF and numerical results from a completed batch:
+
+```bash
+python application/image_batch/src/opendc_evaluate.py \
+  --batch-dir ./logs/scenarios-one-cluster --output-dir ./logs/scenarios-one-report
+```
+
+To redraw an existing report, replace `--batch-dir` with `--metrics-file ./logs/scenarios-one-report/metrics.json`.
+
+See [DESIGN](DESIGN.md#provisional-scenario-workflow) for modeling assumptions and limitations, and [OPENDT_HANDOFF](OPENDT_HANDOFF.md) for current results and next steps. This remains a manual demo with partial scale-down accounting.

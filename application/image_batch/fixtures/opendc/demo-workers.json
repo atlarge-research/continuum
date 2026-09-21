@@ -1,0 +1,7 @@
+{
+  "workers": [
+    {"node_name": "cloud0matthijs", "configured_cores": 4, "memory_mib": 16384, "idle_power_w": 100, "max_power_w": 200},
+    {"node_name": "cloud1matthijs", "configured_cores": 4, "memory_mib": 16384, "idle_power_w": 100, "max_power_w": 200},
+    {"node_name": "cloud2matthijs", "configured_cores": 4, "memory_mib": 16384, "idle_power_w": 100, "max_power_w": 200}
+  ]
+}

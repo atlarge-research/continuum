@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 import platform
 import time
@@ -16,6 +17,8 @@ VERSION = "master-7db7e1a2331fd"
 COMMIT = "7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad"
 SOURCE_ARCHIVE_SHA256 = "df798dae10c0ee3b1911fb01b0dbd25f06f5adb6e8495826dc8ad8b108f4f52d"
 CONTRACT = "opendc-controlled-v2"
+PROVISIONAL_CONTRACT = "opendc-provisional-v1"
+EXECUTION_CONTRACTS = (CONTRACT, PROVISIONAL_CONTRACT)
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "opendc"
 
 
@@ -266,10 +269,10 @@ def prepare(fixture_name, output_dir):
 
 
 def verify_inputs(directory):
-    """Return the manifest after checking a ready, unmodified controlled input.
+    """Return the manifest after checking a ready, unmodified prepared experiment.
 
-    Require the pinned source version, exact fixture and matching artifact
-    hashes. Live simulation bundles are deliberately unsupported.
+    Require pinned source identity and matching artifact hashes. Raw schema-2
+    bundles remain unsupported; explicit provisional preparation is required.
 
     Args:
         directory (str or Path): Prepared experiment containing manifest.json and input files.
@@ -283,6 +286,8 @@ def verify_inputs(directory):
     """
     directory = Path(directory)
     manifest = json.loads((directory / "manifest.json").read_text())
+    if manifest.get("contract") == PROVISIONAL_CONTRACT:
+        return _verify_provisional(directory, manifest)
     if (
         manifest.get("contract") != CONTRACT
         or manifest.get("status") != "ready"
@@ -302,3 +307,197 @@ def verify_inputs(directory):
     if fixture != expected:
         raise ValueError("controlled fixture was modified")
     return manifest
+
+
+def _verify_provisional(directory, manifest):
+    """Check an explicitly prepared replay and its resource/profile contract.
+
+    Args:
+        directory (Path): Prepared input directory.
+        manifest (dict): Parsed manifest with hashes and pinned source identity.
+
+    Returns:
+        dict: Verified manifest, unchanged.
+
+    Raises:
+        ValueError: Initialization, topology, profile, lineage or hashes disagree.
+    """
+    if (
+        manifest.get("status") != "ready"
+        or manifest.get("initial_state") != "provisional-trace"
+        or manifest.get("opendc_commit") != COMMIT
+        or manifest.get("opendc_source_archive_sha256") != SOURCE_ARCHIVE_SHA256
+    ):
+        raise ValueError("expected ready provisional-trace inputs for the pinned runner")
+    if file_hashes(directory, exclude=("manifest.json",)) != manifest.get("sha256"):
+        raise ValueError("provisional input hash mismatch")
+    case = json.loads((directory / "case.json").read_text())
+    if case.get("initialization_mode") != "provisional-trace":
+        raise ValueError("fixed placement is unsupported; no implicit replay fallback")
+    partial = case.get("candidate") == "scale-down"
+    if case.get("scope") != ("remaining_workers_only" if partial else "complete"):
+        raise ValueError("candidate scope does not describe partial scale-down")
+    workers = case["workers"]
+    names = [worker["node_name"] for worker in workers]
+    if not 1 <= len(names) <= 3 or len(set(names)) != len(names):
+        raise ValueError("expected one to three uniquely identified workers")
+    hosts = json.loads((directory / "topology.json").read_text())["clusters"][0]["hosts"]
+    if {host["name"] for host in hosts} != set(names) or len(hosts) != len(names):
+        raise ValueError("topology worker identities differ from case")
+    for worker in workers:
+        configured = worker["configured_cores"]
+        if (
+            type(configured) is not int
+            or configured <= 1
+            or worker["modeled_cores"] != configured - 1
+        ):
+            raise ValueError("worker capacity must apply C - 1 exactly once")
+        for key in ("memory_mib", "frequency_mhz", "idle_power_w", "max_power_w"):
+            if not math.isfinite(worker[key]) or worker[key] <= 0:
+                raise ValueError("invalid worker resources/power")
+        if worker["max_power_w"] < worker["idle_power_w"]:
+            raise ValueError("maximum power is below idle power")
+        host = next(host for host in hosts if host["name"] == worker["node_name"])
+        if (
+            host["cpu"]["coreCount"] != worker["modeled_cores"]
+            or float(host["cpu"]["coreSpeed"].removesuffix(" MHz")) != worker["frequency_mhz"]
+            or float(host["memory"]["size"].removesuffix(" MiB")) != worker["memory_mib"]
+            or float(host["cpuPowerModel"]["idlePower"].removesuffix(" W"))
+            != worker["idle_power_w"]
+            or float(host["cpuPowerModel"]["maxPower"].removesuffix(" W")) != worker["max_power_w"]
+        ):
+            raise ValueError("topology resource or power model differs from case")
+    _verify_case_lineage(case)
+    records = case["tasks"]
+    tasks = [record["task"] for record in records]
+    ids = {task["id"] for task in tasks}
+    omitted = {record["task"]["id"] for record in case["omitted_tasks"]}
+    exhausted = {record["task_id"] for record in case["model_exhausted_jobs"]}
+    if len(ids) != len(tasks) or ids & (omitted | exhausted) or (omitted and not partial):
+        raise ValueError("task identities overlap included, omitted or exhausted work")
+    source = pq.read_table(directory / "source/tasks.parquet").to_pylist()
+    fragments = pq.read_table(directory / "source/fragments.parquet").to_pylist()
+    if source != [
+        {key: value for key, value in task.items() if key != "fragments"} for task in tasks
+    ]:
+        raise ValueError("source task profiles differ from case")
+    if fragments != [fragment for task in tasks for fragment in task["fragments"]]:
+        raise ValueError("source fragments differ from case")
+    for record in records:
+        task = record["task"]
+        if (
+            task["cpu_count"] != 1
+            or task["duration"] <= 0
+            or task["submission_time"] < 0
+            or task["duration"] != sum(fragment["duration"] for fragment in task["fragments"])
+            or task["mem_capacity"] <= 0
+        ):
+            raise ValueError("invalid executable application profile")
+        if not any(task["mem_capacity"] <= worker["memory_mib"] for worker in workers):
+            raise ValueError("task cannot fit any modeled worker")
+        for fragment in task["fragments"]:
+            if (
+                fragment["id"] != task["id"]
+                or fragment["duration"] <= 0
+                or fragment["cpu_count"] != 1
+                or not math.isfinite(fragment["cpu_usage"])
+                or not 0 <= fragment["cpu_usage"] <= task["cpu_capacity"]
+            ):
+                raise ValueError("invalid application fragment")
+    adapted = pq.read_table(directory / "trace/tasks.parquet")
+    original = pq.read_table(directory / "source/tasks.parquet")
+    for name in original.schema.names:
+        values = adapted[name]
+        if name == "submission_time":
+            values = values.cast(pa.int64())
+        values = values.to_pylist()
+        expected = original[name].to_pylist()
+        if name == "mem_capacity":
+            expected = [value * 1000 for value in expected]
+        if values != expected:
+            raise ValueError("adapted trace differs from source")
+    if (directory / "trace/fragments.parquet").read_bytes() != (
+        directory / "source/fragments.parquet"
+    ).read_bytes():
+        raise ValueError("adapted fragments differ from source")
+    return manifest
+
+
+def _verify_case_lineage(case):
+    """Require cohort, original-arrival and assignment evidence for every identity.
+
+    Args:
+        case (dict): Prepared provisional case including omitted and exhausted work.
+
+    Raises:
+        ValueError: Metadata is missing, contradicts its cohort, or loses omitted work scope.
+    """
+    cutoff, horizon = case["cutoff_ms"], case["horizon_ms"]
+    if type(cutoff) is not int or type(horizon) is not int or horizon <= 0:
+        raise ValueError("case needs an integral cutoff and positive arrival horizon")
+    if case["candidate"] not in ("unchanged", "scale-up", "scale-down"):
+        raise ValueError("unknown candidate")
+    if type(case["scenario"]) is not int or case["scenario"] < 0:
+        raise ValueError("invalid scenario index")
+    names = {worker["node_name"] for worker in case["workers"]}
+    selected = case.get("selected_worker")
+    partial = case["candidate"] == "scale-down"
+    if partial and (not isinstance(selected, str) or not selected or selected in names):
+        raise ValueError("scale-down must identify its excluded worker")
+    seen = set()
+    for group in ("tasks", "omitted_tasks", "model_exhausted_jobs"):
+        for item in case[group]:
+            task = item.get("task")
+            task_id = task["id"] if task else item["task_id"]
+            metadata = item.get("metadata", {})
+            original = metadata.get("original_creation_ms")
+            identity = metadata.get("identity", {})
+            if task_id in seen or identity.get("task_id") != task_id or type(original) is not int:
+                raise ValueError("missing or conflicting original-arrival/identity metadata")
+            seen.add(task_id)
+            cohort = metadata.get("cohort")
+            if cohort == "future":
+                if (
+                    group != "tasks"
+                    or metadata.get("phase") != "future"
+                    or "preserved_assignment" not in metadata
+                    or metadata["preserved_assignment"] is not None
+                    or not identity.get("template_job_uid")
+                    or original != cutoff + task["submission_time"]
+                    or not 0 <= task["submission_time"] < horizon
+                ):
+                    raise ValueError("future lineage or arrival window is inconsistent")
+            elif cohort == "backlog":
+                phase = metadata.get("phase")
+                node = metadata.get("node_name")
+                if (
+                    phase not in ("queued", "startup", "running")
+                    or original > cutoff
+                    or not metadata.get("kubernetes_job_uid")
+                    or identity.get("kubernetes_job_uid") != metadata["kubernetes_job_uid"]
+                    or "preserved_assignment" not in metadata
+                    or metadata["preserved_assignment"] != node
+                    or (phase == "queued" and node is not None)
+                    or (phase in ("startup", "running") and not node)
+                    or (task is not None and task["submission_time"] != 0)
+                ):
+                    raise ValueError(
+                        "backlog phase, arrival or assignment metadata is inconsistent"
+                    )
+                if node is not None:
+                    first = metadata.get("first_assignment_observed_ms")
+                    if type(first) is not int or not original <= first <= cutoff:
+                        raise ValueError("missing or invalid observed assignment time")
+                if group == "omitted_tasks" and (not partial or node != selected):
+                    raise ValueError("omitted task does not belong to the excluded worker")
+                if group == "tasks" and node is not None and node not in names:
+                    raise ValueError("included task belongs to an omitted or unknown worker")
+                if group == "model_exhausted_jobs" and (
+                    phase != "running"
+                    or item.get("remaining_execution_ms") != 0
+                    or item.get("observed_completed") is not False
+                    or node not in names | ({selected} if partial else set())
+                ):
+                    raise ValueError("invalid exhausted-work evidence")
+            else:
+                raise ValueError("missing task cohort")

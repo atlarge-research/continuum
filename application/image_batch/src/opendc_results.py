@@ -192,7 +192,7 @@ def validate_results(directory, fixture):
     }
     try:
         completed = _check_tasks(tables["task"], fixture)
-        service = max(tables["service"], key=lambda row: row["timestamp"])
+        service = max(reversed(tables["service"]), key=lambda row: row["timestamp"])
         expected = fixture["expected"]
         _require(
             service["tasks_completed"] == expected["task_count"],
@@ -243,3 +243,161 @@ def validate_results(directory, fixture):
             "or calibrated prediction"
         ),
     }
+
+
+def validate_provisional_results(directory, case):
+    """Validate replay completion and admission without claiming placement fidelity.
+
+    Native lifecycle records, rather than process exit or telemetry snapshots,
+    establish completed identities and CPU/memory admission. Observed assignment
+    is deliberately not enforced by this initialization approximation. OpenDC starts
+    its clock at the earliest submission; returned lifecycle times restore the
+    cutoff-relative origin, while native submission times already use that origin.
+
+    Args:
+        directory (str or Path): Simulator output root.
+        case (dict): Prepared case with included tasks, workers and explicit scope.
+
+    Returns:
+        dict: Validated completion records, scope, counts and semantic digest.
+
+    Raises:
+        ValueError: Output is incomplete, nonfinite, inconsistent or overcommitted.
+    """
+    raw = Path(directory) / "controlled/raw-output/0/seed=0"
+    tables = {}
+    try:
+        for name in ("task", "host", "service", "powerSource"):
+            table = pq.ParquetFile(raw / f"{name}.parquet").read()
+            tables[name] = table.to_pylist()
+        expected = {item["task"]["id"]: item["task"] for item in case["tasks"]}
+        hosts = {worker["node_name"]: worker for worker in case["workers"]}
+        _require(
+            {row["task_id"] for row in tables["task"]} == set(expected),
+            "simulator task identities differ from included tasks",
+        )
+        origin = min(task["submission_time"] for task in expected.values())
+        completed = []
+        for task_id, task in expected.items():
+            terminal = [
+                row
+                for row in tables["task"]
+                if row["task_id"] == task_id and row["task_state"] == "COMPLETED"
+            ]
+            _require(len(terminal) == 1, f"task {task_id} needs exactly one completion")
+            row = dict(terminal[0])
+            if "timestamp_absolute" in row:
+                _require(
+                    row["timestamp_absolute"] - row["timestamp"] == origin,
+                    "native time origin differs from earliest submission",
+                )
+            row["schedule_time"] += origin
+            row["finish_time"] += origin
+            _require(row["host_name"] in hosts, "completion references unknown host")
+            _require(row["submission_time"] == task["submission_time"], "submission time differs")
+            _require(
+                all(
+                    math.isfinite(row[key])
+                    for key in ("schedule_time", "finish_time", "submission_time")
+                ),
+                "nonfinite task timing",
+            )
+            _require(
+                row["finish_time"] >= row["schedule_time"] >= row["submission_time"],
+                "invalid task lifecycle ordering",
+            )
+            _require(
+                row["cpu_count"] == task["cpu_count"]
+                and row["mem_capacity"] == task["mem_capacity"],
+                "task requests differ",
+            )
+            _near(
+                row["finish_time"] - row["schedule_time"],
+                task["duration"],
+                2,
+                "remaining execution duration",
+            )
+            completed.append(
+                {
+                    key: row[key]
+                    for key in (
+                        "task_id",
+                        "submission_time",
+                        "schedule_time",
+                        "finish_time",
+                        "host_name",
+                        "mem_capacity",
+                        "cpu_count",
+                    )
+                }
+            )
+        for name, host in hosts.items():
+            events = []
+            for row in completed:
+                if row["host_name"] == name:
+                    events.extend(
+                        [
+                            (row["schedule_time"], 1, row["cpu_count"], row["mem_capacity"]),
+                            (row["finish_time"], -1, -row["cpu_count"], -row["mem_capacity"]),
+                        ]
+                    )
+            cpu = memory = 0
+            for _, _, cpu_delta, memory_delta in sorted(events):
+                cpu += cpu_delta
+                memory += memory_delta
+                _require(
+                    0 <= cpu <= host["modeled_cores"] and 0 <= memory <= host["memory_mib"],
+                    "worker CPU/memory admission exceeded",
+                )
+        _require(
+            bool(tables["service"]) and bool(tables["host"]) and bool(tables["powerSource"]),
+            "missing native resource records",
+        )
+        service = max(reversed(tables["service"]), key=lambda row: row["timestamp"])
+        _require(
+            service["tasks_total"] == service["tasks_completed"] == len(expected)
+            and service["tasks_pending"]
+            == service["tasks_active"]
+            == service["tasks_terminated"]
+            == 0,
+            "service totals disagree with completed work",
+        )
+        _require(
+            {row["host_name"] for row in tables["host"]} == set(hosts), "host identity mismatch"
+        )
+        for row in tables["host"]:
+            host = hosts[row["host_name"]]
+            _require(
+                row["core_count"] == host["modeled_cores"]
+                and row["mem_capacity"] == host["memory_mib"],
+                "host resources differ",
+            )
+            _require(
+                math.isfinite(row["energy_usage"]) and row["energy_usage"] >= 0,
+                "invalid worker energy",
+            )
+        end = max(row["finish_time"] for row in completed)
+        for name in hosts:
+            samples = [row for row in tables["host"] if row["host_name"] == name]
+            _require(
+                all(math.isfinite(row["timestamp"]) and row["timestamp"] >= 0 for row in samples)
+                and max(row["timestamp"] for row in samples) + origin >= end,
+                "native host energy coverage ends before included completion",
+            )
+        semantic = {
+            name: sorted((_json_values(row) for row in rows), key=canonical)
+            for name, rows in tables.items()
+        }
+        return {
+            "status": "passed",
+            "native_time_origin_ms": origin,
+            "task_count": len(completed),
+            "tasks": completed,
+            "scope": case["scope"],
+            "initialization_mode": "provisional-trace",
+            "table_rows": {name: len(rows) for name, rows in tables.items()},
+            "semantic_sha256": hashlib.sha256(canonical(semantic)).hexdigest(),
+            "interpretation": "provisional trace replay; placement/startup occupancy not restored",
+        }
+    except (KeyError, TypeError, OSError) as exc:
+        raise ValueError(f"incomplete provisional simulator output: {exc}") from exc

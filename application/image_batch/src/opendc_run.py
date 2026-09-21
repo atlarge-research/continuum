@@ -18,6 +18,7 @@ import pyarrow as pa
 from opendc_inputs import (
     COMMIT,
     CONTRACT,
+    PROVISIONAL_CONTRACT,
     SOURCE_ARCHIVE_SHA256,
     VERSION,
     file_hashes,
@@ -26,7 +27,7 @@ from opendc_inputs import (
     write_json,
 )
 from opendc_process import run_process
-from opendc_results import validate_results
+from opendc_results import validate_results, validate_provisional_results
 
 
 def utc_now():
@@ -86,6 +87,7 @@ def _run_prepared(inputs, output, timeout_seconds, runner, manifest):
             or 128 plus the received signal. Input errors propagate to execute.
     """
     input_manifest = verify_inputs(inputs)
+    manifest["contract"] = input_manifest["contract"]
     shutil.copytree(inputs, output / "inputs")
     verify_inputs(output / "inputs")
     manifest["input_manifest"] = input_manifest
@@ -94,6 +96,36 @@ def _run_prepared(inputs, output, timeout_seconds, runner, manifest):
     config["workloads"][0]["source"] = {"type": "uri", "uri": (output / "inputs/trace").as_uri()}
     write_json(output / "experiment.json", config)
     write_json(output / "execution.json", manifest)
+    if input_manifest["contract"] == PROVISIONAL_CONTRACT:
+        case = json.loads((output / "inputs/case.json").read_text())
+        if not case["tasks"]:
+            # The pinned SDK requires a first arrival. An empty cohort has no
+            # native execution; the evaluator accounts for included-worker idle.
+            process = {
+                "execution_kind": "analytical_empty",
+                "launched": False,
+                "exit_code": 0,
+                "timed_out": False,
+                "received_signal": None,
+                "launch_error": None,
+                "wall_seconds": 0,
+                "cpu_total_seconds": 0,
+                "peak_rss_bytes": 0,
+            }
+            manifest["process"] = process
+            manifest["validation"] = {
+                "status": "passed",
+                "kind": "analytical_empty",
+                "tasks": [],
+                "task_count": 0,
+                "scope": case["scope"],
+                "native_time_origin_ms": 0,
+                "initialization_mode": "provisional-trace",
+                "interpretation": "empty included cohort; no native process or completions",
+            }
+            manifest["status"] = "succeeded"
+            write_json(output / "resources.json", process)
+            return 0
     command = [
         runner,
         "--strict",
@@ -120,8 +152,12 @@ def _run_prepared(inputs, output, timeout_seconds, runner, manifest):
         manifest["error"] = process["launch_error"] or f'OpenDC exited with {process["exit_code"]}'
         return 1
     try:
-        fixture = json.loads((output / "inputs/fixture.json").read_text())
-        manifest["validation"] = validate_results(output / "simulator", fixture)
+        if input_manifest["contract"] == PROVISIONAL_CONTRACT:
+            case = json.loads((output / "inputs/case.json").read_text())
+            manifest["validation"] = validate_provisional_results(output / "simulator", case)
+        else:
+            fixture = json.loads((output / "inputs/fixture.json").read_text())
+            manifest["validation"] = validate_results(output / "simulator", fixture)
     except ValueError as exc:
         manifest["validation"] = {"status": "failed", "error": str(exc)}
         manifest["status"] = "failed"
@@ -138,7 +174,8 @@ def execute(input_dir, output_dir, timeout_seconds=120, runner="/opt/opendc/bin/
     can leave the started record and partial files for Kubernetes collection.
 
     Args:
-        input_dir (str or Path): Prepared controlled experiment to verify and copy.
+        input_dir (str or Path): Prepared controlled or explicitly provisional experiment
+            to verify and copy.
         output_dir (str or Path): New directory, separate from the input tree.
         timeout_seconds (float): Finite positive process deadline in seconds.
         runner (str): OpenDC executable path, overridable by process tests.
@@ -203,7 +240,7 @@ def main(argv=None):
     preparation = commands.add_parser("prepare", help="create an empty-state synthetic experiment")
     preparation.add_argument("--fixture", choices=("controlled", "memory"), default="controlled")
     preparation.add_argument("--output-dir", type=Path, required=True)
-    run = commands.add_parser("run", help="execute exactly one prepared controlled experiment")
+    run = commands.add_parser("run", help="execute exactly one prepared experiment")
     run.add_argument("--input-dir", type=Path, required=True)
     run.add_argument("--output-dir", type=Path, required=True)
     run.add_argument("--timeout-seconds", type=float, default=120)
