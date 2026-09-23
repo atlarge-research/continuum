@@ -12,6 +12,13 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from forecast_trace import canonical, parquet_tasks
+from opendc_runtime import (
+    adapt_topology,
+    fns_runtime,
+    runtime_identity,
+    topology_hosts,
+    verify_runtime,
+)
 
 VERSION = "master-7db7e1a2331fd"
 COMMIT = "7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad"
@@ -111,30 +118,32 @@ def topology_for(fixture):
     Returns:
         dict: OpenDC SDK topology with synthetic hosts and a grid power source.
     """
-    return {
-        "clusters": [
-            {
-                "name": "synthetic",
-                "hosts": [
-                    {
-                        "name": f"test-host-{index}",
-                        "cpu": {
-                            "coreCount": fixture["cores_per_host"],
-                            "coreSpeed": f'{fixture["frequency_mhz"]} MHz',
-                        },
-                        "memory": {"size": f'{fixture["memory_mib_per_host"]} MiB'},
-                        "cpuPowerModel": {
-                            "type": "linear",
-                            "idlePower": "100 W",
-                            "maxPower": "200 W",
-                        },
-                    }
-                    for index in range(fixture["host_count"])
-                ],
-                "powerSource": {"name": "grid", "maxPower": "10000 W"},
-            }
-        ]
-    }
+    return adapt_topology(
+        {
+            "clusters": [
+                {
+                    "name": "synthetic",
+                    "hosts": [
+                        {
+                            "name": f"test-host-{index}",
+                            "cpu": {
+                                "coreCount": fixture["cores_per_host"],
+                                "coreSpeed": f'{fixture["frequency_mhz"]} MHz',
+                            },
+                            "memory": {"size": f'{fixture["memory_mib_per_host"]} MiB'},
+                            "cpuPowerModel": {
+                                "type": "linear",
+                                "idlePower": "100 W",
+                                "maxPower": "200 W",
+                            },
+                        }
+                        for index in range(fixture["host_count"])
+                    ],
+                    "powerSource": {"name": "grid", "maxPower": "10000 W"},
+                }
+            ]
+        }
+    )
 
 
 def experiment_config():
@@ -215,6 +224,11 @@ def adapt_trace(source, destination):
         pa.field("submission_time", timestamp, nullable=False),
         tasks["submission_time"].cast(timestamp),
     )
+    if fns_runtime() and "host" not in tasks.schema.names:
+        tasks = tasks.append_column(
+            pa.field("host", pa.string(), nullable=True),
+            pa.array([None] * tasks.num_rows, type=pa.string()),
+        )
     pq.write_table(tasks, destination / "tasks.parquet", compression="NONE", use_dictionary=False)
     (destination / "fragments.parquet").write_bytes((source / "fragments.parquet").read_bytes())
 
@@ -236,6 +250,7 @@ def prepare(fixture_name, output_dir):
         FileExistsError: The output directory already exists.
     """
     started = time.monotonic()
+    identity = runtime_identity()
     if fixture_name not in ("controlled", "memory"):
         raise ValueError("only controlled or memory fixtures are supported")
     fixture = json.loads((FIXTURE_ROOT / f"{fixture_name}.json").read_text())
@@ -251,9 +266,7 @@ def prepare(fixture_name, output_dir):
         "status": "ready",
         "fixture": fixture_name,
         "initial_state": "empty_synthetic",
-        "opendc_version": VERSION,
-        "opendc_commit": COMMIT,
-        "opendc_source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        **identity,
         "transformations": {
             "submission_time": "int64 milliseconds -> timestamp[ms, UTC], no time shift",
             "mem_capacity": "exported MiB * 1000; pinned SDK ComputeWorkloadLoader divides by 1000",
@@ -295,11 +308,7 @@ def verify_inputs(directory):
         or manifest.get("initial_state") != "empty_synthetic"
     ):
         raise ValueError("expected a ready controlled experiment, not a live simulation bundle")
-    if (
-        manifest.get("opendc_commit") != COMMIT
-        or manifest.get("opendc_source_archive_sha256") != SOURCE_ARCHIVE_SHA256
-    ):
-        raise ValueError("controlled input version differs from the pinned runner")
+    verify_runtime(manifest)
     if file_hashes(directory, exclude=("manifest.json",)) != manifest.get("sha256"):
         raise ValueError("controlled input hash mismatch")
     fixture = json.loads((directory / "fixture.json").read_text())
@@ -322,13 +331,9 @@ def _verify_provisional(directory, manifest):
     Raises:
         ValueError: Initialization, topology, profile, lineage or hashes disagree.
     """
-    if (
-        manifest.get("status") != "ready"
-        or manifest.get("initial_state") != "provisional-trace"
-        or manifest.get("opendc_commit") != COMMIT
-        or manifest.get("opendc_source_archive_sha256") != SOURCE_ARCHIVE_SHA256
-    ):
+    if manifest.get("status") != "ready" or manifest.get("initial_state") != "provisional-trace":
         raise ValueError("expected ready provisional-trace inputs for the pinned runner")
+    verify_runtime(manifest)
     if file_hashes(directory, exclude=("manifest.json",)) != manifest.get("sha256"):
         raise ValueError("provisional input hash mismatch")
     case = json.loads((directory / "case.json").read_text())
@@ -341,7 +346,7 @@ def _verify_provisional(directory, manifest):
     names = [worker["node_name"] for worker in workers]
     if not 1 <= len(names) <= 3 or len(set(names)) != len(names):
         raise ValueError("expected one to three uniquely identified workers")
-    hosts = json.loads((directory / "topology.json").read_text())["clusters"][0]["hosts"]
+    hosts = topology_hosts(json.loads((directory / "topology.json").read_text()))
     if {host["name"] for host in hosts} != set(names) or len(hosts) != len(names):
         raise ValueError("topology worker identities differ from case")
     for worker in workers:

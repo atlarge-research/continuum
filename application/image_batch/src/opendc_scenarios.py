@@ -22,16 +22,14 @@ from forecast_trace import (
     read_trace,
 )
 from opendc_inputs import (
-    COMMIT,
     PROVISIONAL_CONTRACT,
-    SOURCE_ARCHIVE_SHA256,
-    VERSION,
     adapt_trace,
     experiment_config,
     file_hashes,
     write_json,
 )
 from simulation_input import build_simulation_inputs
+from opendc_runtime import adapt_topology, runtime_identity
 
 
 SUITE_CONTRACT = "opendc-scenarios-v1"
@@ -480,30 +478,32 @@ def _topology(workers):
     Returns:
         dict: OpenDC SDK topology.
     """
-    return {
-        "clusters": [
-            {
-                "name": "provisional",
-                "hosts": [
-                    {
-                        "name": worker["node_name"],
-                        "cpu": {
-                            "coreCount": worker["modeled_cores"],
-                            "coreSpeed": f'{worker["frequency_mhz"]} MHz',
-                        },
-                        "memory": {"size": f'{worker["memory_mib"]} MiB'},
-                        "cpuPowerModel": {
-                            "type": "linear",
-                            "idlePower": f'{worker["idle_power_w"]} W',
-                            "maxPower": f'{worker["max_power_w"]} W',
-                        },
-                    }
-                    for worker in workers
-                ],
-                "powerSource": {"name": "grid", "maxPower": "10000 W"},
-            }
-        ]
-    }
+    return adapt_topology(
+        {
+            "clusters": [
+                {
+                    "name": "provisional",
+                    "hosts": [
+                        {
+                            "name": worker["node_name"],
+                            "cpu": {
+                                "coreCount": worker["modeled_cores"],
+                                "coreSpeed": f'{worker["frequency_mhz"]} MHz',
+                            },
+                            "memory": {"size": f'{worker["memory_mib"]} MiB'},
+                            "cpuPowerModel": {
+                                "type": "linear",
+                                "idlePower": f'{worker["idle_power_w"]} W',
+                                "maxPower": f'{worker["max_power_w"]} W',
+                            },
+                        }
+                        for worker in workers
+                    ],
+                    "powerSource": {"name": "grid", "maxPower": "10000 W"},
+                }
+            ]
+        }
+    )
 
 
 def _case_tasks(candidate, selected_worker, source_tasks, backlog_metadata, future_lineage):
@@ -595,9 +595,7 @@ def _write_case(
         "contract": PROVISIONAL_CONTRACT,
         "status": "ready",
         "initial_state": initialization_mode,
-        "opendc_version": VERSION,
-        "opendc_commit": COMMIT,
-        "opendc_source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        **runtime_identity(),
         "sha256": file_hashes(directory, exclude=("manifest.json",)),
     }
     write_json(directory / "manifest.json", manifest)

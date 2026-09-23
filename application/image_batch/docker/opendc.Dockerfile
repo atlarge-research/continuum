@@ -1,19 +1,26 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
+ARG OPENDC_COMMIT=7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad
+ARG OPENDC_SOURCE_SHA256=df798dae10c0ee3b1911fb01b0dbd25f06f5adb6e8495826dc8ad8b108f4f52d
+ARG OPENDC_RUNTIME=legacy
+
 FROM eclipse-temurin:21-jdk-jammy@sha256:c7d5863b5dd8f26b90c64f1d80cc2b0e5a5e4642f8db9955a370d348edd8f438 AS opendc-build
+
+ARG OPENDC_COMMIT
+ARG OPENDC_SOURCE_SHA256
 
 ENV GRADLE_USER_HOME=/tmp/gradle-home
 
 ADD --checksum=sha256:f1771298a70f6db5a29daf62378c4e18a17fc33c9ba6b14362e0cdf40610380d \
     https://services.gradle.org/distributions/gradle-8.14.4-bin.zip \
     /tmp/gradle-8.14.4-bin.zip
-ADD --checksum=sha256:df798dae10c0ee3b1911fb01b0dbd25f06f5adb6e8495826dc8ad8b108f4f52d \
-    https://github.com/atlarge-research/opendc/archive/7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad.tar.gz \
+ADD --checksum=sha256:${OPENDC_SOURCE_SHA256} \
+    https://github.com/atlarge-research/opendc/archive/${OPENDC_COMMIT}.tar.gz \
     /tmp/opendc-source.tar.gz
 
 RUN echo "f1771298a70f6db5a29daf62378c4e18a17fc33c9ba6b14362e0cdf40610380d  /tmp/gradle-8.14.4-bin.zip" \
       | sha256sum -c - \
-    && echo "df798dae10c0ee3b1911fb01b0dbd25f06f5adb6e8495826dc8ad8b108f4f52d  /tmp/opendc-source.tar.gz" \
+    && echo "${OPENDC_SOURCE_SHA256}  /tmp/opendc-source.tar.gz" \
       | sha256sum -c - \
     && mkdir -p /opt/gradle /src \
     && cd /opt/gradle \
@@ -38,12 +45,19 @@ FROM eclipse-temurin:21-jre-jammy@sha256:61d6c7b34d36aee3f45d043101259f97f3c6d42
 
 FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534
 
+ARG OPENDC_COMMIT
+ARG OPENDC_SOURCE_SHA256
+ARG OPENDC_RUNTIME
+
 LABEL org.opencontainers.image.source="https://github.com/atlarge-research/opendc" \
-      org.opencontainers.image.revision="7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad" \
+      org.opencontainers.image.revision="${OPENDC_COMMIT}" \
+      org.continuum.opendc.source-sha256="${OPENDC_SOURCE_SHA256}" \
       org.opencontainers.image.version="3.0-SNAPSHOT" \
       org.opencontainers.image.licenses="MIT"
 
 ENV JAVA_HOME=/opt/java/openjdk \
+    OPENDC_BUILD_COMMIT=${OPENDC_COMMIT} \
+    OPENDC_RUNTIME=${OPENDC_RUNTIME} \
     JAVA_OPTS="-Xms64m -Xmx1g -XX:ActiveProcessorCount=1" \
     PATH="/opt/java/openjdk/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -66,6 +80,8 @@ RUN PIP_ROOT_USER_ACTION=ignore python -m pip install --no-cache-dir --no-deps -
 
 COPY application/image_batch/src/opendc_*.py application/image_batch/src/forecast_trace.py /app/
 COPY application/image_batch/fixtures/opendc/*.json /fixtures/opendc/
+
+RUN python -c "from opendc_runtime import runtime_identity; runtime_identity()"
 
 USER 1000:1000
 VOLUME ["/tmp"]

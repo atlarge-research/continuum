@@ -100,6 +100,20 @@ docker build -f application/image_batch/docker/opendc.Dockerfile \
 
 The [controlled-run instructions](OPENDT_HANDOFF.md#controlled-opendc-run-reference) cover an empty-cluster smoke test and the optional Kubernetes integration test. To simulate captured workload, use the workflow below.
 
+For the updated FNS-demo source-build compatibility experiment, build a separate image:
+
+```bash
+docker build -f application/image_batch/docker/opendc.Dockerfile \
+  --build-arg OPENDC_COMMIT=cf10c06eb73c7e60e1076e376922b1201caf12d1 \
+  --build-arg OPENDC_SOURCE_SHA256=b60208e517037eaeae10f5ef32f36716bda5500de9c9a89f4e8cfc240f5ccb25 \
+  --build-arg OPENDC_RUNTIME=fns-demo \
+  -t continuum/opendc:fns-cf10c06 .
+OPENDC_RUNTIME=fns-demo python3 application/image_batch/src/opendc_run.py prepare \
+  --fixture memory --output-dir /tmp/fns-memory-inputs
+```
+
+Use new output directories and the matching image when running those inputs. Host-side preparation defaults to the preserved engine; `OPENDC_RUNTIME=fns-demo` selects the new topology/trace contract. Manifests record the engine separately from [Dante's example](https://github.com/atlarge-research/FNS-demo), pinned at `41aaa9e20a4e299329924454316e6c91eb39f42f`. The example supplies no updated runtime JARs or engine source pin, so this source build does not establish equivalence to the developer's unavailable binary.
+
 ## Manual provisional scenario workflow
 
 Prepare scenarios with `opendc_scenarios.py prepare`, run them with `opendc_batch.py`, then generate an action report:

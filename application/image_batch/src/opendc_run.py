@@ -16,11 +16,8 @@ import time
 import pyarrow as pa
 
 from opendc_inputs import (
-    COMMIT,
     CONTRACT,
     PROVISIONAL_CONTRACT,
-    SOURCE_ARCHIVE_SHA256,
-    VERSION,
     file_hashes,
     prepare,
     verify_inputs,
@@ -28,6 +25,7 @@ from opendc_inputs import (
 )
 from opendc_process import run_process
 from opendc_results import validate_results, validate_provisional_results
+from opendc_runtime import runtime_identity
 
 
 def utc_now():
@@ -50,9 +48,7 @@ def runtime_provenance():
     root = Path(__file__).resolve().parent
     sources = list(root.glob("opendc_*.py")) + [root / "forecast_trace.py"]
     result = {
-        "opendc_version": VERSION,
-        "opendc_commit": COMMIT,
-        "opendc_source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        **runtime_identity(),
         "python_version": platform.python_version(),
         "pyarrow_version": pa.__version__,
         "platform": platform.platform(),
