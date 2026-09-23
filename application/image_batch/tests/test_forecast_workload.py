@@ -188,6 +188,7 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(trace.arrivals["job-0"]["creation_ms"], BASE + 1000)
 
     def test_old_snapshots_supply_arrivals_and_terminal_correction(self):
+        """Recover terminal evidence from old pressure lists without restoring it to backlog."""
         rows = fixture()
         job = {
             "kubernetes_job_uid": "pending-terminal",
@@ -199,6 +200,29 @@ class ForecastTests(unittest.TestCase):
         trace = read_trace(rows, "test", BASE + 1000)
         self.assertIn("pending-terminal", trace.arrivals)
         self.assertEqual(trace.state["jobs"]["queued"], [])
+        self.assertEqual(
+            trace.observed_outcomes["pending-terminal"]["evidence_observed_ms"], BASE + 1000
+        )
+
+    def test_finished_inventory_is_causal_and_does_not_create_a_training_profile(self):
+        """Retain classifier completion evidence before profile emission without future leakage."""
+        rows = fixture()
+        job = {
+            "kubernetes_job_uid": "finished-before-emission",
+            "workload_run_id": "test",
+            "creation_time": iso(BASE),
+            "pod_phase": "Running",
+            "execution_state": "terminated",
+            "execution_finish_time": iso(BASE + 500),
+            "node_name": "worker-a",
+        }
+        rows["cluster-state.jsonl"][1]["jobs"]["finished"] = [job]
+        before = read_trace(rows, "test", BASE + 999)
+        self.assertNotIn(job["kubernetes_job_uid"], before.arrivals)
+        after = read_trace(rows, "test", BASE + 1000)
+        self.assertIn(job["kubernetes_job_uid"], after.arrivals)
+        self.assertIn(job["kubernetes_job_uid"], after.observed_outcomes)
+        self.assertEqual(after.completed, [])
 
     def test_completion_and_emission_are_both_required(self):
         rows = fixture()

@@ -642,6 +642,7 @@ class OpenDTObserverTests(unittest.TestCase):
         self.assertIsNone(active["execution_finish_time"])
 
     def test_terminated_classifier_leaves_pressure_while_pod_is_running(self):
+        """Retain finished classifier evidence without counting a still-Running Pod as pressure."""
         job = demo_job()
         job.status.conditions = []
         execution_start = job.status.start_time + timedelta(seconds=20)
@@ -670,7 +671,10 @@ class OpenDTObserverTests(unittest.TestCase):
         self.assertEqual(state_job["execution_finish_time"], execution_finish.isoformat())
         self.assertEqual(record["counts"]["queued_jobs"], 0)
         self.assertEqual(record["counts"]["active_jobs"], 0)
-        self.assertEqual(record["jobs"], {"queued": [], "active": []})
+        self.assertEqual(record["jobs"]["queued"], [])
+        self.assertEqual(record["jobs"]["active"], [])
+        self.assertEqual(record["jobs"]["finished"][0]["execution_state"], "terminated")
+        self.assertIsNone(record["jobs"]["finished"][0]["job_terminal_status"])
 
     def test_first_observation_includes_terminal_jobs_and_is_deduplicated(self):
         diagnostics = []
@@ -699,6 +703,7 @@ class OpenDTObserverTests(unittest.TestCase):
         self.assertEqual(observations[0]["kubernetes_job_uid"], job.metadata.uid)
 
     def test_terminal_pods_leave_pressure_before_job_completion(self):
+        """Separate terminal Pod evidence from queued/active pressure and Job finalization."""
         job = demo_job()
         job.status.conditions = []
         job.status.completion_time = None
@@ -728,6 +733,10 @@ class OpenDTObserverTests(unittest.TestCase):
                     expected,
                 )
                 self.assertEqual(record["workers"][0]["allocatable_cpu_count"], 4.0)
+                finished = record["jobs"].get("finished", [])
+                self.assertEqual(len(finished), int(phase in ("Succeeded", "Failed")))
+                if finished:
+                    self.assertEqual(finished[0]["kubernetes_job_uid"], "job-uid")
 
     def test_terminal_pod_does_not_hide_another_pending_or_running_pod(self):
         job = demo_job()

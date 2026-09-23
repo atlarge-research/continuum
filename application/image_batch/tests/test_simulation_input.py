@@ -140,6 +140,39 @@ def future(task_id, arrival_ms):
 
 
 class SimulationInputTests(unittest.TestCase):
+    def test_known_arrival_missing_from_snapshot_is_unresolved_not_invented_work(self):
+        """Expose membership incompleteness independently of executable provisional traces."""
+        trace = trace_with_state(
+            arrivals={"missing": {"creation_ms": BASE, "first_seen_ms": CUTOFF - 100}}
+        )
+        manifest, initial, scenarios = build_simulation_inputs(trace, template(), [[]], settings())
+        membership = manifest.get("membership", {})
+        self.assertFalse(membership.get("complete", True))
+        self.assertEqual(membership["unresolved"][0]["job_uid"], "missing")
+        self.assertEqual(membership["unresolved"][0]["original_creation_ms"], BASE)
+        self.assertEqual(initial["tasks"], [])
+        self.assertEqual(scenarios, [[]])
+        self.assertEqual(manifest["status"], "ready")
+
+    def test_observed_classifier_finish_is_not_resurrected_before_profile_emission(self):
+        """A finished classifier is accounted for without claiming successful Job completion."""
+        trace = trace_with_state(arrivals={"finished": {"creation_ms": BASE}})
+        trace.observed_outcomes = {
+            "finished": {
+                "job_uid": "finished",
+                "evidence_observed_ms": CUTOFF - 100,
+                "execution_state": "terminated",
+                "job_terminal_status": None,
+            }
+        }
+        manifest, initial, _ = build_simulation_inputs(trace, template(), [[]], settings())
+        membership = manifest.get("membership", {})
+        self.assertTrue(membership.get("complete", False))
+        self.assertEqual(
+            membership["finished_without_profile"], [trace.observed_outcomes["finished"]]
+        )
+        self.assertEqual(initial["tasks"], [])
+
     def test_builds_shared_backlog_and_normalizes_each_scenario_without_mutation(self):
         queued = state_job("queued", BASE + 2000, pod_phase="Pending", execution_state="waiting")
         startup = state_job(

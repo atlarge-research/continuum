@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -104,12 +104,25 @@ def bounded_read(directory, boundaries=None):
 
 @dataclass
 class Trace:
+    """Evidence restricted by availability time rather than retrospective event time.
+
+    Args:
+        cutoff (int): Inclusive UTC-millisecond availability boundary.
+        arrivals (dict): Job creation times and first evidence availability.
+        completed (list): Successfully emitted profiles available by the cutoff.
+        states (list): Timestamped snapshots in observation order.
+        capture_failures (list): Times of failed observations.
+        state (dict or None): Latest eligible snapshot, when one exists.
+        observed_outcomes (dict): Terminal-state evidence independent of profile emission.
+    """
+
     cutoff: int
     arrivals: dict
     completed: list
     states: list
     capture_failures: list
     state: dict | None
+    observed_outcomes: dict = field(default_factory=dict)
 
 
 def _time(record):
@@ -150,9 +163,28 @@ def validate_task(task):
 
 
 def read_trace(rows, run_id, cutoff):
+    """Read only evidence available at the cutoff, retaining terminal-state observations.
+
+    Finished classifiers are excluded from pressure and kept separately from
+    emitted training profiles. Old snapshots lacking a finished inventory can
+    still provide explicit terminal Pod evidence, but missing Jobs are never
+    inferred to have finished.
+
+    Args:
+        rows (dict): Parsed observer streams, possibly extending beyond the cutoff.
+        run_id (str): Workload run to select.
+        cutoff (int): Latest allowed evidence-availability time, in UTC milliseconds.
+
+    Returns:
+        Trace: Bounded arrivals, profiles, snapshots, failures and observed outcomes.
+
+    Raises:
+        ValueError: Identities, timestamps, resources or snapshots are inconsistent.
+    """
     arrivals = {}
     emissions = {}
     failures = []
+    outcomes = {}
 
     def arrival(uid, run, created, seen):
         if run != run_id or seen > cutoff:
@@ -197,22 +229,43 @@ def read_trace(rows, run_id, cutoff):
         if seen > cutoff:
             continue
         state = copy.deepcopy(row)
-        for group in ("queued", "active"):
+        for group in ("queued", "active", "finished"):
             kept = []
-            for job in state["jobs"][group]:
+            for job in state["jobs"].get(group, []):
                 arrival(
                     job["kubernetes_job_uid"],
                     job["workload_run_id"],
                     job["creation_time"],
                     seen,
                 )
-                if job["workload_run_id"] == run_id and job.get("pod_phase") not in (
-                    "Succeeded",
-                    "Failed",
-                ):
+                if job["workload_run_id"] != run_id:
+                    continue
+                terminal = (
+                    job.get("pod_phase") in ("Succeeded", "Failed")
+                    or job.get("execution_state") == "terminated"
+                    or job.get("job_terminal_status") in ("Complete", "Failed")
+                )
+                if group == "finished" and not terminal:
+                    raise ValueError("finished inventory lacks terminal-state evidence")
+                if terminal:
+                    uid = job["kubernetes_job_uid"]
+                    outcome = {
+                        "job_uid": uid,
+                        "original_creation_ms": milliseconds(job["creation_time"]),
+                        "evidence_observed_ms": seen,
+                        "execution_state": job.get("execution_state"),
+                        "execution_finish_time": job.get("execution_finish_time"),
+                        "pod_phase": job.get("pod_phase"),
+                        "job_terminal_status": job.get("job_terminal_status"),
+                        "node_name": job.get("node_name"),
+                    }
+                    if seen >= outcomes.get(uid, {}).get("evidence_observed_ms", -1):
+                        outcomes[uid] = outcome
+                if not terminal or group == "finished":
                     kept.append(job)
-            state["jobs"][group] = kept
-            state["counts"][f"{group}_jobs"] = len(kept)
+            if group in state["jobs"]:
+                state["jobs"][group] = kept
+                state["counts"][f"{group}_jobs"] = len(kept)
         for worker in state["workers"]:
             for key in (
                 "node_name",
@@ -255,7 +308,9 @@ def read_trace(rows, run_id, cutoff):
             r["source"]["kubernetes_job_uid"],
         ),
     )
-    return Trace(cutoff, arrivals, ordered, states, failures, states[-1][1] if states else None)
+    return Trace(
+        cutoff, arrivals, ordered, states, failures, states[-1][1] if states else None, outcomes
+    )
 
 
 def training_bins(trace, origin, bin_ms, gap_ms):

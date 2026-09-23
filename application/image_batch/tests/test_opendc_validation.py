@@ -49,6 +49,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(case["workers"][0]["modeled_cores"], 3)
             self.assertEqual(case["horizon_ms"], 10000)
             self.assertEqual(len(case["model_exhausted_jobs"]), 1)
+            self.assertEqual(case["initial_membership"], suite["initial_membership"])
 
     def test_known_arrivals_use_real_identity_and_frozen_profile(self):
         """Post-cutoff arrival evidence supplies timestamps, never actual future runtimes."""

@@ -178,6 +178,7 @@ def prepare_validation_suite(
         "template_sha256": template["sha256"],
         "source_prefixes": boundaries,
         "observation_prefixes": observation_boundaries,
+        "initial_membership": copy.deepcopy(simulation["membership"]),
         "derivation": {
             "method": "verified_parent_prefix_and_timestamp_truncation",
             "parent_horizon_ms": simulation["horizon_ms"],
@@ -462,6 +463,7 @@ def compare_tasks(
         "target_seconds": target_seconds,
         "coverage_complete": eligible,
         "state_coverage": state_coverage,
+        "initial_membership": copy.deepcopy(case.get("initial_membership")),
         "unknown_outcome_uids": unknown,
         "tasks": matched,
         "observations": target_observed,

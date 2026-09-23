@@ -679,11 +679,93 @@ def _manifest(cutoff, horizon_ms, job_ids, scenario_metadata, diagnostics):
     }
 
 
+def _membership(trace, initial_tasks, exhausted_jobs, completed):
+    """Account for known arrivals without inventing missing snapshot state.
+
+    Snapshot cadence and Job membership are separate properties. An arrival
+    event establishes existence and creation time but cannot establish whether
+    its Job is queued, running, finished, or assigned to a particular worker.
+
+    Args:
+        trace (Trace): Causally bounded observer evidence.
+        initial_tasks (list[dict]): Executable backlog with original Job metadata.
+        exhausted_jobs (list[dict]): Still-observed work with no modeled execution left.
+        completed (set[str]): Job identities having available completed profiles.
+
+    Returns:
+        dict: Disjoint accounted identities and unresolved membership diagnostics.
+    """
+    represented = {
+        item["metadata"]["kubernetes_job_uid"] for item in initial_tasks + exhausted_jobs
+    }
+    outcomes = {
+        uid: copy.deepcopy(record)
+        for uid, record in trace.observed_outcomes.items()
+        if record["evidence_observed_ms"] <= trace.cutoff
+    }
+    unresolved = []
+    for uid in sorted(set(trace.arrivals) - represented - completed - set(outcomes)):
+        arrival = trace.arrivals[uid]
+        last_state = None
+        last_seen = None
+        for seen, state in sorted(trace.states, reverse=True, key=lambda item: item[0]):
+            if seen > trace.cutoff:
+                continue
+            matches = [
+                job
+                for group in ("queued", "active")
+                for job in state.get("jobs", {}).get(group, [])
+                if job.get("kubernetes_job_uid") == uid
+            ]
+            if matches:
+                last_state, last_seen = copy.deepcopy(matches[0]), seen
+                break
+        unresolved.append(
+            {
+                "job_uid": uid,
+                "original_creation_ms": arrival["creation_ms"],
+                "first_seen_ms": arrival.get("first_seen_ms"),
+                "last_state_observed_ms": last_seen,
+                "last_observed_state": last_state,
+                "reason": "known_arrival_without_resolved_cutoff_state",
+            }
+        )
+    return {
+        "contract": "cutoff-membership-v1",
+        "cutoff_ms": trace.cutoff,
+        "complete": trace.state is not None and not unresolved,
+        "known_arrival_count": len(trace.arrivals),
+        "represented_backlog": sorted(represented),
+        "completed_profiles": sorted(completed),
+        "finished_without_profile": [outcomes[uid] for uid in sorted(set(outcomes) - completed)],
+        "unresolved": unresolved,
+        "interpretation": (
+            "availability-bounded membership; unresolved Jobs are not invented executable work; "
+            "finished classifier evidence is not a successful Job/profile outcome"
+        ),
+    }
+
+
 def build_simulation_inputs(trace, template, scenarios, settings):
     """Build shared initial state and combined traces from cutoff-filtered evidence.
 
     Input timestamps remain absolute evidence. Output Task ``submission_time``
-    values are integral milliseconds relative to the cutoff.
+    values are integral milliseconds relative to the cutoff. Provisional input
+    readiness is separate from the manifest's membership completeness: known
+    arrivals without enough state remain explicit unresolved evidence.
+
+    Args:
+        trace (Trace): Observer evidence bounded by cutoff availability time.
+        template (dict): Frozen representative completed workload profile.
+        scenarios (list[list[dict]]): Sampled future tasks with absolute arrivals.
+        settings (object): Workload identity, horizon, sample count and calibration settings.
+
+    Returns:
+        tuple: Manifest, initial state and executable combined scenarios; invalid
+            inputs retain diagnostics and return an empty scenario list.
+
+    Raises:
+        ValueError: The shared profile or cutoff settings are invalid.
     """
     model = _simulation_model(trace, template, settings)
     diagnostics = []
@@ -701,6 +783,7 @@ def build_simulation_inputs(trace, template, scenarios, settings):
         scenarios, getattr(settings, "scenarios", None), model, job_ids, report
     )
     manifest = _manifest(model.cutoff, model.horizon_ms, job_ids, scenario_metadata, diagnostics)
+    manifest["membership"] = _membership(trace, initial_tasks, exhausted_jobs, completed)
     initial_state = {
         "schema_version": SIMULATION_SCHEMA_VERSION,
         "cutoff": iso(model.cutoff),

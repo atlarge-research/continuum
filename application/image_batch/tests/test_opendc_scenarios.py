@@ -325,6 +325,25 @@ def read_tasks(directory):
 class ScenarioPreparationTests(unittest.TestCase):
     """Protect evidence lineage, candidate partitioning and worker capacity."""
 
+    def test_reconstructs_membership_for_old_bundles_without_changing_their_files(self):
+        """Add causal diagnostics to new cases even when the frozen parent predates them."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            forecast, observer = make_forecast(root)
+            path = forecast / "simulation/manifest.json"
+            old = json.loads(path.read_text())
+            old.pop("membership", None)
+            path.write_bytes(canonical(old))
+            before = file_hashes(forecast)
+            suite = prepare_suite(forecast, observer, configuration(), root / "suite")
+            self.assertTrue(suite.get("initial_membership", {}).get("complete", False))
+            for experiment in suite["experiments"]:
+                case = json.loads(
+                    (root / "suite" / experiment["input_dir"] / "case.json").read_text()
+                )
+                self.assertEqual(case["initial_membership"], suite["initial_membership"])
+            self.assertEqual(file_hashes(forecast), before)
+
     def test_prepares_shared_futures_scale_candidates_and_down_partition(self):
         """Keep sampled futures identical and omitted work explicit across candidates."""
         with tempfile.TemporaryDirectory() as temporary:

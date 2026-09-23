@@ -321,16 +321,35 @@ def build_cluster_state_record(
     label_selector: str,
     observed_at: datetime,
 ) -> dict[str, Any]:
-    """Build queued/active pressure, excluding Pods awaiting Job finalization."""
+    """Build pressure and a separate finished inventory from one API collection.
+
+    Finished classifiers and terminal Jobs remain observable without occupying
+    the queued/active lists. Their presence does not imply a successful emitted
+    workload profile; the independent Job watcher establishes that outcome.
+
+    Args:
+        jobs (list): Observed Kubernetes Jobs selected for this workload.
+        pods (list): Observed Pods belonging to those Jobs.
+        nodes (list): Observed Kubernetes nodes.
+        run_id (str): Observer run identity.
+        namespace (str): Namespace queried by the observer.
+        label_selector (str): Job selector used for this collection.
+        observed_at (datetime): Time at which all collection responses were available.
+
+    Returns:
+        dict: Cluster snapshot with disjoint queued, active and finished inventories.
+    """
     queued = []
     active = []
+    finished = []
     for job in jobs:
-        if terminal_status(job)[0] is not None:
-            continue
+        outcome = terminal_status(job)[0]
         state, record = _state_job_record(job, pods)
         # A terminal Pod is neither queued nor executing. The independent Job
         # watcher still waits for Complete/Failed before recording its outcome.
-        if state == "finished":
+        if state == "finished" or outcome is not None:
+            record["job_terminal_status"] = outcome
+            finished.append(record)
             continue
         (active if state == "active" else queued).append(record)
     workers = []
@@ -340,6 +359,7 @@ def build_cluster_state_record(
             workers.append(worker)
     queued.sort(key=lambda item: (item["creation_time"], item["kubernetes_job_uid"]))
     active.sort(key=lambda item: (item["creation_time"], item["kubernetes_job_uid"]))
+    finished.sort(key=lambda item: (item["creation_time"], item["kubernetes_job_uid"]))
     workers.sort(key=lambda item: item["node_name"])
     return {
         "schema_version": SCHEMA_VERSION,
@@ -351,11 +371,12 @@ def build_cluster_state_record(
             "namespace": namespace,
             "job_label_selector": label_selector,
         },
-        "jobs": {"queued": queued, "active": active},
+        "jobs": {"queued": queued, "active": active, "finished": finished},
         "workers": workers,
         "counts": {
             "queued_jobs": len(queued),
             "active_jobs": len(active),
+            "finished_jobs": len(finished),
             "workers": len(workers),
             "ready_schedulable_workers": sum(
                 worker["ready"] and worker["schedulable"] for worker in workers

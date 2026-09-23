@@ -148,6 +148,9 @@ def _rederive_inputs(forecast_dir, forecast, simulation, template, trace, initia
         initial (dict): Published initial state.
         scenarios (list[list[dict]]): Published normalized combined scenarios.
 
+    Returns:
+        dict: Reconstructed membership diagnostics from the frozen observer prefix.
+
     Raises:
         ValueError: Re-derived state, trims, futures, or lineage differ.
     """
@@ -190,8 +193,14 @@ def _rederive_inputs(forecast_dir, forecast, simulation, template, trace, initia
     if derived_scenarios != scenarios:
         raise ValueError("combined scenarios differ from re-derived sampled futures")
     for key, value in derived_manifest.items():
+        if key == "membership" and key not in simulation:
+            # Historical schema-2 exports predate membership diagnostics. Their
+            # executable state/profile comparisons remain mandatory; absence
+            # of the new inventory does not establish complete membership.
+            continue
         if simulation.get(key) != value:
             raise ValueError(f"simulation {key} differs from re-derived inputs")
+    return derived_manifest["membership"]
 
 
 def _load_evidence(forecast_dir, observer_dir):
@@ -244,7 +253,9 @@ def _load_evidence(forecast_dir, observer_dir):
         _read_tasks(forecast_dir / "simulation/scenarios" / f"{index:04d}")
         for index in range(len(simulation["scenarios"]))
     ]
-    _rederive_inputs(forecast_dir, forecast, simulation, template, trace, initial, scenarios)
+    simulation["membership"] = _rederive_inputs(
+        forecast_dir, forecast, simulation, template, trace, initial, scenarios
+    )
     return forecast, simulation, initial, template, trace, scenarios, boundaries
 
 
@@ -581,6 +592,7 @@ def _write_case(
         "selected_worker": selected_worker,
         "cutoff_ms": simulation["cutoff_ms"],
         "horizon_ms": simulation["horizon_ms"],
+        "initial_membership": copy.deepcopy(simulation.get("membership")),
         "workers": workers,
         "tasks": task_records,
         "omitted_tasks": omitted,
@@ -716,6 +728,7 @@ def prepare_suite(
         "horizon_ms": simulation["horizon_ms"],
         "template_sha256": template["sha256"],
         "source_prefixes": boundaries,
+        "initial_membership": copy.deepcopy(simulation["membership"]),
         "active_workers": active,
         "experiments": experiments,
         "unavailable_candidates": unavailable,
