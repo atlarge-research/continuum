@@ -855,7 +855,7 @@ def aggregate_actions(cases):
     }
 
 
-def display_comparison(cases, comparison, *, smoothing_seconds=2.0, end_seconds=None):
+def display_comparison(cases, comparison, *, smoothing_seconds=2.0):
     """Smooth individual count trajectories before recomputing their display bands.
 
     A positive Gaussian filter avoids negative counts and preserves monotonic completed
@@ -866,24 +866,17 @@ def display_comparison(cases, comparison, *, smoothing_seconds=2.0, end_seconds=
         cases (list[dict]): The cases used to build comparison.
         comparison (dict): Exact action aggregates from aggregate_actions.
         smoothing_seconds (float): Positive Gaussian standard deviation in seconds.
-        end_seconds (float or None): Shared plot endpoint, at least the last case time.
 
     Returns:
         dict: Separate display aggregates; responses retain their exact values.
 
     Raises:
-        ValueError: Smoothing width is invalid or the endpoint truncates evidence.
+        ValueError: Smoothing width or the final comparison time is not finite and positive.
     """
     width = float(smoothing_seconds)
-    end = comparison["time_seconds"][-1] if end_seconds is None else end_seconds
-    end = float(end)
-    if (
-        not math.isfinite(width + end)
-        or width <= 0
-        or end < comparison["time_seconds"][-1]
-        or end <= 0
-    ):
-        raise ValueError("positive smoothing width and an untruncated endpoint are required")
+    end = float(comparison["time_seconds"][-1])
+    if not math.isfinite(width + end) or width <= 0 or end <= 0:
+        raise ValueError("positive finite smoothing width and final comparison time are required")
     times = np.linspace(0, end, math.ceil(end / min(0.25, width / 4)) + 1).tolist()
     display = deepcopy(comparison)
     display["time_seconds"] = times
@@ -1009,22 +1002,6 @@ def _finish_axes(axis, *, integer_y=False, x_maximum=None):
     axis.tick_params(labelbottom=True, labelleft=True)
 
 
-def _comparison_title(cases, comparison):
-    """Keep the page title to the result type and two workload assumptions.
-
-    Args:
-        cases (list[dict]): Matching evaluated cases.
-        comparison (dict): Aggregated action distributions.
-
-    Returns:
-        str: Two-line plot-page title without provenance identifiers.
-    """
-    return (
-        f"Simulation results\n{comparison['scenario_count']} sampled futures · "
-        f"{_input_title(cases).lower()}"
-    )
-
-
 def _plot_batch_page(pdf, cases, comparison):
     """Render energy and completed-Job curves for the selected workload.
 
@@ -1033,19 +1010,45 @@ def _plot_batch_page(pdf, cases, comparison):
         cases (list[dict]): Matching evaluated cases.
         comparison (dict): Display distributions on a common time grid.
     """
+    count = comparison["scenario_count"]
+    horizon = comparison["boundaries"]["arrival_horizon_seconds"]
+    evaluation = comparison["boundaries"]["evaluation_seconds"]
     figure, axes = plt.subplots(2, 1, figsize=(11.69, 8.27), sharex=True)
-    figure.subplots_adjust(top=0.85, bottom=0.10, left=0.09, right=0.97, hspace=0.38)
-    figure.suptitle(_comparison_title(cases, comparison), fontsize=13, y=0.97)
+    figure.subplots_adjust(top=0.80, bottom=0.15, left=0.09, right=0.97, hspace=0.38)
+    figure.suptitle("The demo: compare three capacity choices", fontsize=17, y=0.96)
+    figure.text(
+        0.09,
+        0.89,
+        f"{_input_title(cases)} + arrivals over {horizon:g} seconds; "
+        f"{count} possible futures.\n"
+        "These simulated alternatives illustrate capacity choices; "
+        "they do not validate actual scaling.",
+        fontsize=10,
+        linespacing=1.5,
+    )
     for axis, metric, title in zip(
-        axes, PLOT_METRICS, ("Cumulative Cluster Energy Use", "Completed Jobs")
+        axes, ("energy_joules", "completed_tasks"), ("Cluster energy use", "Completed Jobs")
     ):
         _metric_axis(axis, comparison, cases, metric)
-        axis.set_title(title, fontsize=11)
-        if metric != "energy_joules":
+        axis.set_title(title, fontsize=12)
+        for label in axis.texts:
+            label.set_text(f"Arrivals: first {horizon:g} s | measurement window: {evaluation:g} s")
+        if metric == "completed_tasks":
             axis.get_legend().remove()
+            axis.set_xlabel("Seconds from the start of the simulation")
         else:
             axis.set_xlabel("")
         _finish_axes(axis, integer_y=metric == "completed_tasks")
+    figure.text(
+        0.09,
+        0.055,
+        "Bold lines: medians. Faint bands: smallest to largest result "
+        "across the possible futures.\n"
+        "Scale-down omits removed work; energy assumptions are uncalibrated. "
+        "No best action is established.",
+        fontsize=9,
+        linespacing=1.5,
+    )
     pdf.savefig(figure)
     plt.close(figure)
 
@@ -1058,23 +1061,45 @@ def _plot_response_page(pdf, cases, comparison):
         cases (list[dict]): Cases with matched sampled futures.
         comparison (dict): Per-action response percentile bands and scopes.
     """
+    count = comparison["scenario_count"]
     figure = plt.figure(figsize=(11.69, 8.27))
     grid = figure.add_gridspec(
-        2, 2, top=0.85, bottom=0.10, left=0.09, right=0.97, hspace=0.45, wspace=0.25
+        2, 2, top=0.81, bottom=0.17, left=0.09, right=0.97, hspace=0.50, wspace=0.27
     )
-    panels = (
+    figure.suptitle("The same capacity choices: Job response times", fontsize=17, y=0.96)
+    figure.text(
+        0.09,
+        0.89,
+        f"Same workload and {count} futures as the preceding action page. "
+        "Jobs are followed through completion.\n"
+        "At 90% on the horizontal axis, read the response time "
+        "within which 90% of the Jobs finish.",
+        fontsize=10,
+        linespacing=1.5,
+    )
+    shared_axis = None
+    for cohort, position, title in (
         ("all", grid[0, :], "All modeled Jobs"),
-        ("future", grid[1, 0], "Future Jobs"),
-        ("backlog", grid[1, 1], "Backlog Jobs"),
-    )
-    for cohort, position, title in panels:
-        axis = figure.add_subplot(position)
+        ("future", grid[1, 0], "Jobs arriving after the start"),
+        ("backlog", grid[1, 1], "Jobs already present at the start"),
+    ):
+        axis = figure.add_subplot(position, sharey=shared_axis)
+        shared_axis = axis
         _metric_axis(axis, comparison, cases, cohort)
         _finish_axes(axis, x_maximum=100)
-        axis.set(title=title, ylabel="Response time (seconds)")
+        axis.set_title(title, fontsize=12)
         if cohort != "all" and axis.get_legend() is not None:
             axis.get_legend().remove()
-    figure.suptitle(_comparison_title(cases, comparison), fontsize=13, y=0.97)
+    figure.text(
+        0.09,
+        0.06,
+        "Response time starts at original Job creation, "
+        "including time spent waiting before this simulation.\n"
+        "Scale-down remains partial. These action scenarios are separate "
+        "from any measured forecast-configuration experiment.",
+        fontsize=9,
+        linespacing=1.5,
+    )
     pdf.savefig(figure)
     plt.close(figure)
 
@@ -1185,64 +1210,8 @@ def _metric_axis(axis, comparison, cases, metric):
         axis.text(0.99, 0.94, label, transform=axis.transAxes, ha="right", va="top", fontsize=8)
 
 
-def _plot_input_comparison(pdf, entries, *, responses=False):
-    """Compare a reference and an alternative with identical axes in adjacent columns.
-
-    Args:
-        pdf (PdfPages): Open report writer.
-        entries (list[tuple]): Two (batch, cases, aggregates) entries, reference first.
-        responses (bool): Plot future/backlog response rows instead of time trajectories.
-    """
-    metrics = ("future", "backlog") if responses else PLOT_METRICS
-    figure, axes = plt.subplots(
-        len(metrics), 2, figsize=(11.69, 8.27), sharex=True, sharey="row", squeeze=False
-    )
-    figure.subplots_adjust(top=0.83, bottom=0.10, left=0.08, right=0.98, wspace=0.12, hspace=0.30)
-    figure.suptitle(
-        "Starting-workload comparison" + (" — response times" if responses else ""),
-        fontsize=15,
-        y=0.98,
-    )
-    end = max(entry[2]["time_seconds"][-1] for entry in entries)
-    labels = {
-        "energy_joules": "Cluster energy use (kJ)",
-        "completed_tasks": "Completed Jobs",
-        "future": "Future response (seconds)",
-        "backlog": "Backlog response (seconds)",
-    }
-    for column, (_batch, cases, exact) in enumerate(entries):
-        comparison = exact if responses else display_comparison(cases, exact, end_seconds=end)
-        for row, metric in enumerate(metrics):
-            axis = axes[row, column]
-            _metric_axis(axis, comparison, cases, metric)
-            if row == 0:
-                axis.set_xlabel("")
-            if column == 0:
-                axis.set_ylabel(labels[metric], fontsize=10)
-            if row == 0:
-                role = "Reference" if column == 0 else "Alternative"
-                axis.set_title(
-                    f"{role}: {_input_title(cases)}\n{exact['scenario_count']} sampled futures",
-                    fontsize=10,
-                    pad=12,
-                )
-            # Narrow panels use a compact vertical legend to avoid text spilling over.
-            if axis.get_legend() is not None:
-                if row == 0:
-                    axis.legend(loc="upper left", fontsize=7, ncol=1)
-                else:
-                    axis.get_legend().remove()
-    for row, metric in zip(axes, metrics):
-        for axis in row:
-            _finish_axes(
-                axis, integer_y=metric == "completed_tasks", x_maximum=100 if responses else None
-            )
-    pdf.savefig(figure)
-    plt.close(figure)
-
-
-def render_pdf(report, path, reference_batch=None, *, include_input_comparisons=False):
-    """Show the selected workload, with input comparisons only when explicitly requested.
+def render_pdf(report, path, reference_batch=None):
+    """Show the selected workload using the shared action-page renderers.
 
     Batches missing an action remain in metrics. Exact aggregates are retained under
     action_comparisons; display settings and the selected reference are separate metadata.
@@ -1252,7 +1221,6 @@ def render_pdf(report, path, reference_batch=None, *, include_input_comparisons=
         report (dict): Evaluated metrics; presentation metadata is added in place.
         path (str or Path): New PDF artifact path in an existing directory.
         reference_batch (str or Path or None): Explicit reference input, else first eligible batch.
-        include_input_comparisons (bool): Append side-by-side input comparisons.
 
     Raises:
         ValueError: Comparisons are unmatched or the requested reference is ineligible.
@@ -1272,7 +1240,6 @@ def render_pdf(report, path, reference_batch=None, *, include_input_comparisons=
         },
         "range": "observed minimum and maximum, not confidence limits",
         "exact_metrics_unchanged": True,
-        "input_comparison_pages": include_input_comparisons,
         "axis_bounds": "outward-rounded, evenly spaced endpoint ticks",
     }
     reference = (
@@ -1288,8 +1255,8 @@ def render_pdf(report, path, reference_batch=None, *, include_input_comparisons=
             [
                 f"Selected workload: {reference}. All three actions use the same initial state "
                 "and sampled futures. This is a presentation choice, not a preferred scaling "
-                "action. Other starting inputs remain in metrics.json; side-by-side input pages "
-                "are optional. Batch numbers identify input evidence, not model versions. "
+                "action. Other starting inputs remain in metrics.json. "
+                "Batch numbers identify input evidence, not model versions. "
                 "Starting inputs: " + (sources or "none."),
                 "Read each graph across actions: blue = unchanged, green = scale up, orange "
                 "dashed "
@@ -1330,10 +1297,6 @@ def render_pdf(report, path, reference_batch=None, *, include_input_comparisons=
             _, cases, exact = comparisons[0]
             _plot_batch_page(pdf, cases, display_comparison(cases, exact))
             _plot_response_page(pdf, cases, exact)
-            for alternative in comparisons[1:] if include_input_comparisons else []:
-                entries = [comparisons[0], alternative]
-                _plot_input_comparison(pdf, entries)
-                _plot_input_comparison(pdf, entries, responses=True)
 
 
 def create_report(
@@ -1342,7 +1305,6 @@ def create_report(
     evaluation_seconds=None,
     reference_batch=None,
     *,
-    include_input_comparisons=False,
     metrics_file=None,
 ):
     """Analyze saved batches or rerender saved metrics into a new report directory.
@@ -1352,7 +1314,6 @@ def create_report(
         output_dir (str or Path): New nonoverlapping report directory.
         evaluation_seconds (float or None): Positive common E, defaulting per case to H.
         reference_batch (str or Path or None): Reference input for the first results pages.
-        include_input_comparisons (bool): Append comparison pages for other starting inputs.
         metrics_file (str or Path or None): Saved metrics, without requiring original experiments.
 
     Returns:
@@ -1393,7 +1354,6 @@ def create_report(
         report,
         output / "report.pdf",
         reference_batch,
-        include_input_comparisons=include_input_comparisons,
     )
     write_json(output / "metrics.json", report)
     return report
@@ -1437,11 +1397,6 @@ def main(argv=None):
         type=Path,
         help="batch input to show first; defaults to first complete comparison",
     )
-    parser.add_argument(
-        "--include-input-comparisons",
-        action="store_true",
-        help="append side-by-side reference/alternative input pages",
-    )
     args = parser.parse_args(argv)
     try:
         create_report(
@@ -1449,13 +1404,30 @@ def main(argv=None):
             args.output_dir,
             args.evaluation_seconds,
             args.reference_batch,
-            include_input_comparisons=args.include_input_comparisons,
             metrics_file=args.metrics_file,
         )
     except (FileExistsError, OSError, ValueError) as exc:
         print(f"evaluation failed: {exc}", file=sys.stderr)
         return 2
     return 0
+
+
+def render_action_pages(pdf, report):
+    """Append two self-contained pages for each saved three-action comparison.
+
+    Args:
+        pdf (PdfPages): Open report destination.
+        report (dict): Saved action metrics, requiring no original experiment directories.
+
+    Raises:
+        ValueError: No complete three-action comparison is available.
+    """
+    comparisons, omitted = _prepare_comparisons(report)
+    if not comparisons:
+        raise ValueError("No complete action comparison: " + "; ".join(omitted))
+    for _, cases, exact in comparisons:
+        _plot_batch_page(pdf, cases, display_comparison(cases, exact))
+        _plot_response_page(pdf, cases, exact)
 
 
 if __name__ == "__main__":

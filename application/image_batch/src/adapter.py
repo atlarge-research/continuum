@@ -426,6 +426,11 @@ def make_handler(service: AdapterService):
 
 
 def parse_args() -> argparse.Namespace:
+    """Read adapter options, including the installed worker scheduler profile.
+
+    Returns:
+        argparse.Namespace: CLI options with environment-backed defaults.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=os.getenv("ADAPTER_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.getenv("ADAPTER_PORT", "8080")))
@@ -446,6 +451,10 @@ def parse_args() -> argparse.Namespace:
         "--job-ttl-seconds", type=int, default=int(os.getenv("JOB_TTL_SECONDS", "3600"))
     )
     parser.add_argument(
+        "--worker-scheduler-name",
+        default=os.getenv("WORKER_SCHEDULER_NAME", "default-scheduler"),
+    )
+    parser.add_argument(
         "--worker-inference-repetitions",
         type=int,
         default=int(os.getenv("WORKER_INFERENCE_REPETITIONS", "1")),
@@ -454,6 +463,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Serve one adapter with the selected local or Kubernetes Job submitter."""
     args = parse_args()
     public_base_url = args.public_base_url or f"http://127.0.0.1:{args.port}"
     source_dir = Path(__file__).resolve().parent
@@ -464,6 +474,7 @@ def main() -> None:
             namespace=args.namespace,
             worker_image=args.worker_image,
             ttl_seconds=args.job_ttl_seconds,
+            scheduler_name=args.worker_scheduler_name,
         )
     data_dir = Path(args.data_dir)
     service = AdapterService(

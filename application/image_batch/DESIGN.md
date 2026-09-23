@@ -6,7 +6,7 @@ This document records the architectural and experimental reasoning behind the im
 
 The demo is a scientific vertical slice of an eventual closed-loop digital twin. It must create real endpoint-to-cloud traffic, execute measurable work on Kubernetes, and preserve enough evidence to reconstruct completed work and the cluster state at a chosen cutoff. Later features can use that evidence to forecast workload, prepare OpenDC input, simulate policies, and scale workers.
 
-The current implementation forecasts arrivals and can export combined simulation inputs with remaining work and initial worker state. A separate direct OpenDC container executes controlled synthetic experiments locally and on Kubernetes. A manual provisional workflow also prepares worker-count candidates from schema-2 bundles, executes them sequentially, and compares evaluation windows offline. Faithful live-state initialization, automatic forecast execution, policy selection, and Kubernetes actuation remain unconnected. It is designed for a controlled demo run rather than production operation. Reproducible timing and trace correctness are important; transparent recovery from infrastructure failures is not.
+The current demo observes and forecasts workload, simulates worker-count alternatives, and compares predictions with measurements offline. Faithful live-state initialization and closed-loop scaling remain incomplete. Its purpose is to test modeling assumptions under controlled conditions; reproducible timing and trace correctness take priority over production fault tolerance.
 
 ## Component and data flow
 
@@ -76,7 +76,7 @@ Changing peak height or cycle length can add realism later, but it is deferred u
 
 ## Workload duration and network meaning
 
-The October invocation uses four images per Job to keep endpoint-to-cloud data volume fixed and interpretable. Fixed and ranged batch-size modes are both retained so later experiments can introduce heterogeneous payloads without a redesign.
+The calibrated workload uses four images per Job to keep endpoint-to-cloud data volume fixed and interpretable. Fixed and ranged batch-size modes are both retained so later experiments can introduce heterogeneous payloads without a redesign.
 
 The MobileNet workload would otherwise finish too quickly for useful five-second Prometheus sampling. Repeated inference on each preprocessed image extends execution while still returning one classification per image. This increases compute without increasing transferred data, which helps avoid hiding future latency and bandwidth effects behind an arbitrarily larger network payload.
 
@@ -123,13 +123,11 @@ A forecast uses a frozen, complete evidence boundary and only observations avail
 
 ## Offline run analysis
 
-Analysis runs offline from saved endpoint and observer evidence so reporting does not interfere with the measured workload. Reports must be reproducible and inspectable, with their evidence and analysis assumptions retained. Invalid inputs and incomplete observations remain visible.
+Analysis uses saved observations so reporting does not perturb the workload. Submission lag, scheduler/startup delay and classifier execution are measured separately. Resource plots use observed samples rather than simulator-adjusted profiles, preserve missing data and distinguish workload utilization from total node utilization.
 
-Arrival fidelity measures actual send starts on a monotonic clock rather than using logging time. Cross-host alignment assumes synchronized clocks. Queue wait includes scheduling and container startup; execution uses worker-container start and finish. These distinctions avoid attributing startup or logging delays to computation or workload scheduling.
+Comparisons use the same cohorts, observable windows and scales. Configuration summaries include accuracy, variability and execution cost; chronological examples are chosen independently of prediction quality. Overlapping windows are not independent repetitions, and scenario min–max bands are descriptive ranges rather than confidence intervals.
 
-CPU plots use raw resource samples rather than simulator-oriented OpenDT Fragments, which may clamp or extend utilization. Samples are held forward for at most ten seconds within execution; missing values remain missing, and partial sums are distinguished from full coverage. This shows workload CPU and sampling coverage, not total node utilization or a direct reporting-latency measurement. Terminal Pods are excluded from pressure using captured Pod phases, including in older captures; corrections are documented without rewriting source logs.
-
-Repetitions are compared only when their planned schedules match. Pressure curves show the median and observed range over their common captured interval, leaving gaps for missing state; the range is not a confidence interval. CPU traces remain individual. An execution timeline cannot meaningfully be averaged, so the report shows the first complete run alongside per-batch queue waits from all repetitions. Common distribution bins make runs comparable without repeating every figure. Detailed measurement conventions and evidence caveats belong in the generated report.
+Reports distinguish illustrative action comparisons from validation against observations. Experimental sections appear only when supporting evidence is available; ordinary runs reuse selected settings. Measured closed-loop performance should lead when it exists. Exact measurements and interpretation caveats remain available alongside the compact presentation.
 
 ## Arrival forecasting and calibration
 
@@ -143,7 +141,7 @@ Current-state evidence distinguishes classifier execution from the surrounding J
 
 Forecasts must be reproducible from frozen observations, the selected profile, and the sampling seed, with the numerical environment recorded for audit. Exact reproduction assumes the same runtime and CPU; other environments may differ in floating-point results. Overlapping predictive horizons are not independent experimental runs. Scenario count, arrival horizon, and control cadence are separate choices; cadence must account for the cost of OpenDC evaluation.
 
-The planned loop reuses X sampled futures and one observed state for valid -1/0/+1 worker changes within the one-to-three-worker range. A single Kubernetes-hosted OpenDC runner should initially execute candidates sequentially on the control-plane VM, subject to headroom and scheduling validation. This keeps its reservation outside the simulated worker pool and avoids waiting for an application Job slot. Worker capacity and runner placement follow the planned simplifications below. Integration still needs restoration of initial work in OpenDC, cycle timeout/overrun behavior, and an SLO/confidence decision rule. Scale-down must preserve running Jobs on cordoned workers and account for their completion before treating that capacity as returned to the provider pool. Implementation steps are tracked in [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md#remaining-closed-loop-work).
+Capacity alternatives reuse the same observed state and sampled futures so their differences reflect the action rather than different demand. An eventual control loop must account for simulation time and preserve work on workers being removed. Action selection and actuation are outside the current evaluation.
 
 ### Simulation input semantics
 
@@ -151,7 +149,7 @@ Every scenario starts from the same observed state and uses one representative m
 
 Queued and starting Jobs retain their full execution profile. Starting work occupies its assigned resources, but this version makes no separate estimate of pre-container startup delay. Running work retains only the profile remaining after elapsed classifier execution; scheduler waiting is never subtracted as compute. Remaining execution is `max(0, template_duration - elapsed_classifier_execution)`. An observed-running Job whose modeled profile is exhausted consumes no further simulated capacity. That assumption does not establish observed completion or affect the real Job. More complex execution-duration modeling is outside the demo's scope.
 
-The arrival horizon bounds new arrivals, not execution duration. Included work can finish beyond it, and original arrivals remain available for response-time analysis. Backlog and future-arrival cohorts remain distinguishable so a fixed-window or cohort-based evaluation can be chosen later. Finishing the simulation does not decide which period contributes energy or throughput, how unfinished Jobs affect performance/SLO evaluation, or whether post-horizon arrivals are needed for meaningful completion predictions. These are project decisions to investigate through the evaluation PDF; further OpenDC developer advice is welcome but is not a prerequisite. No scoring policy or SLO acceptance threshold is decided here.
+The arrival horizon bounds new arrivals, not execution duration. A fixed observation window measures timely completion; following the same cohort to completion measures its eventual response distribution. These answer different questions. Backlog and future arrivals remain distinguishable, original creation times retain earlier waiting, and unfinished work is explicit. Neither boundary defines a scaling policy or an SLO threshold.
 
 Initial placement and worker availability are part of the simulated state. Assigned work must remain on its worker, including during cordoning, until its modeled execution finishes. Observed allocatable resources are not calibrated application capacity; the planned worker model uses the explicit one-core allowance below. Runner capacity is separate and should be provided by the control plane. A simulation that starts with an empty cluster cannot represent this initial state faithfully.
 
@@ -161,15 +159,13 @@ Node3 calibration uses 0.02–0.30 Jobs/second as a starting profile. Daemon and
 
 ## Direct OpenDC execution boundary
 
-The container builds pinned OpenDC commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad` and invokes its supported CLI directly, bypassing OpenDT. A small Python layer prepares inputs, supervises execution and checks native results. Synthetic CPU- and memory-admission fixtures establish that this path works; they do not represent the application workload or restore live cluster state.
+The demo executes a fixed OpenDC version directly to isolate simulator behavior from orchestration. Controlled admission experiments check CPU and memory constraints before the simulator is used with application evidence. Passing these checks establishes an execution path, not faithful reconstruction of a live cluster.
 
-Keep original Task/Fragment exports intact. Separate simulator-facing copies annotate timestamps as UTC milliseconds and multiply memory by 1,000 to compensate for the pinned reader's division. Actual memory-admission behavior validates this version-specific adaptation.
-
-A bounded Kubernetes Job with node-local artifacts is sufficient for this milestone. Preserve inputs, native output, diagnostics and process status, and require output validation as well as a successful exit. Measure real execution cost separately from simulated resource use. Build/run details belong in [README](README.md#direct-controlled-opendc-execution); validation evidence and follow-up work belong in [OPENDT_HANDOFF](OPENDT_HANDOFF.md).
+Original observations remain separate from simulator-specific conversions. Reproducibility requires preserving inputs, native outputs and the numerical environment, and checking output validity as well as process success. Actual simulation cost is measured separately from modeled application resource use.
 
 ## Planned worker capacity and runner placement
 
-Model each C-core worker with C - 1 application cores, a deliberate allowance for fractional system reservations. Three four-core workers therefore offer nine one-CPU Job slots. Use the frozen measured application profile; the twelve-slot synthetic fixture remains a regression test. Omit explicit daemon workload and energy overhead while retaining the worker power model's idle baseline.
+Model each C-core worker with C - 1 application cores, a deliberate allowance for fractional system reservations. Three four-core workers therefore offer nine one-CPU Job slots. Use the frozen measured application profile. Omit explicit daemon workload and energy overhead while retaining the worker power model's idle baseline.
 
 Prefer the control-plane VM for OpenDC so it does not wait for worker Job slots. Keep application Jobs off the control plane and verify runner headroom there before relying on loop timing. The control plane and runner remain outside simulated worker capacity and energy; no additional worker-core deduction is needed with this placement.
 
@@ -184,8 +180,6 @@ Worker selection prefers an observed-empty eligible worker, otherwise the worker
 Energy uses cumulative native worker joules, interpolated at evaluation boundaries. Included workers retain their configured idle-power baseline after execution ends; the omitted worker has no assumed power-off time. The illustrative linear defaults are 100 W idle and 200 W maximum, configurable and uncalibrated. Control-plane, runner and separate daemon energy are excluded. Actual runner cost is recorded separately. A fixed window counts only released work as completed or unfinished; arrivals beyond an earlier evaluation boundary remain not-yet-arrived. Backlog response time includes its original waiting time.
 
 ## Planned initial placement and scale-down modeling
-
-The user-agreed validation milestone precedes automatic decision-making: first compare simulation with observations using known subsequent arrivals, then compare forecasts with observations using only pre-cutoff evidence, then vary modeling assumptions in controlled comparisons. Every competing configuration retains the observed backlog. The [handoff validation plan](OPENDT_HANDOFF.md#next-milestone-validate-the-twin-against-observations) defines the sequence, matched-cohort requirements, evidence and interpretation limits. This is deferred implementation work; the accepted report and current synthetic experiments do not yet establish predictive accuracy.
 
 Correct initialization must preserve observed placement and occupy resources before queued or future work is scheduled. For scale-down, prefer an empty worker; otherwise select the worker whose most recent Job assignment is oldest as a simple earliest-completion heuristic.
 
@@ -210,3 +204,13 @@ This is a deliberate scientific-demo trade-off: detecting an invalid run is more
 - Controlled OpenDC execution does not restore initial live state, select policies, or actuate workers; these remain later features.
 
 The current single-host cluster remains the development setup until the closed loop works. A later two-host setup could provide more time for active Jobs to build up before saturation. Capacity and arrival intensity will need to be calibrated together: adding capacity alone could eliminate the queue instead of producing a more informative rise and fall. This expansion is deferred and does not change the current workload or topology.
+
+## Packing and observation validation
+
+Application placement prefers already occupied workers that still have sufficient resources. Packing makes spare capacity visible for later capacity changes, while resource admission and worker eligibility remain mandatory. Real and simulated placement should follow the same principle; measured placement, rather than a scheduler preference alone, establishes whether they agree.
+
+Validation separates three questions. First, replay the observed backlog and known subsequent arrivals to assess the simulator. Second, replace subsequent arrivals with forecasts based only on pre-cutoff evidence to assess the additional forecast error. Third, vary a small set of modeling assumptions while sharing seeds and futures where possible. Fit profiles and choose parameters chronologically, then assess the selected configuration on separate held-out observations.
+
+Every comparison retains initial backlog and fixes the target cohort, cutoffs and evaluation windows. Longer arrival horizons may add competing work without enlarging the scored cohort. Compare completion counts, completed-Job response distributions, scenario variability, empirical coverage and execution cost. Missing snapshot membership, capture gaps, unmatched Jobs, exhausted profiles and unfinished work remain explicit; low average error cannot establish faithful initialization.
+
+Compressed periodic workloads make functional experiments practical, but their horizon-to-cycle ratio and sample size differ from realistic diurnal demand. More training observations can stabilize fitting without removing randomness in a short prediction window. An unchanged observation validates neither scaling counterfactuals nor the uncalibrated power model. Partial scale-down totals cannot establish a winning action.

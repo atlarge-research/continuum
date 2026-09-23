@@ -95,6 +95,8 @@ spec:
               value: fns-demo
             - name: WORKER_IMAGE
               value: continuum/image-batch-worker:fns-v1
+            - name: WORKER_SCHEDULER_NAME
+              value: fns-packing
             - name: JOB_TTL_SECONDS
               value: "3600"
             - name: WORKER_INFERENCE_REPETITIONS

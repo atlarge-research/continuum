@@ -1,214 +1,126 @@
-# Image batch demo application
+# Image batch demo
 
-This application is the first endpoint-to-cloud vertical slice for the October 8 FNS demo. The endpoint sends a batch of images to an adapter, the adapter creates one finite Kubernetes Job, and the Job returns its classifications to the adapter. An observer sidecar records completed workload and live cluster state for later OpenDT/OpenDC use.
+Run image-classification Jobs on Kubernetes, capture their workload and resource use, forecast arrivals, and compare OpenDC simulations with observations. Results stay cloud-side. The demo supports manual simulation and evaluation; automatic scaling is not connected.
 
-```text
-endpoint -- image tar --> adapter -- creates --> Kubernetes Job
-                              ^                      |
-                              |-- cloud-side result--|
-                              |
-                        observer sidecar
-                     -- watches Jobs --> OpenDT JSONL
-```
-
-See [DESIGN.md](DESIGN.md) for the reasoning behind the workload schedule, sender concurrency, synthetic inference duration, and observer data model.
-
-## HTTP and data contracts
-
-- `POST /v1/batches` accepts an uncompressed tar containing JPEG files and returns an HTTP `202` receipt with a request ID and Job name.
-- `GET /v1/batches/{request_id}/payload` serves the stored batch to its Job.
-- `PUT /v1/batches/{request_id}/result` stores the Job result cloud-side.
-- `GET /v1/batches/{request_id}` exposes request state for debugging.
-- `GET /v1/metrics` exposes live adapter concurrency and aggregate timings.
-- The adapter writes application lineage and timing to `/data/events.jsonl`.
-- The observer writes its own ephemeral JSONL files under `/var/lib/opendt` and has no access to the adapter's `/data` directory.
+Run commands from the repository root with Python 3.10+. Use new output directories to preserve previous results. See [DESIGN](DESIGN.md) for scientific reasoning and [HANDOFF](OPENDT_HANDOFF.md) for deployment details, current evidence and continuation notes.
 
 ## Local smoke run
 
-The local submitter runs the worker as a child process with a deterministic checksum classifier. It validates the endpoint, payload, receipt, worker, result, and event contracts without a cluster or TensorFlow Lite.
-
-Use Python 3.10+ and install `requirements-adapter.txt` first. The Kubernetes client package is required; the checksum run needs no cluster or worker packages.
-
-Start the adapter:
+Start a local adapter with a lightweight checksum worker; no cluster or inference model is needed:
 
 ```bash
+python3 -m pip install -r application/image_batch/requirements-adapter.txt
 python3 application/image_batch/src/adapter.py \
   --submitter local --data-dir /tmp/fns-image-batch
 ```
 
-In a second terminal, run one seeded low-peak-low arrival cycle:
+In a second terminal, send one seeded workload cycle:
 
 ```bash
 python3 application/image_batch/src/endpoint.py \
   --adapter-url http://127.0.0.1:8080 \
   --images application/image_classification/src/images \
-  --batch-size 4 --arrival-pattern periodic \
-  --period-seconds 60 \
-  --minimum-rate 0.2 --peak-rate 1 \
-  --max-concurrency 16 --random-seed 42
+  --batch-size 4 --arrival-pattern periodic --period-seconds 60 \
+  --minimum-rate 0.2 --peak-rate 1 --max-concurrency 16 --random-seed 42
 ```
 
-The endpoint prepares the complete schedule and all payloads before the timed run. It emits `schedule.planned` records, starts HTTP submissions through a bounded sender pool, and finishes with `schedule.summary`. The pool prevents a slow blocking HTTP response from shifting later open-loop arrivals unless all senders are occupied.
-
-The October invocation fixes the batch at four images. Use `--batch-size-min` and `--batch-size-max` instead when heterogeneous batch sizes are required. For a constant-rate smoke run, omit `--arrival-pattern periodic` and use `--batches` with `--interval-seconds`.
-
-Inspect a request with the ID printed by the endpoint:
+The endpoint prints request receipts and a final schedule summary. Inspect a request using its printed ID:
 
 ```bash
 curl http://127.0.0.1:8080/v1/batches/REQUEST_ID
 curl http://127.0.0.1:8080/v1/metrics
-tail -f /tmp/fns-image-batch/events.jsonl
 ```
 
 ## Kubernetes demo deployment
 
-`configuration/fns_demo_v1.cfg` provisions one two-vCPU endpoint, one four-vCPU Kubernetes control plane, and three four-vCPU workers. CPU pinning assigns 18 distinct host CPUs.
+Use `configuration/fns_demo_v1.cfg` with Continuum's [provisioning instructions](../../README.md). It provisions one endpoint, a Kubernetes control plane and three workers. Before deployment, follow the [cluster setup notes](OPENDT_HANDOFF.md#cluster-setup-reference) to load images, enable worker packing and check network replay.
 
-Build the images from the repository root:
+Build the application images:
 
 ```bash
-docker build -f application/image_batch/docker/adapter.Dockerfile \
-  -t continuum/image-batch-adapter:fns-v1 .
-docker build -f application/image_batch/docker/worker.Dockerfile \
-  -t continuum/image-batch-worker:fns-v1 .
-docker build -f application/image_batch/docker/endpoint.Dockerfile \
-  -t continuum/image-batch-endpoint:fns-v1 .
+docker build -f application/image_batch/docker/adapter.Dockerfile -t continuum/image-batch-adapter:fns-v1 .
+docker build -f application/image_batch/docker/worker.Dockerfile -t continuum/image-batch-worker:fns-v1 .
+docker build -f application/image_batch/docker/endpoint.Dockerfile -t continuum/image-batch-endpoint:fns-v1 .
 ```
 
-When updating an existing cluster, preserve its calibrated `WORKER_IMAGE` setting and verify loaded image IDs. Use a new adapter/observer tag rather than reusing a cached tag.
-
-After Kubernetes and its monitoring stack are available, configure cAdvisor sampling and deploy the adapter and observer:
+With Kubernetes and monitoring ready:
 
 ```bash
 python3 application/image_batch/src/configure_cadvisor_scrape.py
 kubectl apply -f application/image_batch/manifests/adapter.yaml
 ```
 
-The cAdvisor setup changes only that scrape endpoint to a five-second interval with a one-second timeout and verifies the result. The adapter Deployment must remain at one replica and must not be scaled or updated during a run. If the adapter or observer is replaced or crashes, stop and restart the complete demo.
+Run the endpoint against `http://<cloud-node-ip>:30080`. Keep the calibrated four-image batches and 128 inference repetitions. Use 120-second cycles for functional checks and 240-second cycles for evaluation, with `--arrival-cycles 6 --minimum-rate 0.02 --peak-rate 0.30`. Keep the adapter at one replica and restart the experiment if it or the observer crashes or is replaced.
 
-The manifest's `WORKER_INFERENCE_REPETITIONS=128` setting is a deliberately synthetic, node3-calibrated load multiplier. It keeps the four-image network payload fixed while producing roughly 30--35 seconds of compute for useful sampling; 128 repeated inferences should not be interpreted as realistic application behavior. Use one repetition for a basic smoke test.
+## Save observations and generate a run report
 
-The adapter is exposed on node port `30080`. Configure the endpoint with `ADAPTER_URL=http://<cloud-node-ip>:30080`.
-
-The demo configuration enables pinned KPN 5G access replay plus static core settings. Provisioning compiles MahiMahi into endpoint base images; VM startup checks the inherited installation and fails if it is missing or outdated. Rebuild an older endpoint base before enabling replay. Before running the workload, check `sudo python3 /home/mahimahi/continuum_replay.py check` on the endpoint. See [DESIGN](DESIGN.md#network-emulation) for the model and validation boundary.
-
-## Observer output
-
-The observer continuously flushes four audit streams in its dedicated `emptyDir`:
-
-- `workload.jsonl`: completed OpenDT-compatible Tasks and Fragments.
-- `resource-snapshots.jsonl`: accepted per-Job CPU and memory samples.
-- `cluster-state.jsonl`: queued/running Jobs and worker availability.
-- `observer-events.jsonl`: first-observed Job arrivals, emission times, failures, and collection diagnostics.
-
-Copy them after a run:
+Save the endpoint's stdout as `endpoint.jsonl`. Copy the observer files before removing its Pod:
 
 ```bash
 kubectl cp -n fns-demo \
   -c opendt-observer image-batch-adapter-POD:/var/lib/opendt ./opendt-audit
 ```
 
-The endpoint audit stream is structured stdout and should be captured from its container logs. The adapter result and events remain under its `/data` mount.
-
-These JSONL files are ephemeral experiment evidence, not a durable transport between OpenDT components. Forecasting consumes bounded prefixes; controlled OpenDC execution, policy selection, and actuation are separate phases.
-
-## Offline run report
-
-Generate a report from saved endpoint and observer logs using Python 3.10+:
+Generate a PDF from those files:
 
 ```bash
 python3 -m venv /tmp/fns-analysis-venv
 /tmp/fns-analysis-venv/bin/pip install -r application/image_batch/requirements-analysis.txt
 /tmp/fns-analysis-venv/bin/python application/image_batch/src/analyze_run.py \
-  --endpoint-log ./endpoint.jsonl \
-  --observer-dir ./opendt-audit \
+  --endpoint-log ./endpoint.jsonl --observer-dir ./opendt-audit \
   --output-dir ./logs/image-batch-report
 ```
 
-`--endpoint-log` is the endpoint's captured stdout; `--observer-dir` contains the four streams copied above. Repeat `--endpoint-log` to compare runs with matching planned arrivals, or use `--run-id ID` to select one. Choose a new output directory.
-
-Open `logs/image-batch-report/report.pdf` in VS Code or a desktop PDF reader.
+Open `logs/image-batch-report/report.pdf`. Repeat `--endpoint-log` to compare runs with matching planned arrivals, or add `--run-id ID` to select one.
 
 ## Arrival forecasting
 
-Forecasting reads observer logs and produces future arrival scenarios as OpenDC-compatible Parquet files. Use Python 3.10+:
+Install the forecasting dependencies and generate a forecast plus simulation inputs:
 
 ```bash
 python3 -m venv /tmp/fns-forecast-venv
 /tmp/fns-forecast-venv/bin/pip install -r application/image_batch/requirements-forecast.txt
 /tmp/fns-forecast-venv/bin/python application/image_batch/src/forecast_workload.py \
-  --observer-dir ./opendt-audit --run-id WORKLOAD_RUN_ID --period-seconds 120 \
-  --phase-origin ORIGIN_UTC --cutoff CUTOFF_UTC --output-dir ./logs/forecast-one
+  --observer-dir ./opendt-audit --run-id WORKLOAD_RUN_ID --period-seconds 240 \
+  --phase-origin ORIGIN_UTC --cutoff CUTOFF_UTC \
+  --horizon-seconds 60 --scenarios 10 --simulation-inputs \
+  --output-dir ./logs/forecast-one
 ```
 
-Set `ORIGIN_UTC` to the endpoint's `schedule.ready.details.schedule_start_timestamp` and `CUTOFF_UTC` to the UTC forecast time. Choose a new output directory; `forecast.json` reports readiness.
-
-For calibration, start the endpoint with `--period-seconds 120 --arrival-cycles 6 --minimum-rate 0.02 --peak-rate 0.30`. Keep endpoint and forecast periods equal.
-
-Set `--scenarios X` for the number of sampled futures (default 100) and `--horizon-seconds H` for the future arrival window (default 60 seconds, a multiple of the bin width). Every ready forecast writes `tasks.parquet` and `fragments.parquet` under each `scenarios/NNNN/` directory; historical Tasks and current cluster state are exported separately.
-
-For periodic forecasts, replace `--cutoff CUTOFF_UTC` with `--interval-seconds 10` and read live observer files. This repeats forecasting and export only; OpenDC execution and actuation are not connected yet. `--period-seconds` describes the recurring workload cycle, not the control interval.
-
-Use `evaluate_forecasts.py` to score saved forecasts, or add forecast pages with `analyze_run.py`. Their `--help` lists the required inputs; specify the arrival-run end to exclude shutdown time.
-
-See [DESIGN.md](DESIGN.md#arrival-forecasting-and-calibration) for model and calibration decisions, and `forecast_workload.py --help` for other options.
-
-## Simulation input bundles
-
-Add `--simulation-inputs` to either forecast command to combine queued and remaining running work, worker state, and sampled arrivals into reproducible simulator inputs.
-
-Bundles are written under `simulation/`. Check `simulation/manifest.json` for readiness before using them. One-shot mode exits with 0 when ready, 2 when not ready, and 1 for invalid input. This prepares inputs; it does not run OpenDC or change the cluster.
-
-See [OPENDT_HANDOFF.md](OPENDT_HANDOFF.md) for the provisional runner workflow and remaining live-state limitations.
+Match `--period-seconds` to the workload. Set `ORIGIN_UTC` from the endpoint's `schedule.ready.details.schedule_start_timestamp`; `CUTOFF_UTC` is the forecast time. Check `forecast.json` and `simulation/manifest.json` for readiness. Ready forecasts contain sampled arrivals and simulator input bundles. For repeated forecasts, replace `--cutoff` with `--interval-seconds 10` and use live observer files.
 
 ## Direct controlled OpenDC execution
 
-The direct runner builds upstream OpenDC from master commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad` without OpenDT. The build uses that exact source revision, not a moving branch. The controlled mode runs synthetic empty-state fixtures; the separate provisional workflow below adapts ready schema-2 bundles with explicit initialization limitations. Neither mode closes the control loop. Source, toolchain and runtime pins are defined in the [Dockerfile](docker/opendc.Dockerfile) and [Python requirements](requirements-opendc.txt); each execution records its OpenDC commit and runtime versions. The first build compiles OpenDC and downloads Gradle dependencies without a project-maintained dependency checksum catalogue; execution requires no downloads.
-
-Build and run from the repository root, choosing a new evidence directory:
+Build the pinned simulator image:
 
 ```bash
-docker build -f application/image_batch/docker/opendc.Dockerfile -t continuum/opendc:master-7db7e1a2331fd .
-mkdir -p "$PWD/logs/opendc-local"
-docker run --rm --user "$(id -u):$(id -g)" --network none --read-only \
-  --hostname opendc-controlled --add-host opendc-controlled:127.0.0.1 \
-  --tmpfs /tmp:rw,exec,nosuid,size=256m --cpus=1 --memory=2g \
-  -v "$PWD/logs/opendc-local:/evidence" continuum/opendc:master-7db7e1a2331fd \
-  prepare --fixture controlled --output-dir /evidence/inputs
-docker run --rm --user "$(id -u):$(id -g)" --network none --read-only \
-  --hostname opendc-controlled --add-host opendc-controlled:127.0.0.1 \
-  --tmpfs /tmp:rw,exec,nosuid,size=256m --cpus=1 --memory=2g \
-  -v "$PWD/logs/opendc-local:/evidence" continuum/opendc:master-7db7e1a2331fd \
-  run --input-dir /evidence/inputs --output-dir /evidence/result
+docker build -f application/image_batch/docker/opendc.Dockerfile \
+  -t continuum/opendc:master-7db7e1a2331fd .
 ```
 
-Use `--fixture memory` for the memory-admission check. `/tmp` must allow executable mappings for OpenDC's native Parquet compression library. The root filesystem remains read-only. `execution.json` records process and validation status; `resources.json`, logs, copied inputs, and native output under `simulator/` remain available after exit. This upstream revision uses `opendc run` and no longer emits `trackr.json`; our resolved configuration and execution manifest retain run provenance. Prepare new inputs after changing the pinned revision; old prepared bundles are rejected. CLI exits are 0 for validated success, 1 for execution/output failure, 2 for invalid inputs, and 124 for timeout.
-
-The opt-in integration test repeats local runs, imports the exact image into the selected existing worker, and runs isolated Kubernetes success/failure cases with 1 CPU and 2 GiB requests and limits:
-
-```bash
-/tmp/fns-forecast-venv/bin/python application/image_batch/tests/run_opendc_integration.py \
-  --image continuum/opendc:master-7db7e1a2331fd \
-  --evidence-dir logs/fns-opendc-execution/NEW-RUN \
-  --namespace fns-opendc-NEW-RUN \
-  --controller cloud_controller_matthijs@192.168.210.2 \
-  --worker cloud0_matthijs@192.168.210.3 \
-  --ssh-key "$HOME/.ssh/id_rsa_continuum"
-```
-
-Use lowercase DNS labels for the namespace. The operator environment needs Python 3.10+ and `requirements-opendc.txt`'s PyArrow version; its wheel hashes target the Python 3.11 container. Docker, SSH, controller-side `kubectl`, and worker-side passwordless sudo are required. The test preserves existing workloads and VMs, verifies artifact copies, then removes only its Jobs, namespace, and run directories; the image remains cached on the worker. On failure it preserves remote evidence for inspection. Use `opendc_kubernetes.py collect --help` to resume collection into a new directory, and `manifest --help` to render an individual Job. Delete its remote directory only after `collection.json` reports `collected` and `artifacts_verified: true`; the execution itself may have failed.
+The [controlled-run instructions](OPENDT_HANDOFF.md#controlled-opendc-run-reference) cover an empty-cluster smoke test and the optional Kubernetes integration test. To simulate captured workload, use the workflow below.
 
 ## Manual provisional scenario workflow
 
-Use [opendc_scenarios.py](src/opendc_scenarios.py) to prepare forecast scenarios, then [opendc_batch.py](src/opendc_batch.py) to run them locally or on the Continuum control plane. Each command provides `--help`. Use Python 3.10+ with [requirements-analysis.txt](requirements-analysis.txt) and new output directories.
-
-Generate the PDF and numerical results from a completed batch:
+Prepare scenarios with `opendc_scenarios.py prepare`, run them with `opendc_batch.py`, then generate an action report:
 
 ```bash
-python application/image_batch/src/opendc_evaluate.py \
+python3 application/image_batch/src/opendc_evaluate.py \
   --batch-dir ./logs/scenarios-one-cluster --output-dir ./logs/scenarios-one-report
 ```
 
-To redraw an existing report, replace `--batch-dir` with `--metrics-file ./logs/scenarios-one-report/metrics.json`.
+Each command provides `--help`; the [handoff](OPENDT_HANDOFF.md#manual-run-reference) gives the preparation and execution commands. To redraw saved action results, replace `--batch-dir` with `--metrics-file ./logs/scenarios-one-report/metrics.json`.
 
-See [DESIGN](DESIGN.md#provisional-scenario-workflow) for modeling assumptions and limitations, and [OPENDT_HANDOFF](OPENDT_HANDOFF.md) for current results and next steps. This remains a manual demo with partial scale-down accounting.
+For the combined action and forecast-validation PDF:
+
+```bash
+python3 application/image_batch/src/opendc_report.py \
+  --metrics SAVED_REPORT/metrics.json --split validation \
+  --output-dir NEW_REPORT_DIRECTORY
+```
+
+Open `NEW_REPORT_DIRECTORY/report.pdf`; plotted comparison values are in `comparison.json`. Repeat `--metrics` to combine saved evidence. Omit `--split validation` to include all supplied validation runs; use `--forecast-seed` to choose a scenario seed. Only sections with supplied evidence are included.
+
+## Observation validation
+
+Use `opendc_validation.py prepare` for replay inputs and `evaluate` for measured comparisons. Follow the [recorded experiment commands](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md) to reproduce the chronological validation and held-out evaluation. This remains a manual experiment with approximate initialization, partial scale-down accounting and uncalibrated energy assumptions.

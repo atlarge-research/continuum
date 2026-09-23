@@ -2,17 +2,39 @@
 
 ## Where to resume
 
-The user accepted the [simplified three-page PDF](../../logs/fns-provisional/report-polish-20260921/final/report.pdf) and approved the reviewed provisional demo for a local commit on 2026-09-21. Further PDF polishing is not the next task. The agreed follow-up for a later thread and separate implementation commit is [validation of the twin against observations](#next-milestone-validate-the-twin-against-observations): simulation versus observations, forecast versus observations, then controlled comparisons of modeling assumptions. This direction is agreed but not implemented. Verify the branch and preserve subsequent working-tree changes before resuming. Pushes and future implementation commits require separate authorization.
+The accepted compact report now has a repository entry point, [opendc_report.py](src/opendc_report.py), which combines optional action pages from `opendc_evaluate.py` and forecast-comparison pages from `opendc_report_validation.py`. Review the [regenerated four-page PDF](../../logs/fns-provisional/packing-validation-20260921/report-source-20260923/report.pdf). The existing validation evaluator uses the same composition layer. The temporary report renderer and README have been removed from the report logs; rendering needs only repository code and saved metrics. See [README](README.md#manual-provisional-scenario-workflow) for usage and [DESIGN](DESIGN.md) for the optional-section and shared-window conventions. The user reviewed this milestone and authorized committing and pushing it on 2026-09-24; use Git for its final revision.
+
+Final review removed the obsolete `report_phases()` helper and the optional `_plot_input_comparison()` renderer, their dedicated tests, and the latter's CLI option and endpoint override. The compact report still has five tests for optional sections, split/seed selection, shared windows, missing values and input preservation. All 202 remaining image-batch tests pass, including the socket-dependent HTTP test. Pinned Black passes; Pylint on this final cleanup reports only the existing test-class method-count finding (21/20), with no errors or warnings. The evaluator no longer exceeds the module-size limit; observation evaluation's five previously reviewed refactor findings remain accepted. The four-page PDF was regenerated separately and matches the approved pages pixel for pixel and its numerical comparison exactly. See [final review verification](../../logs/fns-provisional/packing-validation-20260921/document-scope-20260924/VALIDATION.md) and the [preceding cleanup verification](../../logs/fns-provisional/packing-validation-20260921/report-cleanup-20260923/VALIDATION.md).
+
+[AGENTS.md](../../AGENTS.md) now defines documentation audiences: README provides concise run instructions, DESIGN explains scientific/system reasoning, and this handoff carries implementation and continuation detail. Deployment and advanced execution material moved into the reference sections below; per-run results remain in experiment evidence. User review is complete; commit and push are authorized.
+
+These report follow-ups remain future work, outside this commit's PDF scope:
+
+- Repeated-seed configuration evaluation remains future work. The compact comparison currently uses six usable, overlapping windows from capture A, not six independent runs. Compare all candidates over a shared pool of workload seeds; the renderer does not yet pool multiple runs.
+- The opening action illustration uses three futures, while the saved forecast choice uses ten. Eventually replace that opening illustration with actual closed-loop results generated with the chosen settings; do not present the current illustration as that evidence.
+- The shared renderer currently supports action and forecast-validation sections. Add a leading closed-loop performance section when its measurements exist. Ordinary runs should reuse configured settings rather than automatically repeat configuration experiments.
+
+The packing and observation-validation milestone is implemented and measured as one reviewed change on `codex/fns-2026-10-08`, based on `f3c52dac5a01102633bf73bd8fe47e785f8244cd`. Review the [original milestone evaluation PDF](../../logs/fns-provisional/packing-validation-20260921/evaluation/report.pdf), [findings](../../logs/fns-provisional/packing-validation-20260921/FINDINGS.md), [numerical summary](../../logs/fns-provisional/packing-validation-20260921/evaluation/summary.csv) and [reproduction commands](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md). All 592 matrix cases and nine illustrative action cases succeeded; the original milestone's 199-test suite passed before report integration. The user authorized committing and pushing this milestone on 2026-09-24.
+
+Application Jobs now select the existing scheduler's `fns-packing` profile with CPU MostAllocated; live tests measured packing, CPU/memory fit and control-plane runner isolation. OpenDC's existing fitting-host policy already packs, and four configured cores remain three modeled cores. Evaluation uses 240-second cycles; functional checks use 120 seconds. H60/N10 was selected on A before capture B. Held-out completion-curve MAE is 0.785 Jobs with forecasts versus 0.190 with known arrivals; paired replay response MAE is 2.007 seconds. The [findings](../../logs/fns-provisional/packing-validation-20260921/FINDINGS.md) distinguish matched cohorts, two A coverage exclusions, four snapshot-membership omissions, exhausted work and censoring. These are compressed-cycle demo results, not a general calibration claim.
+
+The likely next commit integrates the OpenDC lead's updated implementation. Verify its actual initialization/job-pinning and scale-down APIs, then repeat the preserved known-arrival comparisons before drawing conclusions from forecasts. Current running remainders still restart without restored placement/startup occupancy; partial scale-down and uncalibrated power remain unresolved. Snapshot/event timing also leaves four observed backlog Jobs absent from their cutoff snapshots, including two whose arrival events were already available; treat observation/reconstruction alignment as a targeted follow-up. Do not repeat broad lint cleanup or introduce an action policy.
+
+### Soon-following commit: rebuild with current Kubernetes
+
+Upgrade Kubernetes through Continuum's offline provisioning in a separate future commit, not through an in-place upgrade of the running 1.27.16 cluster. Update the relevant Ansible installation files and compatible Kubernetes, container-runtime, networking and monitoring packages, then provision a fresh cluster and debug/validate the complete deployment. Preserve current captures, logs, images and source artifacts before rebuilding. Revalidate application timing, observation metrics, worker packing, resource admission and control-plane runner isolation against the new stack. The inspected `pr-23-curated` branch still targets Kubernetes 1.27 and is not an already-validated upgrade source. Keep this work separate from the upcoming OpenDC integration and from the current measurement milestone.
+
+The user-accepted [simplified three-page PDF](../../logs/fns-provisional/report-polish-20260921/final/report.pdf) remains the historical presentation baseline. The current milestone combines packing with [all three validation stages](#next-milestone-validate-the-twin-against-observations), superseding older wording that treated scheduling as separate. Verify the branch and preserve subsequent working-tree changes before resuming. Earlier reports and captures remain in their original locations.
 
 The branch-wide formatting and lint cleanup is complete and approved by the user; see [the cleanup report](LINT_CLEANUP.md). The manual provisional scenario workflow below is implemented, including the agreed worker-capacity and control-plane runner placement. Review its validation evidence before proceeding to faithful initialization or complete scale-down accounting. Do not repeat the branch-wide lint pass.
 
 Simulator inputs and direct controlled OpenDC execution are implemented. The execution milestone precedes assigned-work integration and bypasses OpenDT entirely: use `opendc_run.py` and the container built from pinned upstream master commit `7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad`. It retains synthetic empty-state fixtures and now accepts separately prepared `opendc-provisional-v1` experiments. Raw live simulation bundles are still rejected. Provisional replay retains placement evidence but deliberately does not restore placement or startup occupancy.
 
-The OpenDC lead confirmed that initial-state restoration is not currently supported and suggested that a small targeted fix may be feasible. The follow-up requesting fixed initial placement and feedback on the split scale-down simulation has been sent; a solution is pending. Continue with the provisional scenario workflow below while the developer works on it. Evaluation-window decisions do not depend on another developer response.
+The pinned OpenDC revision lacks initial-state restoration. The lead's forthcoming update is expected to provide relevant placement and scale-down features, but it has not been integrated or validated here. Continue to label the current initialization provisional; evaluation-window decisions do not depend on that integration.
 
 The manual `opendc_scenarios.py` → `opendc_batch.py` → `opendc_evaluate.py` path implements the worker-capacity and control-plane decisions below. Historical synthetic fixtures and validation evidence remain intact; explicit legacy worker-hosted fixture execution remains supported.
 
-The user agreed on 2026-09-21 to prefer dense worker packing for application Jobs; see [the scheduling decision](#scheduling-decision-prefer-worker-packing). Scheduler configuration and matching OpenDC behavior remain implementation and validation follow-ups.
+The [worker-packing decision](#scheduling-decision-prefer-worker-packing) is implemented and verified by the current milestone. The original demo's data/source were archived before its adapter image was refreshed, and a real calibrated Job completed with the packing profile. Kubernetes remains at 1.27.16; the deferred offline upgrade above is separate work.
 
 The entry point is [forecast_workload.py](src/forecast_workload.py) with `--simulation-inputs`; [simulation_input.py](src/simulation_input.py) builds the shared initial state and combined scenarios. Use the [README](README.md#arrival-forecasting) for invocation and [DESIGN](DESIGN.md#simulation-input-semantics) for modeling decisions. Scope and delivery priorities remain in the [Notion demo task](https://app.notion.com/p/374dc985c5868055a157df2a6d95f1bb).
 
@@ -47,7 +69,7 @@ Adapter events preserve application lineage; resource observations come from the
 
 ## Controlled runner operation
 
-Use the [README](README.md#direct-controlled-opendc-execution) for the container and isolated integration test. `opendc_run.py prepare` writes source/adapted traces, topology, fixture expectations and provenance; `run` writes `execution.json`, `resources.json`, logs and native simulator output. Always choose new directories. Inspect both the process exit and output validation; OpenDC exit zero alone is insufficient.
+Use the [controlled-run reference](#controlled-opendc-run-reference) for the container and isolated integration test. `opendc_run.py prepare` writes source/adapted traces, topology, fixture expectations and provenance; `run` writes `execution.json`, `resources.json`, logs and native simulator output. Always choose new directories. Inspect both the process exit and output validation; OpenDC exit zero alone is insufficient.
 
 `opendc_kubernetes.py manifest` renders one Job for a preloaded image and pre-created node-local directory. Stage inputs under `REMOTE/inputs` and create `REMOTE/results` owned by UID/GID 1000 with mode 0755; `REMOTE` must be a unique `/var/tmp/fns-opendc-NAME`. Apply the rendered Job in a dedicated namespace. After the Job reaches Complete or Failed, `collect` verifies its source and copies artifacts over SSH into a new local directory. Inspect `collection.json` before deleting the Job or remote directory. Failed collection leaves the source intact. The opt-in integration test implements this full sequence and saves commands, manifests and cleanup evidence.
 
@@ -133,7 +155,7 @@ The user agreed to the three-stage validation direction below. Retain the observ
 
 ## Next milestone: validate the twin against observations
 
-This is the next agreed implementation milestone, deferred to a later thread and separate commit from the current provisional workflow/report work. Its purpose is to establish where prediction error comes from and whether the chosen assumptions are defensible before building the automatic closed loop. Implement the stages in order; do not treat successful OpenDC execution or visually plausible synthetic curves as evidence of predictive accuracy.
+The three stages below record the agreed method implemented by the packing/validation milestone linked above. They remain the method for assessing the forthcoming OpenDC changes: establish where prediction error comes from before building the automatic closed loop. Successful native execution or visually plausible synthetic curves alone are not evidence of predictive accuracy.
 
 ### 1. Simulation versus observations
 
@@ -141,7 +163,7 @@ Start by auditing existing captures for matching forecast cutoffs, initial Job/w
 
 Compare simulated and observed cumulative completions and response distributions for the same Jobs and time windows. Include overall modeled-Job response with backlog/future breakdowns. Match Jobs by saved lineage and preserve original creation times. Record capture gaps, unmatched Jobs, model-exhausted work and unfinished observations explicitly; do not silently drop them or report them as zero. Check whether the capture continues long enough to observe the chosen cohort's completion. If not, use an explicit observation window and identify censored responses, or obtain a new controlled capture.
 
-The current replay restarts running remainders at time zero without restoring placement or startup occupancy. Measure and describe the resulting discrepancy; this stage must not claim faithful initialization. Existing captures are the starting point, but inspect their actual coverage before promising an offline-only validation. Record the real scheduler configuration, including whether it predates or implements the separate worker-packing decision; do not mix configurations as if they were identical.
+The current replay restarts running remainders at time zero without restoring placement or startup occupancy. Measure and describe the resulting discrepancy; this stage must not claim faithful initialization. Existing captures are the starting point, but inspect their actual coverage before promising an offline-only validation. Record the real scheduler configuration, including whether it predates or implements worker packing; do not mix configurations as if they were identical.
 
 ### 2. Forecast versus observations
 
@@ -153,13 +175,13 @@ Compare predicted arrival counts/timing and downstream completion/response curve
 
 Once the first two stages provide a measured baseline, vary one assumption at a time: forecast horizon, sampled-future count (for example 3, 10 and 20), or runtime/remainder estimation. Treat those values as candidate experiments, not newly agreed defaults. Keep the same cutoffs, initial backlog and remaining settings, and reuse seeds/shared sampled futures where applicable. When changing the arrival horizon, declare how the evaluation window and Job cohort stay comparable rather than comparing different amounts of work as if they were the same experiment.
 
-Reuse the retained side-by-side plot layout for meaningful model/configuration comparisons, with common metric scales and clear parameter labels. Assess prediction error, stability as scenario count increases, empirical coverage and execution cost. Existing backlog is present in every configuration; empty versus nonempty starting workloads remain test fixtures, not alternative policies for representing a nonempty cluster. Select parameters using validation cutoffs and assess the selected configuration on separate held-out cutoffs.
+Use adjacent panels for meaningful model/configuration comparisons, with common metric scales and clear parameter labels. Assess prediction error, stability as scenario count increases, empirical coverage and execution cost. Existing backlog is present in every configuration; empty versus nonempty starting workloads remain test fixtures, not alternative policies for representing a nonempty cluster. Select parameters using validation cutoffs and assess the selected configuration on separate held-out cutoffs.
 
 ### Evidence and limits for the follow-up
 
 Produce a reproducible evaluation command, frozen input/configuration provenance, machine-readable matched observations/predictions, comparison plots and a short findings document identifying supported conclusions and remaining gaps. Preserve existing reports, captures, logs, packaging simplifications and workload. The accepted PDF is a presentation baseline, not a request to reopen line styling or simplify its cover during this milestone. Run regressions relevant to the changed contracts and apply the existing changed-file lint/documentation rules; do not repeat branch-wide cleanup.
 
-Actual scaling-action validation needs controlled executions with comparable starting work; an unchanged run does not supply observed counterfactual scale-up/down outcomes. Complete scale-down accounting for the omitted worker and its assigned Jobs is necessary before making full-system action-preference claims. Current worker power assumptions are uncalibrated, so energy accuracy requires suitable measured power evidence. Keep C−1 worker capacity, control-plane runner placement and current provisional limitations explicit. This milestone adds validation evidence, not an automatic scaling action, scoring policy, SLO threshold or new worker-packing implementation.
+Actual scaling-action validation needs controlled executions with comparable starting work; an unchanged run does not supply observed counterfactual scale-up/down outcomes. Complete scale-down accounting for the omitted worker and its assigned Jobs is necessary before making full-system action-preference claims. Current worker power assumptions are uncalibrated, so energy accuracy requires suitable measured power evidence. Keep C−1 worker capacity, control-plane runner placement and current provisional limitations explicit. This milestone combines worker packing with validation evidence; it adds no automatic scaling action, action-scoring policy or SLO threshold.
 
 ## Testing priorities
 
@@ -169,7 +191,7 @@ The direct container-execution milestone has sufficient validation. Additional O
 
 The [code-simplification validation](../../logs/fns-provisional/simplification-20260921/VALIDATION.md) covers removal of repeated evaluator validation, the obsolete formatted reference table, duplicated plotting code and overlapping scenario checks. The evaluator now verifies each completed batch once and uses the runner's saved validated completions and clock correction; scenario preparation retains one complete reconstruction check. `--metrics-file` regenerates the report without raw experiments. All 24 case results and action aggregates match the accepted report, and both graph pages are pixel-identical. The [regenerated PDF](../../logs/fns-provisional/simplification-20260921/from-batches/report.pdf) retains the same modeling limitations. No simulator, cluster or workload changes were required; earlier artifacts remain intact.
 
-The [simplified simulation PDF](../../logs/fns-provisional/report-polish-20260921/final/report.pdf) retains the selected 10-Job backlog, three sampled futures and unchanged line styling. Page two shows Cumulative Cluster Energy Use and Completed Jobs. Page three shows overall modeled-Job response with future/backlog companions. Axis endpoints use evenly spaced round ticks. Explanations live on page one; scale-down remains marked partial in the legend. The numerical reference summary and all exact case metrics remain in JSON. The no-backlog comparison is removed from the main PDF; `--include-input-comparisons` preserves the adjacent-panel layout for intentional input comparisons. See the [polish validation](../../logs/fns-provisional/report-polish-20260921/final/VALIDATION.md). Earlier PDFs and executions remain preserved.
+The [simplified simulation PDF](../../logs/fns-provisional/report-polish-20260921/final/report.pdf) retains the selected 10-Job backlog, three sampled futures and unchanged line styling. Page two shows Cumulative Cluster Energy Use and Completed Jobs. Page three shows overall modeled-Job response with future/backlog companions. Axis endpoints use evenly spaced round ticks. Explanations live on page one; scale-down remains marked partial in the legend. The numerical reference summary and all exact case metrics remain in JSON. The no-backlog comparison is removed from the main PDF; the former `--include-input-comparisons` option and its renderer were removed during final review because the current report no longer uses them. See the [polish validation](../../logs/fns-provisional/report-polish-20260921/final/VALIDATION.md). Earlier PDFs and executions remain preserved.
 
 The [reference-first comparison PDF](../../logs/fns-provisional/report-layout-20260921/final/report.pdf) leads with the user-selected 10-Job initial backlog and then compares it beside the no-backlog input using shared axes. Both use the same two-worker model settings and sampled futures. Action curves use bold medians, thin min–max outlines and faint fills; count curves apply two-second Gaussian display smoothing per scenario without changing exact metrics. Future and backlog response are consistently separated, and an absent cohort is explicit. The [previous comparison PDF](../../logs/fns-provisional/report-comparison-20260921/final/report.pdf) and original report remain preserved. This revision reuses verified executions without a cluster rerun. Batches without scale-up remain in raw metrics but are omitted from three-action graphs; scale-down accounting remains explicitly partial. See the [layout validation](../../logs/fns-provisional/report-layout-20260921/final/VALIDATION.md).
 
@@ -186,3 +208,61 @@ The earlier [v2.4u validation report](../../logs/fns-opendc-execution/validation
 The [simulator-input validation report](../../logs/fns-simulation-inputs/review-validation-20260917T170423Z/VALIDATION.md) covers the refactored builder and schema-2 zero-remaining model: passing regressions, forecast-image checks, offline replay of 148 historical cutoffs, and a fresh six-cycle live run with 141 completed Jobs and no container restarts. It records every rejected cutoff and byte reproduction checks. Packaging and live source validation were checked separately, as detailed in the report.
 
 The earlier [six-cycle live capture](../../logs/fns-simulation-inputs/validation-20260917/) used schema 1's five-second tail; preserve it as historical evidence, not live validation of the zero-remaining model. Source hashes in each capture identify the exact revision tested.
+
+## Cluster setup reference
+
+Before applying `manifests/adapter.yaml`, install [scheduler-packing.yaml](manifests/scheduler-packing.yaml) as `/etc/kubernetes/fns-packing.yaml` on the control plane. Back up the existing kube-scheduler static Pod manifest outside `/etc/kubernetes/manifests`, add `--config=/etc/kubernetes/fns-packing.yaml` and mount that file read-only. Keep the existing scheduler kubeconfig mount. Wait for readiness and verify actual application placement; this manual setup is required before Jobs can use the `fns-packing` profile.
+
+Build images on the host, then make the specified tags available to the VM runtimes before deploying. Preserve the calibrated `WORKER_IMAGE` setting and verify loaded image IDs when refreshing an existing cluster; use a new adapter/observer tag. The deployment assumptions and the validated image-refresh commands are recorded with the [milestone evidence](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md). Do not perform a live Kubernetes version upgrade; use the separate offline provisioning plan above.
+
+Preserve the node3 calibration: four images, 128 inference repetitions and five-second resource sampling. Changing these breaks timing comparability. Keep the adapter and observer healthy and unchanged throughout a measured run.
+
+Network replay uses pinned KPN 5G access traces plus static core settings. Provisioning compiles MahiMahi into endpoint base images; rebuild an older base before enabling replay. On the endpoint, run `sudo python3 /home/mahimahi/continuum_replay.py check` before the workload.
+
+### Evidence to preserve
+
+Copy `/var/lib/opendt` from the observer before removing or rebuilding its Pod: its `emptyDir` is ephemeral. The four streams are `workload.jsonl` (completed profiles), `resource-snapshots.jsonl` (raw samples), `cluster-state.jsonl` (unfinished Jobs and workers), and `observer-events.jsonl` (arrival/emission timing and diagnostics). Capture endpoint stdout separately and preserve adapter results and `events.jsonl` under `/data`. HTTP contracts are defined in [adapter.py](src/adapter.py).
+
+## Controlled OpenDC run reference
+
+Build the pinned image using the [README](README.md#direct-controlled-opendc-execution). This empty-state smoke example retains the required local hostname mapping and executable `/tmp` for native Parquet compression. Choose a new evidence directory:
+
+```bash
+mkdir -p "$PWD/logs/opendc-local"
+docker run --rm --user "$(id -u):$(id -g)" --network none --read-only \
+  --hostname opendc-controlled --add-host opendc-controlled:127.0.0.1 \
+  --tmpfs /tmp:rw,exec,nosuid,size=256m --cpus=1 --memory=2g \
+  -v "$PWD/logs/opendc-local:/evidence" continuum/opendc:master-7db7e1a2331fd \
+  prepare --fixture controlled --output-dir /evidence/inputs
+docker run --rm --user "$(id -u):$(id -g)" --network none --read-only \
+  --hostname opendc-controlled --add-host opendc-controlled:127.0.0.1 \
+  --tmpfs /tmp:rw,exec,nosuid,size=256m --cpus=1 --memory=2g \
+  -v "$PWD/logs/opendc-local:/evidence" continuum/opendc:master-7db7e1a2331fd \
+  run --input-dir /evidence/inputs --output-dir /evidence/result
+```
+
+Check native output validation as well as process success. Prepare fresh inputs after changing OpenDC versions. For optional Kubernetes checks, use [run_opendc_integration.py](tests/run_opendc_integration.py) and its `--help`. After failure, resume artifact collection with `opendc_kubernetes.py collect`; delete remote evidence only after `collection.json` reports `collected` and `artifacts_verified: true`.
+
+## Manual run reference
+
+Use a ready forecast with `--simulation-inputs`, its original observer directory and a worker configuration JSON. Each `workers` entry needs `node_name`, `configured_cores` and `memory_mib`; supply configured VM cores, not already-reduced application cores. An optional `active_workers` list identifies the starting pool. Include a reserve worker to make a scale-up candidate available. Install `requirements-analysis.txt` in the forecasting environment for PDF generation.
+
+```bash
+python3 application/image_batch/src/opendc_scenarios.py prepare \
+  --forecast-dir ./logs/forecast-one --observer-dir ./opendt-audit \
+  --workers workers.json --initialization-mode provisional-trace \
+  --output-dir ./logs/scenarios-one
+python3 application/image_batch/src/opendc_batch.py \
+  --suite-dir ./logs/scenarios-one --output-dir ./logs/scenarios-one-local \
+  --image continuum/opendc:master-7db7e1a2331fd --backend local
+python3 application/image_batch/src/opendc_evaluate.py \
+  --batch-dir ./logs/scenarios-one-local --output-dir ./logs/scenarios-one-report
+```
+
+For Kubernetes execution, follow the [recorded matrix commands](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md) and keep the runner on the control plane. Those commands also cover known-arrival replay and chronological validation; select parameters on validation evidence and reuse the saved selection for held-out evaluation.
+
+## Evaluation and reporting conventions
+
+Preserve the compact report's shared six-window denominator across configurations and metrics, and its chronological detail selection. Use [COMMANDS](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md) and [FINDINGS](../../logs/fns-provisional/packing-validation-20260921/FINDINGS.md) for the exact experiment design and interpretation; the current review state and reporting follow-ups are at the top of this handoff.
+
+Recheck the simulator-specific memory conversion when updating OpenDC: inputs multiply memory by 1,000 to compensate for the pinned reader. Original observer exports must remain unchanged.

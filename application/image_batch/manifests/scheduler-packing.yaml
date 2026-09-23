@@ -1,0 +1,25 @@
+# Kubernetes 1.27: mounted into the existing kube-scheduler static Pod.
+apiVersion: kubescheduler.config.k8s.io/v1
+kind: KubeSchedulerConfiguration
+clientConnection:
+  kubeconfig: /etc/kubernetes/scheduler.conf
+leaderElection:
+  leaderElect: true
+profiles:
+  - schedulerName: default-scheduler
+  - schedulerName: fns-packing
+    plugins:
+      score:
+        disabled:
+          - name: "*"
+        enabled:
+          - name: NodeResourcesFit
+            weight: 1
+    pluginConfig:
+      - name: NodeResourcesFit
+        args:
+          scoringStrategy:
+            type: MostAllocated
+            resources:
+              - name: cpu
+                weight: 1

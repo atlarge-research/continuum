@@ -37,6 +37,7 @@ def build_job_manifest(
     namespace: str,
     worker_image: str,
     ttl_seconds: int,
+    scheduler_name: str = "default-scheduler",
 ) -> dict[str, Any]:
     """Build a worker-only classifier Job with one CPU and bounded memory.
 
@@ -45,6 +46,7 @@ def build_job_manifest(
         namespace (str): Namespace receiving the Job.
         worker_image (str): Calibrated classifier image reference.
         ttl_seconds (int): Retention after completion in seconds.
+        scheduler_name (str): Installed scheduler profile; does not bypass resource admission.
 
     Returns:
         dict: Native Job excluding both control-plane role labels.
@@ -108,6 +110,7 @@ def build_job_manifest(
             "template": {
                 "metadata": {"labels": labels},
                 "spec": {
+                    "schedulerName": scheduler_name,
                     "restartPolicy": "Never",
                     "affinity": {
                         "nodeAffinity": {
@@ -145,6 +148,8 @@ def build_job_manifest(
 
 
 class KubernetesJobSubmitter:
+    """Submit worker Jobs through an installed Kubernetes scheduler profile."""
+
     def __init__(
         self,
         *,
@@ -152,7 +157,17 @@ class KubernetesJobSubmitter:
         worker_image: str,
         ttl_seconds: int,
         kubeconfig: str | None = None,
+        scheduler_name: str = "default-scheduler",
     ):
+        """Configure the client and placement profile.
+
+        Args:
+            namespace (str): Namespace receiving application Jobs.
+            worker_image (str): Calibrated worker image.
+            ttl_seconds (int): Completed Job retention in seconds.
+            kubeconfig (str or None): Explicit client configuration, otherwise auto-detected.
+            scheduler_name (str): Installed profile used by application Pods.
+        """
         if kubeconfig:
             config.load_kube_config(config_file=kubeconfig)
         else:
@@ -165,13 +180,20 @@ class KubernetesJobSubmitter:
         self.namespace = namespace
         self.worker_image = worker_image
         self.ttl_seconds = ttl_seconds
+        self.scheduler_name = scheduler_name
 
     def submit(self, request: JobRequest) -> None:
+        """Create one worker-only Job, retaining scheduler resource-fit checks.
+
+        Args:
+            request (JobRequest): Application request and workload lineage.
+        """
         manifest = build_job_manifest(
             request,
             namespace=self.namespace,
             worker_image=self.worker_image,
             ttl_seconds=self.ttl_seconds,
+            scheduler_name=self.scheduler_name,
         )
         self._api.create_namespaced_job(namespace=self.namespace, body=manifest)
 

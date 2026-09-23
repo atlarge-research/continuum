@@ -514,6 +514,7 @@ class ImageBatchTests(unittest.TestCase):
             kubernetes.verify_options(RaisingParser(), config)
 
     def test_batch_validation_and_manifest_contract(self):
+        """Preserve batch validation, lineage and worker affinity across scheduler profiles."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             first = root / "a.JPEG"
@@ -547,6 +548,20 @@ class ImageBatchTests(unittest.TestCase):
             self.assertEqual(manifest["kind"], "Job")
             self.assertEqual(manifest["spec"]["backoffLimit"], 0)
             self.assertEqual(manifest["spec"]["ttlSecondsAfterFinished"], 3600)
+            self.assertEqual(
+                manifest["spec"]["template"]["spec"]["schedulerName"], "default-scheduler"
+            )
+            packed = build_job_manifest(
+                request,
+                namespace="fns-demo",
+                worker_image="worker@sha256:abc",
+                ttl_seconds=3600,
+                scheduler_name="fns-packing",
+            )["spec"]["template"]["spec"]
+            self.assertEqual(packed["schedulerName"], "fns-packing")
+            self.assertNotIn("nodeName", packed)
+            self.assertNotIn("tolerations", packed)
+            self.assertEqual(packed["affinity"], manifest["spec"]["template"]["spec"]["affinity"])
             self.assertEqual(
                 manifest["metadata"]["labels"]["continuum.atlarge.nl/request-id"],
                 request.request_id,

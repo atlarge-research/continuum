@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import matplotlib.pyplot as plt
 
@@ -15,7 +15,6 @@ from opendc_evaluate import (  # pylint: disable=C0413
     _draw_band,
     _finish_axes,
     _prepare_comparisons,
-    _plot_input_comparison,
     display_comparison,
     _validate_analytical_empty,
     analyze_case,
@@ -237,34 +236,6 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(path.read_bytes()[:4], b"%PDF")
             self.assertEqual(report["presentation"]["reference_batch"], "second")
             self.assertEqual(report["cases"], original_cases)
-
-    def test_shared_axes_include_larger_alternatives_and_empty_reference_cohorts(self):
-        """Prevent reference plotting from freezing limits before the other column is drawn."""
-        cases = comparison_cases()
-        alternative = copy.deepcopy(cases)
-        for case in alternative:
-            case["curves"]["energy_joules"] = [100 * v for v in case["curves"]["energy_joules"]]
-            case["windows"]["cohort_through_completion"]["cohorts"]["future"][
-                "response_samples_seconds"
-            ] = [100, 300]
-        reference = aggregate_actions(cases)
-        entries = [
-            ({"label": "reference"}, cases, reference),
-            ({"label": "alternative"}, alternative, aggregate_actions(alternative)),
-        ]
-        for response_plot, empty_reference in ((False, False), (True, False), (True, True)):
-            with self.subTest(responses=response_plot, empty_reference=empty_reference):
-                if empty_reference:
-                    for data in reference["actions"].values():
-                        data["responses"]["future"] = None
-                pdf = Mock()
-                _plot_input_comparison(pdf, entries, responses=response_plot)
-                figure = pdf.savefig.call_args.args[0]
-                left, right = figure.axes[:2]
-                self.assertEqual(left.get_ylim(), right.get_ylim())
-                self.assertEqual(left.get_ylim()[0], 0)
-                self.assertGreaterEqual(right.get_ylim()[1], 300 if response_plot else 18)
-                self.assertEqual(left.get_xlim(), (0, 100 if response_plot else 6))
 
     def test_action_bands_align_times_without_inventing_early_completions(self):
         """Catch pooling curves, linear count interpolation, or freezing ended-host energy."""

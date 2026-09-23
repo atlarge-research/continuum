@@ -1,3 +1,14 @@
+# Documentation scope
+
+Write each document for its audience and purpose. Update existing explanations instead of appending a development diary, and link to the authoritative location rather than repeating details across documents. Keep Markdown paragraphs unwrapped.
+
+- **README:** A short, results-oriented guide to what the project does and how to run it. Include prerequisites, essential commands, expected outputs and links to advanced workflows. Leave implementation explanations, internal data contracts, experiment history and detailed troubleshooting elsewhere.
+- **DESIGN:** The long-lived scientific and system-design account, suitable as source material for slides, a paper, white paper or technical blog. Explain the problem, conceptual architecture, modeling assumptions, methodological choices, tradeoffs and interpretation limits. Detail is welcome when it develops that reasoning; omit file/function tours, exact CLI recipes, transient test counts, commit status and per-run logs. Put numerical study results and reproduction details with their experiment evidence.
+- **HANDOFF:** Primarily for agents continuing the work. Preserve current state, unresolved issues, next steps and knowledge that is difficult to recover from code: operational constraints, non-obvious failure modes, decision rationale and evidence locations. Prefer links to source, CLI help or validated experiment instructions over API inventories, file tours and repeated commands. Keep a working command example only when it captures non-obvious setup requirements. Update the current state rather than accumulating historical explanations; enough context to resume is the goal, not exhaustive documentation.
+- **Experiment evidence:** Preserve commands, exact configurations, numerical results, diagnostics and validation logs beside the generated artifacts. Link to them from the handoff; do not expand README or DESIGN with each experiment.
+
+Before adding documentation, ask whether the reader needs it to run the project, understand the design, or continue development, and place it accordingly. Material removed from README or DESIGN does not automatically belong in HANDOFF: omit readily recoverable or duplicated details instead of moving them. Length should follow useful content, not a requirement to document every implementation change.
+
 # Python style and review
 
 When adding or modifying Python code, use the repository's existing Black and Pylint tooling before presenting the work for review. This applies to source files, scripts and tests. Reading files, running existing code/tests, or editing documentation alone does not require reformatting Python.
