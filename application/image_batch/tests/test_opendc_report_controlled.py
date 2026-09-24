@@ -28,6 +28,7 @@ class ControlledReportTests(unittest.TestCase):
         try:
             controlled._lifecycle_bar(axis, 0, [1, None, 16], 12, "blue")
             self.assertFalse(any(line.get_color() == "#bfbfbf" for line in axis.lines))
+            self.assertFalse(axis.patches)
             self.assertTrue(any("unavailable" in text.get_text() for text in axis.texts))
             axis.clear()
             controlled._lifecycle_bar(axis, 0, [1, 5, None], 12, "blue")
@@ -36,6 +37,8 @@ class ControlledReportTests(unittest.TestCase):
             axis.clear()
             controlled._lifecycle_bar(axis, 0, [1, 5, 16], 12, "blue")
             self.assertTrue(all(max(line.get_xdata()) <= 12 for line in axis.lines))
+            self.assertTrue(all(patch.get_x() + patch.get_width() <= 12 for patch in axis.patches))
+            self.assertTrue(all(patch.get_height() == 1 for patch in axis.patches))
             self.assertTrue(any(line.get_marker() == ">" for line in axis.lines))
         finally:
             controlled.plt.close(figure)

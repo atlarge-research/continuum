@@ -227,7 +227,7 @@ def lifecycle_rows(saved):
 
 
 def _lifecycle_bar(axis, index, interval, end, color, through=None):
-    """Draw known waiting/execution, clipping at follow-up without fabricating a finish.
+    """Draw touching Job rows, clipping at follow-up without fabricating a finish.
 
     Args:
         axis (Axes): Observed or predicted timeline panel.
@@ -240,29 +240,41 @@ def _lifecycle_bar(axis, index, interval, end, color, through=None):
     arrival, start, finish = interval
     if arrival is None:
         axis.text(
-            0.02, index, "Arrival unavailable", transform=axis.get_yaxis_transform(), fontsize=7
+            0.02,
+            index,
+            "Arrival unavailable",
+            transform=axis.get_yaxis_transform(),
+            fontsize=6,
+            va="center",
         )
         return
     known_end = finish if finish is not None else through
     if start is None:
         axis.text(
-            0.03, index, "Start unavailable", transform=axis.get_yaxis_transform(), fontsize=7
+            0.03,
+            index,
+            "Start unavailable",
+            transform=axis.get_yaxis_transform(),
+            fontsize=6,
+            va="center",
         )
         return
-    axis.plot(
-        [arrival, min(start, end)],
-        [index, index],
+    axis.barh(
+        index,
+        max(0, min(start, end) - arrival),
+        left=arrival,
+        height=1,
         color="#bfbfbf",
-        linewidth=4,
-        solid_capstyle="butt",
+        linewidth=0,
     )
     if start <= end and known_end is not None:
-        axis.plot(
-            [start, min(known_end, end)],
-            [index, index],
+        axis.barh(
+            index,
+            max(0, min(known_end, end) - start),
+            left=start,
+            height=1,
             color=color,
-            linewidth=4,
-            solid_capstyle="butt",
+            linewidth=0,
         )
     if known_end is not None and known_end > end:
         axis.plot(
@@ -283,7 +295,7 @@ def _lifecycle_bar(axis, index, interval, end, color, through=None):
 
 
 def _lifecycle_pages(pdf, comparisons):
-    """Restore detailed arrival/wait/execution plots beside their actual-action replays.
+    """Compare compact whole-cluster timelines with six-point rows and sparse count ticks.
 
     Args:
         pdf (PdfPages): Open report writer.
@@ -301,22 +313,27 @@ def _lifecycle_pages(pdf, comparisons):
         for offset in range(0, len(rows), 30):
             page = rows[offset : offset + 30]
             figure, axes = plt.subplots(1, 2, figsize=(11.69, 8.27), sharex=True, sharey=True)
-            figure.subplots_adjust(top=0.77, bottom=0.23, left=0.16, right=0.97, wspace=0.12)
+            half_height = len(page) * 6 / (8.27 * 72) / 2
+            figure.subplots_adjust(
+                top=0.55 + half_height,
+                bottom=0.55 - half_height,
+                left=0.07,
+                right=0.97,
+                wspace=0.12,
+            )
             figure.suptitle("Validation | Arrival, waiting and execution", fontsize=16, y=0.97)
             figure.text(0.5, 0.895, _title(saved), ha="center", fontsize=11, linespacing=1.5)
             for axis, title in zip(axes, ("Physical cluster", "OpenDC known-arrival replay")):
                 reference = _action_axis(axis, saved) or 0
                 axis.axvline(-reference, color="black", linestyle=":", linewidth=0.8)
                 axis.axvline(page[0]["window_end"], color="grey", linestyle="--", linewidth=0.8)
-                axis.set(title=title, xlim=(lower, upper), ylim=(len(page) - 0.3, -0.7))
+                axis.set(title=title, xlim=(lower, upper), ylim=(len(page) - 0.5, -0.5))
                 axis.grid(axis="x", alpha=0.2)
                 axis.tick_params(labelsize=8)
-            labels = []
+                for boundary in range(1, len(page)):
+                    if page[boundary - 1]["cohort"] != page[boundary]["cohort"]:
+                        axis.axhline(boundary - 0.5, color="black", linewidth=0.8, zorder=4)
             for index, row in enumerate(page):
-                labels.append(
-                    f"{row['cohort'][0].upper()} {offset + index + 1}"
-                    + (" *" if row["matched_future"] else "")
-                )
                 _lifecycle_bar(
                     axes[0],
                     index,
@@ -333,15 +350,14 @@ def _lifecycle_pages(pdf, comparisons):
                         index,
                         row["prediction_status"],
                         transform=axes[1].get_yaxis_transform(),
-                        fontsize=7,
+                        fontsize=6,
+                        va="center",
                     )
                 if row["arrival"] is not None:
                     for axis in axes:
                         axis.plot(row["arrival"], index, marker="d", color="black", markersize=3)
-            axes[0].set_yticks(range(len(page)), labels)
-            axes[0].set_ylabel(
-                "Job number, ordered by creation\nB = backlog; F = future", fontsize=9
-            )
+            counts = [index for index in range(len(page)) if (offset + index + 1) % 10 == 0]
+            axes[0].set_yticks(counts, [offset + index + 1 for index in counts])
             handles = [Patch(color="#bfbfbf", label="Waiting / startup")]
             handles += [Patch(color=colors[name], label=name) for name in workers]
             handles += [
@@ -359,21 +375,22 @@ def _lifecycle_pages(pdf, comparisons):
             figure.legend(
                 handles=handles,
                 loc="lower center",
-                bbox_to_anchor=(0.52, 0.12),
+                bbox_to_anchor=(0.52, 0.55 - half_height - 0.13),
                 ncol=3,
                 fontsize=8,
             )
             figure.text(
                 0.07,
-                0.035,
-                "Same Jobs and time scale in both panels. "
-                "* = completed future pairs used in the start/runtime error panels.\n"
+                0.12,
+                "Rows follow arrival order; ticks count Jobs. "
+                "Horizontal line separates backlog (above) from future Jobs (below).\n"
                 "Dotted line: model start; shaded band: action interval. "
                 "Replay shows remaining work only after model start.\n"
                 "Bars stop at the follow-up boundary: > continues beyond it; x = finish unknown. "
                 "Later competing arrivals are not drawn.\n"
-                "These intervals expose overtaking and waiting; "
-                "scheduler retry/backoff events were not recorded.",
+                "Error panels use matched completions; "
+                "these timelines also retain unfinished work. "
+                "Scheduler retries were not recorded.",
                 fontsize=8,
                 linespacing=1.5,
             )
