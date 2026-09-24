@@ -21,6 +21,31 @@ from test_opendc_scenarios import CUTOFF, configuration, make_forecast
 class ValidationTests(unittest.TestCase):
     """Protect common futures, causal profiles, identity and censoring semantics."""
 
+    def test_finished_snapshot_supplies_outcome_before_profile_emission(self):
+        """Classifier completion is observable even when resource-profile emission is absent."""
+        job = {
+            "kubernetes_job_uid": "finished",
+            "node_name": "worker-a",
+            "execution_state": "terminated",
+            "pod_phase": "Succeeded",
+            "execution_start_time": iso(CUTOFF - 5000),
+            "execution_finish_time": iso(CUTOFF - 1000),
+        }
+        trace = SimpleNamespace(
+            arrivals={"finished": {"creation_ms": CUTOFF - 10000}},
+            completed=[],
+            states=[(CUTOFF, {"jobs": {"queued": [], "active": [], "finished": [job]}})],
+        )
+        observed = validation.observed_jobs(trace)[0]
+        self.assertEqual(observed["start_ms"], CUTOFF - 5000)
+        self.assertEqual(observed["finish_ms"], CUTOFF - 1000)
+        self.assertEqual(observed["status"], "classifier_finished")
+        self.assertIsNone(observed["job_finish_ms"])
+        job["pod_phase"] = "Failed"
+        failed = validation.observed_jobs(trace)[0]
+        self.assertEqual(failed["status"], "Failed")
+        self.assertIsNone(failed["finish_ms"])
+
     def test_truncation_preserves_backlog_and_parent_future(self):
         """A shorter horizon retains exact profiles and removes only later arrivals."""
         with tempfile.TemporaryDirectory() as temporary:

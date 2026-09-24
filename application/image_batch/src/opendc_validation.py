@@ -213,7 +213,11 @@ def prepare_validation_suite(
 
 
 def observed_jobs(trace):
-    """Extract retrospective Job outcomes while preserving missing compute timing.
+    """Extract retrospective outcomes from snapshots and emitted profiles.
+
+    A successful terminal Pod can establish classifier completion before the
+    resource profile is emitted. Kubernetes Job completion stays unavailable
+    until its own timestamp is observed; failed work has no successful finish.
 
     Args:
         trace (Trace): Full frozen capture read for one workload run.
@@ -238,14 +242,34 @@ def observed_jobs(trace):
         for group in state.get("jobs", {}).values():
             for job in group:
                 uid = job.get("kubernetes_job_uid")
-                if uid in records and job.get("node_name"):
-                    records[uid]["node_name"] = job["node_name"]
+                if uid not in records:
+                    continue
+                record = records[uid]
+                if job.get("node_name"):
+                    record["node_name"] = job["node_name"]
+                if job.get("execution_start_time"):
+                    record["start_ms"] = milliseconds(job["execution_start_time"])
+                if job.get("pod_phase") == "Failed" or job.get("job_terminal_status") == "Failed":
+                    record.update(status="Failed", finish_ms=None)
+                elif job.get("execution_finish_time") and (
+                    job.get("pod_phase") == "Succeeded"
+                    or job.get("job_terminal_status") == "Complete"
+                ):
+                    record.update(
+                        status="classifier_finished",
+                        finish_ms=milliseconds(job["execution_finish_time"]),
+                    )
     if trace.states:
         last_time, last_state = trace.states[-1]
         for jobs in last_state.get("jobs", {}).values():
             for job in jobs:
                 uid = job.get("kubernetes_job_uid")
-                if uid in records and job.get("execution_state") != "terminated":
+                if (
+                    uid in records
+                    and job.get("execution_state") != "terminated"
+                    and job.get("pod_phase") not in ("Succeeded", "Failed")
+                    and job.get("job_terminal_status") not in ("Complete", "Failed")
+                ):
                     records[uid]["censored_through_ms"] = last_time
                     records[uid]["status"] = "unfinished"
     for item in trace.completed:
@@ -288,6 +312,7 @@ def read_observations(rows, run_id):
             uid = event["details"]["kubernetes_job_uid"]
             if uid in records:
                 records[uid]["status"] = "Failed"
+                records[uid]["finish_ms"] = None
                 records[uid]["failure_observed_ms"] = milliseconds(event["timestamp"])
     for row in rows["workload.jsonl"]:
         source = row["source"]
