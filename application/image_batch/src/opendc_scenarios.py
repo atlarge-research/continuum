@@ -29,11 +29,13 @@ from opendc_inputs import (
     write_json,
 )
 from simulation_input import build_simulation_inputs
-from opendc_runtime import adapt_topology, runtime_identity
+from opendc_runtime import adapt_topology, fns_runtime, runtime_identity
+from opendc_pinning import FNS_CONTRACT, PINNED_MODE, initial_assignments, initialization_metadata
 
 
 SUITE_CONTRACT = "opendc-scenarios-v1"
 SUPPORTED_INITIALIZATION = "provisional-trace"
+INITIALIZATION_MODES = (SUPPORTED_INITIALIZATION, PINNED_MODE)
 
 
 def _read_tasks(directory):
@@ -571,24 +573,22 @@ def _write_case(
         omitted (list[dict]): Down-candidate omitted Task inventory.
         exhausted (list[dict]): Model-exhausted Job evidence.
         simulation (dict): Source simulation manifest.
-        initialization_mode (str): Required provisional initialization mode.
+        initialization_mode (str): Provisional trace or explicitly requested FNS pinning.
         selected_worker (str or None): Down worker, when applicable.
         experiment_kind (str): Observed or explicitly synthetic experiment label.
 
     Returns:
         dict: Published case manifest.
     """
-    directory.mkdir(parents=True, exist_ok=False)
-    parquet_tasks(tasks, directory / "source")
-    adapt_trace(directory / "source", directory / "trace")
-    write_json(directory / "topology.json", _topology(workers))
-    write_json(directory / "experiment.json", experiment_config())
+    pinned = initialization_mode == PINNED_MODE
     case = {
         "initialization_mode": initialization_mode,
         "candidate": candidate,
         "experiment_kind": experiment_kind,
         "scenario": scenario_index,
-        "scope": "remaining_workers_only" if candidate == "scale-down" else "complete",
+        "scope": "remaining_workers_only"
+        if candidate == "scale-down" and not pinned
+        else "complete",
         "selected_worker": selected_worker,
         "cutoff_ms": simulation["cutoff_ms"],
         "horizon_ms": simulation["horizon_ms"],
@@ -602,9 +602,20 @@ def _write_case(
             "observations may be left-censored"
         ),
     }
+    assignments = initial_assignments(case) if pinned else None
+    config = experiment_config()
+    if pinned:
+        case["initialization"] = initialization_metadata(assignments)
+        config["cordonHosts"] = [[selected_worker] if candidate == "scale-down" else []]
+        config["exportModels"][0]["filesToExport"].append("datacenter")
+    directory.mkdir(parents=True, exist_ok=False)
+    parquet_tasks(tasks, directory / "source")
+    adapt_trace(directory / "source", directory / "trace", assignments)
+    write_json(directory / "topology.json", _topology(workers))
+    write_json(directory / "experiment.json", config)
     write_json(directory / "case.json", case)
     manifest = {
-        "contract": PROVISIONAL_CONTRACT,
+        "contract": FNS_CONTRACT if pinned else PROVISIONAL_CONTRACT,
         "status": "ready",
         "initial_state": initialization_mode,
         **runtime_identity(),
@@ -632,7 +643,7 @@ def prepare_suite(
         observer_dir (str or Path): Original append-only observer stream directory.
         worker_config (dict): Observed/reserve worker configuration and optional active list.
         output_dir (str or Path): New suite destination.
-        initialization_mode (str): Must be ``provisional-trace``.
+        initialization_mode (str): ``provisional-trace`` or FNS ``pinned-trace``.
 
     Returns:
         dict: Ready suite manifest with relative experiment input paths.
@@ -641,8 +652,11 @@ def prepare_suite(
         FileExistsError: The suite destination already exists.
         ValueError: Inputs are unready, stale, inconsistent, tampered, or unsupported.
     """
-    if initialization_mode != SUPPORTED_INITIALIZATION:
-        raise ValueError("only provisional-trace initialization is supported")
+    if initialization_mode not in INITIALIZATION_MODES:
+        raise ValueError("unsupported initialization mode")
+    pinned = initialization_mode == PINNED_MODE
+    if pinned and not fns_runtime():
+        raise ValueError("pinned-trace requires the FNS runtime")
     output = Path(output_dir).resolve()
     forecast_dir, observer_dir = Path(forecast_dir).resolve(), Path(observer_dir).resolve()
     for source in (forecast_dir, observer_dir):
@@ -674,7 +688,15 @@ def prepare_suite(
         unavailable.append({"candidate": "scale-down", "reason": "minimum_worker_count"})
     else:
         selected = _down_worker(active, backlog, exhausted)
-        candidates.append(("scale-down", [name for name in active if name != selected], selected))
+        if pinned and any(
+            item["metadata"].get("preserved_assignment") == selected for item in exhausted
+        ):
+            unavailable.append(
+                {"candidate": "scale-down", "reason": "selected_worker_has_exhausted_work"}
+            )
+        else:
+            remaining = active if pinned else [name for name in active if name != selected]
+            candidates.append(("scale-down", remaining, selected))
 
     output.mkdir(parents=True)
     evidence = output / "source-evidence"
@@ -691,7 +713,7 @@ def prepare_suite(
         workers = [copy.deepcopy(configured[name]) for name in worker_names]
         for scenario_index, source_tasks in enumerate(scenarios):
             tasks, records, omitted = _case_tasks(
-                candidate,
+                "unchanged" if pinned else candidate,
                 selected_worker,
                 source_tasks,
                 backlog_metadata,
@@ -755,7 +777,7 @@ def parser():
     prepare.add_argument("--output-dir", type=Path, required=True)
     prepare.add_argument(
         "--initialization-mode",
-        choices=(SUPPORTED_INITIALIZATION,),
+        choices=INITIALIZATION_MODES,
         required=True,
     )
     return result

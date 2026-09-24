@@ -12,6 +12,13 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from forecast_trace import canonical, parquet_tasks
+from opendc_pinning import (
+    FNS_CONTRACT,
+    PINNED_MODE,
+    initial_assignments,
+    native_order,
+    initialization_metadata,
+)
 from opendc_runtime import (
     adapt_topology,
     fns_runtime,
@@ -25,7 +32,7 @@ COMMIT = "7db7e1a2331fd239bf29c4a69eb6fccd6fddbdad"
 SOURCE_ARCHIVE_SHA256 = "df798dae10c0ee3b1911fb01b0dbd25f06f5adb6e8495826dc8ad8b108f4f52d"
 CONTRACT = "opendc-controlled-v2"
 PROVISIONAL_CONTRACT = "opendc-provisional-v1"
-EXECUTION_CONTRACTS = (CONTRACT, PROVISIONAL_CONTRACT)
+EXECUTION_CONTRACTS = (CONTRACT, PROVISIONAL_CONTRACT, FNS_CONTRACT)
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "fixtures" / "opendc"
 
 
@@ -192,20 +199,23 @@ def experiment_config():
     }
 
 
-def adapt_trace(source, destination):
+def adapt_trace(source, destination, assignments=None):
     """Create simulator-facing Parquet copies for the pinned OpenDC reader.
 
     Multiply Task memory by 1,000 to compensate for the reader's division and
     annotate submission times as UTC milliseconds without shifting them.
-    Preserve the original tables and copy Fragment bytes unchanged.
+    Preserve the original tables and copy Fragment bytes unchanged. Explicit
+    FNS assignments reorder only the adapted table, with assigned tasks first.
 
     Args:
         source (Path): Directory containing original Task and Fragment tables.
         destination (Path): New directory whose parent already exists.
+        assignments (dict or None): FNS task IDs mapped to initially assigned hosts.
 
     Raises:
         FileExistsError: The destination already exists.
-        ValueError: Memory is nonpositive or would overflow int64 after scaling.
+        ValueError: Memory is nonpositive or would overflow int64 after scaling,
+            or assignment identities do not match unique source tasks.
     """
     destination.mkdir()
     tasks = pq.read_table(source / "tasks.parquet")
@@ -229,6 +239,15 @@ def adapt_trace(source, destination):
             pa.field("host", pa.string(), nullable=True),
             pa.array([None] * tasks.num_rows, type=pa.string()),
         )
+    if assignments is not None:
+        if not fns_runtime():
+            raise ValueError("initial assignments require the FNS runtime")
+        ids = tasks["id"].to_pylist()
+        tasks = tasks.set_column(
+            tasks.schema.get_field_index("host"),
+            pa.field("host", pa.string(), nullable=True),
+            pa.array([assignments.get(task_id) for task_id in ids], type=pa.string()),
+        ).take(pa.array(native_order(ids, assignments), type=pa.int64()))
     pq.write_table(tasks, destination / "tasks.parquet", compression="NONE", use_dictionary=False)
     (destination / "fragments.parquet").write_bytes((source / "fragments.parquet").read_bytes())
 
@@ -299,7 +318,7 @@ def verify_inputs(directory):
     """
     directory = Path(directory)
     manifest = json.loads((directory / "manifest.json").read_text())
-    if manifest.get("contract") == PROVISIONAL_CONTRACT:
+    if manifest.get("contract") in (PROVISIONAL_CONTRACT, FNS_CONTRACT):
         return _verify_provisional(directory, manifest)
     if (
         manifest.get("contract") != CONTRACT
@@ -331,15 +350,19 @@ def _verify_provisional(directory, manifest):
     Raises:
         ValueError: Initialization, topology, profile, lineage or hashes disagree.
     """
-    if manifest.get("status") != "ready" or manifest.get("initial_state") != "provisional-trace":
+    pinned = manifest.get("contract") == FNS_CONTRACT
+    mode = PINNED_MODE if pinned else "provisional-trace"
+    if manifest.get("status") != "ready" or manifest.get("initial_state") != mode:
         raise ValueError("expected ready provisional-trace inputs for the pinned runner")
     verify_runtime(manifest)
+    if pinned and not fns_runtime():
+        raise ValueError("pinned-trace requires the FNS runtime")
     if file_hashes(directory, exclude=("manifest.json",)) != manifest.get("sha256"):
         raise ValueError("provisional input hash mismatch")
     case = json.loads((directory / "case.json").read_text())
-    if case.get("initialization_mode") != "provisional-trace":
+    if case.get("initialization_mode") != mode:
         raise ValueError("fixed placement is unsupported; no implicit replay fallback")
-    partial = case.get("candidate") == "scale-down"
+    partial = case.get("candidate") == "scale-down" and not pinned
     if case.get("scope") != ("remaining_workers_only" if partial else "complete"):
         raise ValueError("candidate scope does not describe partial scale-down")
     workers = case["workers"]
@@ -373,6 +396,9 @@ def _verify_provisional(directory, manifest):
         ):
             raise ValueError("topology resource or power model differs from case")
     _verify_case_lineage(case)
+    assignments = initial_assignments(case) if pinned else None
+    if pinned and case.get("initialization") != initialization_metadata(assignments):
+        raise ValueError("initialization metadata differs from pinned input semantics")
     records = case["tasks"]
     tasks = [record["task"] for record in records]
     ids = {task["id"] for task in tasks}
@@ -411,6 +437,24 @@ def _verify_provisional(directory, manifest):
                 raise ValueError("invalid application fragment")
     adapted = pq.read_table(directory / "trace/tasks.parquet")
     original = pq.read_table(directory / "source/tasks.parquet")
+    if (
+        fns_runtime()
+        and not pinned
+        and any(host is not None for host in adapted["host"].to_pylist())
+    ):
+        raise ValueError("provisional replay cannot include hidden initial host assignments")
+    if pinned:
+        original = original.take(
+            pa.array(native_order(original["id"].to_pylist(), assignments), type=pa.int64())
+        )
+        if adapted["host"].to_pylist() != [
+            assignments.get(task_id) for task_id in original["id"].to_pylist()
+        ]:
+            raise ValueError("adapted initial host assignments differ from observed placement")
+        expected_cordon = [case["selected_worker"]] if case["candidate"] == "scale-down" else []
+        config = json.loads((directory / "experiment.json").read_text())
+        if config.get("cordonHosts") != [expected_cordon]:
+            raise ValueError("native cordon configuration differs from case")
     for name in original.schema.names:
         values = adapted[name]
         if name == "submission_time":
@@ -446,9 +490,12 @@ def _verify_case_lineage(case):
         raise ValueError("invalid scenario index")
     names = {worker["node_name"] for worker in case["workers"]}
     selected = case.get("selected_worker")
-    partial = case["candidate"] == "scale-down"
+    pinned = case.get("initialization_mode") == PINNED_MODE
+    partial = case["candidate"] == "scale-down" and not pinned
     if partial and (not isinstance(selected, str) or not selected or selected in names):
         raise ValueError("scale-down must identify its excluded worker")
+    if pinned and case["candidate"] == "scale-down" and selected not in names:
+        raise ValueError("native scale-down must retain its cordoned worker")
     seen = set()
     for group in ("tasks", "omitted_tasks", "model_exhausted_jobs"):
         for item in case[group]:

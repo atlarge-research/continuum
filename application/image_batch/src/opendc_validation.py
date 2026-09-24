@@ -27,7 +27,10 @@ from opendc_scenarios import (
     _load_evidence,
     _worker_records,
     _write_case,
+    INITIALIZATION_MODES,
 )
+from opendc_pinning import PINNED_MODE
+from opendc_runtime import fns_runtime
 
 
 def prepare_validation_suite(
@@ -39,6 +42,7 @@ def prepare_validation_suite(
     horizon_seconds=60,
     scenarios=10,
     arrival_source="forecast",
+    initialization_mode="provisional-trace",
 ):
     """Derive unchanged cases from a verified causal parent without resampling.
 
@@ -54,6 +58,7 @@ def prepare_validation_suite(
         horizon_seconds (int): Positive horizon no longer than the parent horizon.
         scenarios (int): Positive prefix length, or one for known-arrival replay.
         arrival_source (str): ``forecast`` or retrospective ``known-arrival``.
+        initialization_mode (str): Explicit provisional or FNS pinned trace initialization.
 
     Returns:
         dict: Ready suite manifest compatible with the existing batch runner.
@@ -63,6 +68,10 @@ def prepare_validation_suite(
         FileExistsError: The destination already exists.
     """
     output = Path(output_dir).resolve()
+    if initialization_mode not in INITIALIZATION_MODES:
+        raise ValueError("unsupported initialization mode")
+    if initialization_mode == PINNED_MODE and not fns_runtime():
+        raise ValueError("pinned-trace requires the FNS runtime")
     forecast_dir, observer_dir = Path(forecast_dir).resolve(), Path(observer_dir).resolve()
     for source in (forecast_dir, observer_dir):
         if output == source or output.is_relative_to(source) or source.is_relative_to(output):
@@ -160,7 +169,7 @@ def prepare_validation_suite(
             [],
             exhausted,
             derived,
-            "provisional-trace",
+            initialization_mode,
             None,
             arrival_source,
         )
@@ -170,7 +179,7 @@ def prepare_validation_suite(
     manifest = {
         "contract": SUITE_CONTRACT,
         "status": "ready",
-        "initialization_mode": "provisional-trace",
+        "initialization_mode": initialization_mode,
         "experiment_kind": arrival_source,
         "cutoff_ms": cutoff,
         "horizon_ms": horizon,
@@ -190,7 +199,10 @@ def prepare_validation_suite(
             "kubernetes_profile": "fns-packing",
             "score": "cpu MostAllocated",
             "opendc": "ordered fitting used hosts before empty hosts; no weighers",
-            "initial_placement_restored": False,
+            "initial_placement_requested": initialization_mode == PINNED_MODE,
+            "initial_placement_requires_native_validation": initialization_mode == PINNED_MODE,
+            "startup_delay_restored": False,
+            "exhausted_occupancy_restored": False,
         },
         "experiments": experiments,
         "unavailable_candidates": [],
@@ -1059,6 +1071,9 @@ def main():
     prepare.add_argument(
         "--arrival-source", choices=("forecast", "known-arrival"), default="forecast"
     )
+    prepare.add_argument(
+        "--initialization-mode", choices=INITIALIZATION_MODES, default="provisional-trace"
+    )
     evaluate = commands.add_parser(
         "evaluate", help="evaluate and optionally lock validation parameters"
     )
@@ -1084,6 +1099,7 @@ def main():
             horizon_seconds=args.horizon_seconds,
             scenarios=args.scenarios,
             arrival_source=args.arrival_source,
+            initialization_mode=args.initialization_mode,
         )
         return
     selection = json.loads(args.selection_file.read_text()) if args.selection_file else None

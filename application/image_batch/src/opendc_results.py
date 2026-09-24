@@ -9,6 +9,8 @@ import pyarrow.parquet as pq
 
 from forecast_trace import canonical
 from opendc_inputs import fixture_tasks
+from opendc_pinning import PINNED_MODE, initial_assignments
+from opendc_energy import datacenter_series, energy_tolerance
 
 
 def _require(condition, message):
@@ -246,11 +248,13 @@ def validate_results(directory, fixture):
 
 
 def validate_provisional_results(directory, case):
-    """Validate replay completion and admission without claiming placement fidelity.
+    """Validate represented-task lifecycle, admission and optional native pinning/cordon.
 
     Native lifecycle records, rather than process exit or telemetry snapshots,
-    establish completed identities and CPU/memory admission. Observed assignment
-    is deliberately not enforced by this initialization approximation. OpenDC starts
+    establish completed identities and CPU/memory admission. Provisional cases
+    do not enforce placement; pinned cases additionally require the observed
+    hosts at zero, no new cordon admissions and complete datacenter energy.
+    Startup delay and exhausted-work occupancy remain unmodeled. OpenDC starts
     its clock at the earliest submission; returned lifecycle times restore the
     cutoff-relative origin, while native submission times already use that origin.
 
@@ -259,17 +263,23 @@ def validate_provisional_results(directory, case):
         case (dict): Prepared case with included tasks, workers and explicit scope.
 
     Returns:
-        dict: Validated completion records, scope, counts and semantic digest.
+        dict: Validated completion records, scope, counts and semantic digest;
+            pinned cases also expose cordon and aggregate-energy diagnostics.
 
     Raises:
         ValueError: Output is incomplete, nonfinite, inconsistent or overcommitted.
     """
     raw = Path(directory) / "controlled/raw-output/0/seed=0"
     tables = {}
+    pinned = case.get("initialization_mode") == PINNED_MODE
+    assignments = initial_assignments(case) if pinned else {}
+    removed = case.get("selected_worker") if pinned and case["candidate"] == "scale-down" else None
     try:
         for name in ("task", "host", "service", "powerSource"):
             table = pq.ParquetFile(raw / f"{name}.parquet").read()
             tables[name] = table.to_pylist()
+        if pinned:
+            tables["dataCenter"] = _read_table(raw / "dataCenter.parquet")
         expected = {item["task"]["id"]: item["task"] for item in case["tasks"]}
         hosts = {worker["node_name"]: worker for worker in case["workers"]}
         _require(
@@ -317,6 +327,28 @@ def validate_provisional_results(directory, case):
                 2,
                 "remaining execution duration",
             )
+            if task_id in assignments:
+                _require(row["host_name"] == assignments[task_id], "pinned task changed host")
+                _near(row["schedule_time"], 0, 2, "pinned initial start")
+                _require(
+                    all(
+                        sample["host_name"] == assignments[task_id]
+                        for sample in tables["task"]
+                        if sample["task_id"] == task_id
+                        and sample["task_state"] in ("RUNNING", "COMPLETED")
+                    ),
+                    "pinned task changed host during execution",
+                )
+            elif removed is not None:
+                _require(
+                    all(
+                        sample["host_name"] != removed
+                        for sample in tables["task"]
+                        if sample["task_id"] == task_id
+                        and sample["task_state"] in ("RUNNING", "COMPLETED")
+                    ),
+                    "cordoned host admitted unassigned work",
+                )
             completed.append(
                 {
                     key: row[key]
@@ -362,8 +394,10 @@ def validate_provisional_results(directory, case):
             == 0,
             "service totals disagree with completed work",
         )
+        empty_removed = removed is not None and removed not in assignments.values()
+        expected_hosts = set(hosts) - ({removed} if empty_removed else set())
         _require(
-            {row["host_name"] for row in tables["host"]} == set(hosts), "host identity mismatch"
+            {row["host_name"] for row in tables["host"]} == expected_hosts, "host identity mismatch"
         )
         for row in tables["host"]:
             host = hosts[row["host_name"]]
@@ -377,13 +411,73 @@ def validate_provisional_results(directory, case):
                 "invalid worker energy",
             )
         end = max(row["finish_time"] for row in completed)
-        for name in hosts:
+        for name in expected_hosts:
             samples = [row for row in tables["host"] if row["host_name"] == name]
             _require(
                 all(math.isfinite(row["timestamp"]) and row["timestamp"] >= 0 for row in samples)
-                and max(row["timestamp"] for row in samples) + origin >= end,
+                and (name == removed or max(row["timestamp"] for row in samples) + origin >= end),
                 "native host energy coverage ends before included completion",
             )
+        energy = None
+        cordon = None
+        if pinned:
+            _require(
+                service["timestamp"] + origin >= end,
+                "native service coverage ends before completion",
+            )
+            _require(
+                service["hosts_up"] == len(hosts) - int(removed is not None),
+                "cordoned host did not close or remaining host is unavailable",
+            )
+            series = datacenter_series(case, tables["dataCenter"], origin)["modeled-worker-pool"]
+            _require(
+                series["native_last_timestamp_ms"] >= end,
+                "datacenter energy coverage ends before completion",
+            )
+            recorded = [
+                max(rows, key=lambda row: row["timestamp"])["energy_usage"]
+                for name in expected_hosts
+                if (rows := [row for row in tables["host"] if row["host_name"] == name])
+            ]
+            native_total = max(tables["dataCenter"], key=lambda row: row["timestamp"])[
+                "energy_usage"
+            ]
+            _require(
+                native_total + energy_tolerance(native_total, *recorded) >= sum(recorded),
+                "datacenter total omits recorded host energy",
+            )
+            energy = {
+                "source": "native datacenter cumulative energy, including drained hosts",
+                "final_datacenter_joules": series["samples"][-1][1],
+                "last_timestamp_ms": series["native_last_timestamp_ms"],
+                "accuracy": "uncalibrated worker power model",
+            }
+            if removed is not None:
+                cordon = {
+                    "host": removed,
+                    "drain_finish_ms": max(
+                        (r["finish_time"] for r in completed if r["host_name"] == removed),
+                        default=0,
+                    ),
+                    "last_host_sample_ms": max(
+                        (
+                            r["timestamp"] + origin
+                            for r in tables["host"]
+                            if r["host_name"] == removed
+                        ),
+                        default=None,
+                    ),
+                    "new_admissions": 0,
+                    "semantics": (
+                        "native close after assigned executable work; "
+                        "no measured physical power claim"
+                    ),
+                }
+                _require(
+                    cordon["last_host_sample_ms"] is None
+                    or cordon["last_host_sample_ms"] <= cordon["drain_finish_ms"],
+                    "cordoned host continued exporting after its drain boundary",
+                )
         semantic = {
             name: sorted((_json_values(row) for row in rows), key=canonical)
             for name, rows in tables.items()
@@ -394,10 +488,16 @@ def validate_provisional_results(directory, case):
             "task_count": len(completed),
             "tasks": completed,
             "scope": case["scope"],
-            "initialization_mode": "provisional-trace",
+            "initialization_mode": case["initialization_mode"],
             "table_rows": {name: len(rows) for name, rows in tables.items()},
             "semantic_sha256": hashlib.sha256(canonical(semantic)).hexdigest(),
-            "interpretation": "provisional trace replay; placement/startup occupancy not restored",
+            "interpretation": (
+                "validated represented-task pinning; startup delay and exhausted occupancy "
+                "remain unmodeled"
+                if pinned
+                else "provisional trace replay; placement/startup occupancy not restored"
+            ),
+            **({"energy": energy, "cordon": cordon} if pinned else {}),
         }
     except (KeyError, TypeError, OSError) as exc:
         raise ValueError(f"incomplete provisional simulator output: {exc}") from exc

@@ -26,6 +26,7 @@ from opendc_inputs import (
 from opendc_process import run_process
 from opendc_results import validate_results, validate_provisional_results
 from opendc_runtime import runtime_identity
+from opendc_pinning import FNS_CONTRACT
 
 
 def utc_now():
@@ -92,7 +93,7 @@ def _run_prepared(inputs, output, timeout_seconds, runner, manifest):
     config["workloads"][0]["source"] = {"type": "uri", "uri": (output / "inputs/trace").as_uri()}
     write_json(output / "experiment.json", config)
     write_json(output / "execution.json", manifest)
-    if input_manifest["contract"] == PROVISIONAL_CONTRACT:
+    if input_manifest["contract"] in (PROVISIONAL_CONTRACT, FNS_CONTRACT):
         case = json.loads((output / "inputs/case.json").read_text())
         if not case["tasks"]:
             # The pinned SDK requires a first arrival. An empty cohort has no
@@ -116,7 +117,7 @@ def _run_prepared(inputs, output, timeout_seconds, runner, manifest):
                 "task_count": 0,
                 "scope": case["scope"],
                 "native_time_origin_ms": 0,
-                "initialization_mode": "provisional-trace",
+                "initialization_mode": case["initialization_mode"],
                 "interpretation": "empty included cohort; no native process or completions",
             }
             manifest["status"] = "succeeded"
@@ -148,7 +149,7 @@ def _run_prepared(inputs, output, timeout_seconds, runner, manifest):
         manifest["error"] = process["launch_error"] or f'OpenDC exited with {process["exit_code"]}'
         return 1
     try:
-        if input_manifest["contract"] == PROVISIONAL_CONTRACT:
+        if input_manifest["contract"] in (PROVISIONAL_CONTRACT, FNS_CONTRACT):
             case = json.loads((output / "inputs/case.json").read_text())
             manifest["validation"] = validate_provisional_results(output / "simulator", case)
         else:

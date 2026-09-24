@@ -3,8 +3,9 @@
 The report presents exactly two interpretations: a fixed observation window and the same
 backlog-plus-pre-horizon cohort followed through completion. Response-time summaries use only
 observed completions and preserve each task's original creation time. Energy is cumulative host
-energy in joules, interpolated between native samples and extended after native output only at
-the configured idle power of included workers. Partial scale-down scopes exclude omitted worker
+energy in joules, or the complete datacenter accumulator for native cordon cases, interpolated
+between samples and extended after native output at the idle power of workers remaining on.
+Partial scale-down scopes exclude omitted worker
 completion and energy; shared comparison axes label their totals as partial.
 """
 from __future__ import annotations
@@ -27,6 +28,8 @@ import pyarrow.parquet as pq
 from scipy.ndimage import gaussian_filter1d
 
 from opendc_inputs import file_hashes, write_json
+from opendc_pinning import PINNED_MODE
+from opendc_energy import datacenter_series
 
 plt.switch_backend("Agg")
 
@@ -186,10 +189,10 @@ def _host_energy_at(series, end_seconds):
 
 
 def _total_energy_at(series_by_host, end_seconds):
-    """Sum per-host cumulative differences without using power-source totals.
+    """Sum validated worker series or the one complete worker-pool accumulator.
 
     Args:
-        series_by_host (dict): Validated included-host series.
+        series_by_host (dict): Validated per-host or aggregate datacenter series.
         end_seconds (float): Simulator-relative endpoint in seconds.
 
     Returns:
@@ -234,6 +237,7 @@ def analyze_case(
     evaluation_seconds=None,
     native_time_origin_ms=0,
     analytical_empty=False,
+    datacenter_rows=None,
 ):  # pylint: disable=too-many-locals
     """Compute the two approved interpretations for one validated case.
 
@@ -244,6 +248,8 @@ def analyze_case(
         evaluation_seconds (float or None): Positive fixed endpoint, defaulting to horizon H.
         native_time_origin_ms (float): Offset from cutoff to native OpenDC time zero.
         analytical_empty (bool): Compute idle-only energy for an explicit no-process empty case.
+        datacenter_rows (list[dict] or None): Required complete native worker-pool
+            accumulator for pinned cases, including workers that drain and close.
 
     Returns:
         dict: Boundaries, inventory, both windows and shared plot curves.
@@ -300,7 +306,19 @@ def analyze_case(
             }
         )
 
-    series = _energy_series(case, host_rows, native_origin, analytical_empty)
+    pinned = case.get("initialization_mode") == PINNED_MODE
+    if pinned and not analytical_empty:
+        series = datacenter_series(case, datacenter_rows, native_origin)
+    else:
+        energy_case = case
+        if pinned and case["candidate"] == "scale-down":
+            energy_case = {
+                **case,
+                "workers": [
+                    w for w in case["workers"] if w["node_name"] != case["selected_worker"]
+                ],
+            }
+        series = _energy_series(energy_case, host_rows, native_origin, analytical_empty)
     energy_kind = (
         "analytical_idle_only_no_opendc_process"
         if analytical_empty
@@ -312,6 +330,17 @@ def analyze_case(
         if not analytical_empty
         else "included-host configured idle power; no OpenDC process"
     )
+    if pinned and not analytical_empty:
+        energy_kind = "native_datacenter_including_drained_hosts_plus_pre_arrival_idle"
+        energy_method = (
+            "complete worker-pool native datacenter joules, including drain intervals; "
+            "piecewise-linear interpolation; analytical pre-arrival idle "
+            "and remaining-worker idle extension"
+        )
+    elif pinned and analytical_empty:
+        energy_method = (
+            "remaining-worker configured idle; empty cordoned worker off at zero; no OpenDC process"
+        )
     last_completion = max((task["finish_seconds"] for task in normalized), default=0.0)
     if not analytical_empty:
         for name, host_series in series.items():
@@ -354,6 +383,7 @@ def analyze_case(
     ]
 
     return {
+        "initialization_mode": case.get("initialization_mode", "provisional-trace"),
         "boundaries": {
             "cutoff_ms": cutoff,
             "arrival_horizon_seconds": horizon,
@@ -627,6 +657,11 @@ def evaluate_batches(batch_dirs, evaluation_seconds=None):
                 evaluation_seconds,
                 native_time_origin_ms=validation.get("native_time_origin_ms", 0),
                 analytical_empty=analytical_empty,
+                datacenter_rows=(
+                    pq.read_table(run_dir / RAW_ROOT / "dataCenter.parquet").to_pylist()
+                    if case.get("initialization_mode") == PINNED_MODE and not analytical_empty
+                    else None
+                ),
             )
             resources, missing = _resources(run_dir, execution)
             if analytical_empty:
@@ -672,6 +707,8 @@ def evaluate_batches(batch_dirs, evaluation_seconds=None):
                 "native_task_table": None if analytical_empty else task_path,
                 "native_host_table": None if analytical_empty else host_path,
             }
+            if case.get("initialization_mode") == PINNED_MODE and not analytical_empty:
+                paths["native_datacenter_table"] = run_dir / RAW_ROOT / "dataCenter.parquet"
             report["cases"].append(
                 {
                     "batch_label": label,
@@ -1095,8 +1132,12 @@ def _plot_response_page(pdf, cases, comparison):
         0.06,
         "Response time starts at original Job creation, "
         "including time spent waiting before this simulation.\n"
-        "Scale-down remains partial. These action scenarios are separate "
-        "from any measured forecast-configuration experiment.",
+        + (
+            "Scale-down remains partial. "
+            if any(c.get("scope") == "remaining_workers_only" for c in cases)
+            else "Cordon retains assigned executable work until completion. "
+        )
+        + "These are simulated action scenarios, separate from measured application execution.",
         fontsize=9,
         linespacing=1.5,
     )
@@ -1248,6 +1289,8 @@ def render_pdf(report, path, reference_batch=None):
     sources = "; ".join(
         f"{batch['label']} = {_input_title(cases)}" for batch, cases, _ in comparisons
     )
+    partial = any(c.get("scope") == "remaining_workers_only" for c in report["cases"])
+    pinned = any(c.get("initialization_mode") == PINNED_MODE for c in report["cases"])
     with PdfPages(path) as pdf:
         _figure_text_page(
             pdf,
@@ -1260,7 +1303,8 @@ def render_pdf(report, path, reference_batch=None):
                 "Starting inputs: " + (sources or "none."),
                 "Read each graph across actions: blue = unchanged, green = scale up, orange "
                 "dashed "
-                "= scale down (partial). Bold lines are medians; thin outlines and faint shading "
+                + ("= scale down (partial). " if partial else "= scale down with native cordon. ")
+                + "Bold lines are medians; thin outlines and faint shading "
                 "show the observed min–max across equally weighted sampled futures, "
                 "not confidence "
                 "intervals. Job counts use 2-second Gaussian display smoothing per scenario; "
@@ -1281,11 +1325,25 @@ def render_pdf(report, path, reference_batch=None):
                 "only and may be censored. Completed Jobs counts finishes by each plotted time. "
                 "Axes round outward to evenly spaced ticks; curves are not extrapolated to "
                 "these rounded bounds.",
-                "Scale down omits the selected worker and its assigned Jobs: energy and work "
-                "totals are partial, and omitted completion/energy are unknown. Lower totals or "
+                (
+                    "Scale down omits the selected worker and its assigned Jobs: energy and work "
+                    "totals are partial, and omitted completion/energy are unknown. "
+                    if partial
+                    else "Native cordon finishes assigned executable work "
+                    "and closes the selected host; "
+                    "no queued or future task is admitted there. "
+                )
+                + "Lower totals or "
                 "shorter responses alone cannot identify the best action. No scoring or automatic "
-                "decision is introduced. Running remainders restart at zero without restoring "
-                "placement or startup occupancy; each worker has C−1 modeled cores. Default "
+                "decision is introduced. "
+                + (
+                    "Represented assigned work is pinned at zero; "
+                    "startup delay and exhausted occupancy remain unmodeled. "
+                    if pinned
+                    else "Running remainders restart at zero without restoring placement "
+                    "or startup occupancy. "
+                )
+                + "Each worker has C−1 modeled cores. Default "
                 "100 W idle / 200 W maximum power is uncalibrated. Cluster energy here means "
                 "modeled worker energy. Control-plane, runner and "
                 "separate daemon overhead are excluded.",

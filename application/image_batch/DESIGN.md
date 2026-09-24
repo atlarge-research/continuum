@@ -183,17 +183,19 @@ Worker selection prefers an observed-empty eligible worker, otherwise the worker
 
 Energy uses cumulative native worker joules, interpolated at evaluation boundaries. Included workers retain their configured idle-power baseline after execution ends; the omitted worker has no assumed power-off time. The illustrative linear defaults are 100 W idle and 200 W maximum, configurable and uncalibrated. Control-plane, runner and separate daemon energy are excluded. Actual runner cost is recorded separately. A fixed window counts only released work as completed or unfinished; arrivals beyond an earlier evaluation boundary remain not-yet-arrived. Backlog response time includes its original waiting time.
 
-## Planned initial placement and scale-down modeling
+## Pinned initialization and native cordon
 
-Correct initialization must preserve observed placement and occupy resources before queued or future work is scheduled. For scale-down, prefer an empty worker; otherwise select the worker whose most recent Job assignment is oldest as a simple earliest-completion heuristic.
+The optional pinned trace path requests each represented running remainder or starting profile on its observed worker at time zero. Assigned tasks precede ordinary work in the adapted native trace; original source ordering and timestamps remain preserved. Admission checks aggregate CPU and memory on each named worker before execution, because a placement override must not bypass resource fit. Native lifecycle validation then checks initial scheduling, host identity throughout execution, and capacity. This restores placement for represented work, not the entire observed state: startup delay is omitted, exhausted profiles create no allocation, and unresolved membership remains explicit.
 
-Simulate that worker's assigned remaining work separately once per cutoff, then combine it with each future on the remaining workers. This avoids needing a simulated worker that rejects new work while finishing existing Jobs. The components must have disjoint tasks, aligned time boundaries and no modeled cross-component contention. Sum additive metrics and recompute task statistics from combined records; cordoning alone does not imply power-off.
+Native cordon retains all executable tasks and initial workers. The selected worker finishes its assigned work without admitting queued or future tasks, then closes in the simulator. Selection keeps the same observed-empty/earliest-assignment heuristic as the provisional path. A candidate is unavailable when exhausted work on that worker leaves its drain duration unknown. A complete modeled task inventory still does not establish complete physical observation or validate the scaling counterfactual. Kubernetes cordon alone does not power off a VM.
+
+Closing hosts may stop exporting host telemetry before their final energy interval. Complete cordon accounting therefore uses the native datacenter accumulator for the modeled worker pool, checks its identity, time coverage and configured power bounds, and adds idle energy after completion only for remaining workers. These are consistency checks on an uncalibrated model, not evidence of physical energy accuracy. A disjoint split simulation remains a possible diagnostic oracle if native behavior fails; it is not required for a supported native cordon run.
 
 ## Deployment and failure assumptions
 
 Observation remains colocated with the adapter through the October demo, with one observation owner per run. This avoids duplicate collection and the need for coordination between observers.
 
-The experiment assumes the adapter and observer remain healthy for one run. A crash, replacement, update, or loss of observation invalidates the run. Restarting the experiment preserves interpretable evidence; transparent recovery and production fault tolerance are outside this demo's scope.
+The experiment assumes the adapter and observer remain healthy for one run. A crash, replacement, update, or loss of observation invalidates the run. Normal server-side watch closure resumes through the Kubernetes client's last resource version while preserving the same observer and sampler; an unrecoverable history error remains fatal. Restarting an invalid experiment preserves interpretable evidence; production fault tolerance is outside this demo's scope.
 
 This is a deliberate scientific-demo trade-off: detecting an invalid run is more important than keeping a partially corrupted run alive.
 

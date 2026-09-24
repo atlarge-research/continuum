@@ -114,6 +114,8 @@ OPENDC_RUNTIME=fns-demo python3 application/image_batch/src/opendc_run.py prepar
 
 Use new output directories and the matching image when running those inputs. Host-side preparation defaults to the preserved engine; `OPENDC_RUNTIME=fns-demo` selects the new topology/trace contract. Manifests record the engine separately from [Dante's example](https://github.com/atlarge-research/FNS-demo), pinned at `41aaa9e20a4e299329924454316e6c91eb39f42f`. The example supplies no updated runtime JARs or engine source pin, so this source build does not establish equivalence to the developer's unavailable binary.
 
+For assigned-task placement and native cordon, add `--initialization-mode pinned-trace` when preparing scenarios or observation-validation inputs with `OPENDC_RUNTIME=fns-demo`. Run those inputs with the matching FNS image. Results distinguish validated task placement from the remaining startup-delay, exhausted-work and observation gaps.
+
 ## Manual provisional scenario workflow
 
 Prepare scenarios with `opendc_scenarios.py prepare`, run them with `opendc_batch.py`, then generate an action report:
@@ -137,4 +139,4 @@ Open `NEW_REPORT_DIRECTORY/report.pdf`; plotted comparison values are in `compar
 
 ## Observation validation
 
-Use `opendc_validation.py prepare` for replay inputs and `evaluate` for measured comparisons. Follow the [recorded experiment commands](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md) to reproduce the chronological validation and held-out evaluation. This remains a manual experiment with approximate initialization, partial scale-down accounting and uncalibrated energy assumptions.
+Use `opendc_validation.py prepare` for replay inputs and `evaluate` for measured comparisons. Follow the [recorded experiment commands](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md) to reproduce the historical chronological validation and held-out evaluation. That provisional study retains partial scale-down accounting. The optional pinned path uses native cordon with complete represented-work accounting; both remain manual experiments with approximate initialization and uncalibrated energy assumptions.
