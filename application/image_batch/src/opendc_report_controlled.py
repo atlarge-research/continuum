@@ -364,14 +364,14 @@ def _lifecycle_pages(pdf, comparisons):
         figure.text(
             0.07,
             0.025,
-            "Rows follow arrival order; ticks count Jobs. "
-            "Horizontal divider: backlog above, future below.\n"
-            "Dotted line: model start; shaded band: action interval. "
-            "Replay shows remaining work from model start.\n"
-            "Follow-up boundary: > continues beyond it; x = finish unknown. "
-            "Later competing arrivals are not drawn.\n"
-            "Error panels use matched completions; timelines also retain unfinished work. "
-            "Scheduler retries were not recorded.",
+            "Dashed horizontal divider: Jobs already present at model start (above), "
+            "future arrivals (below).\n"
+            "Zero = physical action; shading = timing uncertainty. "
+            "Model start is shortly before the action, not the start of the workload trace.\n"
+            "Follow-up ends at the evaluation boundary measured from model start. "
+            "> continues beyond it; x = finish unknown.\n"
+            "Rows follow arrival order. Later competing arrivals are not drawn. "
+            "Error panels use matched completions; retry events were not recorded.",
             fontsize=8,
             linespacing=1.5,
         )
@@ -380,7 +380,7 @@ def _lifecycle_pages(pdf, comparisons):
 
 
 def _lifecycle_pair(axes, saved, rows, offset, colors, limits):
-    """Draw one scenario with matching Job-count ticks visible on both panels.
+    """Draw one scenario with labeled cohort/time boundaries and matching Job-count ticks.
 
     Args:
         axes (list[Axes]): Physical and simulated panels.
@@ -396,6 +396,20 @@ def _lifecycle_pair(axes, saved, rows, offset, colors, limits):
         reference = _action_axis(axis, saved) or 0
         axis.axvline(-reference, color="black", linestyle=":", linewidth=0.8)
         axis.axvline(rows[0]["window_end"], color="grey", linestyle="--", linewidth=0.8)
+        for position, label in (
+            (-reference, "Model start"),
+            (rows[0]["window_end"], "Follow-up ends"),
+        ):
+            axis.annotate(
+                label,
+                xy=(position, 0 if label == "Model start" else 1),
+                xycoords=axis.get_xaxis_transform(),
+                xytext=(-3, 3),
+                textcoords="offset points",
+                ha="right",
+                va="bottom",
+                fontsize=6,
+            )
         axis.set(xlim=limits, ylim=(len(rows) - 0.5, -0.5))
         axis.set_title(title, fontsize=9, pad=5)
         axis.set_xlabel(axis.get_xlabel(), fontsize=8)
@@ -404,7 +418,22 @@ def _lifecycle_pair(axes, saved, rows, offset, colors, limits):
         axis.grid(axis="x", alpha=0.2)
         for boundary in range(1, len(rows)):
             if rows[boundary - 1]["cohort"] != rows[boundary]["cohort"]:
-                axis.axhline(boundary - 0.5, color="black", linewidth=0.8, zorder=4)
+                axis.axhline(boundary - 0.5, color="black", linestyle="--", linewidth=0.8, zorder=4)
+                for x_position, y_position, label, horizontal, vertical in (
+                    (0.98, boundary - 0.9, "Already present", "right", "bottom"),
+                    (0.02, boundary - 0.1, "Future arrivals", "left", "top"),
+                ):
+                    axis.text(
+                        x_position,
+                        y_position,
+                        label,
+                        transform=axis.get_yaxis_transform(),
+                        ha=horizontal,
+                        va=vertical,
+                        fontsize=6,
+                        bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.5},
+                        zorder=5,
+                    )
     for index, row in enumerate(rows):
         _lifecycle_bar(
             axes[0],
