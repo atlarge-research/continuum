@@ -144,6 +144,20 @@ class InterventionTests(unittest.TestCase):
         self.assertEqual(result["status"], "inconclusive")
         self.assertFalse(result["new_assignments_after_ack"])
 
+    def test_reserve_admission_must_preserve_initial_work_on_other_workers(self):
+        """New reserve admissions cannot hide moved or missing initial assignments."""
+        saved = capture("up")
+        initial = pod("existing", node="worker-b")
+        saved["before_pods"]["items"] = [initial]
+        saved["after_ack_pods"]["items"] = [initial]
+        admitted = pod("new", phase="Succeeded", scheduled="2026-09-24T01:00:12Z")
+        for old in (None, pod("existing", node="worker-a", phase="Succeeded")):
+            with self.subTest(old=old):
+                final = [admitted] + ([old] if old else [])
+                self.assertNotEqual(
+                    validate_intervention(saved, {"items": final})["status"], "supported"
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

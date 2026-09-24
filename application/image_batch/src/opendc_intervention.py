@@ -88,6 +88,11 @@ def validate_intervention(evidence, final_pods):
         for uid in initially_assigned
         if before[uid]["status"]["phase"] not in ("Succeeded", "Failed")
     )
+    all_initial = {
+        uid: pod["spec"]["nodeName"]
+        for uid, pod in before.items()
+        if pod["spec"].get("nodeName") and pod["status"]["phase"] not in ("Succeeded", "Failed")
+    }
     violations, gaps = [], []
     clock = evidence.get("controller_clock_offset_seconds")
     if clock is None:
@@ -106,10 +111,10 @@ def validate_intervention(evidence, final_pods):
         elif bool(nodes[0]["spec"].get("unschedulable", False)) != unschedulable:
             violations.append(f"{key}: selected worker admission state is incorrect")
     drained, missing, unfinished = [], [], []
-    for uid in initial_active:
+    for uid, assigned_worker in all_initial.items():
         if uid not in final:
             missing.append(uid)
-        elif final[uid]["spec"].get("nodeName") != worker:
+        elif final[uid]["spec"].get("nodeName") != assigned_worker:
             violations.append(f"initial Pod moved from its assigned worker: {uid}")
         elif final[uid]["status"]["phase"] == "Failed":
             violations.append(f"initial Pod failed instead of draining successfully: {uid}")
@@ -156,7 +161,9 @@ def validate_intervention(evidence, final_pods):
         "acknowledged_unix_seconds": acknowledged,
         "controller_clock_offset_seconds": clock,
         "initial_active_pod_uids": initial_active,
-        "drained_initial_pod_uids": sorted(drained),
+        "all_initial_assignments": all_initial,
+        "drained_initial_pod_uids": sorted(set(drained).intersection(initial_active)),
+        "drained_all_initial_pod_uids": sorted(drained),
         "missing_initial_pod_uids": sorted(missing),
         "unfinished_initial_pod_uids": sorted(unfinished),
         "new_assignments_after_ack": sorted(new_after),
