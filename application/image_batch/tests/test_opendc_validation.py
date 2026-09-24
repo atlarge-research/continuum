@@ -5,6 +5,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -20,6 +21,19 @@ from test_opendc_scenarios import CUTOFF, configuration, make_forecast
 
 class ValidationTests(unittest.TestCase):
     """Protect common futures, causal profiles, identity and censoring semantics."""
+
+    def test_invalid_explicit_forecast_counts_fail_before_observation_read(self):
+        """A locked held-out count must be a nonempty list of positive integer prefixes."""
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "index.json"
+            for counts in ([], [True], [0], ["10"], [10, 10]):
+                path.write_text(json.dumps({"forecast_counts": counts}))
+                with patch.object(
+                    validation, "load_batch", return_value=(Path(temporary), {"experiments": []})
+                ), patch.object(validation, "bounded_read") as read:
+                    with self.assertRaisesRegex(ValueError, "forecast_counts"):
+                        validation.evaluate_matrix(path, temporary)
+                    read.assert_not_called()
 
     def test_finished_snapshot_supplies_outcome_before_profile_emission(self):
         """Classifier completion is observable even when resource-profile emission is absent."""

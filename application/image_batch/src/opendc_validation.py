@@ -698,16 +698,28 @@ def evaluate_matrix(index_file, batch_dir):
     """Evaluate a saved chronological experiment matrix without fitting any model.
 
     Args:
-        index_file (str or Path): Frozen matrix preparation index.
+        index_file (str or Path): Frozen matrix preparation index. Optional forecast_counts
+            restricts H60 summaries to declared prefixes, such as one locked held-out count.
         batch_dir (str or Path): Successful, hash-verified sequential batch output.
 
     Returns:
         dict: Cutoff/configuration comparisons, per-Job records, coverage and costs.
 
     Raises:
-        ValueError: Batch or matrix identities disagree.
+        ValueError: Batch/matrix identities or explicitly requested forecast counts are invalid.
     """
     index = json.loads(Path(index_file).read_text(encoding="utf-8"))
+    forecast_counts = index.get("forecast_counts", [3, 10, 20])
+    if (
+        not isinstance(forecast_counts, list)
+        or not forecast_counts
+        or any(
+            isinstance(count, bool) or not isinstance(count, int) or count < 1
+            for count in forecast_counts
+        )
+        or len(set(forecast_counts)) != len(forecast_counts)
+    ):
+        raise ValueError("forecast_counts must contain unique positive integer prefixes")
     directory, batch = load_batch(batch_dir)
     if any(item.get("candidate") != "unchanged" for item in batch["experiments"]):
         raise ValueError("observation validation requires unchanged-only simulation cases")
@@ -771,7 +783,9 @@ def evaluate_matrix(index_file, batch_dir):
             ],
             key=lambda c: c["scenario"],
         )
-        counts = (3, 10, 20) if source == "forecast" and horizon == 60 else (len(available),)
+        counts = forecast_counts if source == "forecast" and horizon == 60 else (len(available),)
+        if "forecast_counts" in index and max(counts) > len(available):
+            raise ValueError("forecast_counts requests more futures than were executed")
         for count in counts:
             if len(available) < count:
                 continue
@@ -894,6 +908,7 @@ def evaluate_matrix(index_file, batch_dir):
         "initialization_diagnostics": initialization_diagnostics(cases),
         "shared_process": batch.get("shared_process"),
         "cost_scope": batch.get("cost_scope", "separately measured native processes"),
+        "forecast_counts": forecast_counts,
     }
 
 
