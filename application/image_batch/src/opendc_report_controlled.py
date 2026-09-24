@@ -314,7 +314,7 @@ def _lifecycle_pages(pdf, comparisons):
             labels = []
             for index, row in enumerate(page):
                 labels.append(
-                    f"{row['cohort'][0].upper()} {row['uid'][:8]}"
+                    f"{row['cohort'][0].upper()} {offset + index + 1}"
                     + (" *" if row["matched_future"] else "")
                 )
                 _lifecycle_bar(
@@ -340,7 +340,7 @@ def _lifecycle_pages(pdf, comparisons):
                         axis.plot(row["arrival"], index, marker="d", color="black", markersize=3)
             axes[0].set_yticks(range(len(page)), labels)
             axes[0].set_ylabel(
-                "Job UID prefix, ordered by creation\nB = backlog; F = future", fontsize=9
+                "Job number, ordered by creation\nB = backlog; F = future", fontsize=9
             )
             handles = [Patch(color="#bfbfbf", label="Waiting / startup")]
             handles += [Patch(color=colors[name], label=name) for name in workers]
