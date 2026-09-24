@@ -12,6 +12,12 @@ from opendc_report_observed import SCHEMA as MEASURED_SCHEMA, render_measured_pa
 from forecast_report import render_forecasts
 from opendc_report_replay import render_replay_pages
 from opendc_report_study import SCHEMA as STUDY_SCHEMA, render_study_pages
+from opendc_report_controlled import (
+    SCHEMA as CONTROLLED_SCHEMA,
+    render_pages as render_controlled_pages,
+    timing_summary,
+    validate_comparisons,
+)
 
 
 def render_report(
@@ -24,6 +30,7 @@ def render_report(
     forecast_reports=(),
     replay_reports=(),
     study_reports=(),
+    controlled_reports=(),
 ):
     """Lead with supplied physical execution and arrival forecasts, then simulations.
 
@@ -37,6 +44,7 @@ def render_report(
         forecast_reports (iterable[dict]): Saved arrival-forecast accuracy payloads.
         replay_reports (iterable[dict]): Explicitly labeled unchanged known-arrival results.
         study_reports (iterable[dict]): Frozen independent-run study and held-out outcomes.
+        controlled_reports (iterable[dict]): Physical action comparisons appended as validation.
 
     Returns:
         dict: Section inventory and the exact configuration summaries plotted.
@@ -48,6 +56,7 @@ def render_report(
     measured_reports, forecast_reports = list(measured_reports), list(forecast_reports)
     replay_reports = list(replay_reports)
     study_reports = list(study_reports)
+    controlled_reports = list(controlled_reports)
     if (
         not results
         and not action_reports
@@ -55,6 +64,7 @@ def render_report(
         and not forecast_reports
         and not replay_reports
         and not study_reports
+        and not controlled_reports
     ):
         raise ValueError("Supply action results or observation-validation results")
     audit = {
@@ -64,6 +74,7 @@ def render_report(
         "arrival_forecasts": [],
         "replay": [],
         "studies": [],
+        "controlled": [],
         "section_order": [],
     }
     output = Path(output)
@@ -113,6 +124,13 @@ def render_report(
         for result in results:
             audit["validation"].append(render_configuration_pages(pdf, result, selection, seed))
             audit["section_order"].append("configuration")
+        if controlled_reports:
+            render_controlled_pages(pdf, controlled_reports)
+            audit["controlled"] = [
+                {"context": saved["context"], "timing": timing_summary(saved)}
+                for saved in controlled_reports
+            ]
+            audit["section_order"].append("controlled-validation")
     return audit
 
 
@@ -121,7 +139,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
 
     Args:
         metrics_files (iterable[str or Path]): Saved measured, forecast, replay, action
-            or combined numerical evidence.
+            controlled physical comparisons or combined numerical evidence.
         output_dir (str or Path): New output directory; existing reports are never overwritten.
         split (str or None): Optional validation split to include, such as ``validation``.
         seed (int or None): Forecast scenario seed to use within each supplied run.
@@ -137,13 +155,18 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
     results, actions, selection = [], [], None
     measured, forecasts, replays = [], [], []
     studies = []
+    controlled = []
     saved_seeds = set()
     for source in sources:
         saved = json.loads(source.read_text(encoding="utf-8"))
         saved_seed = saved.get("render_options", {}).get("forecast_seed")
         if saved_seed is not None:
             saved_seeds.add(saved_seed)
-        if saved.get("schema_version") == STUDY_SCHEMA:
+        if saved.get("schema_version") == CONTROLLED_SCHEMA:
+            controlled.extend(saved["comparisons"])
+        elif saved.get("schema_version") == "opendc-controlled-comparison-v1":
+            controlled.append(saved)
+        elif saved.get("schema_version") == STUDY_SCHEMA:
             studies.append(saved)
         elif "results" in saved:
             results.extend(r for r in saved["results"] if split is None or r["split"] == split)
@@ -153,6 +176,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
             measured.extend(saved.get("measured_reports", []))
             forecasts.extend(saved.get("forecast_reports", []))
             studies.extend(saved.get("study_reports", []))
+            controlled.extend(saved.get("controlled_reports", []))
             replays.extend(
                 r
                 for r in saved.get("replay_reports", [])
@@ -184,8 +208,10 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         and not forecasts
         and not replays
         and not studies
+        and not controlled
     ):
         raise ValueError("No evidence matches the requested report sections")
+    validate_comparisons(controlled)
     if seed is None:
         if len(saved_seeds) > 1:
             raise ValueError(
@@ -202,6 +228,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         "forecast_reports": forecasts,
         "replay_reports": replays,
         "study_reports": studies,
+        "controlled_reports": controlled,
         "selection": selection,
         "render_options": {"forecast_seed": seed},
     }
@@ -218,6 +245,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         forecasts,
         replays,
         studies,
+        controlled,
     )
     audit["sources"] = [str(source) for source in sources]
     (output / "comparison.json").write_text(json.dumps(audit, indent=2) + "\n", encoding="utf-8")
