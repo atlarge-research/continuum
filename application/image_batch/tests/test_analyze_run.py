@@ -16,9 +16,9 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Source checkout tests intentionally add src before importing project modules.
 # pylint: disable=wrong-import-position
-from analyze_run import analyze, compact_alignment, main, range_series, read_jsonl, render
 from analyze_run_core import export_matched_comparisons
-from opendc_report import write_report
+from reporting.analyzer import analyze, compact_alignment, main, range_series, read_jsonl, render
+from reporting.assembly import write_report
 from forecast_trace import iso
 from forecast_workload import run_once
 from test_forecast_workload import (

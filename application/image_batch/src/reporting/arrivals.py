@@ -2,9 +2,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from forecast_report import MODELS, rebin_predictions
 from forecast_trace import milliseconds
-from opendc_report_layout import page, panel, finish
+from reporting.forecast_evidence import MODELS, rebin_predictions
+from reporting.layout import page, panel, finish
 
 
 def render_arrivals(pdf, example, summaries, roles, supplement):

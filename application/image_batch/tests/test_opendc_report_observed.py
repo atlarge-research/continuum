@@ -1,6 +1,7 @@
 """Measured-report payloads preserve captured evidence for offline composition."""
 import json
 import math
+import hashlib
 from pathlib import Path
 import sys
 import tempfile
@@ -9,17 +10,17 @@ import re
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # pylint: disable=wrong-import-position
-from opendc_report_observed import (
+from reporting.measured import (
     prepare_measured,
     measured_groups,
     _snapshot_occupancy,
     _covered_series,
 )
-from opendc_report import write_report
-from analyze_run import analyze
+from reporting.forecast_evidence import prepare_forecasts
+from reporting.assembly import write_report
+from reporting.analyzer import analyze
 from test_analyze_run import fixture
 from forecast_workload import run_once
-from forecast_report import prepare_forecasts
 from forecast_trace import iso
 from test_forecast_workload import fixture as forecast_fixture, save_rows, settings, BASE
 from test_opendc_report import action_result
@@ -84,6 +85,12 @@ class ObservedReportTests(unittest.TestCase):
             self.assertTrue(
                 all(p["snapshot_running_jobs"] == 0 for p in payload["runs"][0]["pressure"])
             )
+            implementation = payload["provenance"]["implementation"]
+            self.assertIn("reporting/measured.py", implementation)
+            self.assertIn("reporting/analyzer.py", implementation)
+            for relative, digest in implementation.items():
+                source = Path(__file__).resolve().parents[1] / "src" / relative
+                self.assertEqual(digest, hashlib.sha256(source.read_bytes()).hexdigest())
             self.assertEqual(len(payload["provenance"]["inputs"]), 5)
             self.assertEqual(endpoint.read_bytes(), before)
             round_trip = json.loads(json.dumps(payload, allow_nan=False))

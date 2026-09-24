@@ -10,8 +10,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Test discovery does not install the image_batch sources as a package.
 # pylint: disable=wrong-import-position
-from opendc_report import write_report
-from opendc_report_validation import comparison_rows
+from reporting.assembly import write_report
+from reporting.configuration import comparison_rows
 from test_opendc_evaluate import comparison_cases
 
 # pylint: enable=wrong-import-position

@@ -217,9 +217,11 @@ def prepare_forecasts(forecast_dir, observer_dir, until, rate_bin_seconds=10):
             ],
             "observer_directory": str(Path(observer_dir).resolve()),
             "implementation": {
-                name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+                name: hashlib.sha256(
+                    (Path(__file__).resolve().parent.parent / name).read_bytes()
+                ).hexdigest()
                 for name in (
-                    "forecast_report.py",
+                    "reporting/forecast_evidence.py",
                     "evaluate_forecasts.py",
                     "forecast_trace.py",
                 )

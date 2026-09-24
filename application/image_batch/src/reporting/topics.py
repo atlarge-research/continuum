@@ -1,11 +1,11 @@
 """Topic-oriented report summaries, preserving independent runs and frozen selection."""
 import statistics
 
-from opendc_report_topic_physical import render_physical
-from opendc_report_topic_forecast import render_arrivals
-from opendc_report_topic_study import render_selection, render_completion
+from reporting.physical import render_physical
+from reporting.arrivals import render_arrivals
+from reporting.study import render_selection, render_completion
 
-from opendc_report_study import study_panels
+from reporting.study_evidence import study_panels
 
 
 def arrival_summary(reports, roles):

@@ -1,12 +1,15 @@
 """Accuracy keeps forecast-relative leads, coverage gaps and observed zeros distinct."""
 import copy
+import hashlib
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from forecast_report import (
+# Checkout tests import local sources after adding src.
+# pylint: disable=wrong-import-position
+from reporting.forecast_evidence import (
     cumulative_counts,
     horizon_summary,
     lead_summary,
@@ -16,6 +19,8 @@ from forecast_report import (
 from forecast_trace import iso, milliseconds
 from forecast_workload import run_once
 from test_forecast_workload import BASE, fixture, save_rows, settings
+
+# pylint: enable=wrong-import-position
 
 
 class ForecastReportTests(unittest.TestCase):
@@ -40,6 +45,11 @@ class ForecastReportTests(unittest.TestCase):
             save_rows(root / "inputs", rows)
             run_once(root / "inputs", root / "forecast", BASE + 60000, settings())
             report = prepare_forecasts(root / "forecast", root / "inputs", iso(BASE + 80000))
+            implementation = report["provenance"]["implementation"]
+            self.assertIn("reporting/forecast_evidence.py", implementation)
+            for relative, digest in implementation.items():
+                source = Path(__file__).resolve().parents[1] / "src" / relative
+                self.assertEqual(digest, hashlib.sha256(source.read_bytes()).hexdigest())
             last_score = report["evaluation"]["scores"][-1]
             last_actual = report["actual_bins"][-1]
             self.assertEqual(last_score["bin_start_ms"], BASE + 75000)

@@ -3,7 +3,7 @@ import statistics
 
 from matplotlib.ticker import MaxNLocator
 
-from opendc_report_layout import BLUE, ORANGE, COLORS, page, panel, finish
+from reporting.layout import BLUE, ORANGE, COLORS, page, panel, finish
 
 
 def render_selection(pdf, study, panels, supplement):

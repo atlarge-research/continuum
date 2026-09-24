@@ -3,8 +3,8 @@ import statistics
 
 from matplotlib.ticker import MaxNLocator
 
-from opendc_report_layout import BLUE, ORANGE, GREEN, COLORS, page, panel, finish
-from opendc_report_observed import _covered_series
+from reporting.layout import BLUE, ORANGE, GREEN, COLORS, page, panel, finish
+from reporting.measured import _covered_series
 
 
 def _ecdf(axis, values, label, color):

@@ -13,11 +13,11 @@ from matplotlib.text import Text
 # Direct unittest discovery follows the repository's local source import convention.
 # pylint: disable=wrong-import-position
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-import forecast_report
+import reporting.forecast_evidence as forecast_report
 from forecast_trace import iso
 from forecast_workload import run_once
-from opendc_report_topic_forecast import render_arrivals
-from opendc_report_topics import arrival_summary
+from reporting.arrivals import render_arrivals
+from reporting.topics import arrival_summary
 from test_forecast_workload import BASE, fixture, save_rows, settings
 
 

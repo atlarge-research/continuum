@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Discovery uses the repository source path rather than an installed package.
 # pylint: disable=wrong-import-position
-from opendc_report_replay import replay_panels, render_replay_pages
-from opendc_report import write_report
+from reporting.replay import replay_panels, render_replay_pages
+from reporting.assembly import write_report
 
 # pylint: enable=wrong-import-position
 
@@ -78,7 +78,7 @@ class ReplayReportTests(unittest.TestCase):
 
     def test_empty_placement_diagnostics_remain_visible(self):
         """Zero assigned Jobs still show their denominator within the count-axis bounds."""
-        with patch("opendc_report_replay.finish") as saved:
+        with patch("reporting.replay.finish") as saved:
             render_replay_pages(None, replay_fixture())
         figures = [call.args[1] for call in saved.call_args_list]
         try:

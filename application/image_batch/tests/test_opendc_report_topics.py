@@ -7,11 +7,11 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # pylint: disable=wrong-import-position
 import matplotlib.pyplot as plt
-from opendc_report_topics import arrival_summary
-from opendc_report_topic_physical import _ecdf
-from opendc_report_topic_study import render_completion
-from opendc_report_topic_forecast import _accuracy_page
-from opendc_report_study import study_panels
+from reporting.topics import arrival_summary
+from reporting.physical import _ecdf
+from reporting.study import render_completion
+from reporting.arrivals import _accuracy_page
+from reporting.study_evidence import study_panels
 from test_opendc_report_study import evidence
 
 # pylint: enable=wrong-import-position

@@ -9,9 +9,9 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Tests exercise the checked-out report module.
 # pylint: disable=wrong-import-position
-import opendc_report_controlled as controlled
-from opendc_report_controlled import write_report
-from opendc_report import write_report as combined_report
+from reporting import controlled
+from reporting.controlled import write_report
+from reporting.assembly import write_report as combined_report
 from test_opendc_report import validation_result
 
 # pylint: enable=wrong-import-position
@@ -186,7 +186,7 @@ class ControlledReportTests(unittest.TestCase):
             main, actions = root / "main.json", root / "actions.json"
             main.write_text(json.dumps({"results": [validation_result()]}))
             actions.write_text(json.dumps(saved))
-            with patch("opendc_report.render_controlled_pages") as render:
+            with patch("reporting.assembly.render_controlled_pages") as render:
                 audit = combined_report([actions, main], root / "first")
                 self.assertEqual(audit["section_order"], ["configuration", "controlled-validation"])
                 self.assertEqual(render.call_args.args[1], saved["comparisons"])

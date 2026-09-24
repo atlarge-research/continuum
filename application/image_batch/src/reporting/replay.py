@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
-from opendc_report_layout import finish, page as report_page
+from reporting.layout import finish, page as report_page
 
 
 def replay_panels(entries, window="120"):

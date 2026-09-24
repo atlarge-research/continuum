@@ -29,7 +29,7 @@ from scipy.ndimage import gaussian_filter1d
 from opendc_inputs import file_hashes, write_json
 from opendc_pinning import PINNED_MODE
 from opendc_energy import datacenter_series
-from opendc_report_layout import finish as finish_page, page
+from reporting.layout import finish as finish_page, page
 
 plt.switch_backend("Agg")
 

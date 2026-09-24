@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import statistics
 
-from opendc_report_validation import comparison_rows
+from reporting.configuration import comparison_rows
 
 
 def select_across_runs(results, seed=20261008):

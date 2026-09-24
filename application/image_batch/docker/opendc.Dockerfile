@@ -79,6 +79,7 @@ RUN PIP_ROOT_USER_ACTION=ignore python -m pip install --no-cache-dir --no-deps -
     && /opt/opendc/bin/opendc --help >/dev/null
 
 COPY application/image_batch/src/opendc_*.py application/image_batch/src/forecast_trace.py /app/
+COPY application/image_batch/src/reporting /app/reporting
 COPY application/image_batch/fixtures/opendc/*.json /fixtures/opendc/
 
 RUN python -c "from opendc_runtime import runtime_identity; runtime_identity()"

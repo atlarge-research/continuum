@@ -10,8 +10,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Tests import the checked-out report implementation.
 # pylint: disable=wrong-import-position
-from opendc_report_study import study_panels
-from opendc_report import write_report
+from reporting.study_evidence import study_panels
+from reporting.assembly import write_report
 
 # pylint: enable=wrong-import-position
 
@@ -112,7 +112,7 @@ class StudyReportTests(unittest.TestCase):
             root = Path(temporary)
             source = root / "study.json"
             source.write_text(json.dumps(saved))
-            with patch("opendc_report.PdfPages") as writer:
+            with patch("reporting.assembly.PdfPages") as writer:
                 writer.return_value.__enter__.return_value.savefig.side_effect = save_page
                 audit = write_report([source], root / "current", split="validation")
         self.assertTrue(any("Validation seed 48" in text for text in captured))
@@ -143,7 +143,7 @@ class StudyReportTests(unittest.TestCase):
             root = Path(temporary)
             source = root / "combined.json"
             source.write_text(json.dumps(saved))
-            with patch("opendc_report.render_report", return_value={}):
+            with patch("reporting.assembly.render_report", return_value={}):
                 write_report([source], root / "selection", split="validation")
             result = json.loads((root / "selection/metrics.json").read_text())
         self.assertEqual(len(result["measured_reports"][0]["runs"]), 1)

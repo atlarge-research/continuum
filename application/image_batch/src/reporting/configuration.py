@@ -2,7 +2,7 @@
 import numpy as np
 
 from opendc_evaluate import _finish_axes
-from opendc_report_layout import finish, page
+from reporting.layout import finish, page
 
 COLORS = ("#2864b4", "#218358", "#8855a3", "#c56a16")
 

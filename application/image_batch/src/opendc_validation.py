@@ -17,7 +17,7 @@ from opendc_evaluate import (
     evaluate_batches,
 )
 
-from opendc_report import render_report
+from reporting.assembly import render_report
 from forecast_trace import bounded_read, milliseconds, read_trace
 from opendc_inputs import file_hashes, write_json
 from opendc_scenarios import (
