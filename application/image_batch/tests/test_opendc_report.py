@@ -111,6 +111,27 @@ class ReportTests(unittest.TestCase):
         self.assertEqual([r["means"]["execution_seconds"] for r in rows], [3.0, 6.0])
         self.assertEqual([r["means"]["execution_seconds"] for r in other], [100.0, 100.0])
 
+    def test_offline_regeneration_preserves_nondefault_forecast_seed(self):
+        """Saving all futures must retain the seed actually selected for rendering."""
+        result = validation_result()
+        extra = copy.deepcopy(result)
+        for group in extra["groups"]:
+            group["seed"] = 456
+        for case in extra["cases"]:
+            case["seed"] = 456
+        result["groups"].extend(extra["groups"])
+        result["cases"].extend(extra["cases"])
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.json"
+            source.write_text(json.dumps({"results": [result]}))
+            first = write_report([source], root / "first", seed=456)
+            saved = root / "first/metrics.json"
+            repeated = write_report([saved], root / "second")
+            self.assertEqual(first["validation"], repeated["validation"])
+            overridden = write_report([saved], root / "third", seed=123)
+            self.assertEqual(overridden["validation"][0]["forecast_seed"], 123)
+
     def test_missing_values_are_unavailable_instead_of_zero(self):
         """Missing response samples or execution measurements must not improve a mean."""
         result = validation_result()

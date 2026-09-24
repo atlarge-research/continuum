@@ -73,6 +73,8 @@ python3 -m venv /tmp/fns-analysis-venv
 
 Open `logs/image-batch-report/report.pdf`. Repeat `--endpoint-log` to compare runs with matching planned arrivals, or add `--run-id ID` to select one.
 
+To preserve complete measured series for later combined reports, run `opendc_report_observed.py --endpoint-log CAPTURE/endpoint.jsonl --observer-dir CAPTURE/observer --output NEW_MEASURED.json` in the analysis environment. Repeat `--endpoint-log` for execution repetitions. Pass the saved payload to `opendc_report.py --metrics NEW_MEASURED.json --output-dir NEW_REPORT`; additional `--metrics` files can supply saved `forecast-report.json`, simulator or combined evidence. The new report retains all plotted numbers in `metrics.json` for offline regeneration.
+
 ## Arrival forecasting
 
 Install the forecasting dependencies and generate a forecast plus simulation inputs:

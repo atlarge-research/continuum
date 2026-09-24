@@ -167,6 +167,10 @@ The demo executes a fixed OpenDC version directly to isolate simulator behavior 
 
 Original observations remain separate from simulator-specific conversions. Reproducibility requires preserving inputs, native outputs and the numerical environment, and checking output validity as well as process success. Actual simulation cost is measured separately from modeled application resource use.
 
+Reports lead with measured execution and arrival-forecast accuracy before simulator comparisons. Their saved numerical payload retains original Job times, worker assignments, snapshot occupancy, CPU coverage and gaps, so physical evidence remains usable without a successful simulation or access to the cluster. Matching arrival plans can support execution-repetition ranges; different workload seeds remain separate runs. Measured workload CPU, observed Kubernetes allocatable capacity and the configured application-capacity model are distinct quantities. Missing samples break plotted lines, and partial sample sums are explicitly marked.
+
+Known-arrival old/new replay comparisons require the same run, cutoff, observed Job identities and observation window. Completion curves share axes; placement changes and response discrepancies remain separate diagnostics. Exhausted work, unmatched backlog and censored outcomes retain their own counts rather than disappearing into a completion error. Repeated Job–cutoff pairs are dependent observations. Forecast scenario ranges describe the sampled futures and are not calibrated confidence intervals; a saved report also retains its chosen scenario seed for offline regeneration.
+
 ## Planned worker capacity and runner placement
 
 Model each C-core worker with C - 1 application cores, a deliberate allowance for fractional system reservations. Three four-core workers therefore offer nine one-CPU Job slots. Use the frozen measured application profile. Omit explicit daemon workload and energy overhead while retaining the worker power model's idle baseline.
