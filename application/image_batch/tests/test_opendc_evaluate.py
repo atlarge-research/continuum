@@ -1,6 +1,7 @@
 """Check offline evaluation semantics against hand-calculated evidence."""
 import copy
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -234,6 +235,11 @@ class EvaluationTests(unittest.TestCase):
             original_cases = copy.deepcopy(report["cases"])
             render_pdf(report, path, Path("/second"))
             self.assertEqual(path.read_bytes()[:4], b"%PDF")
+            self.assertEqual(len(re.findall(rb"/Type /Page\b", path.read_bytes())), 2)
+            self.assertEqual(
+                report["action_comparisons"][0],
+                {"batch_label": "second", **aggregate_actions(second)},
+            )
             self.assertEqual(report["presentation"]["reference_batch"], "second")
             self.assertEqual(report["cases"], original_cases)
 

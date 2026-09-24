@@ -1,5 +1,8 @@
 """Direct, cohort-checked comparisons of unchanged known-arrival replay."""
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+
+from opendc_report_layout import finish, page as report_page
 
 
 def replay_panels(entries, window="120"):
@@ -103,21 +106,19 @@ def render_replay_pages(pdf, entries, window="120"):
         )
         for start in range(0, len(selected), 4):
             page = selected[start : start + 4]
-            figure, axes = plt.subplots(2, 2, figsize=(11.69, 8.27), sharex=True, sharey=True)
-            figure.subplots_adjust(
-                top=0.82, bottom=0.17, left=0.08, right=0.97, hspace=0.45, wspace=0.25
+            figure, axes = report_page(
+                "Unchanged replay | completions",
+                "Engine predictions share the same observed cohort; all cutoffs use "
+                "common count and time scales.",
             )
-            figure.suptitle(
-                "Unchanged replay | prediction against observation", fontsize=17, y=0.97
-            )
-            figure.text(0.08, 0.91, run, fontsize=9)
+            figure.text(0.08, 0.865, run, fontsize=8)
             revisions = [
                 f"{entry['label']}: {entry['engine_revision'][:12]}"
                 for entry in entries
                 if entry["result"]["run_id"] == run and entry.get("engine_revision")
             ]
             if revisions:
-                figure.text(0.08, 0.875, "; ".join(revisions), fontsize=8)
+                figure.text(0.08, 0.84, "; ".join(revisions), fontsize=8)
             for axis, panel in zip(axes.flat, page):
                 axis.step(
                     panel["grid_seconds"],
@@ -127,14 +128,14 @@ def render_replay_pages(pdf, entries, window="120"):
                     linewidth=2.5,
                     label="Observed classifier completions",
                 )
-                for index, member in enumerate(panel["members"]):
+                for member in panel["members"]:
                     view = member["group"]["windows"][window]
                     axis.step(
                         panel["grid_seconds"],
                         view["completion_median"],
                         where="post",
                         color=colors[member["label"]],
-                        linestyle=("--", ":", "-.")[index % 3],
+                        linestyle=("--", ":", "-.")[names.index(member["label"]) % 3],
                         label=member["label"],
                     )
                 covered = all(
@@ -142,35 +143,41 @@ def render_replay_pages(pdf, entries, window="120"):
                 )
                 axis.set(
                     title=f"Cutoff {panel['cutoff_index']} | H{panel['horizon_seconds']}, E{window}"
-                    + ("" if covered else " | incomplete coverage"),
+                    + ("" if covered else " | incomplete coverage")
+                    + (
+                        "\nUnavailable: " + ", ".join(panel["unavailable_labels"])
+                        if panel["unavailable_labels"]
+                        else ""
+                    ),
                     xlabel="Seconds after cutoff",
                     ylabel="Completed cohort Jobs",
                     xlim=(0, int(window)),
                     ylim=(0, maximum * 1.05),
                 )
+                axis.yaxis.set_major_locator(MaxNLocator(integer=True))
                 axis.grid(alpha=0.2)
-                axis.legend(fontsize=7)
-                if panel["unavailable_labels"]:
-                    axis.text(
-                        0.02,
-                        0.75,
-                        "Unavailable: " + ", ".join(panel["unavailable_labels"]),
-                        transform=axis.transAxes,
-                        fontsize=8,
-                    )
             for axis in list(axes.flat)[len(page) :]:
                 axis.set_visible(False)
-            figure.text(
-                0.08,
-                0.065,
+            legend = {}
+            for axis in axes.flat:
+                handles, labels = axis.get_legend_handles_labels()
+                legend.update(zip(labels, handles))
+            figure.legend(
+                legend.values(),
+                legend.keys(),
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.105),
+                ncol=4,
+                frameon=False,
+                fontsize=8,
+            )
+            finish(
+                pdf,
+                figure,
                 "Same represented backlog and arrival cohort; original creation times retained.\n"
                 "Placement restoration does not imply improved completion accuracy "
                 "or validate scaling.",
-                fontsize=9,
-                linespacing=1.5,
             )
-            pdf.savefig(figure)
-            plt.close(figure)
         _diagnostic_page(pdf, run, selected, names, colors)
     return panels
 
@@ -185,11 +192,16 @@ def _diagnostic_page(pdf, run, panels, names, colors):
         names (list[str]): Engine labels in stable display order.
         colors (dict): Shared label-to-color mapping.
     """
-    figure, axes = plt.subplots(1, 2, figsize=(11.69, 8.27))
-    figure.subplots_adjust(top=0.80, bottom=0.29, left=0.08, right=0.97, wspace=0.30)
-    figure.suptitle("Replay diagnostics | placement and completion", fontsize=17, y=0.97)
-    figure.text(0.08, 0.91, run, fontsize=9)
-    annotations, maximum = [], 1
+    figure, axes = report_page(
+        "Replay diagnostics | placement and completion",
+        "Placement and matched response times describe different aspects of initialization.",
+        rows=1,
+        columns=2,
+    )
+    axes = axes[0]
+    figure.subplots_adjust(bottom=0.35)
+    figure.text(0.08, 0.865, run, fontsize=8)
+    annotations, maximum, placement_maximum = [], 1, 1
     for index, label in enumerate(names):
         members = [m for p in panels for m in p["members"] if m["label"] == label]
         if not members:
@@ -202,6 +214,7 @@ def _diagnostic_page(pdf, run, panels, names, colors):
             and row.get("placement_changed") is not None
         ]
         changed = sum(row["placement_changed"] for row in assigned)
+        placement_maximum = max(placement_maximum, changed + 1)
         axes[0].bar(index, changed, color=colors[label])
         axes[0].text(index, changed + 0.2, f"{changed}/{len(assigned)}", ha="center", fontsize=9)
         matched = [
@@ -232,9 +245,10 @@ def _diagnostic_page(pdf, run, panels, names, colors):
         xticklabels=names,
         ylabel="Changed initial placements",
         title="Assigned Job–cutoff pairs",
-        ylim=(0, None),
+        ylim=(0, placement_maximum),
     )
     axes[0].tick_params(axis="x", labelrotation=15, labelsize=8)
+    axes[0].yaxis.set_major_locator(MaxNLocator(integer=True))
     axes[1].plot([0, maximum], [0, maximum], color="black", linestyle=":", label="Exact agreement")
     axes[1].set(
         xlim=(0, maximum * 1.05),
@@ -243,17 +257,21 @@ def _diagnostic_page(pdf, run, panels, names, colors):
         ylabel="Predicted response (s)",
         title="Matched Job responses",
     )
-    axes[1].legend(fontsize=7)
+    figure.legend(
+        *axes[1].get_legend_handles_labels(),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.24),
+        ncol=4,
+        frameon=False,
+        fontsize=8,
+    )
     for axis in axes:
         axis.grid(alpha=0.2)
     figure.text(0.08, 0.18, "\n".join(annotations), fontsize=8, linespacing=1.5)
-    figure.text(
-        0.08,
-        0.055,
+    finish(
+        pdf,
+        figure,
         "Counts are dependent Job–cutoff pairs. Missing and exhausted work is not zero work.\n"
-        "Response points require observed and predicted finish times; "
-        "JSON retains all other outcomes.",
-        fontsize=9,
+        "Response points require observed and predicted finish times; JSON retains "
+        "all other outcomes.",
     )
-    pdf.savefig(figure)
-    plt.close(figure)

@@ -4,14 +4,14 @@ import json
 from pathlib import Path
 
 from matplotlib.backends.backend_pdf import PdfPages
-import matplotlib.pyplot as plt
 
+from analyze_run_core import export_matched_comparisons
+from forecast_report import export_forecasts
 from opendc_evaluate import render_action_pages
 from opendc_report_validation import render_configuration_pages
-from opendc_report_observed import SCHEMA as MEASURED_SCHEMA, render_measured_pages
-from forecast_report import render_forecasts
+from opendc_report_observed import SCHEMA as MEASURED_SCHEMA, measured_groups
 from opendc_report_replay import render_replay_pages
-from opendc_report_study import SCHEMA as STUDY_SCHEMA, render_study_pages
+from opendc_report_study import SCHEMA as STUDY_SCHEMA
 from opendc_report_topics import render_topics
 from opendc_report_layout import SUPPLEMENT_SCHEMA
 from opendc_report_controlled import (
@@ -33,7 +33,6 @@ def render_report(
     replay_reports=(),
     study_reports=(),
     controlled_reports=(),
-    topic_overview=False,
     supplement=None,
 ):
     """Lead with supplied physical execution and arrival forecasts, then simulations.
@@ -49,7 +48,6 @@ def render_report(
         replay_reports (iterable[dict]): Explicitly labeled unchanged known-arrival results.
         study_reports (iterable[dict]): Frozen independent-run study and held-out outcomes.
         controlled_reports (iterable[dict]): Physical action comparisons appended as validation.
-        topic_overview (bool): Consolidate one study into scenario-oriented topic pages.
         supplement (dict or None): Saved supplementary illustrations and sensitivity evidence.
 
     Returns:
@@ -85,52 +83,31 @@ def render_report(
     }
     output = Path(output)
     with PdfPages(output) as pdf:
-        if topic_overview:
+        if measured_reports or forecast_reports or study_reports:
             audit["topics"] = render_topics(
                 pdf, measured_reports, forecast_reports, study_reports, supplement or {}
             )
-            audit["section_order"].append("topics")
-        else:
+            audit["section_order"].extend(audit["topics"]["sections"])
+            audit["measured"] = audit["topics"]["physical_runs"]
+            audit["arrival_forecasts"] = audit["topics"]["arrival_summary"]
+            audit["studies"] = audit["topics"]["studies"]
             for index, measured in enumerate(measured_reports):
-                directory = output.parent / f"measured-{index:02d}"
-                directory.mkdir(exist_ok=False)
-                audit["measured"].append(render_measured_pages(pdf, measured, directory))
-                audit["section_order"].append("measured")
+                for group_index, indices in enumerate(measured_groups(measured)):
+                    if len(indices) > 1:
+                        directory = (
+                            output.parent / f"measured-{index:02d}" / f"measured-{group_index}"
+                        )
+                        directory.mkdir(parents=True, exist_ok=False)
+                        export_matched_comparisons(
+                            [measured["runs"][i] for i in indices], directory
+                        )
             for index, forecast in enumerate(forecast_reports):
                 directory = output.parent / f"arrival-forecast-{index:02d}"
                 directory.mkdir(exist_ok=False)
-
-                def save(figure, _directory, _name, title, layout=True):
-                    """Save a reused forecast page into the combined report.
-
-                    Args:
-                        figure (Figure): Existing forecast figure.
-                        _directory (Path): Standalone renderer output directory.
-                        _name (str): Standalone artifact basename.
-                        title (str): Page title from the forecast renderer.
-                        layout (bool): Whether to apply automatic layout.
-                    """
-                    figure.suptitle(title, fontsize=17)
-                    if layout:
-                        figure.tight_layout(rect=(0, 0.055, 1, 0.94))
-                    pdf.savefig(figure)
-                    plt.close(figure)
-
-                render_forecasts(forecast, directory, save)
-                audit["arrival_forecasts"].append(
-                    {
-                        "settings": forecast["evaluation"]["settings"],
-                        "horizon_summary": forecast["horizon_summary"],
-                    }
-                )
-                audit["section_order"].append("arrival-forecast")
+                export_forecasts(forecast, directory)
         if replay_reports:
             audit["replay"] = render_replay_pages(pdf, replay_reports)
             audit["section_order"].append("unchanged-replay")
-        if not topic_overview:
-            for study in study_reports:
-                audit["studies"].append(render_study_pages(pdf, study))
-                audit["section_order"].append("study")
         for actions in action_reports:
             render_action_pages(pdf, actions)
             audit["section_order"].append("actions")
@@ -147,7 +124,7 @@ def render_report(
     return audit
 
 
-def write_report(metrics_files, output_dir, split=None, seed=None, topic_overview=False):
+def write_report(metrics_files, output_dir, split=None, seed=None):
     """Load saved evidence and create a new report without loading original run directories.
 
     Args:
@@ -156,7 +133,6 @@ def write_report(metrics_files, output_dir, split=None, seed=None, topic_overvie
         output_dir (str or Path): New output directory; existing reports are never overwritten.
         split (str or None): Optional validation split to include, such as ``validation``.
         seed (int or None): Forecast scenario seed to use within each supplied run.
-        topic_overview (bool): Use topic pages; also retained from saved rendering options.
 
     Returns:
         dict: Report provenance and configuration values also saved as comparison.json.
@@ -174,9 +150,6 @@ def write_report(metrics_files, output_dir, split=None, seed=None, topic_overvie
     supplement = {}
     for source in sources:
         saved = json.loads(source.read_text(encoding="utf-8"))
-        topic_overview = topic_overview or saved.get("render_options", {}).get(
-            "topic_overview", False
-        )
         extra = (
             saved if saved.get("schema_version") == SUPPLEMENT_SCHEMA else saved.get("supplement")
         )
@@ -223,6 +196,32 @@ def write_report(metrics_files, output_dir, split=None, seed=None, topic_overvie
             actions.append(saved)
         else:
             raise ValueError(f"Unrecognized report metrics: {source}")
+    if split is not None:
+        excluded = {
+            result["run_id"]
+            for study in studies
+            for result in study["results"]
+            if result["split"] != split
+        }
+        measured = [
+            {
+                **saved,
+                "runs": [run for run in saved["runs"] if run["summary"]["run_id"] not in excluded],
+            }
+            for saved in measured
+        ]
+        measured = [saved for saved in measured if saved["runs"]]
+        forecasts = [
+            saved
+            for saved in forecasts
+            if saved["evaluation"]["settings"]["run_id"] not in excluded
+        ]
+        supplement = {
+            key: value
+            for key, value in supplement.items()
+            if key not in ("arrival_illustration", "scheduling")
+            or value.get("run_id") not in excluded
+        }
     studies = [
         {**study, "results": [r for r in study["results"] if split is None or r["split"] == split]}
         for study in studies
@@ -257,7 +256,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None, topic_overvie
         "study_reports": studies,
         "controlled_reports": controlled,
         "selection": selection,
-        "render_options": {"forecast_seed": seed, "topic_overview": topic_overview},
+        "render_options": {"forecast_seed": seed},
         "supplement": supplement,
     }
     (output / "metrics.json").write_text(
@@ -274,7 +273,6 @@ def write_report(metrics_files, output_dir, split=None, seed=None, topic_overvie
         replays,
         studies,
         controlled,
-        topic_overview,
         supplement,
     )
     audit["sources"] = [str(source) for source in sources]
@@ -291,13 +289,8 @@ def main():
         "--split", help="include only this validation split; action pages are retained"
     )
     parser.add_argument("--forecast-seed", type=int)
-    parser.add_argument(
-        "--topic-overview",
-        action="store_true",
-        help="consolidate one frozen study into topic-oriented slides",
-    )
     args = parser.parse_args()
-    write_report(args.metrics, args.output_dir, args.split, args.forecast_seed, args.topic_overview)
+    write_report(args.metrics, args.output_dir, args.split, args.forecast_seed)
 
 
 if __name__ == "__main__":

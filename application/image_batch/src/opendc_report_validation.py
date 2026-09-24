@@ -1,8 +1,8 @@
 """Render self-contained forecast comparisons from saved observation-validation metrics."""
-import matplotlib.pyplot as plt
 import numpy as np
 
-from opendc_evaluate import _figure_text_page, _finish_axes
+from opendc_evaluate import _finish_axes
+from opendc_report_layout import finish, page
 
 COLORS = ("#2864b4", "#218358", "#8855a3", "#c56a16")
 
@@ -29,7 +29,13 @@ def render_configuration_pages(pdf, result, selection=None, seed=None):
     try:
         rows, cutoffs = comparison_rows(result, seed)
     except ValueError as error:
-        _figure_text_page(pdf, "Configuration comparison unavailable", [str(error)])
+        figure, axes = page("Configuration comparison unavailable", str(error), rows=1, columns=1)
+        axes[0, 0].set_axis_off()
+        finish(
+            pdf,
+            figure,
+            "Saved evidence is retained in JSON; no common observable windows were found.",
+        )
         audit["unavailable_reason"] = str(error)
         return audit
     chosen = selection["selected"] if selection else rows[0]
@@ -157,21 +163,15 @@ def configuration_page(pdf, rows, context):
         rows (list[dict]): Matched per-window samples and their arithmetic means.
         context (dict): Measured period, window counts, target horizon and detail settings.
     """
-    figure, axes = plt.subplots(1, 3, figsize=(11.69, 8.27), sharey=True)
-    figure.subplots_adjust(top=0.75, bottom=0.34, left=0.16, right=0.97, wspace=0.27)
-    figure.suptitle("Forecast settings: accuracy and execution cost", fontsize=17, y=0.96)
-    figure.text(
-        0.09,
-        0.865,
-        f"{context['period_seconds']}-second workload cycles; "
-        f"{context['total_windows']} prediction starting points.\n"
-        f"All settings use the same {context['usable_windows']} observable windows; "
-        f"{context['total_windows'] - context['usable_windows']} starting points are excluded.\n"
-        f"Each follows existing Jobs + arrivals in the next {context['target_seconds']} seconds, "
-        "with completions measured for 120 seconds.",
-        fontsize=10,
-        linespacing=1.5,
+    figure, axes = page(
+        "Forecast settings | errors and execution cost",
+        f"Same {context['usable_windows']} observable windows for every setting; "
+        f"{context['total_windows'] - context['usable_windows']} starting points excluded.",
+        rows=1,
+        columns=3,
     )
+    axes = axes[0]
+    figure.subplots_adjust(left=0.17, bottom=0.32, wspace=0.40)
     metrics = (
         ("completion_error", "Completion-count error", "Mean absolute error (Jobs)"),
         ("response_error", "Typical response-time error", "Mean absolute error (seconds)"),
@@ -213,30 +213,21 @@ def configuration_page(pdf, rows, context):
             ylim=(len(rows) - 0.4, -0.6),
         )
         axis.set_yticks(range(len(rows)), labels)
+        axis.tick_params(labelleft=axis is axes[0])
         axis.grid(axis="x", alpha=0.2)
         axis.spines[["top", "right"]].set_visible(False)
-    figure.text(
-        0.09,
-        0.215,
-        "Diamonds = averages; dots = individual windows. Lower is better for all three metrics.\n"
-        "Windows may overlap; these are not independent repeated experiments. "
-        "Unavailable means a measurement is missing.",
-        fontsize=10,
-        linespacing=1.5,
+    finish(
+        pdf,
+        figure,
+        "Diamonds: means; dots: windows. Overlapping windows are dependent. Missing "
+        "measurements remain unavailable.\n"
+        f"{context['period_seconds']} s workload cycles; existing Jobs + arrivals within "
+        f"{context['target_seconds']} s, evaluated for 120 s.\n"
+        "Completion error uses 5 s counts; response error uses medians of Jobs "
+        "finishing in-window (unfinished excluded).\n"
+        "Cost sums simulator execution across futures; forecast fitting and "
+        "Kubernetes overhead are excluded.\n" + context["selection_note"],
     )
-    figure.text(
-        0.09,
-        0.095,
-        "Completion error compares finished-Job counts with observations every five seconds.\n"
-        "Response error compares the median response time of Jobs finished within the window. "
-        "Unfinished Jobs are excluded.\n"
-        "Cost sums simulator execution across futures; "
-        "forecast fitting and Kubernetes overhead are excluded.\n" + context["selection_note"],
-        fontsize=9,
-        linespacing=1.5,
-    )
-    pdf.savefig(figure)
-    plt.close(figure)
 
 
 def detail_page(pdf, result, group):
@@ -249,18 +240,14 @@ def detail_page(pdf, result, group):
     """
     horizon, count = group["horizon_seconds"], group["scenarios"]
     window = group["windows"]["120"]
-    figure, axes = plt.subplots(1, 2, figsize=(11.69, 8.27))
-    figure.subplots_adjust(top=0.76, bottom=0.25, left=0.09, right=0.97, wspace=0.25)
-    figure.suptitle("One example: predictions against what actually happened", fontsize=16, y=0.96)
-    figure.text(
-        0.09,
-        0.875,
-        f"{horizon}-second forecast, {count} possible futures. "
-        f"Prediction starting point {group['cutoff_index'] + 1}.\n"
-        "This is the first shared usable window, chosen by time rather than prediction accuracy.",
-        fontsize=10,
-        linespacing=1.5,
+    figure, axes = page(
+        "Forecast example | arrivals and completions",
+        f"{horizon} s forecast, {count} futures; starting point {group['cutoff_index'] + 1}. "
+        "First shared usable window, chosen chronologically.",
+        rows=1,
+        columns=2,
     )
+    axes = axes[0]
     arrivals = group["arrivals"]
     arrival_samples = np.column_stack(
         (np.zeros(count), np.cumsum(arrivals["scenario_bins"], axis=1))
@@ -299,20 +286,24 @@ def detail_page(pdf, result, group):
         axis.set_xlim(0, max(times))
         axis.set_xticks(np.arange(0, max(times) + 1, 20))
         axis.grid(alpha=0.2)
-        axis.legend(fontsize=9, loc="upper left")
-    figure.text(
-        0.09,
-        0.12,
-        f"Blue bands span the {count} simulated futures; they are not confidence intervals. "
-        "Black lines are observations.\n"
-        "Completion means classifier finish; the Kubernetes Job-completion signal arrives later.\n"
-        "The simulator does not fully restore running/startup occupancy; "
-        "some recorded Jobs cannot be included.",
-        fontsize=10,
-        linespacing=1.5,
+
+    figure.legend(
+        *axes[0].get_legend_handles_labels(),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.105),
+        ncol=2,
+        frameon=False,
+        fontsize=9,
     )
-    pdf.savefig(figure)
-    plt.close(figure)
+    finish(
+        pdf,
+        figure,
+        f"Bands span {count} futures, not confidence intervals. "
+        "One configuration; arrival and completion time domains are labeled separately.\n"
+        "Completion means classifier finish; the Kubernetes Job-completion signal arrives later.\n"
+        "Initialization and represented-work limitations remain in the saved "
+        "evidence; missing work is not zero work.",
+    )
 
 
 def _draw_prediction(axis, times, matrix, label, color, linestyle="-"):

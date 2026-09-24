@@ -3,17 +3,32 @@
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 import copy
+import csv
 import io
 import json
 import math
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from analyze_run import analyze, compact_alignment, main, range_series, read_jsonl
+# Source checkout tests intentionally add src before importing project modules.
+# pylint: disable=wrong-import-position
+from analyze_run import analyze, compact_alignment, main, range_series, read_jsonl, render
+from analyze_run_core import export_matched_comparisons
+from opendc_report import write_report
+from forecast_trace import iso
+from forecast_workload import run_once
+from test_forecast_workload import (
+    BASE as FORECAST_BASE,
+    fixture as forecast_fixture,
+    save_rows,
+    settings,
+)
 
+# pylint: enable=wrong-import-position
 
 BASE = 1_780_000_000
 
@@ -316,6 +331,7 @@ class RunAnalysisTests(unittest.TestCase):
                     read_jsonl(path)
 
     def test_cli_generates_real_artifacts_and_preserves_existing_output(self):
+        """Retain numerical exports and rebuild shared graphics without original logs."""
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             records, evidence = fixture()
@@ -334,16 +350,204 @@ class RunAnalysisTests(unittest.TestCase):
                 self.assertNotIn("UserWarning", errors.getvalue())
                 self.assertEqual(main(args), 2)
             self.assertTrue((root / "report/report.pdf").read_bytes().startswith(b"%PDF"))
-            self.assertTrue((root / "report/pressure.png").read_bytes().startswith(b"\x89PNG"))
-            self.assertEqual(len(list((root / "report").glob("*.png"))), 6)
+            metrics = json.loads((root / "report/metrics.json").read_text())
+            self.assertEqual(metrics["schema_version"], "opendc-combined-evidence-v1")
+            self.assertEqual(metrics["results"], [])
+            self.assertEqual(
+                metrics["measured_reports"][0]["runs"][0]["jobs"][0]["queue_seconds"], 1
+            )
+            with (root / "report/01-run-a/requests.csv").open() as handle:
+                self.assertEqual(len(list(csv.DictReader(handle))), 2)
+            with (root / "report/01-run-a/jobs.csv").open() as handle:
+                self.assertEqual(next(csv.DictReader(handle))["execution_seconds"], "6.0")
+            with (root / "report/01-run-a/pressure.csv").open() as handle:
+                self.assertEqual(len(list(csv.DictReader(handle))), 14)
             summary = json.loads((root / "report/summary.json").read_text())
             self.assertEqual(len(summary["provenance"]["inputs"]), 5)
-            (root / "workload.jsonl").unlink()
+            for path in root.glob("*.jsonl"):
+                path.unlink()
+            audit = write_report([root / "report/metrics.json"], root / "offline")
+            original_audit = json.loads((root / "report/comparison.json").read_text())
+            audit.pop("sources")
+            self.assertEqual(audit, original_audit)
+            self.assertTrue((root / "offline/report.pdf").read_bytes().startswith(b"%PDF"))
             args[-1] = str(root / "missing")
             with redirect_stderr(io.StringIO()) as errors:
                 self.assertEqual(main(args), 2)
-            self.assertIn("workload.jsonl", errors.getvalue())
+            self.assertIn("endpoint.jsonl", errors.getvalue())
             self.assertFalse((root / "missing").exists())
+
+    def test_cli_retains_optional_forecast_exports_for_offline_reproduction(self):
+        """Keep separately captured arrival evidence and its detailed score exports."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            records, evidence = fixture()
+            for name, rows in {"endpoint": records, **evidence}.items():
+                (root / f"{name}.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+            save_rows(root / "forecast-inputs", forecast_fixture())
+            run_once(root / "forecast-inputs", root / "forecast", FORECAST_BASE + 60000, settings())
+            args = [
+                "--endpoint-log",
+                str(root / "endpoint.jsonl"),
+                "--observer-dir",
+                str(root),
+                "--output-dir",
+                str(root / "report"),
+                "--forecast-dir",
+                str(root / "forecast"),
+                "--forecast-observer-dir",
+                str(root / "forecast-inputs"),
+                "--forecast-until",
+                iso(FORECAST_BASE + 80000),
+            ]
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as errors:
+                self.assertEqual(main(args), 0, errors.getvalue())
+            metrics = json.loads((root / "report/metrics.json").read_text())
+            saved = metrics["forecast_reports"][0]
+            self.assertEqual(saved["evaluation"]["settings"]["run_id"], "test")
+            self.assertEqual(json.loads((root / "report/forecast-report.json").read_text()), saved)
+            self.assertEqual(
+                json.loads((root / "report/forecast-evaluation.json").read_text()),
+                saved["evaluation"],
+            )
+            self.assertEqual(
+                json.loads((root / "report/forecast-horizon-scores.json").read_text()),
+                saved["horizon_scores"],
+            )
+            with (root / "report/forecast-scores.csv").open() as handle:
+                scores = list(csv.DictReader(handle))
+            self.assertEqual(len(scores), 2 * len(saved["evaluation"]["scores"]))
+            self.assertEqual({row["model"] for row in scores}, {"cyclic", "constant"})
+            for path in root.rglob("*.jsonl"):
+                path.unlink()
+            audit = write_report([root / "report/metrics.json"], root / "offline")
+            audit.pop("sources")
+            self.assertEqual(audit, json.loads((root / "report/comparison.json").read_text()))
+
+    def test_cli_script_keeps_module_scope_imports_working(self):
+        """Catch circular imports in the documented script entry point."""
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve().parents[1] / "src/analyze_run.py"),
+                "--help",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--endpoint-log", result.stdout)
+
+    def test_matched_report_retains_original_comparison_csv_values_and_gaps(self):
+        """Preserve historical numerical ranges without reviving their old plots."""
+        records, evidence = fixture()
+        reports = [analyze(records, evidence, "run-a", 10) for _ in range(3)]
+        for index, report in enumerate(reports):
+            report["summary"]["run_id"] = f"run-{index}"
+            report["pressure"][0]["queued_jobs"] = (0, 3, 8)[index]
+            for job in report["jobs"]:
+                job["queue_seconds"] = (1, 3, 8)[index]
+        reports[1]["jobs"].pop()
+        reports[1]["summary"].update(completed_jobs=1, unresolved_accepted_jobs=1)
+        reports[1]["pressure"] = [
+            point for point in reports[1]["pressure"] if point["time_seconds"] not in (3, 4, 5, 6)
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "report"
+            render(reports, output, {"inputs": []}, 10)
+            self.assertTrue((output / "pressure-ranges.csv").exists())
+            with (output / "pressure-ranges.csv").open() as handle:
+                reader = csv.DictReader(handle)
+                self.assertEqual(
+                    reader.fieldnames,
+                    [
+                        "time_seconds",
+                        "queued_jobs_median",
+                        "queued_jobs_min",
+                        "queued_jobs_max",
+                        "active_jobs_median",
+                        "active_jobs_min",
+                        "active_jobs_max",
+                        "active_requested_cpu_median",
+                        "active_requested_cpu_min",
+                        "active_requested_cpu_max",
+                        "allocatable_worker_cpu_median",
+                        "allocatable_worker_cpu_min",
+                        "allocatable_worker_cpu_max",
+                        "executing_jobs_median",
+                        "executing_jobs_min",
+                        "executing_jobs_max",
+                        "sampled_jobs_median",
+                        "sampled_jobs_min",
+                        "sampled_jobs_max",
+                    ],
+                )
+                pressure = list(reader)
+            self.assertEqual(len(pressure), 14)
+            self.assertEqual(
+                [
+                    pressure[0][key]
+                    for key in ("queued_jobs_median", "queued_jobs_min", "queued_jobs_max")
+                ],
+                ["3", "0", "8"],
+            )
+            self.assertEqual(pressure[6]["queued_jobs_median"], "nan")
+            with (output / "queue-wait-comparison.csv").open() as handle:
+                reader = csv.DictReader(handle)
+                self.assertEqual(
+                    reader.fieldnames,
+                    [
+                        "batch_index",
+                        "runs_with_completion",
+                        "queue_min",
+                        "queue_median",
+                        "queue_max",
+                    ],
+                )
+                rows = list(reader)
+            self.assertEqual(
+                rows,
+                [
+                    {
+                        "batch_index": "0",
+                        "runs_with_completion": "3",
+                        "queue_min": "1",
+                        "queue_median": "3",
+                        "queue_max": "8",
+                    },
+                    {
+                        "batch_index": "1",
+                        "runs_with_completion": "2",
+                        "queue_min": "1",
+                        "queue_median": "4.5",
+                        "queue_max": "8",
+                    },
+                ],
+            )
+
+    def test_reporting_preserves_different_plans_and_incomplete_runs(self):
+        """Reporting must not impose the historical matched-plan lifecycle restriction."""
+        records, evidence = fixture()
+        first = analyze(records, evidence, "run-a", 10)
+        second = copy.deepcopy(first)
+        second["summary"]["run_id"] = "run-b"
+        second["arrivals"][0]["planned_seconds"] = 0.1
+        first["summary"]["completed_jobs"] = 1
+        first["summary"]["unresolved_accepted_jobs"] = 1
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "report"
+            render([first, second], output, {"inputs": []}, 10)
+            saved = json.loads((output / "metrics.json").read_text())
+            runs = saved["measured_reports"][0]["runs"]
+            self.assertEqual(runs[0]["summary"]["unresolved_accepted_jobs"], 1)
+            self.assertEqual(runs[1]["arrivals"][0]["planned_seconds"], 0.1)
+            self.assertFalse((output / "pressure-ranges.csv").exists())
+            self.assertFalse((output / "queue-wait-comparison.csv").exists())
+            for directory, planned in (("01-run-a", "0.0"), ("02-run-b", "0.1")):
+                with (output / directory / "requests.csv").open() as handle:
+                    self.assertEqual(next(csv.DictReader(handle))["planned_seconds"], planned)
+            self.assertTrue((output / "report.pdf").read_bytes().startswith(b"%PDF"))
 
 
 class ComparisonTests(unittest.TestCase):
@@ -351,6 +555,32 @@ class ComparisonTests(unittest.TestCase):
         records, evidence = fixture()
         first = analyze(records, evidence, "run-a", 10)
         return [first, copy.deepcopy(first), copy.deepcopy(first)]
+
+    def test_numerical_exports_have_no_historical_40_job_plot_limit(self):
+        """Large matched workloads retain comparisons without a lifecycle illustration."""
+        report = self.reports()[0]
+        report["jobs"] = [dict(report["jobs"][0], batch_index=index) for index in range(41)]
+        report["arrivals"] = [dict(report["arrivals"][0], batch_index=index) for index in range(41)]
+        report["summary"]["completed_jobs"] = 41
+        report["summary"]["fidelity"]["planned_count"] = 41
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertTrue(export_matched_comparisons([report], temp))
+            with (Path(temp) / "queue-wait-comparison.csv").open() as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(len(rows), 41)
+            self.assertEqual(rows[-1]["batch_index"], "40")
+
+    def test_unalignable_exports_do_not_block_partial_reports(self):
+        """Missing completed runs or shared captures do not create misleading CSVs."""
+        incomplete = self.reports()
+        for report in incomplete:
+            report["summary"]["completed_jobs"] = 0
+        disjoint = self.reports()
+        disjoint[1]["pressure"] = [dict(disjoint[1]["pressure"][0], time_seconds=100)]
+        for reports in ([], incomplete, disjoint):
+            with self.subTest(reports=len(reports)), tempfile.TemporaryDirectory() as temp:
+                self.assertFalse(export_matched_comparisons(reports, temp))
+                self.assertEqual(list(Path(temp).iterdir()), [])
 
     def test_matching_plans_are_required(self):
         reports = self.reports()

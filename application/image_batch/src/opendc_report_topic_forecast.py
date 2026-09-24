@@ -8,13 +8,13 @@ from opendc_report_layout import page, panel, finish
 
 
 def render_arrivals(pdf, example, summaries, roles, supplement):
-    """Illustrate one held-out workload, then summarize the original evaluation cutoffs.
+    """Illustrate a captured workload, then summarize its original evaluation cutoffs.
 
     Args:
         pdf (PdfPages): Open report writer.
-        example (dict): Saved arrival report for the held-out run.
+        example (dict): Saved arrival report with a captured evaluation end.
         summaries (list[dict]): Equal-run summaries separated by study split.
-        roles (dict): Explicit workload identities and roles.
+        roles (dict): Explicit identities; standalone runs can have no seed or study split.
         supplement (dict): Additional causal forecasts for illustration only.
 
     Raises:
@@ -23,13 +23,24 @@ def render_arrivals(pdf, example, summaries, roles, supplement):
     settings = example["evaluation"]["settings"]
     origin, width = settings["origin_ms"], example["rate_bin_seconds"]
     run = settings["run_id"]
-    seed = roles[run]["workload_seed"]
+    role = roles[run]
+    seed = role["workload_seed"]
+    study = {row["split"] for row in summaries} == {"validation", "held-out"}
+    identity = (
+        f"Held-out seed {seed}"
+        if role["split"] == "held-out" and seed is not None
+        else f"Run {run}"
+        if seed is None
+        else f"Workload seed {seed}"
+    )
     supplement = supplement.get("arrival_illustration", {})
     extra = supplement.get("forecasts", [])
     if extra and (supplement["run_id"] != run or any(f["settings"] != settings for f in extra)):
-        raise ValueError("supplementary forecast settings do not match held-out run")
+        raise ValueError("supplementary forecast settings do not match example run")
     forecasts = sorted(example["forecasts"] + extra, key=lambda f: milliseconds(f["cutoff"]))
-    end = supplement.get("schedule_seconds", 6 * settings["period_seconds"])
+    end = supplement.get("schedule_seconds")
+    if end is None:
+        end = (example["evaluation"]["evaluation_cutoff_ms"] - origin) / 1000
     figure = plt.figure(figsize=(11.69, 8.27))
     grid = figure.add_gridspec(
         2, 3, left=0.08, right=0.97, top=0.78, bottom=0.24, hspace=0.95, wspace=0.35
@@ -40,7 +51,7 @@ def render_arrivals(pdf, example, summaries, roles, supplement):
     figure.text(
         0.08,
         0.905,
-        f"Held-out seed {seed}: each forecast is issued before its arrivals; "
+        f"{identity}: each forecast is issued before its arrivals; "
         "periodic predictions follow the changing workload rate.",
         fontsize=10,
     )
@@ -71,7 +82,7 @@ def render_arrivals(pdf, example, summaries, roles, supplement):
     axis.set_xlim(0, end)
     axis.set_ylim(bottom=0)
     axis.set_xticks(np.arange(0, end + 1, settings["period_seconds"]))
-    first = (milliseconds(forecasts[0]["cutoff"]) - origin) / 1000
+    first = (milliseconds(forecasts[0]["cutoff"]) - origin) / 1000 if forecasts else 0
     axis.axvspan(0, first, color="0.94", zorder=-1)
     axis.text(
         first / 2,
@@ -84,7 +95,7 @@ def render_arrivals(pdf, example, summaries, roles, supplement):
     panel(
         axis,
         f"{len(forecasts)} forecast issues; triangles mark issue times | common {width}-s bins",
-        "Seconds from schedule start",
+        "Seconds from schedule start" if study else "Seconds from forecast origin",
         "Arrivals per second",
     )
     axis.grid(alpha=0.18)
@@ -100,9 +111,14 @@ def render_arrivals(pdf, example, summaries, roles, supplement):
     )
     examples = example["example_cutoffs"]
     maximum = max(
-        max(v for v in series[key] if v is not None)
-        for series in example["cumulative_examples"].values()
-        for key in ("observed_count", "cyclic", "constant")
+        (
+            v
+            for series in example["cumulative_examples"].values()
+            for key in ("observed_count", "cyclic", "constant")
+            for v in series[key]
+            if v is not None
+        ),
+        default=0,
     )
     for index, cutoff in enumerate(examples):
         series = example["cumulative_examples"][cutoff]
@@ -140,47 +156,78 @@ def render_arrivals(pdf, example, summaries, roles, supplement):
         axis.set(
             xlim=(0, settings["horizon_seconds"]),
             ylim=(0, max(1, maximum * 1.08)),
-            xticks=[0, 20, 40, 60],
+            xticks=np.linspace(0, settings["horizon_seconds"], 4),
         )
         axis.grid(alpha=0.18)
-    handles, labels = axis.get_legend_handles_labels()
-    figure.legend(
-        handles,
-        labels,
-        loc="center",
-        bbox_to_anchor=(0.53, 0.15),
-        ncol=3,
-        frameon=False,
-        fontsize=9,
-    )
-    finish(
-        pdf,
-        figure,
-        "Bottom: first, middle and last fully covered original study forecasts; "
-        "the vertical difference is count error.\n"
-        f"Top adds {len(extra)} offline causal illustrations, without changing study scores. "
-        "The axis ends with scheduled arrivals, not the observer tail.",
-    )
+    if examples:
+        handles, labels = axis.get_legend_handles_labels()
+        figure.legend(
+            handles,
+            labels,
+            loc="center",
+            bbox_to_anchor=(0.53, 0.15),
+            ncol=3,
+            frameon=False,
+            fontsize=9,
+        )
+    else:
+        figure.text(
+            0.08, 0.35, "No eligible cumulative forecast examples are available.", fontsize=11
+        )
+    if study:
+        note = (
+            "Bottom: first, middle and last fully covered original study forecasts; "
+            "the vertical difference is count error.\n"
+            f"Top adds {len(extra)} offline causal illustrations, without changing study scores. "
+            "The axis ends with scheduled arrivals, not the observer tail."
+        )
+    else:
+        note = (
+            "Bottom: original forecast examples; the vertical difference is count error. "
+            "Missing coverage leaves observed totals unavailable.\n"
+            "Scores use the original forecast issues. "
+            "The top axis ends at the captured evaluation end."
+        )
+    finish(pdf, figure, note)
     _accuracy_page(pdf, summaries)
 
 
 def _accuracy_page(pdf, summaries):
-    """Show all workload seeds compactly, with selection and held-out means separated.
+    """Show equal-run errors with only the explicitly assigned workload roles.
 
     Args:
         pdf (PdfPages): Open report writer.
         summaries (list[dict]): Per-run values and equal-run aggregated count errors.
     """
+    splits = sorted({row["split"] for row in summaries})
+    study = set(splits) == {"validation", "held-out"}
+    groups = (
+        [("validation", "Selection runs"), ("held-out", "Held-out run")]
+        if study
+        else [
+            (
+                split,
+                {"validation": "Selection runs", "held-out": "Held-out run"}.get(
+                    split, "Captured runs" if split == "unassigned" else split
+                ),
+            )
+            for split in splits
+        ]
+    )
     figure, axes = page(
-        "Forecast accuracy | count errors across independent workloads",
+        "Forecast accuracy | count errors across independent workloads"
+        if study
+        else "Forecast accuracy | count errors across captured runs",
         "Periodic forecasting helps on some runs; compare it against "
-        "the constant-rate baseline, including the held-out run.",
+        "the constant-rate baseline, including the held-out run."
+        if study
+        else "Compare periodic forecasting against the constant-rate baseline "
+        "on captured arrivals.",
         rows=1,
+        columns=max(1, len(groups)),
     )
     figure.subplots_adjust(top=0.79, bottom=0.56)
-    for axis, split, label in zip(
-        axes[0], ("validation", "held-out"), ("Selection runs", "Held-out run")
-    ):
+    for axis, (split, label) in zip(axes[0], groups):
         rows = sorted(
             (r for r in summaries if r["split"] == split), key=lambda r: r["horizon_seconds"]
         )
@@ -235,10 +282,11 @@ def _accuracy_page(pdf, summaries):
     table_axis.axis("off")
     cells = []
     for row in sorted(summaries, key=lambda r: (r["split"] == "held-out", r["horizon_seconds"])):
-        seeds = "/".join(str(r["workload_seed"]) for r in row["per_run"])
+        seeds = "/".join(_run_identity(run) for run in row["per_run"])
+        label = {"held-out": "Held out", "validation": "Selection"}.get(row["split"], "Run")
         cells.append(
             [
-                f"{'Held out' if row['split'] == 'held-out' else 'Selection'} {seeds}",
+                f"{label} {seeds}",
                 str(row["horizon_seconds"]),
                 str(row["eligible_forecasts"]),
                 str(row["excluded_forecasts"]),
@@ -250,7 +298,7 @@ def _accuracy_page(pdf, summaries):
     table = table_axis.table(
         cellText=cells,
         colLabels=[
-            "Workload seeds",
+            "Workload seeds" if study else "Workloads",
             "Horizon\n(s)",
             "Eligible\nissues",
             "Excluded\nissues",
@@ -268,9 +316,10 @@ def _accuracy_page(pdf, summaries):
         cell.set_edgecolor("0.85")
         if row == 0:
             cell.set_facecolor("#eef2f6")
-    last = [r for r in summaries if r["horizon_seconds"] == 60]
+    horizon = 60 if study else max((row["horizon_seconds"] for row in summaries), default=0)
+    last = [r for r in summaries if r["horizon_seconds"] == horizon]
     exceptions = [
-        str(run["workload_seed"])
+        _run_identity(run)
         for row in last
         for run in row["per_run"]
         if run["cyclic"] is not None and run["cyclic"] > run["constant"]
@@ -278,7 +327,11 @@ def _accuracy_page(pdf, summaries):
     figure.text(
         0.08,
         0.125,
-        "At 60 s, constant rate beats periodic on workload seed(s): "
+        (
+            f"At {horizon} s, constant rate beats periodic on workload seed(s): "
+            if study
+            else f"At {horizon} s, constant rate beats periodic on run(s): "
+        )
         + (", ".join(exceptions) or "none")
         + ".",
         fontsize=10,
@@ -288,9 +341,25 @@ def _accuracy_page(pdf, summaries):
         figure,
         "Lines: means of scored runs; crosses/ranges: individual runs, not confidence intervals. "
         "Issues within a run are dependent.\n"
-        "These scores use only the original study cutoffs. This campaign uses H60; "
-        "H120 was tested in the earlier campaign, not this selection.",
+        + (
+            "These scores use only the original study cutoffs. This campaign uses H60; "
+            "H120 was tested in the earlier campaign, not this selection."
+            if study
+            else "Scores use original captured forecast issues and fully covered future intervals."
+        ),
     )
+
+
+def _run_identity(run):
+    """Identify a workload without inventing a seed for a standalone capture.
+
+    Args:
+        run (dict): Per-run summary with a run ID and optional workload seed.
+
+    Returns:
+        str: Assigned seed, or the actual run ID when a seed is unavailable.
+    """
+    return str(run["workload_seed"]) if run["workload_seed"] is not None else run["run_id"]
 
 
 def _number(value):

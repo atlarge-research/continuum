@@ -29,6 +29,21 @@ def _ecdf(axis, values, label, color):
     axis.set_xlim(0, max(axis.get_xlim()[1], max(values, default=0) * 1.05))
 
 
+def _run_label(run, roles):
+    """Name a physical workload without inventing a random seed.
+
+    Args:
+        run (dict): Saved analyzed measurement.
+        roles (dict): Explicit workload identities.
+
+    Returns:
+        str: Seed label when known, otherwise the run identity.
+    """
+    identity = run["summary"]["run_id"]
+    seed = roles[identity]["workload_seed"]
+    return f"seed {seed}" if seed is not None else f"run {identity}"
+
+
 def render_physical(pdf, measured, roles, supplement):
     """Show per-run fidelity and distributions, retaining one actual cluster timeline.
 
@@ -42,16 +57,19 @@ def render_physical(pdf, measured, roles, supplement):
         (run for saved in measured for run in saved["runs"]), key=lambda run: run["origin"]
     )
     example = runs[0]
-    seed = roles[example["summary"]["run_id"]]["workload_seed"]
-    maximum_lag = max(r["summary"]["fidelity"]["lag_ms"]["max"] for r in runs)
+    example_label = _run_label(example, roles)
+    lags = [r["summary"]["fidelity"]["lag_ms"]["max"] for r in runs]
+    maximum_lag = max((value for value in lags if value is not None), default=None)
+    lag_text = f"{maximum_lag:.1f} ms" if maximum_lag is not None else "unavailable"
+    study_context = all(roles[r["summary"]["run_id"]]["split"] != "unassigned" for r in runs)
     total = sum(r["summary"]["completed_jobs"] for r in runs)
     figure, axes = page(
         "Physical execution | workload delivery and cluster pressure",
         f"{total} Jobs completed across {len(runs)} runs; maximum HTTP start lag "
-        f"{maximum_lag:.1f} ms. Cluster pressure varies with arrivals.",
+        f"{lag_text}. Cluster pressure varies with arrivals.",
     )
     for index, run in enumerate(runs):
-        label = f"Seed {roles[run['summary']['run_id']]['workload_seed']}"
+        label = _run_label(run, roles).capitalize()
         _ecdf(axes[0, 0], [r["lag_ms"] for r in run["arrivals"]], label, COLORS[index % 3])
         _ecdf(
             axes[0, 1],
@@ -65,7 +83,9 @@ def render_physical(pdf, measured, roles, supplement):
         )
     panel(
         axes[0, 0],
-        "HTTP starts closely follow planned times",
+        "HTTP starts closely follow planned times"
+        if all(r["summary"]["fidelity"].get("fidelity_passed") is True for r in runs)
+        else "Compare HTTP starts with planned times",
         "HTTP start − planned start (ms)",
         "Requests at or below delay (%)",
     )
@@ -76,11 +96,17 @@ def render_physical(pdf, measured, roles, supplement):
         "Jobs at or below delay (%)",
     )
     pressure = example["pressure"]
-    for key, label, color in (
+    categories = (
         ("unassigned_jobs", "Waiting for assignment", ORANGE),
         ("snapshot_running_jobs", "Running", GREEN),
         ("startup_jobs", "Assigned, starting", BLUE),
-    ):
+    )
+    if not any("unassigned_jobs" in point for point in pressure):
+        categories = (
+            ("queued_jobs", "Queued", ORANGE),
+            ("active_jobs", "Active incl. startup", GREEN),
+        )
+    for key, label, color in categories:
         axes[1, 0].step(*_covered_series(pressure, key), where="post", label=label, color=color)
     for key, label, color, style in (
         ("active_requested_cpu", "Requested", BLUE, "--"),
@@ -112,10 +138,17 @@ def render_physical(pdf, measured, roles, supplement):
         axis.set_xlim(0, example["end_seconds"])
         axis.set_ylim(bottom=0)
         axis.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
-        axis.set_xticks([0, 360, 720, 1080, 1440])
+        duration = (
+            example["summary"]["schedule"]
+            .get("profile", {})
+            .get("duration_seconds", example["end_seconds"])
+        )
+        axis.set_xticks([duration * part / 4 for part in range(5)])
     panel(
         axes[1, 0],
-        f"Arrival bursts create queues | example seed {seed}",
+        f"Arrival bursts create queues | example {example_label}"
+        if study_context
+        else f"Captured Job pressure | {example_label}",
         "Seconds from schedule start",
         "Jobs",
     )
@@ -147,7 +180,7 @@ def render_physical(pdf, measured, roles, supplement):
             fontsize=8,
         )
     counts = "; ".join(
-        f"seed {roles[r['summary']['run_id']]['workload_seed']}: "
+        f"{_run_label(r, roles)}: "
         f"{r['summary']['completed_jobs']} complete, "
         f"{r['summary']['unresolved_accepted_jobs']} unresolved, {len(r['gaps'])} state gaps"
         for r in runs
@@ -155,8 +188,13 @@ def render_physical(pdf, measured, roles, supplement):
     finish(
         pdf,
         figure,
-        counts + "\nSame workload settings, independent arrival seeds. "
-        "CPU is workload CPU, not whole-machine utilization or power; gaps remain missing.",
+        counts
+        + (
+            "\nSame workload settings, independent arrival seeds. "
+            if study_context
+            else "\nDistributions are per run; arrival plans are not aligned. "
+        )
+        + "CPU is workload CPU, not whole-machine utilization or power; gaps remain missing.",
     )
     _waiting_page(pdf, runs, roles, supplement)
 
@@ -170,24 +208,29 @@ def _waiting_page(pdf, runs, roles, supplement):
         roles (dict): Explicit workload seeds.
         supplement (dict): Saved scheduling decomposition, when available.
     """
+    study_context = all(roles[r["summary"]["run_id"]]["split"] != "unassigned" for r in runs)
     figure, axes = page(
-        "Where time goes | waiting dominates the long delays",
+        "Where time goes | waiting dominates the long delays"
+        if study_context
+        else "Where time goes | waiting and execution",
         "Compare each run's delay distribution; inspect an actual burst "
         "instead of averaging Job timelines.",
     )
     for index, run in enumerate(runs):
-        label = f"Seed {roles[run['summary']['run_id']]['workload_seed']}"
+        label = _run_label(run, roles).capitalize()
         for axis, field in zip(axes[0], ("queue_seconds", "execution_seconds")):
             _ecdf(axis, [j.get(field) for j in run["jobs"]], label, COLORS[index % 3])
     panel(
         axes[0, 0],
-        "A minority of Jobs wait much longer",
+        "A minority of Jobs wait much longer" if study_context else "Job waiting distribution",
         "Job creation → classifier start (s)",
         "Jobs at or below duration (%)",
     )
     panel(
         axes[0, 1],
-        "Classifier execution is comparatively stable",
+        "Classifier execution is comparatively stable"
+        if study_context
+        else "Classifier execution distribution",
         "Classifier execution (s)",
         "Jobs at or below duration (%)",
     )
@@ -205,7 +248,7 @@ def _waiting_page(pdf, runs, roles, supplement):
     example = next(
         (run for run in runs if run["summary"]["run_id"] == saved.get("run_id")), runs[0]
     )
-    seed = roles[example["summary"]["run_id"]]["workload_seed"]
+    example_label = _run_label(example, roles)
     for key, label, color in (
         ("pod_to_scheduled", "Pod → scheduled", ORANGE),
         ("scheduled_to_start", "Scheduled → execution", BLUE),
@@ -221,11 +264,17 @@ def _waiting_page(pdf, runs, roles, supplement):
         )
     panel(
         axes[1, 0],
-        f"Long waits precede scheduling | seed {seed}",
+        f"Long waits precede scheduling | {example_label}"
+        if saved
+        else "Scheduling timestamps unavailable",
         "Measured interval (s)",
         "Jobs at or below duration (%)",
     )
-    period = example["summary"]["schedule"]["profile"]["period_seconds"]
+    period = (
+        example["summary"]["schedule"]
+        .get("profile", {})
+        .get("period_seconds", example["end_seconds"])
+    )
     origin = example["origin"]
     jobs = sorted(
         (
@@ -257,7 +306,9 @@ def _waiting_page(pdf, runs, roles, supplement):
     axes[1, 1].yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
     panel(
         axes[1, 1],
-        f"Waiting varies by Job | seed {seed}, first cycle",
+        f"Waiting varies by Job | {example_label}, first window"
+        if "period_seconds" not in example["summary"]["schedule"].get("profile", {})
+        else f"Waiting varies by Job | {example_label}, first cycle",
         "Seconds from schedule start",
         "Jobs in creation order",
     )
@@ -270,7 +321,7 @@ def _waiting_page(pdf, runs, roles, supplement):
     if saved:
         startup = statistics.median(r["seconds"]["scheduled_to_start"] for r in saved["rows"])
         delay_note = (
-            f"Seed {seed}: scheduling wait max "
+            f"{example_label.capitalize()}: scheduling wait max "
             f"{max(r['seconds']['pod_to_scheduled'] for r in saved['rows']):.0f} s; "
             "scheduled → execution median "
             f"{startup:.0f} s. "

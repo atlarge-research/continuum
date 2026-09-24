@@ -15,8 +15,6 @@ def render_selection(pdf, study, panels, supplement):
         panels (list[dict]): Paired forecast/known-arrival comparisons.
         supplement (dict): Matched-phase scenario-seed sensitivity, if supplied.
 
-    Raises:
-        ValueError: No covered held-out comparison is available.
     """
     selection = study["selection"]
     chosen = selection["selected"]
@@ -27,14 +25,15 @@ def render_selection(pdf, study, panels, supplement):
         and p["forecast"]["coverage_complete"]
         and p["known_arrival"]["coverage_complete"]
     ]
-    if not held:
-        raise ValueError("held-out evaluation has no covered paired cutoffs")
     figure, axes = page(
         "Configuration selection | small differences, limited evidence",
         f"H{chosen['horizon_seconds']}/N{chosen['scenarios']} was selected before "
-        f"held-out seed {held[0]['workload_seed']}; the held-out run never changes the choice.",
+        f"held-out seed {held[0]['workload_seed']}; the held-out run never changes the choice."
+        if held
+        else "Frozen selection is retained; no covered held-out comparison was supplied.",
     )
     candidates = selection["candidates"]
+    horizons = {candidate["horizon_seconds"] for candidate in candidates}
     for index, candidate in enumerate(candidates):
         mean = candidate["completion_curve_mae"]
         low, high = candidate["between_run_completion_mae_range"]
@@ -51,13 +50,20 @@ def render_selection(pdf, study, panels, supplement):
             )
     axes[0, 0].set(
         xticks=range(len(candidates)),
-        xticklabels=[f"N{c['scenarios']}" for c in candidates],
+        xticklabels=[
+            f"N{c['scenarios']}"
+            if len(horizons) == 1
+            else f"H{c['horizon_seconds']}/N{c['scenarios']}"
+            for c in candidates
+        ],
         ylim=(0, None),
     )
     panel(
         axes[0, 0],
         "Similar errors across tested sample counts",
-        "Sampled futures (H60 fixed)",
+        f"Sampled futures (H{next(iter(horizons))} fixed)"
+        if len(horizons) == 1
+        else "Arrival horizon (H) / sampled futures (N)",
         "Completion-count MAE (Jobs)",
     )
     sensitivity = supplement.get("sensitivity", {})
@@ -90,7 +96,7 @@ def render_selection(pdf, study, panels, supplement):
             fontsize=8,
         )
     means = [
-        statistics.mean(p[key]["completion_curve_mae"] for p in held)
+        statistics.mean(p[key]["completion_curve_mae"] for p in held) if held else 0
         for key in ("forecast", "known_arrival")
     ]
     axes[1, 0].bar([0, 1], means, color=[BLUE, ORANGE], width=0.6)
@@ -98,8 +104,11 @@ def render_selection(pdf, study, panels, supplement):
         axes[1, 0].text(index, value + 0.04, f"{value:.2f} Jobs", ha="center", fontsize=10)
     axes[1, 0].set(
         xticks=[0, 1],
-        xticklabels=[f"Selected H60/N{chosen['scenarios']}", "Known arrivals"],
-        ylim=(0, max(means) * 1.3),
+        xticklabels=[
+            f"Selected H{chosen['horizon_seconds']}/N{chosen['scenarios']}",
+            "Known arrivals",
+        ],
+        ylim=(0, max(means) * 1.3 if max(means) > 0 else 1),
     )
     panel(
         axes[1, 0],
@@ -109,6 +118,8 @@ def render_selection(pdf, study, panels, supplement):
     )
     response_deltas = []
     for index, item in enumerate(held):
+        if "responses" not in item["forecast"]:
+            continue
         response = item["forecast"]["responses"]["future"]
         observed = response["observed"]["median"]
         predicted = response["median"]
@@ -161,6 +172,13 @@ def render_selection(pdf, study, panels, supplement):
         "H = future-arrival seconds; N = sampled futures.\nFollow-up = 120 s; count grid = 5 s.",
         fontsize=9,
     )
+    if not held:
+        for axis in axes[1]:
+            axis.clear()
+            axis.set_axis_off()
+            axis.text(
+                0.5, 0.5, "Held-out comparison unavailable", ha="center", transform=axis.transAxes
+            )
     diagnostics = [p["diagnostics"] for p in panels if p["split"] != "held-out"]
     incomplete = sum(d["membership_complete"] is not True for d in diagnostics)
     exhausted = sum(d["model_exhausted"] for d in diagnostics)
@@ -200,9 +218,11 @@ def render_completion(pdf, panels, roles):
     for offset in range(0, len(panels), 4):
         subset = panels[offset : offset + 4]
         seed = roles[subset[0]["run_id"]]["workload_seed"]
+        role = subset[0]["split"]
+        label = "Held-out" if role == "held-out" else role.capitalize()
         figure, axes = page(
             "Completion diagnosis | predictions directly against observations",
-            f"Held-out seed {seed}: known-arrival replay isolates simulator discrepancy; "
+            f"{label} seed {seed}: known-arrival replay isolates simulator discrepancy; "
             "forecast curves also include uncertain arrivals.",
         )
         for axis, item in zip(axes.flat, subset):
@@ -283,6 +303,7 @@ def render_completion(pdf, panels, roles):
             f"{sum(d['unmatched_observed_backlog'] for d in diagnostics)}/"
             f"{sum(d['unknown_outcome_uids'] for d in diagnostics)}. "
             "\n"
-            "Cohort = backlog + next 60 s of arrivals; follow-up = 120 s. "
+            f"Cohort = backlog + next {subset[0]['horizon_seconds']} s of arrivals; "
+            "follow-up = 120 s. "
             f"Ranges describe {subset[0]['scenarios']} sampled futures, not confidence intervals.",
         )

@@ -134,6 +134,11 @@ class ObservedReportTests(unittest.TestCase):
             source.write_text(json.dumps(forecasts))
             standalone = write_report([source], root / "forecast-only")
             self.assertEqual(standalone["section_order"], ["arrival-forecast"])
+            exported = root / "forecast-only/arrival-forecast-00"
+            self.assertEqual(json.loads((exported / "forecast-report.json").read_text()), forecasts)
+            self.assertTrue(
+                (exported / "forecast-scores.csv").read_text().startswith("forecast_cutoff,")
+            )
             records, evidence = fixture()
             combined = {
                 "results": [],

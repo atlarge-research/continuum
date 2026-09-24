@@ -89,49 +89,72 @@ def arrival_summary(reports, roles):
 
 
 def render_topics(pdf, measured, forecasts, studies, supplement):
-    """Render topic pages without changing original study data or selection.
+    """Render supplied evidence using one layout, without inventing study membership.
 
     Args:
         pdf (PdfPages): Open report writer.
-        measured (list[dict]): Original complete physical measurement payloads.
-        forecasts (list[dict]): Original forecast evaluations used by the study.
-        studies (list[dict]): One frozen selection/held-out study.
-        supplement (dict): Optional saved causal illustrations and scenario sensitivity.
+        measured (list[dict]): Saved physical measurements, possibly empty.
+        forecasts (list[dict]): Saved arrival evaluations, possibly empty.
+        studies (list[dict]): Frozen studies with explicit selection and evaluation roles.
+        supplement (dict): Optional causal illustrations and scenario sensitivity.
 
     Returns:
-        dict: Numerical summaries, study panels and provenance used on the topic pages.
+        dict: Section inventory, numerical summaries and original selection provenance.
 
     Raises:
-        ValueError: Evidence lacks one study, matching run identities or a held-out run.
+        ValueError: Run identities or study roles conflict, or forecast contracts differ.
     """
-    if len(studies) != 1:
-        raise ValueError("topic report requires exactly one frozen study")
-    study = studies[0]
-    roles = {
-        r["run_id"]: {"split": r["split"], "workload_seed": r["workload_seed"]}
-        for r in study["results"]
-    }
-    if len(roles) != len(study["results"]):
-        raise ValueError("duplicate study run")
-    runs = [r for saved in measured for r in saved["runs"]]
-    identities = [r["summary"]["run_id"] for r in runs]
-    if len(set(identities)) != len(identities) or set(identities) != set(roles):
-        raise ValueError("physical and study run identities must match uniquely")
-    summaries = arrival_summary(forecasts, roles)
-    if {f["evaluation"]["settings"]["run_id"] for f in forecasts} != set(roles):
-        raise ValueError("forecast and study run identities must match")
-    held = sorted(run for run, role in roles.items() if role["split"] == "held-out")
-    if len(held) != 1:
-        raise ValueError("topic illustrations require one identified held-out run")
-    panels = study_panels(study)
-    render_physical(pdf, measured, roles, supplement)
-    example = next(f for f in forecasts if f["evaluation"]["settings"]["run_id"] == held[0])
-    render_arrivals(pdf, example, summaries, roles, supplement)
-    render_selection(pdf, study, panels, supplement)
-    render_completion(pdf, [p for p in panels if p["run_id"] == held[0]], roles)
+    roles = {}
+    for study in studies:
+        for result in study["results"]:
+            run = result["run_id"]
+            if run in roles:
+                raise ValueError("duplicate study run")
+            roles[run] = {"split": result["split"], "workload_seed": result["workload_seed"]}
+    runs = [run for saved in measured for run in saved["runs"]]
+    identities = [run["summary"]["run_id"] for run in runs]
+    if len(set(identities)) != len(identities):
+        raise ValueError("duplicate physical run")
+    for run in runs:
+        roles.setdefault(
+            run["summary"]["run_id"],
+            {"split": "unassigned", "workload_seed": run["summary"]["schedule"].get("random_seed")},
+        )
+    for report in forecasts:
+        roles.setdefault(
+            report["evaluation"]["settings"]["run_id"],
+            {"split": "unassigned", "workload_seed": None},
+        )
+    sections, summaries, study_audits = [], [], []
+    if runs:
+        render_physical(pdf, measured, roles, supplement)
+        sections.append("measured")
+    if forecasts:
+        summaries = arrival_summary(forecasts, roles)
+        examples = sorted(
+            forecasts,
+            key=lambda report: (
+                roles[report["evaluation"]["settings"]["run_id"]]["split"] != "held-out",
+                report["evaluation"]["settings"]["origin_ms"],
+                report["evaluation"]["settings"]["run_id"],
+            ),
+        )
+        render_arrivals(pdf, examples[0], summaries, roles, supplement)
+        sections.append("arrival-forecast")
+    for study in studies:
+        panels = study_panels(study)
+        if study["selection"].get("candidates"):
+            render_selection(pdf, study, panels, supplement)
+        held = {p["run_id"] for p in panels if p["split"] == "held-out"}
+        selected_runs = held or {p["run_id"] for p in panels}
+        for run in sorted(selected_runs):
+            render_completion(pdf, [p for p in panels if p["run_id"] == run], roles)
+        study_audits.append({"selection": study["selection"], "panels": panels})
+        sections.append("study")
     return {
+        "sections": sections,
+        "physical_runs": [run["summary"] for run in runs],
         "arrival_summary": summaries,
-        "study_panels": panels,
-        "selection": study["selection"],
+        "studies": study_audits,
         "supplement": supplement,
     }

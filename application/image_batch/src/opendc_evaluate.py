@@ -18,7 +18,6 @@ import json
 import math
 from pathlib import Path
 import sys
-import textwrap
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -30,6 +29,7 @@ from scipy.ndimage import gaussian_filter1d
 from opendc_inputs import file_hashes, write_json
 from opendc_pinning import PINNED_MODE
 from opendc_energy import datacenter_series
+from opendc_report_layout import finish as finish_page, page
 
 plt.switch_backend("Agg")
 
@@ -751,25 +751,6 @@ def evaluate_batches(batch_dirs, evaluation_seconds=None):
     return report
 
 
-def _figure_text_page(pdf, title, paragraphs):
-    """Write one text page with explicit wrapping inside the page margins.
-
-    Args:
-        pdf (PdfPages): Open report writer.
-        title (str): Page heading.
-        paragraphs (list[str]): Unwrapped prose blocks; the caller must limit total page text.
-    """
-    figure = plt.figure(figsize=(11.69, 8.27))
-    figure.suptitle(title, fontsize=18, fontweight="bold", y=0.94)
-    y = 0.84
-    for paragraph in paragraphs:
-        wrapped = textwrap.fill(paragraph, width=118)
-        figure.text(0.08, y, wrapped, fontsize=10.5, va="top", linespacing=1.45)
-        y -= 0.025 + len(wrapped.splitlines()) * 10.5 * 1.45 / (8.27 * 72)
-    pdf.savefig(figure)
-    plt.close(figure)
-
-
 ACTIONS = ("unchanged", "scale-up", "scale-down")
 ACTION_COLORS = {"unchanged": "#2864b4", "scale-up": "#218358", "scale-down": "#c56a16"}
 CURVE_METRICS = ("energy_joules", "completed_tasks", "unfinished_tasks")
@@ -1064,48 +1045,52 @@ def _plot_batch_page(pdf, cases, comparison):
     count = comparison["scenario_count"]
     horizon = comparison["boundaries"]["arrival_horizon_seconds"]
     evaluation = comparison["boundaries"]["evaluation_seconds"]
-    figure, axes = plt.subplots(2, 1, figsize=(11.69, 8.27), sharex=True)
-    figure.subplots_adjust(top=0.80, bottom=0.15, left=0.09, right=0.97, hspace=0.38)
-    figure.suptitle("The demo: compare three capacity choices", fontsize=17, y=0.96)
+    figure, axes = page(
+        "Capacity choices | modeled energy and completions",
+        f"{_input_title(cases)}; arrivals over {horizon:g} s; {count} sampled futures. "
+        f"Evaluation cutoff: {evaluation:g} s.",
+        rows=2,
+        columns=1,
+    )
     figure.text(
-        0.09,
-        0.89,
-        f"{_input_title(cases)} + arrivals over {horizon:g} seconds; "
-        f"{count} possible futures.\n"
-        "These simulated alternatives illustrate capacity choices; "
-        "they do not validate actual scaling.",
-        fontsize=10,
-        linespacing=1.5,
+        0.08,
+        0.865,
+        "Vertical dotted line: arrival horizon; dash-dot line: evaluation cutoff when different.",
+        fontsize=9,
     )
     for axis, metric, title in zip(
-        axes, ("energy_joules", "completed_tasks"), ("Cluster energy use", "Completed Jobs")
+        axes.flat, ("energy_joules", "completed_tasks"), ("Worker energy", "Completed Jobs")
     ):
         _metric_axis(axis, comparison, cases, metric)
-        axis.set_title(title, fontsize=12)
-        for label in axis.texts:
-            label.set_text(f"Arrivals: first {horizon:g} s | measurement window: {evaluation:g} s")
-        if metric == "completed_tasks":
-            axis.get_legend().remove()
-            axis.set_xlabel("Seconds from the start of the simulation")
-        else:
-            axis.set_xlabel("")
+        axis.set_title(title, fontsize=10)
         _finish_axes(axis, integer_y=metric == "completed_tasks")
-    figure.text(
-        0.09,
-        0.055,
-        "Bold lines: medians. Faint bands: smallest to largest result "
-        "across the possible futures.\n"
-        "Scale-down omits removed work; energy assumptions are uncalibrated. "
-        "No best action is established.",
+    figure.legend(
+        *axes[0, 0].get_legend_handles_labels(),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.105),
+        ncol=3,
+        frameon=False,
         fontsize=9,
-        linespacing=1.5,
     )
-    pdf.savefig(figure)
-    plt.close(figure)
+    partial = any(c.get("scope") == "remaining_workers_only" for c in cases)
+    finish_page(
+        pdf,
+        figure,
+        "Medians and min–max across matched futures; ranges are not confidence intervals. "
+        "Counts use 2 s display smoothing.\n"
+        "Energy is modeled worker energy with uncalibrated power; other "
+        "infrastructure is excluded.\n"
+        + (
+            "Scale-down omits removed work and energy. "
+            if partial
+            else "Cordon retains assigned executable work. "
+        )
+        + "Exact metrics remain in JSON; these scenarios do not validate scaling.",
+    )
 
 
 def _plot_response_page(pdf, cases, comparison):
-    """Show all modeled responses first, with separate cohort diagnostics below.
+    """Show response distributions with identical scales across modeled cohorts.
 
     Args:
         pdf (PdfPages): Open report writer.
@@ -1113,50 +1098,49 @@ def _plot_response_page(pdf, cases, comparison):
         comparison (dict): Per-action response percentile bands and scopes.
     """
     count = comparison["scenario_count"]
-    figure = plt.figure(figsize=(11.69, 8.27))
-    grid = figure.add_gridspec(
-        2, 2, top=0.81, bottom=0.17, left=0.09, right=0.97, hspace=0.50, wspace=0.27
+    figure, axes = page(
+        "Capacity choices | Job response times",
+        f"Same workload and {count} matched futures; represented Jobs are followed "
+        "through completion.",
+        rows=1,
+        columns=3,
     )
-    figure.suptitle("The same capacity choices: Job response times", fontsize=17, y=0.96)
-    figure.text(
-        0.09,
-        0.89,
-        f"Same workload and {count} futures as the preceding action page. "
-        "Jobs are followed through completion.\n"
-        "At 90% on the horizontal axis, read the response time "
-        "within which 90% of the Jobs finish.",
-        fontsize=10,
-        linespacing=1.5,
-    )
-    shared_axis = None
-    for cohort, position, title in (
-        ("all", grid[0, :], "All modeled Jobs"),
-        ("future", grid[1, 0], "Jobs arriving after the start"),
-        ("backlog", grid[1, 1], "Jobs already present at the start"),
+    for axis, cohort, title in zip(
+        axes.flat,
+        ("all", "future", "backlog"),
+        ("All modeled Jobs", "Arrivals after cutoff", "Unfinished at cutoff"),
     ):
-        axis = figure.add_subplot(position, sharey=shared_axis)
-        shared_axis = axis
+        if axis is not axes[0, 0]:
+            axis.sharey(axes[0, 0])
         _metric_axis(axis, comparison, cases, cohort)
+        axis.set_title(title, fontsize=10)
+    for axis in axes.flat:
         _finish_axes(axis, x_maximum=100)
-        axis.set_title(title, fontsize=12)
-        if cohort != "all" and axis.get_legend() is not None:
-            axis.get_legend().remove()
-    figure.text(
-        0.09,
-        0.06,
-        "Response time starts at original Job creation, "
-        "including time spent waiting before this simulation.\n"
-        + (
-            "Scale-down remains partial. "
-            if any(c.get("scope") == "remaining_workers_only" for c in cases)
-            else "Cordon retains assigned executable work until completion. "
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    if handles:
+        figure.legend(
+            handles,
+            labels,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.105),
+            ncol=3,
+            frameon=False,
+            fontsize=9,
         )
-        + "These are simulated action scenarios, separate from measured application execution.",
-        fontsize=9,
-        linespacing=1.5,
+    finish_page(
+        pdf,
+        figure,
+        "Response starts at original Job creation, including pre-cutoff waiting; "
+        "90% marks the time within which 90% finish.\n"
+        "Medians and min–max weight each future equally. Backlog includes queued, "
+        "startup and running Jobs.\n"
+        + (
+            "Scale-down remains partial; omitted Jobs are outside these curves. "
+            if any(c.get("scope") == "remaining_workers_only" for c in cases)
+            else "Cordon retains assigned executable work. "
+        )
+        + "Empty cohorts have no response distribution.",
     )
-    pdf.savefig(figure)
-    plt.close(figure)
 
 
 def _prepare_comparisons(report, reference_batch=None):
@@ -1195,7 +1179,7 @@ def _prepare_comparisons(report, reference_batch=None):
 
 
 def _metric_axis(axis, comparison, cases, metric):
-    """Draw the same action comparison in either page layout.
+    """Draw one action metric with legends and boundary explanations supplied by the page.
 
     Args:
         axis (matplotlib.axes.Axes): Target plot; shared limits are finalized by the caller.
@@ -1216,7 +1200,6 @@ def _metric_axis(axis, comparison, cases, metric):
                 data["scope"],
                 factor=0.001 if metric == "energy_joules" else 1,
             )
-        axis.legend(loc="upper left", fontsize=8, ncol=3)
     else:
         components = ("backlog", "future") if metric == "all" else (metric,)
         empty = all(
@@ -1231,7 +1214,7 @@ def _metric_axis(axis, comparison, cases, metric):
                 "all": "No modeled Jobs",
             }[metric]
             if empty
-            else "Comparison unavailable: at least one action / future has no response samples"
+            else "Unavailable: an action / future\nhas no response samples"
         )
         axis.text(
             0.5,
@@ -1257,12 +1240,6 @@ def _metric_axis(axis, comparison, cases, metric):
         axis.axvline(horizon, color="#666666", linestyle=":", alpha=0.6)
         if evaluation != horizon:
             axis.axvline(evaluation, color="#666666", linestyle="-.", alpha=0.6)
-        label = (
-            f"H = E = {horizon:g}s"
-            if horizon == evaluation
-            else f"H = {horizon:g}s; E = {evaluation:g}s"
-        )
-        axis.text(0.99, 0.94, label, transform=axis.transAxes, ha="right", va="top", fontsize=8)
 
 
 def render_pdf(report, path, reference_batch=None):
@@ -1297,78 +1274,19 @@ def render_pdf(report, path, reference_batch=None):
         "exact_metrics_unchanged": True,
         "axis_bounds": "outward-rounded, evenly spaced endpoint ticks",
     }
-    reference = (
-        _input_title(comparisons[0][1]) if comparisons else "No complete comparison available"
-    )
-    sources = "; ".join(
-        f"{batch['label']} = {_input_title(cases)}" for batch, cases, _ in comparisons
-    )
-    partial = any(c.get("scope") == "remaining_workers_only" for c in report["cases"])
-    pinned = any(c.get("initialization_mode") == PINNED_MODE for c in report["cases"])
+    report["presentation"]["omitted_batches"] = omitted
     with PdfPages(path) as pdf:
-        _figure_text_page(
-            pdf,
-            "OpenDC provisional evaluation — action comparison",
-            [
-                f"Selected workload: {reference}. All three actions use the same initial state "
-                "and sampled futures. This is a presentation choice, not a preferred scaling "
-                "action. Other starting inputs remain in metrics.json. "
-                "Batch numbers identify input evidence, not model versions. "
-                "Starting inputs: " + (sources or "none."),
-                "Read each graph across actions: blue = unchanged, green = scale up, orange "
-                "dashed "
-                + ("= scale down (partial). " if partial else "= scale down with native cordon. ")
-                + "Bold lines are medians; thin outlines and faint shading "
-                "show the observed min–max across equally weighted sampled futures, "
-                "not confidence "
-                "intervals. Job counts use 2-second Gaussian display smoothing per scenario; "
-                "event timing and endpoint counts are approximate. Exact numerical metrics "
-                "remain available in metrics.json.",
-                "Backlog means all unfinished Jobs at the cutoff (queued, starting or running). "
-                "Future means sampled arrivals during [0, H). Future response describes new "
-                "demand; "
-                "backlog response describes recovery and retains pre-cutoff waiting. An empty "
-                "backlog has no response curve. All modeled Jobs combines both cohorts within "
-                "each future, then aggregates equally across futures. These response curves "
-                "follow modeled Jobs through completion, not only finishes by E; omitted Jobs "
-                "remain outside them.",
-                "H is the arrival horizon; E is the fixed evaluation cutoff (default E = H). "
-                "The other window ends at max(H, last included completion). Energy interpolates "
-                "native cumulative joules and extends at configured idle power, including "
-                "alignment to shared endpoints. Response summaries by E include completions "
-                "only and may be censored. Completed Jobs counts finishes by each plotted time. "
-                "Axes round outward to evenly spaced ticks; curves are not extrapolated to "
-                "these rounded bounds.",
-                (
-                    "Scale down omits the selected worker and its assigned Jobs: energy and work "
-                    "totals are partial, and omitted completion/energy are unknown. "
-                    if partial
-                    else "Native cordon finishes assigned executable work "
-                    "and closes the selected host; "
-                    "no queued or future task is admitted there. "
-                )
-                + "Lower totals or "
-                "shorter responses alone cannot identify the best action. No scoring or automatic "
-                "decision is introduced. "
-                + (
-                    "Represented assigned work is pinned at zero; "
-                    "startup delay and exhausted occupancy remain unmodeled. "
-                    if pinned
-                    else "Running remainders restart at zero without restoring placement "
-                    "or startup occupancy. "
-                )
-                + "Each worker has C−1 modeled cores. Default "
-                "100 W idle / 200 W maximum power is uncalibrated. Cluster energy here means "
-                "modeled worker energy. Control-plane, runner and "
-                "separate daemon overhead are excluded.",
-                "Supporting batches without all three actions remain in metrics.json but have no "
-                "comparison graphs: " + ("; ".join(omitted) if omitted else "none."),
-            ],
-        )
         if comparisons:
-            _, cases, exact = comparisons[0]
-            _plot_batch_page(pdf, cases, display_comparison(cases, exact))
-            _plot_response_page(pdf, cases, exact)
+            _render_action_comparisons(pdf, comparisons[:1])
+        else:
+            figure, axes = page(
+                "Action comparison unavailable",
+                "No batch contains all three capacity choices.",
+                rows=1,
+                columns=1,
+            )
+            axes[0, 0].set_axis_off()
+            finish_page(pdf, figure, "\n".join(omitted))
 
 
 def create_report(
@@ -1497,6 +1415,16 @@ def render_action_pages(pdf, report):
     comparisons, omitted = _prepare_comparisons(report)
     if not comparisons:
         raise ValueError("No complete action comparison: " + "; ".join(omitted))
+    _render_action_comparisons(pdf, comparisons)
+
+
+def _render_action_comparisons(pdf, comparisons):
+    """Use identical diagnostic pages for standalone and combined report destinations.
+
+    Args:
+        pdf (PdfPages): Open report writer.
+        comparisons (list[tuple]): Ordered batches, matching cases and exact aggregates.
+    """
     for _, cases, exact in comparisons:
         _plot_batch_page(pdf, cases, display_comparison(cases, exact))
         _plot_response_page(pdf, cases, exact)

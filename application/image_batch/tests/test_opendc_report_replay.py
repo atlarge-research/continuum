@@ -6,11 +6,14 @@ from pathlib import Path
 import sys
 import unittest
 import tempfile
+from unittest.mock import patch
+
+import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Discovery uses the repository source path rather than an installed package.
 # pylint: disable=wrong-import-position
-from opendc_report_replay import replay_panels
+from opendc_report_replay import replay_panels, render_replay_pages
 from opendc_report import write_report
 
 # pylint: enable=wrong-import-position
@@ -72,6 +75,28 @@ class ReplayReportTests(unittest.TestCase):
         entries[1]["result"]["groups"] = []
         entries[1]["result"]["cases"] = []
         self.assertEqual(replay_panels(entries)[0]["unavailable_labels"], ["new"])
+
+    def test_empty_placement_diagnostics_remain_visible(self):
+        """Zero assigned Jobs still show their denominator within the count-axis bounds."""
+        with patch("opendc_report_replay.finish") as saved:
+            render_replay_pages(None, replay_fixture())
+        figures = [call.args[1] for call in saved.call_args_list]
+        try:
+            diagnostic = figures[-1]
+            axis = diagnostic.axes[0]
+            self.assertEqual([text.get_text() for text in axis.texts], ["0/0", "0/0"])
+            self.assertTrue(
+                all(
+                    axis.get_ylim()[0] <= text.get_position()[1] <= axis.get_ylim()[1]
+                    for text in axis.texts
+                )
+            )
+            self.assertTrue(all(tick == int(tick) for tick in axis.get_yticks()))
+            self.assertTrue(diagnostic.legends)
+            self.assertTrue(all(axis.get_legend() is None for axis in diagnostic.axes))
+        finally:
+            for figure in figures:
+                plt.close(figure)
 
     def test_replay_only_report_regenerates_offline(self):
         """Saved old/new replay evidence needs neither live observations nor native results."""
