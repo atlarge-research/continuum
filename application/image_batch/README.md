@@ -116,6 +116,8 @@ Use new output directories and the matching image when running those inputs. Hos
 
 For assigned-task placement and native cordon, add `--initialization-mode pinned-trace` when preparing scenarios or observation-validation inputs with `OPENDC_RUNTIME=fns-demo`. Run those inputs with the matching FNS image. Results distinguish validated task placement from the remaining startup-delay, exhausted-work and observation gaps.
 
+Compatible pinned suites can run in one native process using `python /app/opendc_native_batch.py --suite-dir /inputs --output-dir /results/batch` inside the matching FNS image (override its default entrypoint). Mount the prepared suite read-only and a new results directory writable, retaining the usual runner resource limits. The resulting `batch.json` works with the action evaluator. Shared process cost is reported once; empty or incompatible suites retain individual execution.
+
 ## Manual provisional scenario workflow
 
 Prepare scenarios with `opendc_scenarios.py prepare`, run them with `opendc_batch.py`, then generate an action report:

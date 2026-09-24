@@ -191,6 +191,8 @@ Native cordon retains all executable tasks and initial workers. The selected wor
 
 Closing hosts may stop exporting host telemetry before their final energy interval. Complete cordon accounting therefore uses the native datacenter accumulator for the modeled worker pool, checks its identity, time coverage and configured power bounds, and adds idle energy after completion only for remaining workers. These are consistency checks on an uncalibrated model, not evidence of physical energy accuracy. A disjoint split simulation remains a possible diagnostic oracle if native behavior fails; it is not required for a supported native cordon run.
 
+Compatible action/sample matrices can share one sequential native process. A common topology closes absent reserve hosts immediately; every action retains the same initial task inventory and each sampled future has an explicit identity, even when trace bytes coincide. This optimization requires agreement with individual execution on placement, timing and energy, not merely a successful exit. Shared wall time, CPU and peak memory belong to the whole experiment and cannot be divided into measured per-sample costs. Empty or incompatible matrices retain individual execution. Observation validation accepts unchanged cases only, preventing action variants from being pooled as if they were alternative forecasts of an unchanged observed run.
+
 ## Deployment and failure assumptions
 
 Observation remains colocated with the adapter through the October demo, with one observation owner per run. This avoids duplicate collection and the need for coordination between observers.

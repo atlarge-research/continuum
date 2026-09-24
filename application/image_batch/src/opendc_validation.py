@@ -684,6 +684,8 @@ def evaluate_matrix(index_file, batch_dir):
     """
     index = json.loads(Path(index_file).read_text(encoding="utf-8"))
     directory, batch = load_batch(batch_dir)
+    if any(item.get("candidate") != "unchanged" for item in batch["experiments"]):
+        raise ValueError("observation validation requires unchanged-only simulation cases")
     rows, boundaries = bounded_read(index["observer_dir"])
     trace, observations = read_observations(rows, index["run_id"])
     times = [t for t, _ in trace.states]
@@ -865,6 +867,8 @@ def evaluate_matrix(index_file, batch_dir):
         "groups": groups,
         "observed_jobs": observations,
         "initialization_diagnostics": initialization_diagnostics(cases),
+        "shared_process": batch.get("shared_process"),
+        "cost_scope": batch.get("cost_scope", "separately measured native processes"),
     }
 
 

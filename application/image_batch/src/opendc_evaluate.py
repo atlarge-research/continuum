@@ -546,6 +546,9 @@ def _resources(run_dir, execution):
     """
     path = run_dir / "resources.json"
     record = json.loads(path.read_text()) if path.exists() else execution.get("process", {})
+    shared = record.get("execution_kind") == "shared_native_batch"
+    if shared:
+        record = {}
     empty = record.get("execution_kind") == "analytical_empty"
     result, missing = {}, []
     for source, target in (
@@ -560,7 +563,15 @@ def _resources(run_dir, execution):
         )
         result[target] = None if value is None else float(value)
         if value is None and not empty:
-            missing.append({"component": target, "value": None, "reason": "not recorded"})
+            missing.append(
+                {
+                    "component": target,
+                    "value": None,
+                    "reason": "shared process measured once for the full batch"
+                    if shared
+                    else "not recorded",
+                }
+            )
     if empty:
         missing.append(
             {
@@ -620,6 +631,9 @@ def evaluate_batches(batch_dirs, evaluation_seconds=None):
             "cases": len(batch["experiments"]),
             "input_contract": batch.get("suite_manifest", {}).get("contract"),
         }
+        if batch.get("shared_process") is not None:
+            batch_entry["shared_process"] = batch["shared_process"]
+            batch_entry["cost_scope"] = batch["cost_scope"]
         report["batches"].append(batch_entry)
         suite_experiments = {
             (item.get("candidate"), item.get("scenario")): item
