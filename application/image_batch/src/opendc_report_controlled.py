@@ -295,7 +295,7 @@ def _lifecycle_bar(axis, index, interval, end, color, through=None):
 
 
 def _lifecycle_pages(pdf, comparisons):
-    """Compare compact whole-cluster timelines with six-point rows and sparse count ticks.
+    """Compare three scenarios per page with aligned physical/replay panels.
 
     Args:
         pdf (PdfPages): Open report writer.
@@ -309,93 +309,125 @@ def _lifecycle_pages(pdf, comparisons):
     colors = {name: plt.get_cmap("tab10")(i) for i, name in enumerate(workers)}
     lower = min([0] + [row["arrival"] for row in all_rows if row["arrival"] is not None]) - 4
     upper = max(row["window_end"] for row in all_rows) + 4
-    for saved, rows in groups:
-        for offset in range(0, len(rows), 30):
-            page = rows[offset : offset + 30]
-            figure, axes = plt.subplots(1, 2, figsize=(11.69, 8.27), sharex=True, sharey=True)
-            half_height = len(page) * 6 / (8.27 * 72) / 2
-            figure.subplots_adjust(
-                top=0.55 + half_height,
-                bottom=0.55 - half_height,
-                left=0.07,
-                right=0.97,
-                wspace=0.12,
-            )
-            figure.suptitle("Validation | Arrival, waiting and execution", fontsize=16, y=0.97)
-            figure.text(0.5, 0.895, _title(saved), ha="center", fontsize=11, linespacing=1.5)
-            for axis, title in zip(axes, ("Physical cluster", "OpenDC known-arrival replay")):
-                reference = _action_axis(axis, saved) or 0
-                axis.axvline(-reference, color="black", linestyle=":", linewidth=0.8)
-                axis.axvline(page[0]["window_end"], color="grey", linestyle="--", linewidth=0.8)
-                axis.set(title=title, xlim=(lower, upper), ylim=(len(page) - 0.5, -0.5))
-                axis.grid(axis="x", alpha=0.2)
-                axis.tick_params(labelsize=8)
-                for boundary in range(1, len(page)):
-                    if page[boundary - 1]["cohort"] != page[boundary]["cohort"]:
-                        axis.axhline(boundary - 0.5, color="black", linewidth=0.8, zorder=4)
-            for index, row in enumerate(page):
-                _lifecycle_bar(
-                    axes[0],
-                    index,
-                    row["observed"],
-                    row["window_end"],
-                    colors[row["worker"]],
-                    row["observed_through"],
-                )
-                if row["predicted"] is not None:
-                    _lifecycle_bar(axes[1], index, row["predicted"], row["window_end"], "#7355a2")
-                else:
-                    axes[1].text(
-                        0.03,
-                        index,
-                        row["prediction_status"],
-                        transform=axes[1].get_yaxis_transform(),
-                        fontsize=6,
-                        va="center",
-                    )
-                if row["arrival"] is not None:
-                    for axis in axes:
-                        axis.plot(row["arrival"], index, marker="d", color="black", markersize=3)
-            counts = [index for index in range(len(page)) if (offset + index + 1) % 10 == 0]
-            axes[0].set_yticks(counts, [offset + index + 1 for index in counts])
-            handles = [Patch(color="#bfbfbf", label="Waiting / startup")]
-            handles += [Patch(color=colors[name], label=name) for name in workers]
-            handles += [
-                Patch(color="#7355a2", label="Modeled execution"),
-                Line2D(
-                    [],
-                    [],
-                    color="black",
-                    marker="d",
-                    linestyle="none",
-                    markersize=4,
-                    label="Job created",
-                ),
-            ]
-            figure.legend(
-                handles=handles,
-                loc="lower center",
-                bbox_to_anchor=(0.52, 0.55 - half_height - 0.13),
-                ncol=3,
-                fontsize=8,
+    panels = [
+        (saved, rows[offset : offset + 30], offset)
+        for saved, rows in groups
+        for offset in range(0, len(rows), 30)
+    ]
+    for first in range(0, len(panels), 3):
+        page = panels[first : first + 3]
+        figure, axes = plt.subplots(
+            len(page),
+            2,
+            figsize=(11.69, 8.27),
+            squeeze=False,
+            sharex=True,
+            sharey="row",
+            gridspec_kw={"height_ratios": [len(rows) for _, rows, _ in page]},
+        )
+        figure.subplots_adjust(
+            top=0.84, bottom=0.23, left=0.07, right=0.97, wspace=0.15, hspace=1.05
+        )
+        figure.suptitle("Validation | Arrival, waiting and execution", fontsize=16, y=0.97)
+        for pair, (saved, rows, offset) in zip(axes, page):
+            _lifecycle_pair(pair, saved, rows, offset, colors, (lower, upper))
+            heading = (
+                TITLES[saved["physical"]["kind"]]
+                + "  |  Target: "
+                + saved["context"]["selected_worker"]
             )
             figure.text(
-                0.07,
-                0.12,
-                "Rows follow arrival order; ticks count Jobs. "
-                "Horizontal line separates backlog (above) from future Jobs (below).\n"
-                "Dotted line: model start; shaded band: action interval. "
-                "Replay shows remaining work only after model start.\n"
-                "Bars stop at the follow-up boundary: > continues beyond it; x = finish unknown. "
-                "Later competing arrivals are not drawn.\n"
-                "Error panels use matched completions; "
-                "these timelines also retain unfinished work. "
-                "Scheduler retries were not recorded.",
-                fontsize=8,
-                linespacing=1.5,
+                0.52,
+                pair[0].get_position().y1 + 0.047,
+                heading,
+                ha="center",
+                fontsize=11,
+                weight="bold",
             )
-            pdf.savefig(figure)
-            plt.close(figure)
+        handles = [Patch(color="#bfbfbf", label="Waiting / startup")]
+        handles += [Patch(color=colors[name], label=name) for name in workers]
+        handles += [
+            Patch(color="#7355a2", label="Modeled execution"),
+            Line2D(
+                [],
+                [],
+                color="black",
+                marker="d",
+                linestyle="none",
+                markersize=4,
+                label="Job created",
+            ),
+        ]
+        figure.legend(
+            handles=handles, loc="lower center", bbox_to_anchor=(0.52, 0.11), ncol=3, fontsize=8
+        )
+        figure.text(
+            0.07,
+            0.025,
+            "Rows follow arrival order; ticks count Jobs. "
+            "Horizontal divider: backlog above, future below.\n"
+            "Dotted line: model start; shaded band: action interval. "
+            "Replay shows remaining work from model start.\n"
+            "Follow-up boundary: > continues beyond it; x = finish unknown. "
+            "Later competing arrivals are not drawn.\n"
+            "Error panels use matched completions; timelines also retain unfinished work. "
+            "Scheduler retries were not recorded.",
+            fontsize=8,
+            linespacing=1.5,
+        )
+        pdf.savefig(figure)
+        plt.close(figure)
+
+
+def _lifecycle_pair(axes, saved, rows, offset, colors, limits):
+    """Draw one scenario with matching Job-count ticks visible on both panels.
+
+    Args:
+        axes (list[Axes]): Physical and simulated panels.
+        saved (dict): Controlled action evidence.
+        rows (list[dict]): Consecutive arrival-ordered Jobs for this panel pair.
+        offset (int): Number of Jobs preceding this chunk.
+        colors (dict): Shared observed-worker colors.
+        limits (tuple): Common action-relative horizontal limits.
+    """
+    step = max(1, math.ceil(len(rows) / 4))
+    counts = sorted({1, *range(step, len(rows) + 1, step)})
+    for axis, title in zip(axes, ("Physical cluster", "OpenDC known-arrival replay")):
+        reference = _action_axis(axis, saved) or 0
+        axis.axvline(-reference, color="black", linestyle=":", linewidth=0.8)
+        axis.axvline(rows[0]["window_end"], color="grey", linestyle="--", linewidth=0.8)
+        axis.set(xlim=limits, ylim=(len(rows) - 0.5, -0.5))
+        axis.set_title(title, fontsize=9, pad=5)
+        axis.set_xlabel(axis.get_xlabel(), fontsize=8)
+        axis.set_yticks([count - 1 for count in counts], [offset + count for count in counts])
+        axis.tick_params(labelsize=8, labelleft=True, labelbottom=True)
+        axis.grid(axis="x", alpha=0.2)
+        for boundary in range(1, len(rows)):
+            if rows[boundary - 1]["cohort"] != rows[boundary]["cohort"]:
+                axis.axhline(boundary - 0.5, color="black", linewidth=0.8, zorder=4)
+    for index, row in enumerate(rows):
+        _lifecycle_bar(
+            axes[0],
+            index,
+            row["observed"],
+            row["window_end"],
+            colors[row["worker"]],
+            row["observed_through"],
+        )
+        if row["predicted"] is not None:
+            _lifecycle_bar(axes[1], index, row["predicted"], row["window_end"], "#7355a2")
+        else:
+            axes[1].text(
+                0.03,
+                index,
+                row["prediction_status"],
+                transform=axes[1].get_yaxis_transform(),
+                fontsize=5,
+                va="center",
+            )
+        if row["arrival"] is not None:
+            for axis in axes:
+                axis.plot(row["arrival"], index, marker="d", color="black", markersize=2)
 
 
 def _assignment_page(pdf, page, all_comparisons):
