@@ -429,8 +429,8 @@ def _worker_records(worker_config, trace, template, backlog, exhausted):
         configured[name] = record
 
     observed = {worker["node_name"]: worker for worker in trace.state["workers"]}
-    if any(not worker["ready"] or not worker["schedulable"] for worker in observed.values()):
-        raise ValueError("unschedulable or unready initial workers are unsupported")
+    if any(not worker["ready"] for worker in observed.values()):
+        raise ValueError("unready initial workers are unsupported")
     requested_active = worker_config.get("active_workers")
     active = sorted(observed) if requested_active is None else requested_active
     if (
@@ -442,11 +442,24 @@ def _worker_records(worker_config, trace, template, backlog, exhausted):
         raise ValueError("active_workers must be a nonempty list of unique names")
     if any(name not in observed or name not in configured for name in active):
         raise ValueError("active worker is absent from observed state or configuration")
+    if any(not observed[name]["schedulable"] for name in active):
+        raise ValueError("unschedulable active workers are unsupported")
     assigned = {
         item["metadata"].get("node_name")
         for item in backlog + exhausted
         if item["metadata"].get("node_name")
     }
+    # Explicitly excluded Ready workers may be cordoned warm reserves, but no
+    # observed live assignment may be reclassified as an initially empty reserve.
+    assigned.update(
+        job["node_name"]
+        for group in ("queued", "active")
+        for job in trace.state["jobs"].get(group, [])
+        if job.get("node_name")
+        and job.get("execution_state") != "terminated"
+        and job.get("pod_phase") not in ("Succeeded", "Failed")
+        and job.get("job_terminal_status") not in ("Complete", "Failed")
+    )
     if not assigned.issubset(set(active)):
         raise ValueError("assigned worker is excluded from active state")
     if not 1 <= len(active) <= 3:

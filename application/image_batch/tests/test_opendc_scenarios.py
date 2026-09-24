@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 import pyarrow.parquet as pq
 
@@ -13,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from forecast_trace import STREAMS, bounded_read, canonical, digest, iso, parquet_tasks, read_trace
 from opendc_inputs import file_hashes, verify_inputs
-from opendc_scenarios import prepare_suite
+from opendc_scenarios import prepare_suite, _worker_records
 from simulation_input import build_simulation_inputs
 
 
@@ -540,6 +541,42 @@ class ScenarioPreparationTests(unittest.TestCase):
             case = json.loads((root / "suite/experiments/scale-up/0000/case.json").read_text())
             reserve = next(w for w in case["workers"] if w["node_name"] == "worker-c")
             self.assertEqual(reserve["memory_mib"], 7168)
+
+    def test_explicit_empty_cordoned_reserve_can_be_admitted(self):
+        """A Ready warm reserve may be cordoned until a controlled scale-up experiment."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            observed = [
+                worker("worker-a", 4, 8192),
+                worker("worker-b", 8, 16384),
+                {**worker("worker-c", 4, 7168), "schedulable": False},
+            ]
+            forecast, observer = make_forecast(root, workers=observed)
+            config = configuration()
+            config["active_workers"] = ["worker-a", "worker-b"]
+            prepare_suite(forecast, observer, config, root / "suite")
+            case = json.loads((root / "suite/experiments/scale-up/0000/case.json").read_text())
+            self.assertEqual(
+                [w["node_name"] for w in case["workers"]], ["worker-a", "worker-b", "worker-c"]
+            )
+            with self.assertRaisesRegex(ValueError, "unschedulable"):
+                prepare_suite(forecast, observer, configuration(), root / "implicit")
+
+    def test_unrepresented_live_assignment_cannot_become_empty_reserve(self):
+        """Reserve admission must consider raw observed work beyond executable profiles."""
+        config = configuration()
+        config["active_workers"] = ["worker-a", "worker-b"]
+        trace = SimpleNamespace(
+            state={
+                "workers": [worker(name, 4, 8192) for name in ("worker-a", "worker-b", "worker-c")],
+                "jobs": {
+                    "active": [{"node_name": "worker-c", "execution_state": "running"}],
+                    "queued": [],
+                },
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "assigned worker is excluded"):
+            _worker_records(config, trace, template(), [], [])
 
     def test_omitted_and_exhausted_inventory_cannot_share_an_identity(self):
         """Keep an omitted executable task distinct from exhausted observed work."""
