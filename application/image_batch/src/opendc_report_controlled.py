@@ -6,6 +6,8 @@ from pathlib import Path
 from statistics import mean
 
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 
 from opendc_report_observed import _covered_series
@@ -137,7 +139,7 @@ def _action_axis(axis, saved):
 
 
 def render_pages(pdf, comparisons):
-    """Append physical validation, completion/error explanation and individual responses.
+    """Append action checks, timing errors, responses and readable per-Job timelines.
 
     Args:
         pdf (PdfPages): Open PDF writer.
@@ -149,6 +151,234 @@ def render_pages(pdf, comparisons):
         _assignment_page(pdf, page, comparisons)
         _timing_page(pdf, page, comparisons)
         _response_page(pdf, page, comparisons)
+    _lifecycle_pages(pdf, comparisons)
+
+
+def lifecycle_rows(saved):
+    """Join original arrivals and execution intervals without inventing missing outcomes.
+
+    Model intervals begin at or after the cutoff: pinned running work is a remainder,
+    not a prediction of its already-observed history. Endpoints remain uncropped here;
+    rendering clips both series at the original evaluation boundary.
+
+    Args:
+        saved (dict): Controlled comparison with original task and observation evidence.
+
+    Returns:
+        list[dict]: Arrival-ordered rows in seconds from the physical action midpoint.
+    """
+    comparison = saved.get("comparison") or {}
+    if "cutoff_ms" not in comparison:
+        return []
+    cutoff = comparison["cutoff_ms"]
+    reference = action_reference(saved) or 0
+    origin = cutoff + 1000 * reference
+    tasks = {row["uid"]: row for row in comparison.get("tasks", [])}
+    observations = {row["uid"]: row for row in comparison.get("observations", [])}
+    exhausted = {row["uid"]: row for row in comparison.get("model_exhausted", [])}
+    observations.update(exhausted)
+    matched = {row["uid"] for row in comparison.get("matched_completed_pairs", [])}
+    rows = []
+    for uid in tasks.keys() | observations.keys():
+        task = tasks.get(uid, {})
+        observed = observations.get(uid, task.get("observed") or {})
+        creation = task.get("original_creation_ms", observed.get("creation_ms"))
+        if creation is None:
+            # Unknown arrival remains explicit as an unavailable interval, sorted last.
+            arrival = None
+        else:
+            arrival = (creation - origin) / 1000
+        cohort = task.get("cohort", observed.get("cohort", "backlog"))
+        finish = task.get("predicted_finish_ms")
+        duration = task.get("modeled_duration_seconds")
+        prediction = None
+        if finish is not None and duration is not None and creation is not None:
+            prediction = [
+                (max(creation, cutoff) - origin) / 1000,
+                (finish - origin) / 1000 - duration,
+                (finish - origin) / 1000,
+            ]
+        rows.append(
+            {
+                "uid": uid,
+                "cohort": cohort,
+                "arrival": arrival,
+                "observed": [arrival]
+                + [
+                    (observed[key] - origin) / 1000 if observed.get(key) is not None else None
+                    for key in ("start_ms", "finish_ms")
+                ],
+                "observed_through": (
+                    (observed["censored_through_ms"] - origin) / 1000
+                    if observed.get("censored_through_ms") is not None
+                    else None
+                ),
+                "worker": observed.get("node_name") or "Unknown worker",
+                "predicted": prediction,
+                "prediction_status": "Model exhausted" if uid in exhausted else "Unavailable",
+                "matched_future": cohort == "future" and uid in matched,
+                "window_end": comparison["window_seconds"] - reference,
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda row: (row["arrival"] if row["arrival"] is not None else math.inf, row["uid"]),
+    )
+
+
+def _lifecycle_bar(axis, index, interval, end, color, through=None):
+    """Draw known waiting/execution, clipping at follow-up without fabricating a finish.
+
+    Args:
+        axis (Axes): Observed or predicted timeline panel.
+        index (int): Shared Job row.
+        interval (list): Creation/admission, start and finish seconds, possibly unknown.
+        end (float): Original follow-up boundary in display coordinates.
+        color (str or tuple): Execution color.
+        through (float or None): Latest explicit evidence for an unfinished observation.
+    """
+    arrival, start, finish = interval
+    if arrival is None:
+        axis.text(
+            0.02, index, "Arrival unavailable", transform=axis.get_yaxis_transform(), fontsize=7
+        )
+        return
+    known_end = finish if finish is not None else through
+    if start is None:
+        axis.text(
+            0.03, index, "Start unavailable", transform=axis.get_yaxis_transform(), fontsize=7
+        )
+        return
+    axis.plot(
+        [arrival, min(start, end)],
+        [index, index],
+        color="#bfbfbf",
+        linewidth=4,
+        solid_capstyle="butt",
+    )
+    if start <= end and known_end is not None:
+        axis.plot(
+            [start, min(known_end, end)],
+            [index, index],
+            color=color,
+            linewidth=4,
+            solid_capstyle="butt",
+        )
+    if known_end is not None and known_end > end:
+        axis.plot(
+            end,
+            index,
+            marker=">",
+            color=color if start < end else "grey",
+            markersize=5,
+        )
+    elif finish is None:
+        axis.plot(
+            min(known_end if known_end is not None else start, end),
+            index,
+            marker="x",
+            color="black",
+            markersize=4,
+        )
+
+
+def _lifecycle_pages(pdf, comparisons):
+    """Restore detailed arrival/wait/execution plots beside their actual-action replays.
+
+    Args:
+        pdf (PdfPages): Open report writer.
+        comparisons (list[dict]): Saved action evidence; raw captures are not required.
+    """
+    groups = [(saved, lifecycle_rows(saved)) for saved in comparisons]
+    all_rows = [row for _, rows in groups for row in rows]
+    if not all_rows:
+        return
+    workers = sorted({row["worker"] for row in all_rows})
+    colors = {name: plt.get_cmap("tab10")(i) for i, name in enumerate(workers)}
+    lower = min([0] + [row["arrival"] for row in all_rows if row["arrival"] is not None]) - 4
+    upper = max(row["window_end"] for row in all_rows) + 4
+    for saved, rows in groups:
+        for offset in range(0, len(rows), 30):
+            page = rows[offset : offset + 30]
+            figure, axes = plt.subplots(1, 2, figsize=(11.69, 8.27), sharex=True, sharey=True)
+            figure.subplots_adjust(top=0.77, bottom=0.23, left=0.16, right=0.97, wspace=0.12)
+            figure.suptitle("Validation | Arrival, waiting and execution", fontsize=16, y=0.97)
+            figure.text(0.5, 0.895, _title(saved), ha="center", fontsize=11, linespacing=1.5)
+            for axis, title in zip(axes, ("Physical cluster", "OpenDC known-arrival replay")):
+                reference = _action_axis(axis, saved) or 0
+                axis.axvline(-reference, color="black", linestyle=":", linewidth=0.8)
+                axis.axvline(page[0]["window_end"], color="grey", linestyle="--", linewidth=0.8)
+                axis.set(title=title, xlim=(lower, upper), ylim=(len(page) - 0.3, -0.7))
+                axis.grid(axis="x", alpha=0.2)
+                axis.tick_params(labelsize=8)
+            labels = []
+            for index, row in enumerate(page):
+                labels.append(
+                    f"{row['cohort'][0].upper()} {row['uid'][:8]}"
+                    + (" *" if row["matched_future"] else "")
+                )
+                _lifecycle_bar(
+                    axes[0],
+                    index,
+                    row["observed"],
+                    row["window_end"],
+                    colors[row["worker"]],
+                    row["observed_through"],
+                )
+                if row["predicted"] is not None:
+                    _lifecycle_bar(axes[1], index, row["predicted"], row["window_end"], "#7355a2")
+                else:
+                    axes[1].text(
+                        0.03,
+                        index,
+                        row["prediction_status"],
+                        transform=axes[1].get_yaxis_transform(),
+                        fontsize=7,
+                    )
+                if row["arrival"] is not None:
+                    for axis in axes:
+                        axis.plot(row["arrival"], index, marker="d", color="black", markersize=3)
+            axes[0].set_yticks(range(len(page)), labels)
+            axes[0].set_ylabel(
+                "Job UID prefix, ordered by creation\nB = backlog; F = future", fontsize=9
+            )
+            handles = [Patch(color="#bfbfbf", label="Waiting / startup")]
+            handles += [Patch(color=colors[name], label=name) for name in workers]
+            handles += [
+                Patch(color="#7355a2", label="Modeled execution"),
+                Line2D(
+                    [],
+                    [],
+                    color="black",
+                    marker="d",
+                    linestyle="none",
+                    markersize=4,
+                    label="Job created",
+                ),
+            ]
+            figure.legend(
+                handles=handles,
+                loc="lower center",
+                bbox_to_anchor=(0.52, 0.12),
+                ncol=3,
+                fontsize=8,
+            )
+            figure.text(
+                0.07,
+                0.035,
+                "Same Jobs and time scale in both panels. "
+                "* = completed future pairs used in the start/runtime error panels.\n"
+                "Dotted line: model start; shaded band: action interval. "
+                "Replay shows remaining work only after model start.\n"
+                "Bars stop at the follow-up boundary: > continues beyond it; x = finish unknown. "
+                "Later competing arrivals are not drawn.\n"
+                "These intervals expose overtaking and waiting; "
+                "scheduler retry/backoff events were not recorded.",
+                fontsize=8,
+                linespacing=1.5,
+            )
+            pdf.savefig(figure)
+            plt.close(figure)
 
 
 def _assignment_page(pdf, page, all_comparisons):

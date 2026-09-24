@@ -20,6 +20,112 @@ from test_opendc_report import validation_result
 class ControlledReportTests(unittest.TestCase):
     """Saved numerical results must redraw offline and retain action identity."""
 
+    def test_lifecycle_render_keeps_missing_start_unknown_and_clips_followup(self):
+        """Incomplete timestamps cannot imply queuing or extend bars past follow-up."""
+        # Inspect the private renderer's artists to test scientific interval semantics.
+        # pylint: disable=protected-access
+        figure, axis = controlled.plt.subplots()
+        try:
+            controlled._lifecycle_bar(axis, 0, [1, None, 16], 12, "blue")
+            self.assertFalse(any(line.get_color() == "#bfbfbf" for line in axis.lines))
+            self.assertTrue(any("unavailable" in text.get_text() for text in axis.texts))
+            axis.clear()
+            controlled._lifecycle_bar(axis, 0, [1, 5, None], 12, "blue")
+            marker = next(line for line in axis.lines if line.get_marker() == "x")
+            self.assertEqual(list(marker.get_xdata()), [5])
+            axis.clear()
+            controlled._lifecycle_bar(axis, 0, [1, 5, 16], 12, "blue")
+            self.assertTrue(all(max(line.get_xdata()) <= 12 for line in axis.lines))
+            self.assertTrue(any(line.get_marker() == ">" for line in axis.lines))
+        finally:
+            controlled.plt.close(figure)
+
+    def test_lifecycle_preserves_arrivals_remainders_and_unrepresented_work(self):
+        """Timeline rows include censored/exhausted work without inventing model history."""
+        observations = [
+            {
+                "uid": "new",
+                "cohort": "future",
+                "creation_ms": 11000,
+                "start_ms": 12000,
+                "finish_ms": 16000,
+            },
+            {
+                "uid": "old",
+                "cohort": "backlog",
+                "creation_ms": 1000,
+                "start_ms": 2000,
+                "finish_ms": 13000,
+            },
+        ]
+        saved = {
+            "context": {"observed_action_interval_seconds": [1, 3]},
+            "comparison": {
+                "cutoff_ms": 10000,
+                "window_seconds": 5,
+                "observations": observations,
+                "tasks": [
+                    {
+                        "uid": "new",
+                        "cohort": "future",
+                        "original_creation_ms": 11000,
+                        "predicted_finish_ms": 20000,
+                        "modeled_duration_seconds": 4,
+                    },
+                    {
+                        "uid": "old",
+                        "cohort": "backlog",
+                        "original_creation_ms": 1000,
+                        "predicted_finish_ms": 14000,
+                        "modeled_duration_seconds": 4,
+                    },
+                ],
+                "model_exhausted": [
+                    {"uid": "exhausted", "creation_ms": 0, "start_ms": 1000, "finish_ms": 12000}
+                ],
+                "matched_completed_pairs": [],
+            },
+        }
+        before = json.dumps(saved, sort_keys=True)
+        rows = controlled.lifecycle_rows(saved)
+        self.assertEqual([r["uid"] for r in rows], ["exhausted", "old", "new"])
+        self.assertEqual(rows[0]["prediction_status"], "Model exhausted")
+        self.assertIsNone(rows[0]["predicted"])
+        self.assertEqual(rows[1]["predicted"], [-2, -2, 2])
+        self.assertEqual(rows[1]["observed"], [-11, -10, 1])
+        self.assertEqual(rows[2]["observed"], [-1, 0, 4])
+        self.assertEqual(rows[2]["predicted"], [-1, 4, 8])
+        self.assertEqual(rows[2]["window_end"], 3)
+        self.assertEqual(before, json.dumps(saved, sort_keys=True))
+
+    def test_lifecycle_retains_missing_outcomes_and_matched_future_identity(self):
+        """Unknown finishes stay unknown and only matched futures receive the MAE marker."""
+        saved = {
+            "context": {},
+            "comparison": {
+                "cutoff_ms": 0,
+                "window_seconds": 120,
+                "tasks": [{"uid": "missing", "cohort": "future", "original_creation_ms": 1000}],
+                "observations": [
+                    {
+                        "uid": "missing",
+                        "cohort": "future",
+                        "creation_ms": 1000,
+                        "start_ms": None,
+                        "finish_ms": None,
+                        "censored_through_ms": 9000,
+                    }
+                ],
+                "matched_completed_pairs": [{"uid": "missing"}],
+            },
+        }
+        row = controlled.lifecycle_rows(saved)[0]
+        self.assertEqual(row["observed"], [1, None, None])
+        self.assertEqual(row["observed_through"], 9)
+        self.assertIsNone(row["predicted"])
+        self.assertTrue(row["matched_future"])
+        self.assertEqual(controlled.lifecycle_rows({}), [])
+
     def test_action_axis_uses_measured_interval_without_changing_evidence(self):
         """Time zero is the bounded API action, not the earlier model snapshot."""
         saved = {"context": {"observed_action_interval_seconds": [1, 3]}}
