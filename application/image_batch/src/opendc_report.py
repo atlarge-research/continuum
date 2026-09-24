@@ -12,6 +12,8 @@ from opendc_report_observed import SCHEMA as MEASURED_SCHEMA, render_measured_pa
 from forecast_report import render_forecasts
 from opendc_report_replay import render_replay_pages
 from opendc_report_study import SCHEMA as STUDY_SCHEMA, render_study_pages
+from opendc_report_topics import render_topics
+from opendc_report_layout import SUPPLEMENT_SCHEMA
 from opendc_report_controlled import (
     SCHEMA as CONTROLLED_SCHEMA,
     render_pages as render_controlled_pages,
@@ -31,6 +33,8 @@ def render_report(
     replay_reports=(),
     study_reports=(),
     controlled_reports=(),
+    topic_overview=False,
+    supplement=None,
 ):
     """Lead with supplied physical execution and arrival forecasts, then simulations.
 
@@ -45,6 +49,8 @@ def render_report(
         replay_reports (iterable[dict]): Explicitly labeled unchanged known-arrival results.
         study_reports (iterable[dict]): Frozen independent-run study and held-out outcomes.
         controlled_reports (iterable[dict]): Physical action comparisons appended as validation.
+        topic_overview (bool): Consolidate one study into scenario-oriented topic pages.
+        supplement (dict or None): Saved supplementary illustrations and sensitivity evidence.
 
     Returns:
         dict: Section inventory and the exact configuration summaries plotted.
@@ -79,45 +85,52 @@ def render_report(
     }
     output = Path(output)
     with PdfPages(output) as pdf:
-        for index, measured in enumerate(measured_reports):
-            directory = output.parent / f"measured-{index:02d}"
-            directory.mkdir(exist_ok=False)
-            audit["measured"].append(render_measured_pages(pdf, measured, directory))
-            audit["section_order"].append("measured")
-        for index, forecast in enumerate(forecast_reports):
-            directory = output.parent / f"arrival-forecast-{index:02d}"
-            directory.mkdir(exist_ok=False)
-
-            def save(figure, _directory, _name, title, layout=True):
-                """Save a reused forecast page into the combined report.
-
-                Args:
-                    figure (Figure): Existing forecast figure.
-                    _directory (Path): Standalone renderer output directory.
-                    _name (str): Standalone artifact basename.
-                    title (str): Page title from the forecast renderer.
-                    layout (bool): Whether to apply automatic layout.
-                """
-                figure.suptitle(title, fontsize=17)
-                if layout:
-                    figure.tight_layout(rect=(0, 0.055, 1, 0.94))
-                pdf.savefig(figure)
-                plt.close(figure)
-
-            render_forecasts(forecast, directory, save)
-            audit["arrival_forecasts"].append(
-                {
-                    "settings": forecast["evaluation"]["settings"],
-                    "horizon_summary": forecast["horizon_summary"],
-                }
+        if topic_overview:
+            audit["topics"] = render_topics(
+                pdf, measured_reports, forecast_reports, study_reports, supplement or {}
             )
-            audit["section_order"].append("arrival-forecast")
+            audit["section_order"].append("topics")
+        else:
+            for index, measured in enumerate(measured_reports):
+                directory = output.parent / f"measured-{index:02d}"
+                directory.mkdir(exist_ok=False)
+                audit["measured"].append(render_measured_pages(pdf, measured, directory))
+                audit["section_order"].append("measured")
+            for index, forecast in enumerate(forecast_reports):
+                directory = output.parent / f"arrival-forecast-{index:02d}"
+                directory.mkdir(exist_ok=False)
+
+                def save(figure, _directory, _name, title, layout=True):
+                    """Save a reused forecast page into the combined report.
+
+                    Args:
+                        figure (Figure): Existing forecast figure.
+                        _directory (Path): Standalone renderer output directory.
+                        _name (str): Standalone artifact basename.
+                        title (str): Page title from the forecast renderer.
+                        layout (bool): Whether to apply automatic layout.
+                    """
+                    figure.suptitle(title, fontsize=17)
+                    if layout:
+                        figure.tight_layout(rect=(0, 0.055, 1, 0.94))
+                    pdf.savefig(figure)
+                    plt.close(figure)
+
+                render_forecasts(forecast, directory, save)
+                audit["arrival_forecasts"].append(
+                    {
+                        "settings": forecast["evaluation"]["settings"],
+                        "horizon_summary": forecast["horizon_summary"],
+                    }
+                )
+                audit["section_order"].append("arrival-forecast")
         if replay_reports:
             audit["replay"] = render_replay_pages(pdf, replay_reports)
             audit["section_order"].append("unchanged-replay")
-        for study in study_reports:
-            audit["studies"].append(render_study_pages(pdf, study))
-            audit["section_order"].append("study")
+        if not topic_overview:
+            for study in study_reports:
+                audit["studies"].append(render_study_pages(pdf, study))
+                audit["section_order"].append("study")
         for actions in action_reports:
             render_action_pages(pdf, actions)
             audit["section_order"].append("actions")
@@ -134,7 +147,7 @@ def render_report(
     return audit
 
 
-def write_report(metrics_files, output_dir, split=None, seed=None):
+def write_report(metrics_files, output_dir, split=None, seed=None, topic_overview=False):
     """Load saved evidence and create a new report without loading original run directories.
 
     Args:
@@ -143,6 +156,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         output_dir (str or Path): New output directory; existing reports are never overwritten.
         split (str or None): Optional validation split to include, such as ``validation``.
         seed (int or None): Forecast scenario seed to use within each supplied run.
+        topic_overview (bool): Use topic pages; also retained from saved rendering options.
 
     Returns:
         dict: Report provenance and configuration values also saved as comparison.json.
@@ -157,11 +171,24 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
     studies = []
     controlled = []
     saved_seeds = set()
+    supplement = {}
     for source in sources:
         saved = json.loads(source.read_text(encoding="utf-8"))
+        topic_overview = topic_overview or saved.get("render_options", {}).get(
+            "topic_overview", False
+        )
+        extra = (
+            saved if saved.get("schema_version") == SUPPLEMENT_SCHEMA else saved.get("supplement")
+        )
+        if extra:
+            if supplement and supplement != extra:
+                raise ValueError("Supplied reports contain different supplementary evidence")
+            supplement = extra
         saved_seed = saved.get("render_options", {}).get("forecast_seed")
         if saved_seed is not None:
             saved_seeds.add(saved_seed)
+        if saved.get("schema_version") == SUPPLEMENT_SCHEMA:
+            continue
         if saved.get("schema_version") == CONTROLLED_SCHEMA:
             controlled.extend(saved["comparisons"])
         elif saved.get("schema_version") == "opendc-controlled-comparison-v1":
@@ -230,7 +257,8 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         "study_reports": studies,
         "controlled_reports": controlled,
         "selection": selection,
-        "render_options": {"forecast_seed": seed},
+        "render_options": {"forecast_seed": seed, "topic_overview": topic_overview},
+        "supplement": supplement,
     }
     (output / "metrics.json").write_text(
         json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8"
@@ -246,6 +274,8 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         replays,
         studies,
         controlled,
+        topic_overview,
+        supplement,
     )
     audit["sources"] = [str(source) for source in sources]
     (output / "comparison.json").write_text(json.dumps(audit, indent=2) + "\n", encoding="utf-8")
@@ -261,8 +291,13 @@ def main():
         "--split", help="include only this validation split; action pages are retained"
     )
     parser.add_argument("--forecast-seed", type=int)
+    parser.add_argument(
+        "--topic-overview",
+        action="store_true",
+        help="consolidate one frozen study into topic-oriented slides",
+    )
     args = parser.parse_args()
-    write_report(args.metrics, args.output_dir, args.split, args.forecast_seed)
+    write_report(args.metrics, args.output_dir, args.split, args.forecast_seed, args.topic_overview)
 
 
 if __name__ == "__main__":

@@ -73,7 +73,7 @@ python3 -m venv /tmp/fns-analysis-venv
 
 Open `logs/image-batch-report/report.pdf`. Repeat `--endpoint-log` to compare runs with matching planned arrivals, or add `--run-id ID` to select one.
 
-To preserve complete measured series for later combined reports, run `opendc_report_observed.py --endpoint-log CAPTURE/endpoint.jsonl --observer-dir CAPTURE/observer --output NEW_MEASURED.json` in the analysis environment. Repeat `--endpoint-log` for execution repetitions. Pass the saved payload to `opendc_report.py --metrics NEW_MEASURED.json --output-dir NEW_REPORT`; additional `--metrics` files can supply saved `forecast-report.json`, simulator or combined evidence. The new report retains all plotted numbers in `metrics.json` for offline regeneration.
+To preserve complete measured series for later combined reports, run `opendc_report_observed.py --endpoint-log CAPTURE/endpoint.jsonl --observer-dir CAPTURE/observer --output NEW_MEASURED.json` in the analysis environment. Repeat `--endpoint-log` for execution repetitions. Pass the saved payload to `opendc_report.py --metrics NEW_MEASURED.json --output-dir NEW_REPORT`; additional `--metrics` files can supply saved `forecast-report.json`, simulator or combined evidence. The new report retains all plotted numbers in `metrics.json` for offline regeneration. For a combined frozen study with matching physical and forecast evidence, add `--topic-overview` to produce concise landscape slides across runs; the saved rendering option is retained on regeneration. Optional supplementary evidence adds causal forecast illustrations and matched scenario-seed sensitivity. See the [current report and reproduction evidence](OPENDT_HANDOFF.md#reports-and-preserved-evidence).
 
 ## Arrival forecasting
 
