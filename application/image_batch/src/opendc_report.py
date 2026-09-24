@@ -11,6 +11,7 @@ from opendc_report_validation import render_configuration_pages
 from opendc_report_observed import SCHEMA as MEASURED_SCHEMA, render_measured_pages
 from forecast_report import render_forecasts
 from opendc_report_replay import render_replay_pages
+from opendc_report_study import SCHEMA as STUDY_SCHEMA, render_study_pages
 
 
 def render_report(
@@ -22,6 +23,7 @@ def render_report(
     measured_reports=(),
     forecast_reports=(),
     replay_reports=(),
+    study_reports=(),
 ):
     """Lead with supplied physical execution and arrival forecasts, then simulations.
 
@@ -34,6 +36,7 @@ def render_report(
         measured_reports (iterable[dict]): Complete saved measured-run numerical payloads.
         forecast_reports (iterable[dict]): Saved arrival-forecast accuracy payloads.
         replay_reports (iterable[dict]): Explicitly labeled unchanged known-arrival results.
+        study_reports (iterable[dict]): Frozen independent-run study and held-out outcomes.
 
     Returns:
         dict: Section inventory and the exact configuration summaries plotted.
@@ -44,12 +47,14 @@ def render_report(
     action_reports = list(action_reports)
     measured_reports, forecast_reports = list(measured_reports), list(forecast_reports)
     replay_reports = list(replay_reports)
+    study_reports = list(study_reports)
     if (
         not results
         and not action_reports
         and not measured_reports
         and not forecast_reports
         and not replay_reports
+        and not study_reports
     ):
         raise ValueError("Supply action results or observation-validation results")
     audit = {
@@ -58,6 +63,7 @@ def render_report(
         "measured": [],
         "arrival_forecasts": [],
         "replay": [],
+        "studies": [],
         "section_order": [],
     }
     output = Path(output)
@@ -98,6 +104,9 @@ def render_report(
         if replay_reports:
             audit["replay"] = render_replay_pages(pdf, replay_reports)
             audit["section_order"].append("unchanged-replay")
+        for study in study_reports:
+            audit["studies"].append(render_study_pages(pdf, study))
+            audit["section_order"].append("study")
         for actions in action_reports:
             render_action_pages(pdf, actions)
             audit["section_order"].append("actions")
@@ -127,19 +136,23 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
     sources = [Path(path).resolve() for path in metrics_files]
     results, actions, selection = [], [], None
     measured, forecasts, replays = [], [], []
+    studies = []
     saved_seeds = set()
     for source in sources:
         saved = json.loads(source.read_text(encoding="utf-8"))
         saved_seed = saved.get("render_options", {}).get("forecast_seed")
         if saved_seed is not None:
             saved_seeds.add(saved_seed)
-        if "results" in saved:
+        if saved.get("schema_version") == STUDY_SCHEMA:
+            studies.append(saved)
+        elif "results" in saved:
             results.extend(r for r in saved["results"] if split is None or r["split"] == split)
             if saved.get("action_report") is not None:
                 actions.append(saved["action_report"])
             actions.extend(saved.get("action_reports", []))
             measured.extend(saved.get("measured_reports", []))
             forecasts.extend(saved.get("forecast_reports", []))
+            studies.extend(saved.get("study_reports", []))
             replays.extend(
                 r
                 for r in saved.get("replay_reports", [])
@@ -159,7 +172,19 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
             actions.append(saved)
         else:
             raise ValueError(f"Unrecognized report metrics: {source}")
-    if not results and not actions and not measured and not forecasts and not replays:
+    studies = [
+        {**study, "results": [r for r in study["results"] if split is None or r["split"] == split]}
+        for study in studies
+    ]
+    studies = [study for study in studies if study["results"]]
+    if (
+        not results
+        and not actions
+        and not measured
+        and not forecasts
+        and not replays
+        and not studies
+    ):
         raise ValueError("No evidence matches the requested report sections")
     if seed is None:
         if len(saved_seeds) > 1:
@@ -176,6 +201,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         "measured_reports": measured,
         "forecast_reports": forecasts,
         "replay_reports": replays,
+        "study_reports": studies,
         "selection": selection,
         "render_options": {"forecast_seed": seed},
     }
@@ -183,7 +209,15 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8"
     )
     audit = render_report(
-        results, output / "report.pdf", selection, actions, seed, measured, forecasts, replays
+        results,
+        output / "report.pdf",
+        selection,
+        actions,
+        seed,
+        measured,
+        forecasts,
+        replays,
+        studies,
     )
     audit["sources"] = [str(source) for source in sources]
     (output / "comparison.json").write_text(json.dumps(audit, indent=2) + "\n", encoding="utf-8")
