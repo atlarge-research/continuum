@@ -960,6 +960,18 @@ class OpenDTObserver:
         return True
 
     def run(self) -> None:
+        """Follow Job changes across normal server watch closures without relisting.
+
+        The Kubernetes client resumes closed streams from its last resource
+        version when no explicit timeout is supplied. Even timeout_seconds=0
+        disables that behavior. Keep sampler state and emitted identities across
+        reconnects; an unrecoverable API error remains fatal rather than hiding
+        an observation gap behind a new list of current Jobs.
+
+        Raises:
+            RuntimeError: The watch terminates instead of resuming.
+            client.rest.ApiException: Kubernetes cannot continue the resource history.
+        """
         self.sampler.start()
         try:
             initial = self.batch_api.list_namespaced_job(
@@ -974,7 +986,6 @@ class OpenDTObserver:
                 namespace=self.namespace,
                 label_selector=self.label_selector,
                 resource_version=resource_version,
-                timeout_seconds=0,
             ):
                 job = event.get("object")
                 if job is not None:

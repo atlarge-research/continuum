@@ -10,6 +10,10 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
+
+from kubernetes import watch
+from kubernetes.client.rest import ApiException
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
@@ -882,6 +886,64 @@ class OpenDTObserverTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "watch ended unexpectedly"):
             observer.run()
+        self.assertTrue(sampler.started)
+        self.assertTrue(sampler.stopped)
+
+    def test_server_watch_closure_resumes_at_last_resource_version(self):
+        """A normal server closure must preserve event continuity and sampler lifetime."""
+        requests = []
+
+        def list_jobs(**kwargs):
+            """Supply two closed streams followed by an unrecoverable API error.
+
+            Args:
+                kwargs (dict): Kubernetes list/watch parameters.
+
+            Returns:
+                SimpleNamespace: Initial list or finite streaming response.
+
+            Raises:
+                ApiException: The third request cannot resume resource history.
+            """
+            if not kwargs.get("watch"):
+                return SimpleNamespace(items=[], metadata=SimpleNamespace(resource_version="10"))
+            requests.append(kwargs)
+            if len(requests) > 2:
+                raise ApiException(status=410, reason="history no longer available")
+            version = str(10 + len(requests))
+            event = {
+                "type": "MODIFIED",
+                "object": {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "metadata": {"name": "job-" + version, "resourceVersion": version},
+                },
+            }
+            return SimpleNamespace(
+                stream=lambda **unused: iter([(json.dumps(event) + "\n").encode()]),
+                close=lambda: None,
+                release_conn=lambda: None,
+            )
+
+        sampler = FakeSampler()
+        observer = OpenDTObserver(
+            batch_api=SimpleNamespace(list_namespaced_job=list_jobs),
+            watch_factory=lambda: watch.Watch(return_type="V1Job"),
+            sampler=sampler,
+            workload_writer=RecordingWriter(),
+            diagnostic_writer=RecordingWriter(),
+            namespace="fns-demo",
+            label_selector="continuum.atlarge.nl/workload=image-batch",
+            run_id="run-test",
+            cpu_frequency_mhz=2400,
+        )
+        with patch.object(observer, "handle_job") as handle:
+            with self.assertRaises(ApiException):
+                observer.run()
+        self.assertEqual(
+            [call.args[0].metadata.name for call in handle.call_args_list], ["job-11", "job-12"]
+        )
+        self.assertEqual([request["resource_version"] for request in requests], ["10", "11", "12"])
         self.assertTrue(sampler.started)
         self.assertTrue(sampler.stopped)
 
