@@ -307,6 +307,9 @@ def render_pages(pdf, reports):
     heldout = [run for run in runs if run["role"] == "heldout" and run["accepted_capture"]]
     pairs = paired_savings(runs)
     _outcomes(pdf, heldout, pairs)
+    action_runs = [run for run in heldout if run["controller"].get("actions")]
+    for run in action_runs:
+        _action_evidence_page(pdf, run)
     _timelines(pdf, heldout)
     representative = next(
         (run for run in heldout if run["seed"] == 63 and run["arm"] == "forecast"), None
@@ -317,6 +320,7 @@ def render_pages(pdf, reports):
         heldout_runs=len(heldout),
         pilot_runs=sum(r["role"] == "pilot" for r in runs),
         rejected_runs=[r["run_id"] for r in runs if not r["accepted_capture"]],
+        action_runs=[run["run_id"] for run in action_runs],
         pairs=pairs,
     )
 
@@ -569,6 +573,153 @@ def observed_series(series, origin, field):
         values.append(np.nan if value is None else value)
         previous = point["time"]
     return times, values
+
+
+def action_evidence(run):
+    """Keep decision origin separate from API acknowledgment and observer confirmation.
+
+    Args:
+        run (dict): Frozen run with per-cycle proposals and recorded action requests.
+
+    Returns:
+        list[dict]: All requests, their decision source and strict confirmation status.
+    """
+    cycles = {cycle["tick"]: cycle for cycle in run["controller"]["cycles"]}
+    rows = []
+    for action in run["controller"].get("actions", []):
+        cycle = cycles.get(action.get("tick"), {})
+        if cycle.get("proposal", {}).get("fallback") is True:
+            source = "Reactive fallback"
+        elif run["arm"] == "forecast" and cycle.get("forecast_valid") is True:
+            source = "Forecast"
+        elif run["arm"] == "reactive":
+            source = "Reactive baseline"
+        else:
+            source = "Unknown"
+        rows.append(
+            dict(
+                action=action["action"],
+                source=source,
+                request_seconds=action["recorded_at_ns"] / 1e9,
+                confirmed=action.get("observed") is True
+                and action.get("result", {}).get("status") == "acknowledged",
+            )
+        )
+    return rows
+
+
+def _action_evidence_page(pdf, run):
+    """Show actual actuation, including fallback and rejected native decisions.
+
+    Args:
+        pdf (PdfPages): Open report destination.
+        run (dict): Accepted held-out run selected because it recorded action requests.
+    """
+    figure, axes = page(
+        f'Physical action evidence: heldout {run["arm"]}, seed {run["seed"]}',
+        "Observed capacity changes establish actuation; the decision source and latency "
+        "remain explicit.",
+    )
+    origin = run["evaluation_start_seconds"]
+    actions = action_evidence(run)
+    for axis, field, title, ylabel in (
+        (
+            axes[0, 0],
+            "allocated",
+            "Capacity counts accepting and draining workers",
+            "Application cores",
+        ),
+        (
+            axes[0, 1],
+            "queue",
+            "Observed queue alongside action requests",
+            "Queued Jobs",
+        ),
+    ):
+        times, values = observed_series(run["allocation"]["series"], origin, field)
+        axis.step(times, values, where="post", color="black")
+        for index, action in enumerate(actions):
+            axis.axvline(
+                (action["request_seconds"] - origin) / 60,
+                color=COLORS[index % len(COLORS)],
+                linestyle="--",
+                linewidth=1,
+            )
+        axis.set_xlim(0, (run["arrival_end_seconds"] - origin) / 60)
+        axis.set_ylim(bottom=0)
+        panel(axis, title, "Minutes after warm-up", ylabel)
+    axes[1, 0].axis("off")
+    axes[1, 0].set_title(
+        "API acknowledgment and observation are both required", fontsize=10, pad=10
+    )
+    table = axes[1, 0].table(
+        cellText=[
+            [
+                action["action"].replace("scale-", "").title(),
+                action["source"],
+                f'{(action["request_seconds"] - origin) / 60:.2f}',
+                "Yes" if action["confirmed"] else "No",
+            ]
+            for action in actions
+        ],
+        colLabels=["Request", "Decision source", "Minute", "Confirmed"],
+        colWidths=[0.19, 0.39, 0.16, 0.26],
+        cellLoc="center",
+        loc="upper center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    table.scale(1, 1.6)
+    if run["arm"] == "reactive":
+        axes[1, 1].axis("off")
+        axes[1, 1].text(
+            0.5,
+            0.5,
+            "Not applicable: reactive baseline\nuses no native forecasts",
+            ha="center",
+            va="center",
+            transform=axes[1, 1].transAxes,
+            fontsize=10,
+        )
+    else:
+        for valid, label, color in (
+            (True, "Valid forecast", COLORS[0]),
+            (False, "Rejected native decision", COLORS[1]),
+        ):
+            cycles = [
+                cycle
+                for cycle in run["controller"]["cycles"]
+                if cycle.get("complete_native_eligible")
+                and cycle.get("forecast_valid") is valid
+                and cycle.get("decision_age_seconds") is not None
+            ]
+            axes[1, 1].scatter(
+                [(cycle["started_at"] - origin) / 60 for cycle in cycles],
+                [cycle["decision_age_seconds"] for cycle in cycles],
+                color=color,
+                label=label,
+                s=22,
+            )
+        axes[1, 1].axhline(30, color="black", linestyle="--", linewidth=1)
+        axes[1, 1].set_ylim(bottom=0)
+        axes[1, 1].set_xlim(0, (run["arrival_end_seconds"] - origin) / 60)
+        axes[1, 1].legend(fontsize=7, loc="lower left")
+        panel(
+            axes[1, 1],
+            "Rejected completed native decisions retain their measured age",
+            "Minutes after warm-up",
+            "Native decision age from cutoff (s)",
+        )
+    finish(
+        pdf,
+        figure,
+        "Dashed timeline markers show API request times; the table distinguishes "
+        "confirmed outcomes from requests.\n"
+        "Observation gaps remain blank. Evaluation-window actions are shown; "
+        "the full journal retains follow-up.\n"
+        "This run is shown because actions occurred, not as a representative "
+        "forecast-quality sample. Warm reserves remain powered.",
+    )
 
 
 def _forecast_observation_page(pdf, run):

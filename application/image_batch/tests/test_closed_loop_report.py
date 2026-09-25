@@ -6,6 +6,9 @@ import math
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
+
+import matplotlib.pyplot as plt
 
 from reporting.assembly import write_report
 
@@ -105,3 +108,71 @@ class ClosedLoopReportTests(unittest.TestCase):
         for field in ("allocated", "queue"):
             _, values = module.observed_series(series, 0, field)
             self.assertTrue(any(math.isnan(value) for value in values))
+
+    def test_action_evidence_distinguishes_fallback_and_uncertain_execution(self):
+        """A physical up is not forecast-selected when fallback supplied its proposal."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = dict(
+            arm="forecast",
+            controller=dict(
+                cycles=[
+                    dict(tick=9, forecast_valid=True, proposal={}),
+                    dict(tick=11, forecast_valid=False, proposal=dict(fallback=True)),
+                ],
+                actions=[
+                    dict(
+                        tick=9,
+                        action="scale-down",
+                        observed=True,
+                        recorded_at_ns=1_000_000_000,
+                        result=dict(status="acknowledged"),
+                    ),
+                    dict(
+                        tick=11,
+                        action="scale-up",
+                        observed=True,
+                        recorded_at_ns=2_000_000_000,
+                        result=dict(status="acknowledged"),
+                    ),
+                    dict(
+                        tick=12,
+                        action="scale-down",
+                        observed=None,
+                        recorded_at_ns=3_000_000_000,
+                        result=dict(status="uncertain"),
+                    ),
+                ],
+            ),
+        )
+        rows = module.action_evidence(run)
+        self.assertEqual([r["source"] for r in rows], ["Forecast", "Reactive fallback", "Unknown"])
+        self.assertEqual([r["confirmed"] for r in rows], [True, True, False])
+        self.assertEqual([r["request_seconds"] for r in rows], [1, 2, 3])
+        run["controller"]["actions"][0]["result"]["status"] = "uncertain"
+        self.assertFalse(module.action_evidence(run)[0]["confirmed"])
+
+    def test_reactive_action_page_does_not_imply_missing_native_metrics(self):
+        """A baseline action page identifies native forecasts as inapplicable."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = dict(
+            seed=7,
+            arm="reactive",
+            evaluation_start_seconds=0,
+            arrival_end_seconds=120,
+            allocation=dict(series=[]),
+            controller=dict(
+                cycles=[],
+                actions=[dict(action="scale-down", recorded_at_ns=1_000_000_000)],
+            ),
+        )
+        with mock.patch("reporting.closed_loop.finish") as saved:
+            # Inspect the internal renderer without expanding the public report API.
+            module._action_evidence_page(None, run)  # pylint: disable=protected-access
+        figure = saved.call_args.args[1]
+        try:
+            self.assertTrue(
+                any("Not applicable" in text.get_text() for text in figure.axes[3].texts)
+            )
+            self.assertIsNone(figure.axes[3].get_legend())
+        finally:
+            plt.close(figure)
