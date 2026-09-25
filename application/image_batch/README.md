@@ -169,7 +169,7 @@ Open `NEW_REPORT_DIRECTORY/report.pdf`; plotted comparison values are in `compar
 
 ## Observation validation
 
-Use `opendc_validation.py prepare` for replay inputs and `evaluate` for measured comparisons. Follow the [recorded experiment commands](../../logs/fns-provisional/packing-validation-20260921/COMMANDS.md) to reproduce the historical chronological validation and held-out evaluation. That provisional study retains partial scale-down accounting. The optional pinned path uses native cordon with complete represented-work accounting; both remain manual experiments with approximate initialization and uncalibrated energy assumptions.
+Use `opendc_validation.py prepare` for replay inputs and `evaluate` for measured comparisons. Follow the [recorded experiment commands](/home/matthijs/continuum/logs/fns-provisional/packing-validation-20260921/COMMANDS.md) to reproduce the historical chronological validation and held-out evaluation. That provisional study retains partial scale-down accounting. The optional pinned path uses native cordon with complete represented-work accounting; both remain manual experiments with approximate initialization and uncalibrated energy assumptions.
 
 For independent validation workload runs, use `opendc_study.py --metrics RUN_A.json --metrics RUN_B.json --output NEW_SELECTION.json` to freeze an equally weighted configuration choice. Each metrics file must identify its distinct `workload_seed`. Preserve that selection before held-out execution and restrict the held-out preparation index's `forecast_counts` to the selected count.
 
