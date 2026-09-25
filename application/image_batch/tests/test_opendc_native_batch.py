@@ -11,7 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # pylint: disable=wrong-import-position
 from opendc_inputs import file_hashes, write_json
-from opendc_scenarios import prepare_suite
+from opendc_scenarios import prepare_suite, _write_case
 from opendc_native_batch import plan_suite, execute_suite
 from opendc_evaluate import _resources
 from opendc_validation import evaluate_matrix
@@ -40,6 +40,46 @@ def batch_fixture(root):
     return root / "suite"
 
 
+def empty_sample_fixture(root, all_empty=False):
+    """Replace initial work with empty backlog and one or all empty future samples.
+
+    Args:
+        root (Path): Fresh fixture parent.
+        all_empty (bool): Remove future work from every sample when true.
+
+    Returns:
+        Path: Hash-verified suite containing analytically empty cohorts.
+    """
+    suite = batch_fixture(root)
+    manifest = json.loads((suite / "manifest.json").read_text())
+    for entry in manifest["experiments"]:
+        path = suite / entry["input_dir"]
+        case = json.loads((path / "case.json").read_text())
+        records = [
+            row
+            for row in case["tasks"]
+            if row["metadata"]["cohort"] == "future" and entry["scenario"] != 0 and not all_empty
+        ]
+        shutil.rmtree(path)
+        _write_case(
+            path,
+            case["candidate"],
+            case["scenario"],
+            case["workers"],
+            [row["task"] for row in records],
+            records,
+            [],
+            [],
+            {"cutoff_ms": case["cutoff_ms"], "horizon_ms": case["horizon_ms"]},
+            "pinned-trace",
+            case["selected_worker"],
+            "explicit-empty-sample-fixture",
+        )
+    manifest["sha256"] = file_hashes(suite, exclude=("manifest.json",))
+    write_json(suite / "manifest.json", manifest)
+    return suite
+
+
 class NativeBatchTests(unittest.TestCase):
     """Batch identity must follow the pinned Cartesian contract, not directory order."""
 
@@ -66,6 +106,35 @@ class NativeBatchTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(file_hashes(suite), before)
+
+    def test_empty_samples_keep_identity_without_entering_native_workload_matrix(self):
+        """An empty draw is a complete zero cohort, not a missing or fabricated sample."""
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"OPENDC_RUNTIME": "fns-demo"}
+        ):
+            suite = empty_sample_fixture(Path(temporary))
+            plan = plan_suite(suite)
+            self.assertEqual(plan["samples"], [0, 1])
+            self.assertEqual(plan["native_samples"], [1])
+            self.assertEqual(
+                [row["native_index"] for row in plan["mapping"]], [None, 0, None, 1, None, 2]
+            )
+            self.assertEqual(len(plan["experiment"]["workloads"]), 1)
+
+    def test_all_empty_samples_produce_verified_members_without_native_process(self):
+        """Idle decisions remain possible when every sampled future is empty."""
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"OPENDC_RUNTIME": "fns-demo"}
+        ):
+            root = Path(temporary)
+            suite = empty_sample_fixture(root, all_empty=True)
+            with patch("opendc_native_batch.run_process") as launch:
+                self.assertEqual(execute_suite(suite, root / "output"), 0)
+                launch.assert_not_called()
+            saved = json.loads((root / "output/batch.json").read_text())
+            self.assertEqual(saved["remaining_experiments"], 0)
+            self.assertEqual(len(saved["experiments"]), 6)
+            self.assertTrue(all(row["validated"] for row in saved["experiments"]))
 
     def test_missing_cartesian_member_is_rejected_before_launch(self):
         """Incomplete action/sample pairing cannot silently become another experiment."""

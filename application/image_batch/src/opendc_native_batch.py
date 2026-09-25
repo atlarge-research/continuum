@@ -12,7 +12,7 @@ from opendc_inputs import file_hashes, verify_inputs, write_json
 from opendc_pinning import FNS_CONTRACT, PINNED_MODE, cordoned_worker
 from opendc_process import run_process
 from opendc_results import validate_provisional_results
-from opendc_run import runtime_provenance, utc_now
+from opendc_run import execute, runtime_provenance, utc_now
 from opendc_runtime import fns_runtime, topology_hosts
 
 
@@ -72,7 +72,7 @@ def plan_suite(suite_dir):
         dict: Native experiment, topology, ordered mapping and source suite manifest.
 
     Raises:
-        ValueError: Inputs are incompatible, incomplete, empty or not pinned FNS cases.
+        ValueError: Inputs are incompatible, incomplete or not pinned FNS cases.
     """
     suite = Path(suite_dir).resolve()
     manifest = json.loads((suite / "manifest.json").read_text())
@@ -92,10 +92,8 @@ def plan_suite(suite_dir):
         key = (item["candidate"], item["scenario"])
         if key in cases or key != (case["candidate"], case["scenario"]):
             raise ValueError("duplicate or inconsistent sample/action identity")
-        if case["initialization_mode"] != PINNED_MODE or not case["tasks"]:
-            raise ValueError(
-                "native batch needs nonempty pinned cases; use individual empty execution"
-            )
+        if case["initialization_mode"] != PINNED_MODE:
+            raise ValueError("native batch requires pinned cases")
         cases[key] = (item, case, path)
     actions = [name for name in ACTIONS if any(key[0] == name for key in cases)]
     samples = sorted({key[1] for key in cases})
@@ -109,6 +107,8 @@ def plan_suite(suite_dir):
     experiment = json.loads((largest[2] / "experiment.json").read_text())
     common = _common_experiment(largest[2])
     mapping, cordons = [], []
+    native_samples = [sample for sample in samples if cases[(actions[0], sample)][1]["tasks"]]
+    native_index = 0
     for action in actions:
         action_reference = cases[(action, samples[0])][1]
         names = {worker["node_name"] for worker in action_reference["workers"]}
@@ -142,11 +142,13 @@ def plan_suite(suite_dir):
             mapping.append(
                 {
                     **item,
-                    "native_index": len(mapping),
+                    "native_index": native_index if case["tasks"] else None,
+                    "output_index": len(mapping),
                     "case_sha256": file_hashes(path),
                     "cordon_hosts": cordon,
                 }
             )
+            native_index += bool(case["tasks"])
     experiment["cordonHosts"] = cordons
     experiment["topologies"][0]["importFrom"] = str(largest[2] / "topology.json")
     workload = experiment["workloads"][0]
@@ -155,12 +157,13 @@ def plan_suite(suite_dir):
             **copy.deepcopy(workload),
             "source": {"type": "uri", "uri": (cases[(actions[0], sample)][2] / "trace").as_uri()},
         }
-        for sample in samples
+        for sample in native_samples
     ]
     return {
         "suite_manifest": manifest,
         "actions": actions,
         "samples": samples,
+        "native_samples": native_samples,
         "mapping": mapping,
         "topology": topology,
         "experiment": experiment,
@@ -180,15 +183,33 @@ def _materialize_members(output, plan, record):
         ValueError: Native output inventory or any case lifecycle is invalid.
     """
     raw = output / "native/controlled/raw-output"
-    expected = {str(item["native_index"]) for item in plan["mapping"]}
-    if not raw.is_dir() or {path.name for path in raw.iterdir()} != expected:
+    expected = {
+        str(item["native_index"]) for item in plan["mapping"] if item["native_index"] is not None
+    }
+    if expected and (not raw.is_dir() or {path.name for path in raw.iterdir()} != expected):
         raise ValueError("native Cartesian output inventory differs from declared mapping")
     for item in plan["mapping"]:
+        relative = Path("experiments") / f'{item["output_index"]:04d}'
+        member = output / relative / "run"
+        if item["native_index"] is None:
+            if execute(output / "inputs" / item["input_dir"], member) != 0:
+                raise ValueError("analytically empty member did not validate")
+            record["experiments"].append(
+                {
+                    **{key: item[key] for key in ("candidate", "scenario", "input_dir")},
+                    "output_dir": relative.as_posix(),
+                    "runner_dir": "run",
+                    "status": "succeeded",
+                    "validated": True,
+                    "native_index": None,
+                }
+            )
+            record["remaining_experiments"] -= 1
+            write_json(output / "batch.json", record)
+            continue
         native = raw / str(item["native_index"])
         if {path.name for path in native.iterdir()} != {"seed=0"}:
             raise ValueError("native sample has missing or unexpected seed output")
-        relative = Path("experiments") / f'{item["native_index"]:04d}'
-        member = output / relative / "run"
         member.mkdir(parents=True)
         shutil.copytree(output / "inputs" / item["input_dir"], member / "inputs")
         destination = member / "simulator/controlled/raw-output/0"
@@ -265,7 +286,10 @@ def execute_suite(suite_dir, output_dir, timeout_seconds=120, runner="/opt/opend
         "experiments": [],
         "remaining_experiments": len(plan["mapping"]),
         "shared_process": None,
-        "cost_scope": "one process for the full Cartesian matrix; no per-case attribution",
+        "cost_scope": (
+            "one process for nonempty Cartesian members; empty members analytical; "
+            "no per-case native attribution"
+        ),
     }
     write_json(output / "batch.json", record)
     code = 1
@@ -282,7 +306,20 @@ def execute_suite(suite_dir, output_dir, timeout_seconds=120, runner="/opt/opend
             "--no-progress",
             "--no-summary",
         ]
-        process = run_process(command, output, timeout_seconds)
+        process = (
+            run_process(command, output, timeout_seconds)
+            if plan["native_samples"]
+            else {
+                "execution_kind": "analytical_empty",
+                "launched": False,
+                "exit_code": 0,
+                "timed_out": False,
+                "received_signal": None,
+                "wall_seconds": 0,
+                "cpu_total_seconds": 0,
+                "peak_rss_bytes": 0,
+            }
+        )
         record["shared_process"] = process
         write_json(output / "shared-resources.json", process)
         if process["timed_out"]:
