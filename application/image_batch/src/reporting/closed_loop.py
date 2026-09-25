@@ -257,7 +257,7 @@ def _timelines(pdf, runs):
     axes[1, 1].axhline(30, color="black", linestyle="--", linewidth=1)
     for axis in axes.flat:
         axis.set_ylim(bottom=0)
-    axes[0, 0].legend(fontsize=8, loc="upper right")
+    axes[0, 0].legend(fontsize=8, loc="lower left")
     panel(
         axes[0, 0],
         "Allocation includes a cordoned worker until it drains",
@@ -651,8 +651,16 @@ def _forecast_observation_page(pdf, run):
     for axis in axes.flat:
         axis.set_ylim(bottom=0)
         axis.set_xlim(0, (run["arrival_end_seconds"] - origin) / 60)
-    for axis in (axes[0, 0], axes[0, 1], axes[1, 0]):
-        axis.legend(fontsize=7, loc="upper left")
+    axes[0, 0].legend(
+        fontsize=7,
+        loc="upper left",
+        bbox_to_anchor=(0, -0.32),
+        ncol=3,
+        borderaxespad=0,
+        frameon=False,
+    )
+    axes[0, 1].legend(fontsize=7, loc="lower left")
+    axes[1, 0].legend(fontsize=7, loc="upper left")
     panel(
         axes[0, 0],
         "Forecast count versus actual arrivals in the next 60 seconds",
