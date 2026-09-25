@@ -63,6 +63,15 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(env["JOB_NAMESPACE"], "fns-test-new")
         self.assertEqual(env["WORKER_SCHEDULER_NAME"], "fns-packing")
         self.assertEqual(len(env), len(containers[0]["env"]))
+        fifo = module.capture_manifests(
+            original, "fns-test-fifo", {"adapter.py": "source"}, admission_workers={"worker-a": 4}
+        )
+        fifo_role = next(item for item in fifo if item["kind"] == "Role")
+        self.assertIn("patch", fifo_role["rules"][0]["verbs"])
+        fifo_deployment = next(item for item in fifo if item["kind"] == "Deployment")
+        fifo_containers = fifo_deployment["spec"]["template"]["spec"]["containers"]
+        self.assertEqual(fifo_containers[-1]["name"], "fifo-admission")
+        self.assertEqual(json.loads(fifo_containers[-1]["env"][1]["value"]), {"worker-a": 4})
         self.assertEqual(original, before)
         self.assertEqual(containers[0]["command"], ["python", "-u", "/review/adapter.py"])
         service = next(item for item in manifests if item["kind"] == "Service")

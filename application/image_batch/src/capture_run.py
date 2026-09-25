@@ -59,13 +59,14 @@ def prepare_output(output, invocation):
     write_json(output / "invocation.json", invocation)
 
 
-def capture_manifests(original, namespace, source):
+def capture_manifests(original, namespace, source, *, admission_workers=None):
     """Clone the calibrated deployment into an isolated capture namespace.
 
     Args:
         original (dict): Retrieved live deployment, never modified.
         namespace (str): New experiment namespace beginning with fns-.
         source (dict[str, str]): Exact Python source mounted into the capture.
+        admission_workers (dict or None): Explicit VM-core pool enabling namespace FIFO.
 
     Returns:
         list[dict]: Namespace, permissions, source, deployment and dynamic NodePort.
@@ -85,6 +86,8 @@ def capture_manifests(original, namespace, source):
             obj["metadata"]["namespace"] = namespace
         for subject in obj.get("subjects", []):
             subject["namespace"] = namespace
+        if obj["kind"] == "Role" and admission_workers is not None:
+            obj["rules"][0]["verbs"].append("patch")
         docs.append(obj)
     docs.append(
         {
@@ -118,6 +121,7 @@ def capture_manifests(original, namespace, source):
                 WORKER_SCHEDULER_NAME="fns-packing",
                 PUBLIC_BASE_URL=f"http://image-batch-adapter.{namespace}.svc.cluster.local:8080",
                 JOB_TTL_SECONDS="86400",
+                WORKER_ADMISSION_MODE="fifo" if admission_workers is not None else "scheduler",
             )
         for name, value in values.items():
             env[name] = {"name": name, "value": value}
@@ -125,6 +129,27 @@ def capture_manifests(original, namespace, source):
         if container["name"] in ("adapter", "opendt-observer"):
             script = "adapter.py" if container["name"] == "adapter" else "opendt_observer.py"
             container["command"] = ["python", "-u", "/review/" + script]
+    if admission_workers is not None:
+        adapter = next(item for item in spec["containers"] if item["name"] == "adapter")
+        spec["containers"].append(
+            {
+                "name": "fifo-admission",
+                "image": adapter["image"],
+                "imagePullPolicy": "IfNotPresent",
+                "command": ["python", "-u", "/review/fifo_admission.py"],
+                "env": [
+                    {"name": "JOB_NAMESPACE", "value": namespace},
+                    {"name": "ADMISSION_WORKERS", "value": json.dumps(admission_workers)},
+                ],
+                "volumeMounts": [
+                    {"name": "capture-source", "mountPath": "/review", "readOnly": True}
+                ],
+                "resources": {
+                    "requests": {"cpu": "100m", "memory": "128Mi"},
+                    "limits": {"cpu": "500m", "memory": "256Mi"},
+                },
+            }
+        )
     docs.extend(
         [
             deployment,
@@ -280,7 +305,14 @@ class CaptureSession:
         (self.output / "source").mkdir()
         for name, value in source.items():
             (self.output / "source" / name).write_text(value)
-        manifests = capture_manifests(self.original, self.namespace, source)
+        admission = (
+            {name: self.args.worker_cores for name in self.args.workers}
+            if self.args.admission_mode == "fifo"
+            else None
+        )
+        manifests = capture_manifests(
+            self.original, self.namespace, source, admission_workers=admission
+        )
         manifest = yaml.safe_dump_all(manifests)
         (self.output / "manifest.yaml").write_text(manifest)
         remote_input(
@@ -435,7 +467,10 @@ class CaptureSession:
             write_json(self.output / filename, self.get(resource, "-n", self.namespace))
         write_json(self.output / "nodes-final.json", self.get("nodes"))
         if self.pod_name:
-            for container in ("adapter", "opendt-observer"):
+            containers = ["adapter", "opendt-observer"]
+            if self.args.admission_mode == "fifo":
+                containers.append("fifo-admission")
+            for container in containers:
                 (self.output / (container + ".log")).write_bytes(
                     self.kubectl("logs", "-n", self.namespace, self.pod_name, "-c", container)
                 )
@@ -599,6 +634,7 @@ def main():
     parser.add_argument("--minimum-rate", type=float, default=0.02)
     parser.add_argument("--peak-rate", type=float, default=0.30)
     parser.add_argument("--active-workers", type=int, default=3)
+    parser.add_argument("--admission-mode", choices=("scheduler", "fifo"), default="scheduler")
     parser.add_argument(
         "--control-arm", choices=("none", "fixed", "reactive", "forecast"), default="none"
     )

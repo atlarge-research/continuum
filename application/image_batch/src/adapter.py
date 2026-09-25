@@ -451,6 +451,11 @@ def parse_args() -> argparse.Namespace:
         "--job-ttl-seconds", type=int, default=int(os.getenv("JOB_TTL_SECONDS", "3600"))
     )
     parser.add_argument(
+        "--worker-admission-mode",
+        choices=("scheduler", "fifo"),
+        default=os.getenv("WORKER_ADMISSION_MODE", "scheduler"),
+    )
+    parser.add_argument(
         "--worker-scheduler-name",
         default=os.getenv("WORKER_SCHEDULER_NAME", "default-scheduler"),
     )
@@ -475,6 +480,7 @@ def main() -> None:
             worker_image=args.worker_image,
             ttl_seconds=args.job_ttl_seconds,
             scheduler_name=args.worker_scheduler_name,
+            suspend_jobs=args.worker_admission_mode == "fifo",
         )
     data_dir = Path(args.data_dir)
     service = AdapterService(

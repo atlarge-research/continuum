@@ -545,6 +545,15 @@ class ImageBatchTests(unittest.TestCase):
                 worker_image="worker@sha256:abc",
                 ttl_seconds=3600,
             )
+            suspended = build_job_manifest(
+                request,
+                namespace="fns-demo",
+                worker_image="worker:v1",
+                ttl_seconds=3600,
+                suspend=True,
+            )
+            self.assertTrue(suspended["spec"]["suspend"])
+            self.assertFalse(manifest["spec"]["suspend"])
             self.assertEqual(manifest["kind"], "Job")
             self.assertEqual(manifest["spec"]["backoffLimit"], 0)
             self.assertEqual(manifest["spec"]["ttlSecondsAfterFinished"], 3600)
