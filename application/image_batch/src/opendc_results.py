@@ -9,7 +9,7 @@ import pyarrow.parquet as pq
 
 from forecast_trace import canonical
 from opendc_inputs import fixture_tasks
-from opendc_pinning import PINNED_MODE, initial_assignments
+from opendc_pinning import PINNED_MODE, initial_assignments, cordoned_worker
 from opendc_energy import datacenter_series, energy_tolerance
 
 
@@ -273,7 +273,7 @@ def validate_provisional_results(directory, case):
     tables = {}
     pinned = case.get("initialization_mode") == PINNED_MODE
     assignments = initial_assignments(case) if pinned else {}
-    removed = case.get("selected_worker") if pinned and case["candidate"] == "scale-down" else None
+    removed = cordoned_worker(case) if pinned else None
     try:
         for name in ("task", "host", "service", "powerSource"):
             table = pq.ParquetFile(raw / f"{name}.parquet").read()

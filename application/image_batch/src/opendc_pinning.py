@@ -4,6 +4,25 @@ PINNED_MODE = "pinned-trace"
 FNS_CONTRACT = "opendc-fns-v1"
 
 
+def cordoned_worker(case):
+    """Resolve the one existing or proposed cordon without forgetting draining work.
+
+    Args:
+        case (dict): Case with an optional previous cordon and candidate action.
+
+    Returns:
+        str or None: Worker closed to new admission throughout this simulation.
+
+    Raises:
+        ValueError: The case requests two simultaneous draining workers.
+    """
+    existing = case.get("initial_cordoned_worker")
+    proposed = case.get("selected_worker") if case["candidate"] == "scale-down" else None
+    if existing and proposed:
+        raise ValueError("a second worker cannot drain while another cordon persists")
+    return existing or proposed
+
+
 def initial_assignments(case):
     """Validate simultaneous initial placement and return executable task assignments.
 
@@ -45,8 +64,8 @@ def initial_assignments(case):
             or used[host][1] > workers[host]["memory_mib"]
         ):
             raise ValueError(f"initial pinned capacity exceeded on {host}")
-    if case["candidate"] == "scale-down":
-        selected = case["selected_worker"]
+    selected = cordoned_worker(case)
+    if selected is not None:
         if selected not in workers or case["omitted_tasks"]:
             raise ValueError("native cordon must retain its worker and all executable work")
         remaining = [worker for name, worker in workers.items() if name != selected]

@@ -460,10 +460,27 @@ def _worker_records(worker_config, trace, template, backlog, exhausted):
         and job.get("pod_phase") not in ("Succeeded", "Failed")
         and job.get("job_terminal_status") not in ("Complete", "Failed")
     )
-    if not assigned.issubset(set(active)):
+    draining = worker_config.get("draining_workers", [])
+    if (
+        not isinstance(draining, list)
+        or len(draining) > 1
+        or any(not isinstance(name, str) for name in draining)
+        or set(draining).intersection(active)
+        or any(name not in observed or name not in configured for name in draining)
+        or any(observed[name]["schedulable"] for name in draining)
+    ):
+        raise ValueError("draining_workers must identify at most one observed cordoned worker")
+    if not assigned.issubset(set(active + draining)):
         raise ValueError("assigned worker is excluded from active state")
-    if not 1 <= len(active) <= 3:
-        raise ValueError("active worker count must be between one and three")
+    minimum = worker_config.get("minimum_workers", 1)
+    maximum = worker_config.get("maximum_workers", 3)
+    if (
+        type(minimum) is not int
+        or type(maximum) is not int
+        or not 1 <= minimum <= maximum
+        or not minimum <= len(active) <= maximum
+    ):
+        raise ValueError("active worker count must respect positive integral capacity bounds")
     for name in set(configured).intersection(observed):
         configured[name]["observed_allocatable_memory_mib"] = observed[name][
             "allocatable_memory_mb"
@@ -573,6 +590,7 @@ def _write_case(
     initialization_mode,
     selected_worker,
     experiment_kind,
+    draining_worker=None,
 ):
     """Write one experiment and publish its ready case manifest last.
 
@@ -589,6 +607,7 @@ def _write_case(
         initialization_mode (str): Provisional trace or explicitly requested FNS pinning.
         selected_worker (str or None): Down worker, when applicable.
         experiment_kind (str): Observed or explicitly synthetic experiment label.
+        draining_worker (str or None): Existing cordon whose assigned work still drains.
 
     Returns:
         dict: Published case manifest.
@@ -603,6 +622,7 @@ def _write_case(
         if candidate == "scale-down" and not pinned
         else "complete",
         "selected_worker": selected_worker,
+        "initial_cordoned_worker": draining_worker,
         "cutoff_ms": simulation["cutoff_ms"],
         "horizon_ms": simulation["horizon_ms"],
         "initial_membership": copy.deepcopy(simulation.get("membership")),
@@ -619,7 +639,8 @@ def _write_case(
     config = experiment_config()
     if pinned:
         case["initialization"] = initialization_metadata(assignments)
-        config["cordonHosts"] = [[selected_worker] if candidate == "scale-down" else []]
+        cordon = draining_worker or (selected_worker if candidate == "scale-down" else None)
+        config["cordonHosts"] = [[cordon] if cordon else []]
         config["exportModels"][0]["filesToExport"].append("datacenter")
     directory.mkdir(parents=True, exist_ok=False)
     parquet_tasks(tasks, directory / "source")
@@ -683,21 +704,27 @@ def prepare_suite(
     )
     backlog, exhausted = _enrich_backlog(initial, trace)
     configured, active = _worker_records(worker_config, trace, template, backlog, exhausted)
+    draining = worker_config.get("draining_workers", [])
+    if draining and not pinned:
+        raise ValueError("persistent draining requires pinned-trace initialization")
     experiment_kind = forecast.get("experiment_kind", "observed-replay")
     if not isinstance(experiment_kind, str) or not experiment_kind:
         raise ValueError("experiment_kind must be a nonempty string")
 
-    candidates = [("unchanged", active, None)]
+    occupied = sorted(active + draining)
+    candidates = [("unchanged", occupied, None)]
     unavailable = []
-    if len(active) >= 3:
+    if len(active) >= worker_config.get("maximum_workers", 3):
         unavailable.append({"candidate": "scale-up", "reason": "maximum_worker_count"})
     else:
-        reserves = sorted(set(configured) - set(active))
+        reserves = sorted(set(configured) - set(occupied))
         if reserves:
-            candidates.append(("scale-up", sorted(active + [reserves[0]]), None))
+            candidates.append(("scale-up", sorted(occupied + [reserves[0]]), reserves[0]))
         else:
             unavailable.append({"candidate": "scale-up", "reason": "no_configured_reserve"})
-    if len(active) <= 1:
+    if draining:
+        unavailable.append({"candidate": "scale-down", "reason": "worker_already_draining"})
+    elif len(active) <= worker_config.get("minimum_workers", 1):
         unavailable.append({"candidate": "scale-down", "reason": "minimum_worker_count"})
     else:
         selected = _down_worker(active, backlog, exhausted)
@@ -746,6 +773,7 @@ def prepare_suite(
                 initialization_mode,
                 selected_worker,
                 experiment_kind,
+                draining[0] if draining else None,
             )
             experiments.append(
                 {
@@ -765,6 +793,7 @@ def prepare_suite(
         "source_prefixes": boundaries,
         "initial_membership": copy.deepcopy(simulation["membership"]),
         "active_workers": active,
+        "draining_workers": draining,
         "experiments": experiments,
         "unavailable_candidates": unavailable,
         "sha256": file_hashes(output, exclude=("manifest.json",)),

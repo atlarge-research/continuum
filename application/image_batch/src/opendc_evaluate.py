@@ -27,7 +27,7 @@ import pyarrow.parquet as pq
 from scipy.ndimage import gaussian_filter1d
 
 from opendc_inputs import file_hashes, write_json
-from opendc_pinning import PINNED_MODE
+from opendc_pinning import PINNED_MODE, cordoned_worker
 from opendc_energy import datacenter_series
 from reporting.layout import finish as finish_page, page
 
@@ -311,12 +311,10 @@ def analyze_case(
         series = datacenter_series(case, datacenter_rows, native_origin)
     else:
         energy_case = case
-        if pinned and case["candidate"] == "scale-down":
+        if pinned and cordoned_worker(case):
             energy_case = {
                 **case,
-                "workers": [
-                    w for w in case["workers"] if w["node_name"] != case["selected_worker"]
-                ],
+                "workers": [w for w in case["workers"] if w["node_name"] != cordoned_worker(case)],
             }
         series = _energy_series(energy_case, host_rows, native_origin, analytical_empty)
     energy_kind = (

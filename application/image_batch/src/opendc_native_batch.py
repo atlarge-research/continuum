@@ -9,7 +9,7 @@ import sys
 import time
 
 from opendc_inputs import file_hashes, verify_inputs, write_json
-from opendc_pinning import FNS_CONTRACT, PINNED_MODE
+from opendc_pinning import FNS_CONTRACT, PINNED_MODE, cordoned_worker
 from opendc_process import run_process
 from opendc_results import validate_provisional_results
 from opendc_run import runtime_provenance, utc_now
@@ -112,7 +112,7 @@ def plan_suite(suite_dir):
     for action in actions:
         action_reference = cases[(action, samples[0])][1]
         names = {worker["node_name"] for worker in action_reference["workers"]}
-        removed = action_reference["selected_worker"] if action == "scale-down" else None
+        removed = cordoned_worker(action_reference)
         cordon = sorted((union_names - names) | ({removed} if removed else set()))
         if cordon in cordons:
             raise ValueError("distinct actions would collapse to one native cordon specification")
@@ -124,7 +124,10 @@ def plan_suite(suite_dir):
             source_case = cases[(actions[0], sample)][1]
             if any(case[key] != reference[key] for key in ("cutoff_ms", "horizon_ms")):
                 raise ValueError("native matrix requires one cutoff and horizon")
-            if any(case[key] != action_reference[key] for key in ("workers", "selected_worker")):
+            if any(
+                case.get(key) != action_reference.get(key)
+                for key in ("workers", "selected_worker", "initial_cordoned_worker")
+            ):
                 raise ValueError("action topology or cordon differs between samples")
             if any(
                 case[key] != source_case[key]

@@ -16,6 +16,7 @@ from opendc_pinning import (
     FNS_CONTRACT,
     PINNED_MODE,
     initial_assignments,
+    cordoned_worker,
     native_order,
     initialization_metadata,
 )
@@ -451,7 +452,8 @@ def _verify_provisional(directory, manifest):
             assignments.get(task_id) for task_id in original["id"].to_pylist()
         ]:
             raise ValueError("adapted initial host assignments differ from observed placement")
-        expected_cordon = [case["selected_worker"]] if case["candidate"] == "scale-down" else []
+        removed = cordoned_worker(case)
+        expected_cordon = [removed] if removed else []
         config = json.loads((directory / "experiment.json").read_text())
         if config.get("cordonHosts") != [expected_cordon]:
             raise ValueError("native cordon configuration differs from case")

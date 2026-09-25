@@ -97,6 +97,9 @@ def prepare_validation_suite(
     # pylint: enable=unidiomatic-typecheck
     backlog, exhausted = _enrich_backlog(initial, trace)
     configured, active = _worker_records(worker_config, trace, template, backlog, exhausted)
+    draining = worker_config.get("draining_workers", [])
+    if draining and initialization_mode != PINNED_MODE:
+        raise ValueError("persistent draining requires pinned-trace initialization")
     cutoff, horizon = simulation["cutoff_ms"], horizon_seconds * 1000
     futures = []
     observation_boundaries = None
@@ -163,7 +166,7 @@ def prepare_validation_suite(
             output / relative,
             "unchanged",
             index,
-            [configured[name] for name in active],
+            [configured[name] for name in sorted(active + draining)],
             [r["task"] for r in records],
             records,
             [],
@@ -172,6 +175,7 @@ def prepare_validation_suite(
             initialization_mode,
             None,
             arrival_source,
+            draining[0] if draining else None,
         )
         experiments.append(
             {"candidate": "unchanged", "scenario": index, "input_dir": relative.as_posix()}
