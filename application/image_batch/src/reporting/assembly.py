@@ -7,6 +7,12 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from analyze_run_core import export_matched_comparisons
 from opendc_evaluate import render_action_pages
+from reporting.closed_loop import (
+    SCHEMA as CLOSED_LOOP_SCHEMA,
+    render_pages as render_loop_pages,
+    render_run_details as render_loop_details,
+    render_validation as render_loop_validation,
+)
 from reporting.forecast_evidence import export_forecasts
 from reporting.configuration import render_configuration_pages
 from reporting.measured import SCHEMA as MEASURED_SCHEMA, measured_groups
@@ -22,7 +28,9 @@ from reporting.controlled import (
 )
 
 
-def render_report(
+# Each optional evidence family is a separate established entrypoint argument.
+# Retain the existing caller contract while adding the closed-loop family.
+def render_report(  # pylint: disable=too-many-arguments
     results,
     output,
     selection=None,
@@ -34,6 +42,7 @@ def render_report(
     study_reports=(),
     controlled_reports=(),
     supplement=None,
+    closed_loop_reports=(),
 ):
     """Lead with supplied physical execution and arrival forecasts, then simulations.
 
@@ -49,6 +58,7 @@ def render_report(
         study_reports (iterable[dict]): Frozen independent-run study and held-out outcomes.
         controlled_reports (iterable[dict]): Physical action comparisons appended as validation.
         supplement (dict or None): Saved supplementary illustrations and sensitivity evidence.
+        closed_loop_reports (iterable[dict]): Physical loop outcomes with explicit study roles.
 
     Returns:
         dict: Section inventory and the exact configuration summaries plotted.
@@ -61,14 +71,18 @@ def render_report(
     replay_reports = list(replay_reports)
     study_reports = list(study_reports)
     controlled_reports = list(controlled_reports)
-    if (
-        not results
-        and not action_reports
-        and not measured_reports
-        and not forecast_reports
-        and not replay_reports
-        and not study_reports
-        and not controlled_reports
+    closed_loop_reports = list(closed_loop_reports)
+    if not any(
+        (
+            results,
+            action_reports,
+            measured_reports,
+            forecast_reports,
+            replay_reports,
+            study_reports,
+            controlled_reports,
+            closed_loop_reports,
+        )
     ):
         raise ValueError("Supply action results or observation-validation results")
     audit = {
@@ -83,6 +97,9 @@ def render_report(
     }
     output = Path(output)
     with PdfPages(output) as pdf:
+        if closed_loop_reports:
+            audit["closed_loop"] = render_loop_pages(pdf, closed_loop_reports)
+            audit["section_order"].append("closed-loop-physical")
         if measured_reports or forecast_reports or study_reports:
             audit["topics"] = render_topics(
                 pdf, measured_reports, forecast_reports, study_reports, supplement or {}
@@ -121,6 +138,10 @@ def render_report(
                 for saved in controlled_reports
             ]
             audit["section_order"].append("controlled-validation")
+        if closed_loop_reports:
+            render_loop_validation(pdf, closed_loop_reports)
+            render_loop_details(pdf, closed_loop_reports)
+            audit["section_order"].append("closed-loop-validation")
     return audit
 
 
@@ -146,6 +167,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
     measured, forecasts, replays = [], [], []
     studies = []
     controlled = []
+    closed_loop = []
     saved_seeds = set()
     supplement = {}
     for source in sources:
@@ -162,7 +184,9 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
             saved_seeds.add(saved_seed)
         if saved.get("schema_version") == SUPPLEMENT_SCHEMA:
             continue
-        if saved.get("schema_version") == CONTROLLED_SCHEMA:
+        if saved.get("schema_version") == CLOSED_LOOP_SCHEMA:
+            closed_loop.append(saved)
+        elif saved.get("schema_version") == CONTROLLED_SCHEMA:
             controlled.extend(saved["comparisons"])
         elif saved.get("schema_version") == "opendc-controlled-comparison-v1":
             controlled.append(saved)
@@ -177,6 +201,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
             forecasts.extend(saved.get("forecast_reports", []))
             studies.extend(saved.get("study_reports", []))
             controlled.extend(saved.get("controlled_reports", []))
+            closed_loop.extend(saved.get("closed_loop_reports", []))
             replays.extend(
                 r
                 for r in saved.get("replay_reports", [])
@@ -227,15 +252,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         for study in studies
     ]
     studies = [study for study in studies if study["results"]]
-    if (
-        not results
-        and not actions
-        and not measured
-        and not forecasts
-        and not replays
-        and not studies
-        and not controlled
-    ):
+    if not any((results, actions, measured, forecasts, replays, studies, controlled, closed_loop)):
         raise ValueError("No evidence matches the requested report sections")
     validate_comparisons(controlled)
     if seed is None:
@@ -255,6 +272,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         "replay_reports": replays,
         "study_reports": studies,
         "controlled_reports": controlled,
+        "closed_loop_reports": closed_loop,
         "selection": selection,
         "render_options": {"forecast_seed": seed},
         "supplement": supplement,
@@ -274,6 +292,7 @@ def write_report(metrics_files, output_dir, split=None, seed=None):
         studies,
         controlled,
         supplement,
+        closed_loop,
     )
     audit["sources"] = [str(source) for source in sources]
     (output / "comparison.json").write_text(json.dumps(audit, indent=2) + "\n", encoding="utf-8")

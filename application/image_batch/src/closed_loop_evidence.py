@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from closed_loop_diagnostics import cycle_diagnostic
 from closed_loop_guards import snapshot_view
 from forecast_trace import bounded_read, milliseconds
 from opendc_inputs import write_json
@@ -478,6 +479,17 @@ def capture_evidence(capture, role):
     digest = hashlib.sha256(
         json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+    controller = controller_outcomes(capture / "controller", start, end)
+    diagnostics = [
+        cycle_diagnostic(
+            capture / "controller" / f'cycle-{cycle["tick"]:04d}',
+            cycle,
+            observations,
+            round(end * 1000),
+            round((end + 600) * 1000),
+        )
+        for cycle in controller["cycles"]
+    ]
     return dict(
         capture=str(capture),
         role=role,
@@ -498,7 +510,8 @@ def capture_evidence(capture, role):
         restarts=restarts,
         allocation=allocation_result,
         responses=response_result,
-        controller=controller_outcomes(capture / "controller", start, end),
+        controller=controller,
+        forecast_diagnostics=[row for row in diagnostics if row is not None],
         observation_boundaries=boundaries,
         source_hashes=json.loads((capture / "source-hashes.json").read_text()),
     )

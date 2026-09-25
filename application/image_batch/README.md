@@ -1,6 +1,6 @@
 # Image batch demo
 
-Run image-classification Jobs on Kubernetes, capture their workload and resource use, forecast arrivals, and compare OpenDC simulations with observations. Results stay cloud-side. The demo supports manual simulation and evaluation; automatic scaling is not connected.
+Run image-classification Jobs on Kubernetes, capture their workload and resource use, forecast arrivals, and compare OpenDC simulations with observations. Results stay cloud-side. The demo includes a repeated controller that evaluates OpenDC capacity choices and cordons or uncordons warm worker reserves.
 
 Run commands from the repository root with Python 3.10+. Use new output directories to preserve previous results. See [DESIGN](DESIGN.md) for scientific reasoning and [HANDOFF](OPENDT_HANDOFF.md) for deployment details, current evidence and continuation notes.
 
@@ -119,7 +119,32 @@ Use new output directories and the matching image when running those inputs. Hos
 
 For assigned-task placement and native cordon, add `--initialization-mode pinned-trace` when preparing scenarios or observation-validation inputs with `OPENDC_RUNTIME=fns-demo`. Run those inputs with the matching FNS image. Results distinguish validated task placement from the remaining startup-delay, exhausted-work and observation gaps.
 
-Compatible pinned suites can run in one native process using `python /app/opendc_native_batch.py --suite-dir /inputs --output-dir /results/batch` inside the matching FNS image (override its default entrypoint). Mount the prepared suite read-only and a new results directory writable, retaining the usual runner resource limits. The resulting `batch.json` works with the action evaluator. Shared process cost is reported once; empty or incompatible suites retain individual execution.
+Compatible pinned suites can run in one native process using `python /app/opendc_native_batch.py --suite-dir /inputs --output-dir /results/batch` inside the matching FNS image (override its default entrypoint). Mount the prepared suite read-only and a new results directory writable, retaining the usual runner resource limits. The resulting `batch.json` works with the action evaluator. Shared process cost is reported once. Empty members are completed analytically and labeled separately; compatible nonempty members share native execution, while incompatible matrices retain individual execution.
+
+## Closed-loop physical experiments
+
+The capture command requires the calibrated demo cluster, SSH access to its controller and endpoint VMs, the tested native image, and the Python dependencies used by the forecasting workflow. It creates a fresh namespace, sends an independent workload, saves observer and controller evidence, and restores experiment-owned admission and network state after successful collection. Use the [handoff](OPENDT_HANDOFF.md#where-to-resume) for the current experiment protocol, infrastructure state and preserved evidence.
+
+Set `CAPTURE_DIR`, `RUN_NAMESPACE` and `WORKLOAD_SEED` to fresh experiment values, then run:
+
+```bash
+OPENDC_RUNTIME=fns-demo PYTHONPATH=application/image_batch/src \
+  python3 -m capture_run --output "$CAPTURE_DIR" --namespace "$RUN_NAMESPACE" \
+  --seed "$WORKLOAD_SEED" --admission-mode fifo --control-arm forecast
+```
+
+The default geometry has three warm-up cycles followed by three evaluation cycles. `--control-arm fixed` and `--control-arm reactive` run the matched baselines. Use `--help` for explicit worker, SSH, image and workload settings. The output contains original request receipts, Job inventories, raw observer streams, frozen per-cycle forecasts and native results, and an action/outcome journal. Failed attempts preserve their resources and failure record for diagnosis.
+
+Produce a self-contained physical evidence file and an offline PDF in new destinations:
+
+```bash
+PYTHONPATH=application/image_batch/src python3 -m closed_loop_evidence \
+  --capture "$CAPTURE_DIR" --role pilot --output "$METRICS_FILE"
+PYTHONPATH=application/image_batch/src python3 -m reporting.assembly \
+  --metrics "$METRICS_FILE" --output-dir "$REPORT_DIR"
+```
+
+Use the study role recorded before execution; held-out comparisons require matching planned workloads and evaluation windows. The PDF reports accepting-plus-draining core-time separately from powered worker availability. A surviving capture can reattach its controller with `python3 -m closed_loop_resume --capture-output "$CAPTURE_DIR"` using the same source path and runtime environment; the owner, journal and observer identity must still match.
 
 ## Manual provisional scenario workflow
 
