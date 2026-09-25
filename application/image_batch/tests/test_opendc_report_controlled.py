@@ -20,6 +20,33 @@ from test_opendc_report import validation_result
 class ControlledReportTests(unittest.TestCase):
     """Saved numerical results must redraw offline and retain action identity."""
 
+    def test_release_only_occupancy_does_not_draw_predicted_classifier_history(self):
+        """A known classifier finish before cutoff cannot become new predicted execution."""
+        saved = {
+            "context": {},
+            "comparison": {
+                "cutoff_ms": 100000,
+                "window_seconds": 60,
+                "tasks": [
+                    {
+                        "uid": "release",
+                        "phase": "release",
+                        "cohort": "backlog",
+                        "original_creation_ms": 80000,
+                        "predicted_finish_ms": 99000,
+                        "modeled_duration_seconds": 0,
+                    }
+                ],
+                "observations": [
+                    {"uid": "release", "creation_ms": 80000, "start_ms": 85000, "finish_ms": 99000}
+                ],
+            },
+        }
+        row = controlled.lifecycle_rows(saved)[0]
+        self.assertIsNone(row["predicted"])
+        self.assertEqual(row["observed"], [-20, -15, -1])
+        self.assertEqual(row["prediction_status"], "Classifier finished; release only")
+
     def test_lifecycle_render_keeps_missing_start_unknown_and_clips_followup(self):
         """Incomplete timestamps cannot imply queuing or extend bars past follow-up."""
         # Inspect the private renderer's artists to test scientific interval semantics.

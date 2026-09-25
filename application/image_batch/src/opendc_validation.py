@@ -443,7 +443,10 @@ def compare_tasks(
             "match_status": "matched"
             if truth
             else ("synthetic_future" if uid is None else "unmatched"),
-            "modeled_duration_seconds": (task["duration"] - startup_ms - release_ms) / 1000,
+            "modeled_duration_seconds": occupancy.get(
+                "classifier_profile_ms", task["duration"] - startup_ms - release_ms
+            )
+            / 1000,
             "rescheduled_wait_seconds": native["schedule_time"] / 1000
             if metadata.get("phase") == "running"
             else None,

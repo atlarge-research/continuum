@@ -192,7 +192,12 @@ def lifecycle_rows(saved):
         finish = task.get("predicted_finish_ms")
         duration = task.get("modeled_duration_seconds")
         prediction = None
-        if finish is not None and duration is not None and creation is not None:
+        if (
+            task.get("phase") != "release"
+            and finish is not None
+            and duration is not None
+            and creation is not None
+        ):
             prediction = [
                 (max(creation, cutoff) - origin) / 1000,
                 (finish - origin) / 1000 - duration,
@@ -215,7 +220,11 @@ def lifecycle_rows(saved):
                 ),
                 "worker": observed.get("node_name") or "Unknown worker",
                 "predicted": prediction,
-                "prediction_status": "Model exhausted" if uid in exhausted else "Unavailable",
+                "prediction_status": "Classifier finished; release only"
+                if task.get("phase") == "release"
+                else "Model exhausted"
+                if uid in exhausted
+                else "Unavailable",
                 "matched_future": cohort == "future" and uid in matched,
                 "window_end": comparison["window_seconds"] - reference,
             }

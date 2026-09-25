@@ -241,6 +241,12 @@ def analyze_case(
 ):  # pylint: disable=too-many-locals
     """Compute the two approved interpretations for one validated case.
 
+    Response and completion metrics use classifier finish. Explicit occupancy
+    models retain resource release separately, including an already observed
+    classifier finish for release-only work; energy coverage extends through the
+    final resource release. Controller Job-completion proxies must use the
+    separate resource-release response rather than classifier response.
+
     Args:
         case (dict): Prepared provisional case.json object.
         completions (list[dict]): Independently validated native terminal task records.
@@ -293,6 +299,13 @@ def analyze_case(
             raise ValueError(f"task {task_id} has invalid lifecycle timing")
         if cohort == "future" and submission >= horizon * 1000:
             raise ValueError(f"future task {task_id} is outside arrival horizon")
+        resource_release = finish
+        occupancy = item["metadata"].get("occupancy", {})
+        finish = (
+            occupancy["observed_classifier_finish_ms"] - cutoff
+            if occupancy.get("release_only")
+            else finish - occupancy.get("release_ms", 0)
+        )
         response = (cutoff + finish - original) / 1000
         if response < 0 or not math.isfinite(response):
             raise ValueError(f"task {task_id} has invalid original response time")
@@ -303,6 +316,9 @@ def analyze_case(
                 "submission_seconds": submission / 1000,
                 "finish_seconds": finish / 1000,
                 "response_seconds": response,
+                "resource_release_seconds": resource_release / 1000,
+                "resource_release_response_seconds": (cutoff + resource_release - original) / 1000,
+                "classifier_finish_already_observed": bool(occupancy.get("release_only")),
             }
         )
 
@@ -340,13 +356,14 @@ def analyze_case(
             "remaining-worker configured idle; empty cordoned worker off at zero; no OpenDC process"
         )
     last_completion = max((task["finish_seconds"] for task in normalized), default=0.0)
+    last_release = max((task["resource_release_seconds"] for task in normalized), default=0.0)
     if not analytical_empty:
         for name, host_series in series.items():
-            if host_series["native_last_timestamp_ms"] + 1e-9 < last_completion * 1000:
+            if host_series["native_last_timestamp_ms"] + 1e-9 < last_release * 1000:
                 raise ValueError(
                     f"host {name} native energy ends before latest included completion"
                 )
-    cohort_end = max(horizon, last_completion)
+    cohort_end = max(horizon, last_release)
     fixed_completed = {
         task["task_id"]
         for task in normalized
@@ -388,8 +405,10 @@ def analyze_case(
             "evaluation_seconds": evaluation,
             "cohort_end_seconds": cohort_end,
             "last_included_completion_seconds": last_completion,
+            "last_resource_release_seconds": last_release,
             "native_time_origin_seconds": native_origin / 1000,
         },
+        "lifecycles": normalized,
         "inventory": {
             "simulated_tasks": len(normalized),
             "omitted_tasks": len(case.get("omitted_tasks", [])),
