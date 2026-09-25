@@ -572,17 +572,20 @@ def _worker_records(worker_config, trace, template, backlog, exhausted):
     return configured, sorted(active)
 
 
-def _down_worker(active, backlog, exhausted):
+def _down_worker(active, backlog, exhausted, *, preferred=None):
     """Choose one deterministic scale-down worker from assignment observations.
 
     Args:
         active (list[str]): Active worker names.
         backlog (list[dict]): Enriched executable backlog.
         exhausted (list[dict]): Enriched model-exhausted evidence.
+        preferred (str or None): Prior winning target to resimulate while still accepting.
 
     Returns:
-        str: Selected worker name.
+        str: Selected worker name; scores are always recomputed from the new state.
     """
+    if preferred in active:
+        return preferred
     assigned = {name: [] for name in active}
     for item in backlog + exhausted:
         metadata = item["metadata"]
@@ -850,7 +853,9 @@ def prepare_suite(
     elif len(active) <= worker_config.get("minimum_workers", 1):
         unavailable.append({"candidate": "scale-down", "reason": "minimum_worker_count"})
     else:
-        selected = _down_worker(active, backlog, exhausted)
+        selected = _down_worker(
+            active, backlog, exhausted, preferred=worker_config.get("preferred_down_worker")
+        )
         if pinned and any(
             item["metadata"].get("preserved_assignment") == selected for item in exhausted
         ):
@@ -918,6 +923,7 @@ def prepare_suite(
         "source_prefixes": boundaries,
         "initial_membership": copy.deepcopy(simulation["membership"]),
         "active_workers": active,
+        "down_target_preference": worker_config.get("preferred_down_worker"),
         "draining_workers": draining,
         "experiments": experiments,
         "unavailable_candidates": unavailable,

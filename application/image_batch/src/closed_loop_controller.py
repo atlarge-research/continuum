@@ -2,6 +2,7 @@
 
 import copy
 import json
+import resource
 import subprocess
 import time
 import uuid
@@ -328,6 +329,7 @@ class Controller:
         """
         prefix = directory / "observer"
         self.session.archive_observer(prefix)
+        captured_at = time.time()
         settings = Settings(
             run_id=self.session.namespace,
             origin_ms=round(self.origin * 1000),
@@ -341,7 +343,7 @@ class Controller:
         status, selected = run_once(
             prefix,
             forecast_dir,
-            round(time.time() * 1000),
+            round(captured_at * 1000),
             settings,
             self.template,
             simulation_inputs=True,
@@ -352,12 +354,24 @@ class Controller:
             self.template = selected
             write_json(self.output / "frozen-template.json", selected)
         state = json.loads((forecast_dir / "state.json").read_text())
-        before = snapshot_view(state, self.config, now_seconds=time.time())
+        # Initial freshness belongs to collection; computation ages the separately guarded decision.
+        before = snapshot_view(state, self.config, now_seconds=captured_at)
         config = {
             **copy.deepcopy(self.config),
             "active_workers": before["active_workers"],
             "draining_workers": before["draining_workers"],
         }
+        wins = self.history.get("down_wins", 0)
+        if isinstance(wins, int) and not isinstance(wins, bool) and wins > 0:
+            config["preferred_down_worker"] = self.history.get("down_worker")
+        write_json(
+            directory / "collection-timing.json",
+            {
+                "collected_at_seconds": captured_at,
+                "state_seconds": before["timestamp_seconds"],
+                "prepared_at_seconds": time.time(),
+            },
+        )
         prepare_suite(forecast_dir, prefix, config, directory / "suite", "pinned-trace")
         batch = run_control_plane_suite(
             directory / "suite",
@@ -372,6 +386,7 @@ class Controller:
 
     def cycle(self):
         """Observe, evaluate, select, guard, actuate and record one nonoverlapping cycle."""
+        usage_before = resource.getrusage(resource.RUSAGE_SELF)
         self.tick_number += 1
         directory = self.output / f"cycle-{self.tick_number:04d}"
         directory.mkdir()
@@ -470,6 +485,7 @@ class Controller:
                 self.shadow = 0
             self.history.update(down_worker=None, down_wins=0)
             self.journal.append("cycle.error", tick=self.tick_number, error=str(exc))
+        usage_after = resource.getrusage(resource.RUSAGE_SELF)
         self.journal.append(
             "cycle.end",
             tick=self.tick_number,
@@ -477,6 +493,13 @@ class Controller:
             forecast_valid=valid,
             history=self.history,
             elapsed_seconds=time.time() - started,
+            controller_cpu_seconds=(
+                usage_after.ru_utime
+                + usage_after.ru_stime
+                - usage_before.ru_utime
+                - usage_before.ru_stime
+            ),
+            controller_process_peak_rss_kib=usage_after.ru_maxrss,
         )
 
     def close(self):

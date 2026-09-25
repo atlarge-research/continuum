@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 from closed_loop_journal import Journal
 from test_closed_loop_guards import GuardTests
+from opendc_scenarios import _down_worker
 
 
 class ControllerTests(unittest.TestCase):
@@ -20,6 +21,7 @@ class ControllerTests(unittest.TestCase):
         fixture = GuardTests()
         fixture.setUp()
         self.config = fixture.config
+        self.snapshot = fixture.snapshot
         self.view = fixture.view()
         self.node = {
             "metadata": {"name": "w1", "uid": "uid-w1", "resourceVersion": "42"},
@@ -171,3 +173,45 @@ class ControllerTests(unittest.TestCase):
             (root / "cycle-0003").mkdir()
             self.assertEqual(module.last_tick(journal, root), 3)
             journal.close()
+
+    def test_down_candidate_continues_the_previous_target_without_reusing_its_score(self):
+        """A now-busy prior target can be resimulated instead of resetting on a new empty worker."""
+        backlog = [{"metadata": {"preserved_assignment": "w2", "first_assignment_observed_ms": 1}}]
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="w2"), "w2")
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="removed"), "w1")
+
+    def test_initial_freshness_is_measured_at_collection_before_forecast_computation(self):
+        """Ten seconds of valid computation ages the decision, not its collection precondition."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            loop = object.__new__(module.Controller)
+            loop.session = Mock(namespace="test")
+            loop.session.namespace = "test"
+            loop.args = Mock(period_seconds=120, warmup_cycles=1, native_image="test")
+            loop.origin, loop.tick_number = 900, 1
+            loop.template, loop.config, loop.history = {"saved": True}, self.config, {}
+            loop.cluster = {}
+
+            def forecast(_prefix, destination, _cutoff, _settings, _template, **_kwargs):
+                destination.mkdir()
+                (destination / "state.json").write_text(json.dumps(self.snapshot))
+                return (
+                    {
+                        "status": "ready",
+                        "simulation_inputs": {"status": "ready"},
+                        "cutoff": self.snapshot["timestamp"],
+                    },
+                    loop.template,
+                )
+
+            with patch.object(module.time, "time", side_effect=[1001, 1010]), patch.object(
+                module, "run_once", side_effect=forecast
+            ), patch.object(module, "prepare_suite"), patch.object(
+                module, "run_control_plane_suite", return_value=root
+            ), patch.object(
+                module, "load_scores", return_value=([], {})
+            ):
+                before, _, cutoff = loop.predict(root)
+            self.assertEqual(before["timestamp_seconds"], 1000)
+            self.assertEqual(cutoff, 1000)
