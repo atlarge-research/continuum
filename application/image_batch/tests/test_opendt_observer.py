@@ -55,16 +55,71 @@ class FakeSampler:
     def stop(self):
         self.stopped = True
 
+    def retire_job(self, _job_uid):
+        """Accept the terminal evidence notification used by the watcher fixture.
+
+        Args:
+            _job_uid (str): Completed fixture identity.
+        """
+
     def take_snapshots(self, _job_uid):
         snapshots, self.snapshots = self.snapshots, []
         return snapshots
 
 
+def raw_fixture_list(items):
+    """Return raw identity JSON while keeping API model fixtures separate.
+
+    Args:
+        items (list): Existing fake Kubernetes Job or Pod models.
+
+    Returns:
+        SimpleNamespace: Raw response with explicit connection release.
+    """
+    rows = []
+    for item in items:
+        metadata = {"uid": item.metadata.uid}
+        if hasattr(item.metadata, "owner_references"):
+            metadata["ownerReferences"] = [vars(owner) for owner in item.metadata.owner_references]
+        rows.append({"metadata": metadata})
+    return SimpleNamespace(data=json.dumps({"items": rows}), release_conn=lambda: None)
+
+
+def decode_fixture_list(response, items):
+    """Stand in for SDK model reconstruction at the raw-response boundary.
+
+    Args:
+        response (SimpleNamespace): Filtered raw response passed to the SDK.
+        items (list): Fixture models supplied by the fake API.
+
+    Returns:
+        SimpleNamespace: Selected fixture objects and a stable list resource version.
+    """
+    uids = {row["metadata"]["uid"] for row in json.loads(response.data)["items"]}
+    return SimpleNamespace(
+        items=[item for item in items if item.metadata.uid in uids],
+        metadata=SimpleNamespace(resource_version="17"),
+    )
+
+
 class FakeBatchApi:
     def __init__(self, jobs):
         self.jobs = jobs
+        self.api_client = SimpleNamespace(
+            deserialize=lambda response, _model: decode_fixture_list(response, self.jobs)
+        )
 
-    def list_namespaced_job(self, **_kwargs):
+    def list_namespaced_job(self, **kwargs):
+        """Expose raw identities to the sampler or models to the watcher.
+
+        Args:
+            kwargs (dict): Kubernetes list options, including content preloading.
+
+        Returns:
+            SimpleNamespace: Raw list response or fixture models.
+        """
+        if kwargs.get("_preload_content") is False:
+            return raw_fixture_list(self.jobs)
         return SimpleNamespace(items=self.jobs, metadata=SimpleNamespace(resource_version="17"))
 
 
@@ -98,8 +153,21 @@ class FakeCoreApi:
         self.pods = pods or []
         self.nodes = nodes or []
         self.fail_nodes = fail_nodes
+        self.api_client = SimpleNamespace(
+            deserialize=lambda response, _model: decode_fixture_list(response, self.pods)
+        )
 
-    def list_namespaced_pod(self, **_kwargs):
+    def list_namespaced_pod(self, **kwargs):
+        """Expose raw identities to the sampler or models to execution-interval reads.
+
+        Args:
+            kwargs (dict): Kubernetes list options, including content preloading.
+
+        Returns:
+            SimpleNamespace: Raw list response or fixture models.
+        """
+        if kwargs.get("_preload_content") is False:
+            return raw_fixture_list(self.pods)
         return SimpleNamespace(items=self.pods)
 
     def list_node(self):
@@ -963,6 +1031,37 @@ class OpenDTObserverTests(unittest.TestCase):
         self.assertIn('verbs: ["get", "list"]', node_role)
         self.assertNotIn("create", node_role)
         self.assertNotIn("update", node_role)
+
+    def test_retirement_occurs_only_after_both_terminal_records_are_persisted(self):
+        """A sampled or partly emitted completion must remain in recurring inventory."""
+        sampler = FakeSampler()
+        sampler.retired = []
+        workload, diagnostics = RecordingWriter(), RecordingWriter()
+
+        def retire(uid):
+            """Check persisted evidence at the retirement boundary.
+
+            Args:
+                uid (str): Completed fixture identity.
+            """
+            self.assertEqual(len(workload.records), 1)
+            self.assertEqual(diagnostics.records[-1]["event_type"], "task.emitted")
+            sampler.retired.append(uid)
+
+        sampler.retire_job = retire
+        observer = OpenDTObserver(
+            batch_api=FakeBatchApi([]),
+            watch_factory=EmptyWatch,
+            sampler=sampler,
+            workload_writer=workload,
+            diagnostic_writer=diagnostics,
+            namespace="fns-demo",
+            label_selector="test",
+            run_id="run-test",
+            cpu_frequency_mhz=2400,
+        )
+        self.assertTrue(observer.handle_job(demo_job()))
+        self.assertEqual(sampler.retired, ["job-uid"])
 
 
 if __name__ == "__main__":
