@@ -18,10 +18,9 @@ class LoopStudyReportTests(unittest.TestCase):
 
     def test_agreement_weights_runs_equally_and_excludes_missing_cutoffs(self):
         """One matching cutoff and three mismatches in another run means50%, not25%."""
-        matching = dict(primary=dict(preferred="unchanged"), alternate=dict(preferred="unchanged"))
-        different = dict(
-            primary=dict(preferred="unchanged"), alternate=dict(preferred="scale-down")
-        )
+        primary = dict(preferred="unchanged", scores=[dict(candidate="unchanged", valid=True)])
+        matching = dict(primary=primary, alternate=dict(preferred="unchanged"))
+        different = dict(primary=primary, alternate=dict(preferred="scale-down"))
         runs = [
             dict(seed=62, comparisons=[matching, dict(excluded="missing")]),
             dict(seed=63, comparisons=[different, different, different]),
@@ -29,6 +28,29 @@ class LoopStudyReportTests(unittest.TestCase):
         result = ranking_agreement(runs, "alternate")
         self.assertEqual(result["mean_run_fraction"], 0.5)
         self.assertEqual(result["scored_cutoffs"], [1, 3])
+
+    def test_choice_coverage_uses_scored_cutoffs_and_valid_not_feasible_candidates(self):
+        """Forced agreement and genuine choices stay distinguishable on the same denominator."""
+        hold = dict(candidate="unchanged", valid=True, worst_late_fraction=0.0)
+        down = dict(candidate="scale-down", valid=True, worst_late_fraction=0.8)
+        invalid = dict(candidate="scale-up", valid=False)
+        choice = dict(
+            primary=dict(preferred="unchanged", scores=[hold, down, invalid]),
+            alternate=dict(preferred="unchanged"),
+        )
+        forced = dict(
+            primary=dict(preferred="unchanged", scores=[hold, invalid]),
+            alternate=dict(preferred="unchanged"),
+        )
+        unscored = dict(choice, alternate=dict(preferred=None))
+        runs = [
+            dict(seed=62, comparisons=[forced, choice, unscored, dict(choice, excluded="bad")]),
+            dict(seed=63, comparisons=[forced]),
+        ]
+        result = ranking_agreement(runs, "alternate")
+        self.assertEqual(result["scored_cutoffs"], [2, 1])
+        self.assertEqual(result["competing_candidate_cutoffs"], [1, 0])
+        self.assertEqual(result["mean_run_fraction"], 1.0)
 
     def test_predicted_classifier_timeline_keeps_release_separate(self):
         """Native finish minus classifier duration gives start; release is a separate segment."""

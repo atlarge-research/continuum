@@ -42,9 +42,9 @@ def ranking_agreement(runs, variant):
         variant (str): Alternate sampled future or retrospective known-arrival ranking key.
 
     Returns:
-        dict: Per-run agreement fractions, scored cutoff counts and equal-run mean.
+        dict: Per-run agreement, scored and multi-candidate cutoff counts, and equal-run mean.
     """
-    fractions, counts, seeds = [], [], []
+    fractions, counts, seeds, choices = [], [], [], []
     for run in runs:
         rows = [
             row
@@ -60,10 +60,17 @@ def ranking_agreement(runs, variant):
             )
             counts.append(len(rows))
             seeds.append(run["seed"])
+            choices.append(
+                sum(
+                    sum(score["valid"] is True for score in row["primary"]["scores"]) >= 2
+                    for row in rows
+                )
+            )
     return dict(
         seeds=seeds,
         run_fractions=fractions,
         scored_cutoffs=counts,
+        competing_candidate_cutoffs=choices,
         mean_run_fraction=float(np.mean(fractions)) if fractions else None,
     )
 
@@ -331,12 +338,23 @@ def _ranking_page(pdf, runs):
     summaries = [ranking_agreement(runs, key) for key in ("alternate", "known_arrival")]
     for index, summary in enumerate(summaries):
         values = [100 * value for value in summary["run_fractions"]]
-        axes[0, 0].scatter([index] * len(values), values, color=(BLUE, ORANGE)[index], s=35)
+        axes[0, 0].scatter([index] * len(values), values, color=(ORANGE, GREEN)[index], s=35)
         if values:
             axes[0, 0].scatter(
                 index, 100 * summary["mean_run_fraction"], marker="_", s=250, color="black"
             )
-    axes[0, 0].set_xticks([0, 1], ["Alternate seed", "Known arrivals"])
+    labels = []
+    for title, summary in zip(("Alternate seed", "Known arrivals"), summaries):
+        choices = "; ".join(
+            f"{seed}: {choice}/{count}"
+            for seed, choice, count in zip(
+                summary["seeds"],
+                summary["competing_candidate_cutoffs"],
+                summary["scored_cutoffs"],
+            )
+        )
+        labels.append(f"{title}\n{choices or 'No scored cutoffs'}")
+    axes[0, 0].set_xticks([0, 1], labels, fontsize=8)
     axes[0, 0].set_ylim(0, 105)
     panel(
         axes[0, 0],
@@ -422,6 +440,8 @@ def _ranking_page(pdf, runs):
         figure,
         f"Predeclared cycles 1/4/7/10; {excluded} excluded cutoffs, never replaced. "
         "Dots are independent runs; black marks are equal-run means.\n"
+        "Agreement labels show seed: cutoffs with ≥2 valid candidates / scored cutoffs. "
+        "A single candidate forces agreement, not ranking sensitivity.\n"
         "Rankings precede hysteresis, minimum savings, cooldown and physical guards. "
         "They are not policy actions or policy regret.\n"
         "Known arrivals retain causal profiles/backlog and finite H60; "
