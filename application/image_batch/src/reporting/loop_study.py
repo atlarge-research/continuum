@@ -439,7 +439,7 @@ def _ranking_page(pdf, runs):
         pdf,
         figure,
         f"Predeclared cycles 1/4/7/10; {excluded} excluded cutoffs, never replaced. "
-        "Dots are independent runs; black marks are equal-run means.\n"
+        "Agreement dots are independent runs; black marks are equal-run means.\n"
         "Agreement labels show seed: cutoffs with ≥2 valid candidates / scored cutoffs. "
         "A single candidate forces agreement, not ranking sensitivity.\n"
         "Rankings precede hysteresis, minimum savings, cooldown and physical guards. "

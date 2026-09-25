@@ -448,7 +448,7 @@ def render_run_details(pdf, reports):
         if not run["accepted_capture"]:
             identity += " REJECTED"
         lower, upper = run["allocation"]["allocated_core_seconds_bounds"]
-        allocation = f"{lower/3600:.2f}–{upper/3600:.2f}"
+        allocation = f"{lower/3600:.3f}–{upper/3600:.3f}"
         physical.append(
             [
                 identity,
