@@ -18,7 +18,7 @@ from reporting.measured import (
 )
 from reporting.forecast_evidence import prepare_forecasts
 from reporting.assembly import write_report
-from reporting.analyzer import analyze
+from analyze_run_core import analyze
 from test_analyze_run import fixture
 from forecast_workload import run_once
 from forecast_trace import iso

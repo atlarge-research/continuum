@@ -606,58 +606,6 @@ def analyze(records, evidence, run_id, max_sample_age):
     }
 
 
-def compact_alignment(reports):
-    """Compare matching plans on a common elapsed-time grid, without bridging gaps.
-
-    Args:
-        reports (list[dict]): Nonempty analyzed repetitions with identical planned arrivals.
-
-    Returns:
-        tuple: Common one-second grid, aligned pressure points and first complete run index.
-
-    Raises:
-        ValueError: Plans differ, there is no complete run of at most 40 Jobs, or captures
-            have no common interval. This numerical helper does not constrain topic reporting.
-    """
-    plans = [
-        [(r["batch_index"], r["planned_seconds"]) for r in report["arrivals"]] for report in reports
-    ]
-    require(
-        all(plan == plans[0] for plan in plans),
-        "compact comparison requires matching batch indices and planned offsets; analyze "
-        "different schedules individually with --run-id",
-    )
-    complete = [
-        i
-        for i, r in enumerate(reports)
-        if r["summary"]["completed_jobs"] > 0
-        and r["summary"]["completed_jobs"] == r["summary"]["fidelity"]["planned_count"]
-        and r["summary"]["unresolved_accepted_jobs"] == 0
-    ]
-    require(complete, "compact lifecycle requires at least one complete run")
-    representative = complete[0]
-    require(
-        len(reports[representative]["jobs"]) <= 40,
-        "lifecycle comparison supports up to 40 Jobs per run",
-    )
-    # Use the common captured interval; never extend a shorter capture as zero load.
-    start = math.ceil(max(r["pressure"][0]["time_seconds"] for r in reports))
-    end = math.floor(min(r["pressure"][-1]["time_seconds"] for r in reports))
-    grid = list(range(max(0, start), end + 1))
-    require(grid, "no common pressure capture interval")
-    aligned = []
-    for report in reports:
-        points = report["pressure"]
-        times = [p["time_seconds"] for p in points]
-        values = []
-        for t in grid:
-            index = bisect_right(times, t) - 1
-            point = points[index] if index >= 0 else None
-            values.append(point if point and t - point["time_seconds"] <= 3 else None)
-        aligned.append(values)
-    return grid, aligned, representative
-
-
 def range_series(aligned, key):
     """Require every repetition at a grid point so the range has a fixed denominator.
 
@@ -697,11 +645,10 @@ def write_csv(path, rows, fields):
 
 
 def export_matched_comparisons(reports, output):
-    """Preserve historical comparison CSVs when the captured runs can be aligned.
+    """Export pressure ranges and queue waits for alignable captured runs.
 
-    This numerical export has no lifecycle figure's 40-Job limit. Matching batch
-    indices and planned offsets, one complete representative, and a common
-    captured interval are required; other evidence still supports per-run reports.
+    Matching batch indices and planned offsets, one complete representative, and
+    a common captured interval are required; other evidence still supports per-run reports.
 
     Args:
         reports (list[dict]): Analyzed runs in report order.

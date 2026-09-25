@@ -16,22 +16,7 @@ import sys
 
 import matplotlib
 
-# Preserve the standalone analyzer's public numerical API without coupling the core to graphics.
-from analyze_run_core import (  # pylint: disable=unused-import
-    STREAMS,
-    analyze,
-    compact_alignment,
-    describe,
-    endpoint_run,
-    export_matched_comparisons,
-    number,
-    range_series,
-    read_jsonl,
-    require,
-    seconds,
-    unique,
-    write_csv,
-)
+from analyze_run_core import export_matched_comparisons, require, write_csv
 from reporting.forecast_evidence import export_forecasts, prepare_forecasts
 from reporting.assembly import render_report
 from reporting.measured import SCHEMA, prepare_measured

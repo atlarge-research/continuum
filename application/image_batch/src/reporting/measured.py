@@ -156,7 +156,6 @@ def prepare_measured(endpoint_logs, observer_dir, run_ids=None, max_sample_age=1
                     (Path(__file__).resolve().parent.parent / name).read_bytes()
                 ).hexdigest()
                 for name in (
-                    "analyze_run.py",
                     "analyze_run_core.py",
                     "reporting/analyzer.py",
                     "reporting/measured.py",

@@ -7,6 +7,7 @@ import csv
 import io
 import json
 import math
+import os
 from pathlib import Path
 import sys
 import subprocess
@@ -16,8 +17,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # Source checkout tests intentionally add src before importing project modules.
 # pylint: disable=wrong-import-position
-from analyze_run_core import export_matched_comparisons
-from reporting.analyzer import analyze, compact_alignment, main, range_series, read_jsonl, render
+from analyze_run_core import analyze, export_matched_comparisons, range_series, read_jsonl
+from reporting.analyzer import main, render
 from reporting.assembly import write_report
 from forecast_trace import iso
 from forecast_workload import run_once
@@ -424,20 +425,41 @@ class RunAnalysisTests(unittest.TestCase):
             audit.pop("sources")
             self.assertEqual(audit, json.loads((root / "report/comparison.json").read_text()))
 
-    def test_cli_script_keeps_module_scope_imports_working(self):
-        """Catch circular imports in the documented script entry point."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(Path(__file__).resolve().parents[1] / "src/analyze_run.py"),
-                "--help",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--endpoint-log", result.stdout)
+    def test_analyzer_module_generates_a_pdf_from_captured_inputs(self):
+        """The documented module command produces a report outside the checkout."""
+        records, evidence = fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "endpoint.jsonl").write_text("".join(json.dumps(row) + "\n" for row in records))
+            for name, rows in evidence.items():
+                (root / (name + ".jsonl")).write_text(
+                    "".join(json.dumps(row) + "\n" for row in rows)
+                )
+            source = Path(__file__).resolve().parents[1] / "src"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "reporting.analyzer",
+                    "--endpoint-log",
+                    "endpoint.jsonl",
+                    "--observer-dir",
+                    ".",
+                    "--output-dir",
+                    "report",
+                ],
+                cwd=root,
+                env={**os.environ, "PYTHONPATH": str(source)},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((root / "report/report.pdf").read_bytes().startswith(b"%PDF"))
+            saved = json.loads((root / "report/metrics.json").read_text())
+            self.assertEqual(
+                saved["measured_reports"][0]["runs"][0]["summary"]["completed_jobs"], 2
+            )
 
     def test_matched_report_retains_original_comparison_csv_values_and_gaps(self):
         """Preserve historical numerical ranges without reviving their old plots."""
@@ -583,38 +605,50 @@ class ComparisonTests(unittest.TestCase):
                 self.assertEqual(list(Path(temp).iterdir()), [])
 
     def test_matching_plans_are_required(self):
+        """Different arrival plans cannot produce batch-aligned comparison CSVs."""
         reports = self.reports()
         reports[1]["arrivals"][0]["planned_seconds"] += 0.1
-        with self.assertRaisesRegex(ValueError, "matching batch indices and planned offsets"):
-            compact_alignment(reports)
+        with tempfile.TemporaryDirectory() as temporary:
+            self.assertFalse(export_matched_comparisons(reports, temporary))
+            self.assertEqual(list(Path(temporary).iterdir()), [])
 
     def test_common_grid_does_not_bridge_missing_captures(self):
+        """Exported ranges stop at shared coverage and leave capture gaps missing."""
         reports = self.reports()
         reports[1]["pressure"] = [
             p for p in reports[1]["pressure"] if p["time_seconds"] not in (3, 4, 5, 6)
         ]
         reports[2]["pressure"] = reports[2]["pressure"][:-2]
-        grid, aligned, _ = compact_alignment(reports)
-        self.assertEqual(grid[-1], reports[2]["pressure"][-1]["time_seconds"])
-        self.assertIsNone(aligned[1][grid.index(6)])
-        median, low, high = range_series(aligned, "active_jobs")
-        self.assertTrue(math.isnan(median[grid.index(6)]))
-        self.assertTrue(math.isnan(low[grid.index(6)]))
-        self.assertTrue(math.isnan(high[grid.index(6)]))
+        with tempfile.TemporaryDirectory() as temporary:
+            self.assertTrue(export_matched_comparisons(reports, temporary))
+            with (Path(temporary) / "pressure-ranges.csv").open() as handle:
+                rows = list(csv.DictReader(handle))
+        self.assertEqual(
+            float(rows[-1]["time_seconds"]), reports[2]["pressure"][-1]["time_seconds"]
+        )
+        gap = next(row for row in rows if float(row["time_seconds"]) == 6)
+        self.assertTrue(
+            all(
+                math.isnan(float(gap["active_jobs_" + suffix]))
+                for suffix in ("median", "min", "max")
+            )
+        )
 
     def test_observed_range_is_not_a_confidence_interval(self):
         aligned = [[{"value": value}] for value in (1, 3, 8)]
         self.assertEqual(range_series(aligned, "value"), ([3], [1], [8]))
 
     def test_representative_is_first_complete_run(self):
+        """A partial first run cannot hide Jobs represented by a complete repetition."""
         reports = self.reports()
         reports[0]["summary"]["completed_jobs"] = 1
-        _, _, representative = compact_alignment(reports)
-        self.assertEqual(representative, 1)
-        for report in reports:
-            report["summary"]["completed_jobs"] = 0
-        with self.assertRaisesRegex(ValueError, "at least one complete run"):
-            compact_alignment(reports)
+        reports[0]["jobs"] = reports[0]["jobs"][:1]
+        with tempfile.TemporaryDirectory() as temporary:
+            self.assertTrue(export_matched_comparisons(reports, temporary))
+            with (Path(temporary) / "queue-wait-comparison.csv").open() as handle:
+                rows = list(csv.DictReader(handle))
+        self.assertEqual([int(row["batch_index"]) for row in rows], [0, 1])
+        self.assertEqual([int(row["runs_with_completion"]) for row in rows], [3, 2])
 
 
 if __name__ == "__main__":

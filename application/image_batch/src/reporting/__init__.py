@@ -1,4 +1,4 @@
 """Offline report assembly, evidence adapters and shared presentation.
 
-Use the existing scripts in the parent source directory for command-line access.
+Run python -m reporting.<module> with the source directory on PYTHONPATH.
 """

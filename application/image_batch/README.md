@@ -61,19 +61,20 @@ kubectl cp -n fns-demo \
   -c opendt-observer image-batch-adapter-POD:/var/lib/opendt ./opendt-audit
 ```
 
-Generate a PDF from those files:
+From the repository root, generate a PDF from those files:
 
 ```bash
 python3 -m venv /tmp/fns-analysis-venv
 /tmp/fns-analysis-venv/bin/pip install -r application/image_batch/requirements-analysis.txt
-/tmp/fns-analysis-venv/bin/python application/image_batch/src/analyze_run.py \
+export PYTHONPATH="$PWD/application/image_batch/src"
+/tmp/fns-analysis-venv/bin/python -m reporting.analyzer \
   --endpoint-log ./endpoint.jsonl --observer-dir ./opendt-audit \
   --output-dir ./logs/image-batch-report
 ```
 
 Open `logs/image-batch-report/report.pdf`. Repeat `--endpoint-log` to compare captured runs, or add `--run-id ID` to select one. The report preserves separate run distributions; different arrival plans are not aligned by batch index. Numerical CSVs, summaries and a self-contained `metrics.json` accompany the PDF.
 
-To preserve complete measured series for later combined reports, run `opendc_report_observed.py --endpoint-log CAPTURE/endpoint.jsonl --observer-dir CAPTURE/observer --output NEW_MEASURED.json` in the analysis environment. Repeat `--endpoint-log` for execution repetitions. Pass the saved payload to `opendc_report.py --metrics NEW_MEASURED.json --output-dir NEW_REPORT`; additional `--metrics` files can supply saved `forecast-report.json`, simulator or combined evidence. The new report retains all plotted numbers in `metrics.json` for offline regeneration. Combined and standalone commands use the same topic-oriented landscape style. Supply only the evidence sections available; study selection and held-out roles come from explicit study metadata. Older saved metrics remain readable; the obsolete `--topic-overview` flag is no longer needed or accepted. Optional supplementary evidence adds causal forecast illustrations and matched scenario-seed sensitivity. See the [current report and reproduction evidence](OPENDT_HANDOFF.md#reports-and-preserved-evidence).
+To preserve complete measured series for later combined reports, run `/tmp/fns-analysis-venv/bin/python -m reporting.measured --endpoint-log CAPTURE/endpoint.jsonl --observer-dir CAPTURE/observer --output NEW_MEASURED.json` using the analysis environment and `PYTHONPATH` above. Repeat `--endpoint-log` for execution repetitions. Pass the saved payload to `/tmp/fns-analysis-venv/bin/python -m reporting.assembly --metrics NEW_MEASURED.json --output-dir NEW_REPORT`; additional `--metrics` files can supply saved `forecast-report.json`, simulator or combined evidence. The new report retains all plotted numbers in `metrics.json` for offline regeneration. Combined and standalone commands use the same topic-oriented landscape style. Supply only the evidence sections available; study selection and held-out roles come from explicit study metadata. Optional supplementary evidence adds causal forecast illustrations and matched scenario-seed sensitivity. See the [current report and reproduction evidence](OPENDT_HANDOFF.md#reports-and-preserved-evidence).
 
 ## Arrival forecasting
 
@@ -134,7 +135,7 @@ Each command provides `--help`; the [handoff](OPENDT_HANDOFF.md#manual-run-refer
 For the combined action and forecast-validation PDF:
 
 ```bash
-python3 application/image_batch/src/opendc_report.py \
+PYTHONPATH=application/image_batch/src /tmp/fns-analysis-venv/bin/python -m reporting.assembly \
   --metrics SAVED_REPORT/metrics.json --split validation \
   --output-dir NEW_REPORT_DIRECTORY
 ```
@@ -149,4 +150,4 @@ For independent validation workload runs, use `opendc_study.py --metrics RUN_A.j
 
 For a controlled physical cordon or reserve-admission capture, `opendc_intervention.py --intervention CAPTURE/intervention.json --final-pods CAPTURE/pods-final.json --output NEW_VERDICT.json` checks preserved placement and drain evidence. It reports API-boundary ambiguities explicitly; a successful API command alone is insufficient.
 
-Append controlled-action validation to the main PDF with `opendc_report.py --metrics MAIN_METRICS.json --metrics CONTROLLED_METRICS.json --output-dir NEW_REPORT`. The controlled input can be an individual comparison or a saved controlled report's `metrics.json`; the combined payload redraws offline through the same command. Validation pages appear last and show worker assignments, completion counts, start/runtime errors, per-Job responses and detailed arrival/wait/execution timelines against the action actually observed. Different workloads remain separate. The standalone `opendc_report_controlled.py --comparison COMPARISON.json --output-dir NEW_REPORT` entry point remains available.
+Append controlled-action validation to the main PDF with `/tmp/fns-analysis-venv/bin/python -m reporting.assembly --metrics MAIN_METRICS.json --metrics CONTROLLED_METRICS.json --output-dir NEW_REPORT`. The controlled input can be an individual comparison or a saved controlled report's `metrics.json`; the combined payload redraws offline through the same command. Validation pages appear last and show worker assignments, completion counts, start/runtime errors, per-Job responses and detailed arrival/wait/execution timelines against the action actually observed. Different workloads remain separate. The standalone `/tmp/fns-analysis-venv/bin/python -m reporting.controlled --comparison COMPARISON.json --output-dir NEW_REPORT` entry point remains available.
