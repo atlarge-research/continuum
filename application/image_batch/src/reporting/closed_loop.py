@@ -163,6 +163,7 @@ def _outcomes(pdf, runs, pairs):
     ]
     axes[1, 1].bar(range(3), counts, color=COLORS)
     axes[1, 1].bar(range(3), incomplete, bottom=counts, color="#999999", hatch="///")
+    axes[1, 1].set_ylim(0, max(1, 1.1 * max(sum(pair) for pair in zip(counts, incomplete))))
     axes[1, 1].set_xticks(range(3), LABELS)
     panel(
         axes[1, 1],
@@ -353,7 +354,15 @@ def render_validation(pdf, reports):
         )
     table = axis.table(
         cellText=rows,
-        colLabels=["Role / seed", "Arm", "Capture", "Down", "Up", "Valid streak", "Native ≤30 s"],
+        colLabels=[
+            "Role / seed",
+            "Arm",
+            "Capture",
+            "Down",
+            "Up",
+            "Successful streak",
+            "Native ≤30 s",
+        ],
         loc="upper center",
         cellLoc="center",
     )
@@ -368,9 +377,9 @@ def render_validation(pdf, reports):
         pdf,
         figure,
         "Down/up require acknowledged actions confirmed by a later observer snapshot. "
-        "Skipped or invalid cycles break a streak.\n"
-        "Pilots select implementation choices and do not enter held-out benefit "
-        "summaries. Rejected attempts remain archived.\n"
+        "Unconfirmed actions or skipped/invalid cycles break a streak.\n"
+        "Pilots provide implementation/functional evidence, separate from held-out "
+        "benefit summaries. Rejected attempts remain archived.\n"
         "Model limits: 60-second arrival horizon; three sampled futures; warm "
         "reserves; configured C−1 application cores once.",
     )

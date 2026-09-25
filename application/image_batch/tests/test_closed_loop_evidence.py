@@ -152,6 +152,30 @@ class EvidenceTests(unittest.TestCase):
             result = self.module().controller_outcomes(root, 1000, 1240)
         self.assertEqual(result["longest_consecutive_valid_cycles"], 2)
 
+    def test_unconfirmed_action_breaks_successful_feedback_streak(self):
+        """An API acknowledgement without observed capacity feedback is not a completed loop."""
+        for observed, expected in ((True, 3), (False, 1), (None, 1)):
+            with self.subTest(observed=observed), tempfile.TemporaryDirectory() as temporary:
+                records = []
+                for tick in range(1, 4):
+                    records.append(dict(event="cycle.begin", tick=tick, started_at=940 + tick * 60))
+                    if tick == 2 and observed is not None:
+                        records.append(
+                            dict(event="cycle.observed", tick=tick, action_observed=observed)
+                        )
+                    records.append(
+                        dict(
+                            event="cycle.end",
+                            tick=tick,
+                            outcome="acknowledged" if tick == 2 else "held",
+                            forecast_valid=True,
+                        )
+                    )
+                root = Path(temporary)
+                (root / "journal.jsonl").write_text("\n".join(json.dumps(row) for row in records))
+                result = self.module().controller_outcomes(root, 1000, 1180)
+                self.assertEqual(result["longest_consecutive_valid_cycles"], expected)
+
     def test_job_failed_before_evaluation_is_not_live_warmup_backlog(self):
         """Failure observed before the scoring boundary is a terminal outcome."""
         result = self.module().responses(

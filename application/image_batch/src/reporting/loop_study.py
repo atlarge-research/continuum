@@ -405,6 +405,9 @@ def _ranking_page(pdf, runs):
             "Seed / cycle",
             "Largest change in late fraction (pp)",
         )
+    shared_limit = max(1, *(axis.get_ylim()[1] for axis in axes[1]))
+    for axis in axes[1]:
+        axis.set_ylim(0, shared_limit)
     figure.legend(
         *axes[0, 1].get_legend_handles_labels(),
         loc="center",
@@ -503,8 +506,8 @@ def render_safety(pdf, supplement):
                 "API / intent unclear",
             ],
             rows[offset : offset + 14],
-            "Audits cover the whole capture, including warm-up; "
-            "pilot seeds 60/61 remain selection evidence.\n"
+            "Audits cover workload and follow-up; empty scheduling setup is excluded. "
+            "Pilots remain separate from held-out results.\n"
             "Intents include requests later vetoed before dispatch. "
             "Missing inventories and binding gaps are inconclusive.\n"
             "No Kubernetes Events/API audit log; "

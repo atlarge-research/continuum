@@ -192,6 +192,10 @@ def responses(observations, start_ms, end_ms, *, deadline_seconds=120, followup_
 def controller_outcomes(directory, start, end):
     """Summarize actual cycle latency, acknowledged intents and observed action identities.
 
+    Successful streaks require valid forecasts and completed feedback. An
+    acknowledged action without observer confirmation breaks the streak; later
+    reconciliation does not retroactively make that cycle successful.
+
     Args:
         directory (Path): Controller journal and immutable per-cycle native evidence.
         start (float): Inclusive common evaluation boundary in epoch seconds.
@@ -255,6 +259,8 @@ def controller_outcomes(directory, start, end):
             "shadow",
             "acknowledged",
         )
+        if row.get("outcome") == "acknowledged" and row.get("action_observed") is not True:
+            valid = False
         consecutive = consecutive + 1 if valid else 0
         longest = max(longest, consecutive)
         cycle = directory / f'cycle-{row["tick"]:04d}'
