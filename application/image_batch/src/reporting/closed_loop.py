@@ -253,11 +253,11 @@ def _timelines(pdf, runs):
                 s=14,
                 alpha=0.65,
             )
+    axes[1, 0].axvline(120, color="black", linestyle="--", linewidth=1)
+    axes[1, 1].axhline(30, color="black", linestyle="--", linewidth=1)
     for axis in axes.flat:
         axis.set_ylim(bottom=0)
     axes[0, 0].legend(fontsize=8, loc="upper right")
-    axes[1, 0].axvline(120, color="black", linestyle="--", linewidth=1)
-    axes[1, 1].axhline(30, color="black", linestyle="--", linewidth=1)
     panel(
         axes[0, 0],
         "Allocation includes a cordoned worker until it drains",
