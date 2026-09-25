@@ -44,6 +44,11 @@ def summarize_candidate(candidate, decision_age, *, scenarios=3, deadline_second
     rows = candidate.get("scenarios", [])
     if candidate.get("unavailable_reason"):
         return {**result, "reason": candidate["unavailable_reason"]}
+    if candidate.get("candidate") != "unchanged" and (
+        not isinstance(candidate.get("selected_worker"), str)
+        or not candidate["selected_worker"].strip()
+    ):
+        return {**result, "reason": "missing_action_target"}
     if len(rows) != scenarios:
         return {**result, "reason": "missing_scenarios"}
     fractions, tardiness, allocation = [], [], []
@@ -85,6 +90,8 @@ def select_action(candidates, state, *, now_seconds, decision_age, scenarios=3):
     Candidate comparison requires all scenarios and complete represented work.
     Empty cohorts are explicitly valid; incomplete results cannot appear cheap.
     Only acknowledged physical actions update ``last_action_at`` in the caller.
+    The native-result adapter must verify identical scenario identities and Job
+    cohorts across actions before supplying these numerical summaries.
 
     Args:
         candidates (list[dict]): Shared-future unchanged/up/down score inputs.
@@ -121,6 +128,8 @@ def select_action(candidates, state, *, now_seconds, decision_age, scenarios=3):
     }
     if decision_age > 30:
         return {**result, "reason": "decision_stale"}
+    if type(state.get("down_wins", 0)) is not int or state.get("down_wins", 0) < 0:
+        return {**result, "reason": "proposal_history_invalid"}
     scores = [summarize_candidate(item, decision_age, scenarios=scenarios) for item in candidates]
     result["scores"] = scores
     valid = {item["candidate"]: item for item in scores if item["valid"]}
@@ -157,7 +166,7 @@ def select_action(candidates, state, *, now_seconds, decision_age, scenarios=3):
     if action == "scale-down":
         cost = hold["allocated_core_seconds"]
         saving = (cost - selected["allocated_core_seconds"]) / cost if cost else 0
-        if saving < 0.10 or not selected["selected_worker"]:
+        if saving < 0.10 and not math.isclose(saving, 0.10, rel_tol=1e-12):
             return {**result, "reason": "insufficient_savings_or_target"}
         wins = (
             state.get("down_wins", 0)

@@ -25,7 +25,7 @@ def candidate(action, cost, response=60, *, count=20, complete=True, worker=None
     """
     return {
         "candidate": action,
-        "selected_worker": worker,
+        "selected_worker": "w3" if worker is None and action == "scale-up" else worker,
         "scenarios": [
             {
                 "responses_seconds": [response] * count,
@@ -126,6 +126,31 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(self.choose([hold, down], state=state)["action"], "scale-down")
         down["scenarios"][0]["cohort_size"] = 1
         self.assertEqual(self.choose([hold, down], state=state)["action"], "unchanged")
+
+    def test_invalid_history_cannot_bypass_two_wins(self):
+        """Noninteger history must fail closed rather than authorize a reduction."""
+        candidates = [candidate("unchanged", 1080), candidate("scale-down", 720, worker="w2")]
+        for wins in (float("nan"), float("inf"), True, "1", -1):
+            with self.subTest(wins=wins):
+                result = self.choose(candidates, state={"down_worker": "w2", "down_wins": wins})
+                self.assertEqual(result["action"], "unchanged")
+                self.assertEqual(result["reason"], "proposal_history_invalid")
+
+    def test_scale_up_requires_an_explicit_worker(self):
+        """An otherwise useful action needs an auditable physical target."""
+        up = candidate("scale-up", 1080)
+        up["selected_worker"] = None
+        self.assertEqual(
+            self.choose([candidate("unchanged", 720, response=180), up])["action"], "unchanged"
+        )
+
+    def test_exact_ten_percent_savings_meets_threshold(self):
+        """The inclusive savings threshold must tolerate binary rounding."""
+        result = self.choose(
+            [candidate("unchanged", 3), candidate("scale-down", 2.7, worker="w2")],
+            state={"down_worker": "w2", "down_wins": 1},
+        )
+        self.assertEqual(result["action"], "scale-down")
 
 
 if __name__ == "__main__":
