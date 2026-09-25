@@ -15,6 +15,7 @@ import time
 
 import yaml
 
+from closed_loop_controller import Controller
 from opendc_batch import remote_input
 from opendc_inputs import write_json
 from opendc_kubernetes import extract_artifacts, ssh
@@ -163,6 +164,7 @@ class CaptureSession:
         self.base_replay = ["sudo", "python3", "/home/mahimahi/continuum_replay.py"]
         self.samples = []
         self.output_created = False
+        self.loop = None
 
     def get(self, *arguments):
         """Read Kubernetes JSON through the explicit control-plane SSH connection.
@@ -500,6 +502,9 @@ class CaptureSession:
             ValueError: Capture health or placement is invalid.
         """
         self.prepare()
+        if self.args.control_arm != "none":
+            self.loop = Controller(self)
+            self.loop.prepare()
         command = self.endpoint_command()
         write_json(self.output / "endpoint-command.json", command)
         with (self.output / "endpoint.jsonl").open("wb") as stdout, (
@@ -523,6 +528,8 @@ class CaptureSession:
             while time.monotonic() < deadline:
                 _, sample = self.observe()
                 print(json.dumps(sample), flush=True)
+                if self.loop is not None:
+                    self.loop.maybe_tick()
                 if self.process.poll() is not None:
                     if self.process.returncode:
                         raise RuntimeError("endpoint failed; preserve capture resources")
@@ -536,7 +543,10 @@ class CaptureSession:
                 )
         # Completed profiles lag Job completion; wait on actual emission identities.
         expected = {
-            job["metadata"]["uid"] for job in self.get("jobs", "-n", self.namespace)["items"]
+            job["metadata"]["uid"]
+            for job in self.get("jobs", "-n", self.namespace)["items"]
+            if job["metadata"].get("labels", {}).get("app.kubernetes.io/name")
+            == "image-batch-worker"
         }
         deadline = time.monotonic() + 180
         while True:
@@ -571,6 +581,8 @@ class CaptureSession:
                 )
                 break
             time.sleep(5)
+        if self.loop is not None:
+            self.loop.close()
         self.collect()
         self.restore(remove_namespace=not missing)
         print("CAPTURE_COLLECTED", flush=True)
@@ -587,6 +599,15 @@ def main():
     parser.add_argument("--minimum-rate", type=float, default=0.02)
     parser.add_argument("--peak-rate", type=float, default=0.30)
     parser.add_argument("--active-workers", type=int, default=3)
+    parser.add_argument(
+        "--control-arm", choices=("none", "fixed", "reactive", "forecast"), default="none"
+    )
+    parser.add_argument("--warmup-cycles", type=int, default=3)
+    parser.add_argument("--worker-cores", type=int, default=4)
+    parser.add_argument("--worker-memory-mib", type=int, default=16384)
+    parser.add_argument("--minimum-workers", type=int, default=1)
+    parser.add_argument("--maximum-workers", type=int, default=3)
+    parser.add_argument("--native-image", default="continuum/opendc:fns-loop-20260925-122a859")
     parser.add_argument("--workers", nargs="+", default=WORKERS)
     parser.add_argument("--controller", default=CONTROLLER)
     parser.add_argument("--endpoint", default=ENDPOINT)
@@ -603,6 +624,17 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.active_workers <= len(args.workers):
         parser.error("active worker count must fit the worker inventory")
+    if (
+        args.control_arm != "none"
+        and not 1
+        <= args.minimum_workers
+        <= args.active_workers
+        <= args.maximum_workers
+        <= len(args.workers)
+    ):
+        parser.error("controller worker bounds must contain the initial accepting pool")
+    if args.control_arm != "none" and (args.warmup_cycles < 1 or args.warmup_cycles >= args.cycles):
+        parser.error("warmup must contain complete cycles and leave evaluation cycles")
     session = CaptureSession(args)
     try:
         session.run()
