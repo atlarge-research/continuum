@@ -22,7 +22,7 @@ class GuardTests(unittest.TestCase):
         }
         self.snapshot = {
             "timestamp": iso(1000000),
-            "collection": {"missing_job_uids": [], "atomic": False},
+            "collection": {"missing_job_uids": [], "atomic": False, "started_at": iso(1000000)},
             "workers": [
                 {
                     "node_name": name,
@@ -169,6 +169,12 @@ class GuardTests(unittest.TestCase):
         self.snapshot["workers"][2]["kubernetes_node_uid"] = "replaced"
         with self.assertRaisesRegex(ValueError, "identity"):
             self.module().reconcile_pending(pending, self.view())
+
+    def test_slow_collection_cannot_relabel_old_membership_as_fresh(self):
+        """Completion-time availability does not make an old API collection safe for action."""
+        self.snapshot["collection"]["started_at"] = iso(960000)
+        with self.assertRaisesRegex(ValueError, "collection"):
+            self.view(now=1001)
 
 
 if __name__ == "__main__":

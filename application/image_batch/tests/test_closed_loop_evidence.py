@@ -31,6 +31,7 @@ class EvidenceTests(unittest.TestCase):
         for second in range(11):
             state = copy.deepcopy(fixture.snapshot)
             state["timestamp"] = iso((1000 + second) * 1000)
+            state["collection"]["started_at"] = state["timestamp"]
             state["workers"][1]["schedulable"] = second < 3
             if second < 5:
                 state["jobs"]["active"] = [fixture.job(node="w2")]
@@ -49,6 +50,7 @@ class EvidenceTests(unittest.TestCase):
         for second in [0, 1, 2, 7, 8, 9, 10]:
             state = copy.deepcopy(fixture.snapshot)
             state["timestamp"] = iso((1000 + second) * 1000)
+            state["collection"]["started_at"] = state["timestamp"]
             states.append(state)
         result = self.module().allocation(states, fixture.config, 1000, 1010)
         self.assertIsNone(result["allocated_application_core_seconds"])
@@ -103,6 +105,7 @@ class EvidenceTests(unittest.TestCase):
         for second in range(3):
             state = copy.deepcopy(fixture.snapshot)
             state["timestamp"] = iso((1000 + second) * 1000)
+            state["collection"]["started_at"] = state["timestamp"]
             state["collection"]["missing_job_uids"] = ["new-job"]
             for worker in state["workers"]:
                 worker["schedulable"] = True

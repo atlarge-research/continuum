@@ -215,3 +215,29 @@ class ControllerTests(unittest.TestCase):
                 before, _, cutoff = loop.predict(root)
             self.assertEqual(before["timestamp_seconds"], 1000)
             self.assertEqual(cutoff, 1000)
+
+    def test_replacement_node_does_not_confirm_the_original_action(self):
+        """A matching cordon flag on a new UID is not observation of the requested worker."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 2, {}
+            loop.args = Mock(control_arm="reactive")
+            loop.config, loop.session = self.config, Mock()
+            replacement = json.loads(json.dumps(self.view))
+            replacement["timestamp_seconds"] = 1003
+            replacement["nodes"]["w1"].update(uid="replacement", accepting=False)
+            loop.fresh = Mock(side_effect=[self.view, self.view, replacement, replacement])
+            loop.recover = Mock()
+            proposal = dict(action="scale-down", selected_worker="w1", state={})
+            with patch.object(module, "reactive_action", return_value=proposal), patch.object(
+                module, "actuate", return_value=dict(last_action_at=1002)
+            ), patch.object(module.time, "time", return_value=1003), patch.object(
+                module.time, "monotonic", side_effect=[0, 4]
+            ):
+                loop.cycle()
+            observed = [r for r in loop.journal.records if r["event"] == "cycle.observed"]
+            self.assertFalse(observed[-1]["action_observed"])
+            loop.journal.close()

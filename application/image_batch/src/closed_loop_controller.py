@@ -104,7 +104,7 @@ def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds
         raise ValueError("target node is no longer Ready")
     # Recheck after the potentially slow API read; stale proposals never reach mutation.
     guard_action(before, fresh, proposal, config, decision_age=time.time() - cutoff_seconds)
-    if time.time() - fresh["timestamp_seconds"] > 3:
+    if time.time() - fresh["collection_started_seconds"] > 3:
         raise ValueError("pre-action observation became stale during the node read")
     action_id = uuid.uuid4().hex
     request = journal.append(
@@ -118,7 +118,7 @@ def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds
     )
     try:
         guard_action(before, fresh, proposal, config, decision_age=time.time() - cutoff_seconds)
-        if time.time() - fresh["timestamp_seconds"] > 3:
+        if time.time() - fresh["collection_started_seconds"] > 3:
             raise ValueError("pre-action observation became stale while persisting intent")
     except ValueError:
         journal.append("action.result", action_id=action_id, status="not_dispatched_stale")
@@ -467,10 +467,12 @@ class Controller:
             if outcome == "acknowledged":
                 deadline = time.monotonic() + 3
                 while True:
-                    confirmed = observed["timestamp_seconds"] >= self.history[
-                        "last_action_at"
-                    ] and observed["nodes"][proposal["selected_worker"]]["accepting"] == (
-                        proposal["action"] == "scale-up"
+                    target = proposal["selected_worker"]
+                    confirmed = (
+                        observed["timestamp_seconds"] >= self.history["last_action_at"]
+                        and observed["nodes"][target]["uid"] == before["nodes"][target]["uid"]
+                        and observed["nodes"][target]["accepting"]
+                        == (proposal["action"] == "scale-up")
                     )
                     if confirmed or time.monotonic() >= deadline:
                         break

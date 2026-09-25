@@ -12,6 +12,7 @@ def snapshot_view(snapshot, config, *, now_seconds):
     Classifier termination does not release requests: only terminal Pods or Jobs
     do. Every configured worker must be observed Ready with a stable UID; C−1 is
     applied once to configured VM cores, then checked against actual allocatable.
+    Availability uses collection completion; freshness includes its oldest API read.
 
     Args:
         snapshot (dict): Observer snapshot, including bounded membership reconciliation.
@@ -28,6 +29,11 @@ def snapshot_view(snapshot, config, *, now_seconds):
     if not math.isfinite(now_seconds) or not 0 <= now_seconds - at <= 3:
         raise ValueError("state is stale or its timestamp is in the future")
     collection = snapshot.get("collection", {})
+    if not isinstance(collection.get("started_at"), str):
+        raise ValueError("collection start time is unavailable")
+    started = milliseconds(collection["started_at"]) / 1000
+    if not started <= at or not 0 <= now_seconds - started <= 3:
+        raise ValueError("collection is stale or its temporal bounds are invalid")
     if collection.get("missing_job_uids") != []:
         raise ValueError("observation membership is incomplete or unreconciled")
     configured = {worker["node_name"]: worker for worker in config["workers"]}
@@ -120,6 +126,7 @@ def snapshot_view(snapshot, config, *, now_seconds):
         raise ValueError("accepting/draining worker count violates configured bounds")
     return {
         "timestamp_seconds": at,
+        "collection_started_seconds": started,
         "nodes": nodes,
         "assignments": assignments,
         "queue": sorted(queue, key=lambda item: (item["created_at"], item["uid"])),
