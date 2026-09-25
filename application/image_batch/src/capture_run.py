@@ -270,7 +270,7 @@ class CaptureSession:
         (self.output / "replay-check.txt").write_bytes(
             ssh(self.args.endpoint, self.args.ssh_key, self.base_replay + ["check"])
         )
-        source = {path.name: path.read_text() for path in SOURCE.glob("*.py")}
+        source = {path.name: path.read_text() for path in self.args.source_dir.glob("*.py")}
         write_json(
             self.output / "source-hashes.json",
             {name: hashlib.sha256(value.encode()).hexdigest() for name, value in source.items()},
@@ -594,6 +594,12 @@ def main():
     parser.add_argument("--control-node", default=CONTROL_NODE)
     parser.add_argument("--adapter-address", default="192.168.210.3")
     parser.add_argument("--endpoint-image", default=ENDPOINT_IMAGE)
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=SOURCE,
+        help="frozen application source directory for matched comparisons",
+    )
     args = parser.parse_args()
     if not 1 <= args.active_workers <= len(args.workers):
         parser.error("active worker count must fit the worker inventory")
