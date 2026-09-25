@@ -12,6 +12,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from forecast_trace import canonical, parquet_tasks
+from opendc_occupancy import estimated_exhausted_ids
 from opendc_pinning import (
     FNS_CONTRACT,
     PINNED_MODE,
@@ -368,8 +369,8 @@ def _verify_provisional(directory, manifest):
         raise ValueError("candidate scope does not describe partial scale-down")
     workers = case["workers"]
     names = [worker["node_name"] for worker in workers]
-    if not 1 <= len(names) <= 3 or len(set(names)) != len(names):
-        raise ValueError("expected one to three uniquely identified workers")
+    if not names or len(set(names)) != len(names):
+        raise ValueError("expected a nonempty set of uniquely identified workers")
     hosts = topology_hosts(json.loads((directory / "topology.json").read_text()))
     if {host["name"] for host in hosts} != set(names) or len(hosts) != len(names):
         raise ValueError("topology worker identities differ from case")
@@ -398,14 +399,20 @@ def _verify_provisional(directory, manifest):
             raise ValueError("topology resource or power model differs from case")
     _verify_case_lineage(case)
     assignments = initial_assignments(case) if pinned else None
-    if pinned and case.get("initialization") != initialization_metadata(assignments):
+    if pinned and case.get("initialization") != initialization_metadata(assignments, case):
         raise ValueError("initialization metadata differs from pinned input semantics")
     records = case["tasks"]
     tasks = [record["task"] for record in records]
     ids = {task["id"] for task in tasks}
     omitted = {record["task"]["id"] for record in case["omitted_tasks"]}
     exhausted = {record["task_id"] for record in case["model_exhausted_jobs"]}
-    if len(ids) != len(tasks) or ids & (omitted | exhausted) or (omitted and not partial):
+    estimated = estimated_exhausted_ids(case)
+    if (
+        len(ids) != len(tasks)
+        or ids & omitted
+        or ids & exhausted != estimated
+        or (omitted and not partial)
+    ):
         raise ValueError("task identities overlap included, omitted or exhausted work")
     source = pq.read_table(directory / "source/tasks.parquet").to_pylist()
     fragments = pq.read_table(directory / "source/fragments.parquet").to_pylist()
@@ -499,6 +506,7 @@ def _verify_case_lineage(case):
     if pinned and case["candidate"] == "scale-down" and selected not in names:
         raise ValueError("native scale-down must retain its cordoned worker")
     seen = set()
+    estimated = estimated_exhausted_ids(case)
     for group in ("tasks", "omitted_tasks", "model_exhausted_jobs"):
         for item in case[group]:
             task = item.get("task")
@@ -506,7 +514,12 @@ def _verify_case_lineage(case):
             metadata = item.get("metadata", {})
             original = metadata.get("original_creation_ms")
             identity = metadata.get("identity", {})
-            if task_id in seen or identity.get("task_id") != task_id or type(original) is not int:
+            permitted_overlap = group == "model_exhausted_jobs" and task_id in estimated
+            if (
+                (task_id in seen and not permitted_overlap)
+                or identity.get("task_id") != task_id
+                or type(original) is not int
+            ):
                 raise ValueError("missing or conflicting original-arrival/identity metadata")
             seen.add(task_id)
             cohort = metadata.get("cohort")
@@ -525,14 +538,14 @@ def _verify_case_lineage(case):
                 phase = metadata.get("phase")
                 node = metadata.get("node_name")
                 if (
-                    phase not in ("queued", "startup", "running")
+                    phase not in ("queued", "startup", "running", "release")
                     or original > cutoff
                     or not metadata.get("kubernetes_job_uid")
                     or identity.get("kubernetes_job_uid") != metadata["kubernetes_job_uid"]
                     or "preserved_assignment" not in metadata
                     or metadata["preserved_assignment"] != node
                     or (phase == "queued" and node is not None)
-                    or (phase in ("startup", "running") and not node)
+                    or (phase in ("startup", "running", "release") and not node)
                     or (task is not None and task["submission_time"] != 0)
                 ):
                     raise ValueError(
@@ -542,6 +555,18 @@ def _verify_case_lineage(case):
                     first = metadata.get("first_assignment_observed_ms")
                     if type(first) is not int or not original <= first <= cutoff:
                         raise ValueError("missing or invalid observed assignment time")
+                if phase == "release":
+                    occupancy = metadata.get("occupancy", {})
+                    finished = occupancy.get("observed_classifier_finish_ms")
+                    if (
+                        not case.get("occupancy_model")
+                        or occupancy.get("release_only") is not True
+                        or type(finished) is not int
+                        or not original <= finished <= cutoff
+                        or task is None
+                        or any(fragment["cpu_usage"] != 0 for fragment in task["fragments"])
+                    ):
+                        raise ValueError("invalid observed release-only occupancy")
                 if group == "omitted_tasks" and (not partial or node != selected):
                     raise ValueError("omitted task does not belong to the excluded worker")
                 if group == "tasks" and node is not None and node not in names:

@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pyarrow.parquet as pq
 
+from opendc_occupancy import apply_occupancy, calibrate_occupancy
+
 from forecast_trace import (
     bounded_read,
     canonical,
@@ -367,6 +369,88 @@ def _future_metadata(lineage):
     return copied
 
 
+def release_backlog(trace, simulation, calibration):
+    """Retain requests of observed finished classifiers until their Pods terminate.
+
+    Args:
+        trace (Trace): Current availability-bounded worker and Job snapshot.
+        simulation (dict): Validated Job-to-task identities for the same cutoff.
+        calibration (dict or None): Optional frozen lifecycle model.
+
+    Returns:
+        list[dict]: Pinned occupancy-only Tasks with the already observed classifier finish.
+
+    Raises:
+        ValueError: A held allocation lacks identity, timing or homogeneous request evidence.
+    """
+    if calibration is None:
+        return []
+    records = []
+    resources = calibration["residual_resources"]
+    for job in trace.state["jobs"].get("finished", []):
+        if job.get("pod_phase") in ("Succeeded", "Failed") or job.get("job_terminal_status") in (
+            "Complete",
+            "Failed",
+        ):
+            continue
+        uid = job.get("kubernetes_job_uid")
+        if (
+            not job.get("node_name")
+            or uid not in simulation["job_ids"]
+            or not job.get("execution_finish_time")
+        ):
+            raise ValueError("unreleased Pod lacks assignment, identity or classifier finish")
+        finish = milliseconds(job["execution_finish_time"])
+        creation = milliseconds(job["creation_time"])
+        if (
+            not creation <= finish <= trace.cutoff
+            or job.get("requested_cpu_count") != resources["cpu_count"]
+            or job.get("requested_memory_mb") != resources["mem_capacity"]
+        ):
+            raise ValueError("unreleased Pod timing or request differs from the calibrated model")
+        duration = max(1000, calibration["release_ms"] - (trace.cutoff - finish))
+        task_id = simulation["job_ids"][uid]
+        metadata = {
+            "cohort": "backlog",
+            "phase": "release",
+            "node_name": job["node_name"],
+            "kubernetes_job_uid": uid,
+            "original_creation_ms": creation,
+            "identity": {
+                "task_id": task_id,
+                "kubernetes_job_uid": uid,
+                "request_id": job.get("request_id"),
+            },
+            "release_observation": copy.deepcopy(job),
+            "occupancy": {
+                "release_only": True,
+                "profile_exhausted": False,
+                "startup_ms": 0,
+                "release_ms": 0,
+                "classifier_profile_ms": 0,
+                "observed_classifier_finish_ms": finish,
+                "release_basis": "remaining calibrated release with one-second still-held floor",
+            },
+        }
+        metadata.update(_assignment_evidence(trace, metadata))
+        task = {key: resources[key] for key in ("cpu_count", "cpu_capacity", "mem_capacity")}
+        task.update(
+            id=task_id,
+            submission_time=0,
+            duration=duration,
+            fragments=[
+                {
+                    "id": task_id,
+                    "duration": duration,
+                    "cpu_count": resources["cpu_count"],
+                    "cpu_usage": 0.0,
+                }
+            ],
+        )
+        records.append({"task": task, "metadata": metadata})
+    return records
+
+
 def _worker_records(worker_config, trace, template, backlog, exhausted):
     """Validate worker configuration and construct modeled worker records.
 
@@ -453,10 +537,9 @@ def _worker_records(worker_config, trace, template, backlog, exhausted):
     # observed live assignment may be reclassified as an initially empty reserve.
     assigned.update(
         job["node_name"]
-        for group in ("queued", "active")
+        for group in ("queued", "active", "finished")
         for job in trace.state["jobs"].get(group, [])
         if job.get("node_name")
-        and job.get("execution_state") != "terminated"
         and job.get("pod_phase") not in ("Succeeded", "Failed")
         and job.get("job_terminal_status") not in ("Complete", "Failed")
     )
@@ -591,6 +674,7 @@ def _write_case(
     selected_worker,
     experiment_kind,
     draining_worker=None,
+    occupancy_model=None,
 ):
     """Write one experiment and publish its ready case manifest last.
 
@@ -608,6 +692,7 @@ def _write_case(
         selected_worker (str or None): Down worker, when applicable.
         experiment_kind (str): Observed or explicitly synthetic experiment label.
         draining_worker (str or None): Existing cordon whose assigned work still drains.
+        occupancy_model (dict or None): Frozen causal lifecycle and residual estimates.
 
     Returns:
         dict: Published case manifest.
@@ -635,10 +720,13 @@ def _write_case(
             "observations may be left-censored"
         ),
     }
+    if occupancy_model:
+        case = apply_occupancy(case, occupancy_model)
+        tasks = [item["task"] for item in case["tasks"]]
     assignments = initial_assignments(case) if pinned else None
     config = experiment_config()
     if pinned:
-        case["initialization"] = initialization_metadata(assignments)
+        case["initialization"] = initialization_metadata(assignments, case)
         cordon = draining_worker or (selected_worker if candidate == "scale-down" else None)
         config["cordonHosts"] = [[cordon] if cordon else []]
         config["exportModels"][0]["filesToExport"].append("datacenter")
@@ -657,6 +745,34 @@ def _write_case(
     }
     write_json(directory / "manifest.json", manifest)
     return manifest
+
+
+def prepare_occupancy_model(worker_config, forecast, template, observer_dir, boundaries):
+    """Reconstruct optional lifecycle calibration solely at frozen profile selection.
+
+    Args:
+        worker_config (dict): Explicit optional occupancy_model contract name.
+        forecast (dict): Forecast providing workload identity.
+        template (dict): Selected classifier profile and causal selection cutoff.
+        observer_dir (Path): Immutable observer-prefix source.
+        boundaries (dict): Exact verified byte boundaries from this forecast.
+
+    Returns:
+        dict or None: Causal calibration, or the original classifier-only model.
+
+    Raises:
+        ValueError: The requested model is unknown or selection evidence is invalid.
+    """
+    contract = worker_config.get("occupancy_model")
+    if contract is None:
+        return None
+    if contract != "causal-occupancy-v1":
+        raise ValueError("unknown occupancy model")
+    rows, _ = bounded_read(observer_dir, boundaries)
+    trace = read_trace(
+        rows, forecast["settings"]["run_id"], milliseconds(template["selection_cutoff"])
+    )
+    return calibrate_occupancy(trace, template)
 
 
 def prepare_suite(
@@ -704,6 +820,11 @@ def prepare_suite(
     )
     backlog, exhausted = _enrich_backlog(initial, trace)
     configured, active = _worker_records(worker_config, trace, template, backlog, exhausted)
+    occupancy_model = prepare_occupancy_model(
+        worker_config, forecast, template, observer_dir, boundaries
+    )
+    releasing = release_backlog(trace, simulation, occupancy_model)
+    backlog.extend(releasing)
     draining = worker_config.get("draining_workers", [])
     if draining and not pinned:
         raise ValueError("persistent draining requires pinned-trace initialization")
@@ -724,6 +845,8 @@ def prepare_suite(
             unavailable.append({"candidate": "scale-up", "reason": "no_configured_reserve"})
     if draining:
         unavailable.append({"candidate": "scale-down", "reason": "worker_already_draining"})
+    elif occupancy_model and (exhausted or not simulation["membership"]["complete"]):
+        unavailable.append({"candidate": "scale-down", "reason": "exhausted_or_unresolved_work"})
     elif len(active) <= worker_config.get("minimum_workers", 1):
         unavailable.append({"candidate": "scale-down", "reason": "minimum_worker_count"})
     else:
@@ -752,6 +875,7 @@ def prepare_suite(
     for candidate, worker_names, selected_worker in candidates:
         workers = [copy.deepcopy(configured[name]) for name in worker_names]
         for scenario_index, source_tasks in enumerate(scenarios):
+            source_tasks = source_tasks + [item["task"] for item in releasing]
             tasks, records, omitted = _case_tasks(
                 "unchanged" if pinned else candidate,
                 selected_worker,
@@ -774,6 +898,7 @@ def prepare_suite(
                 selected_worker,
                 experiment_kind,
                 draining[0] if draining else None,
+                occupancy_model,
             )
             experiments.append(
                 {

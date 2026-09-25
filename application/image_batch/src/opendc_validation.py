@@ -28,6 +28,8 @@ from opendc_scenarios import (
     _worker_records,
     _write_case,
     INITIALIZATION_MODES,
+    prepare_occupancy_model,
+    release_backlog,
 )
 from opendc_pinning import PINNED_MODE
 from opendc_runtime import fns_runtime
@@ -97,6 +99,10 @@ def prepare_validation_suite(
     # pylint: enable=unidiomatic-typecheck
     backlog, exhausted = _enrich_backlog(initial, trace)
     configured, active = _worker_records(worker_config, trace, template, backlog, exhausted)
+    occupancy_model = prepare_occupancy_model(
+        worker_config, forecast, template, observer_dir, boundaries
+    )
+    backlog.extend(release_backlog(trace, simulation, occupancy_model))
     draining = worker_config.get("draining_workers", [])
     if draining and initialization_mode != PINNED_MODE:
         raise ValueError("persistent draining requires pinned-trace initialization")
@@ -176,6 +182,7 @@ def prepare_validation_suite(
             None,
             arrival_source,
             draining[0] if draining else None,
+            occupancy_model,
         )
         experiments.append(
             {"candidate": "unchanged", "scenario": index, "input_dir": relative.as_posix()}
@@ -392,8 +399,9 @@ def compare_tasks(
         for r in observations
         if r["uid"] in backlog_uids or cutoff <= r["creation_ms"] < cutoff + target_seconds * 1000
     ]
-    # Exhausted work remains a separate observed inventory, never an invented completion.
-    target_observed = [r for r in target_observed if r["uid"] not in exhausted_uids]
+    # Only unrepresented exhausted work is outside the common predicted/observed cohort.
+    # Explicit occupancy estimates retain the matching actual outcome or censoring.
+    target_observed = [r for r in target_observed if r["uid"] not in exhausted_uids - backlog_uids]
     target_observed = [
         {**r, "cohort": "backlog" if r["uid"] in backlog_uids else "future"}
         for r in target_observed
@@ -413,7 +421,12 @@ def compare_tasks(
         native = complete[task["id"]]
         uid = metadata["identity"].get("kubernetes_job_uid")
         truth = observed.get(uid)
-        predicted_finish = cutoff + native["finish_time"]
+        occupancy = metadata.get("occupancy", {})
+        startup_ms = occupancy.get("startup_ms", 0)
+        release_ms = occupancy.get("release_ms", 0)
+        predicted_finish = occupancy.get(
+            "observed_classifier_finish_ms", cutoff + native["finish_time"] - release_ms
+        )
         record = {
             "task_id": task["id"],
             "uid": uid,
@@ -421,6 +434,8 @@ def compare_tasks(
             "phase": metadata.get("phase"),
             "original_creation_ms": metadata["original_creation_ms"],
             "predicted_finish_ms": predicted_finish,
+            "predicted_resource_release_ms": cutoff + native["finish_time"],
+            "modeled_occupancy": occupancy,
             "predicted_response_seconds": (predicted_finish - metadata["original_creation_ms"])
             / 1000,
             "predicted_completed": predicted_finish <= end,
@@ -428,7 +443,7 @@ def compare_tasks(
             "match_status": "matched"
             if truth
             else ("synthetic_future" if uid is None else "unmatched"),
-            "modeled_duration_seconds": task["duration"] / 1000,
+            "modeled_duration_seconds": (task["duration"] - startup_ms - release_ms) / 1000,
             "rescheduled_wait_seconds": native["schedule_time"] / 1000
             if metadata.get("phase") == "running"
             else None,
@@ -439,7 +454,7 @@ def compare_tasks(
         if truth and truth["finish_ms"] is not None:
             record["finish_error_seconds"] = (predicted_finish - truth["finish_ms"]) / 1000
             record["observed_response_seconds"] = (truth["finish_ms"] - truth["creation_ms"]) / 1000
-            if truth["start_ms"] is not None:
+            if truth["start_ms"] is not None and metadata.get("phase") != "release":
                 actual_work = max(
                     0,
                     truth["finish_ms"]
@@ -450,7 +465,7 @@ def compare_tasks(
                     ),
                 )
                 record["runtime_or_remainder_error_seconds"] = (
-                    task["duration"] - actual_work
+                    task["duration"] - startup_ms - release_ms - actual_work
                 ) / 1000
                 resume = (
                     max(cutoff, truth["start_ms"])
@@ -458,7 +473,7 @@ def compare_tasks(
                     else truth["start_ms"]
                 )
                 record["start_or_resume_error_seconds"] = (
-                    cutoff + native["schedule_time"] - resume
+                    cutoff + native["schedule_time"] + startup_ms - resume
                 ) / 1000
                 record["unmodeled_startup_seconds"] = (
                     max(0, truth["start_ms"] - cutoff) / 1000

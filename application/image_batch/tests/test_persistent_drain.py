@@ -91,6 +91,9 @@ class PersistentDrainTests(unittest.TestCase):
                 (root / "suite" / manifest["experiments"][0]["input_dir"] / "case.json").read_text()
             )
             self.assertEqual(sum(node["modeled_cores"] for node in case["workers"]), 35)
+            for entry in manifest["experiments"]:
+                verify_inputs(root / "suite" / entry["input_dir"])
+            plan_suite(root / "suite")
 
 
 if __name__ == "__main__":

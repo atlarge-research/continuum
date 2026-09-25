@@ -1,5 +1,7 @@
 """Admission and ordering preconditions for the pinned FNS-demo engine."""
 
+from opendc_occupancy import estimated_exhausted_ids
+
 PINNED_MODE = "pinned-trace"
 FNS_CONTRACT = "opendc-fns-v1"
 
@@ -42,6 +44,7 @@ def initial_assignments(case):
             cordoned worker has observed work with no modeled drain duration.
     """
     workers = {worker["node_name"]: worker for worker in case["workers"]}
+    estimated = estimated_exhausted_ids(case)
     used = {name: [0, 0] for name in workers}
     assigned = {}
     for record in case["tasks"]:
@@ -52,7 +55,7 @@ def initial_assignments(case):
         if (
             host not in workers
             or metadata.get("cohort") != "backlog"
-            or metadata.get("phase") not in ("running", "startup")
+            or metadata.get("phase") not in ("running", "startup", "release")
             or task["submission_time"] != 0
         ):
             raise ValueError("invalid initial pinned assignment")
@@ -79,6 +82,7 @@ def initial_assignments(case):
                 raise ValueError("unassigned task exceeds remaining worker capacity after cordon")
         if any(
             item["metadata"].get("preserved_assignment") == selected
+            and item["task_id"] not in estimated
             for item in case["model_exhausted_jobs"]
         ):
             raise ValueError("selected worker has exhausted work with unknown drain duration")
@@ -103,16 +107,17 @@ def native_order(task_ids, assignments):
     return sorted(range(len(task_ids)), key=lambda index: task_ids[index] not in assignments)
 
 
-def initialization_metadata(assignments):
+def initialization_metadata(assignments, case=None):
     """Describe requested placement and the remaining startup/exhaustion approximations.
 
     Args:
         assignments (dict[int, str]): Validated initial task-to-host assignments.
+        case (dict or None): Optional case carrying explicit lifecycle occupancy estimates.
 
     Returns:
         dict: Input intent and explicit limitations, not an execution success verdict.
     """
-    return {
+    result = {
         "pinned_task_ids": sorted(assignments),
         "trace_order": "assigned tasks first, then original unassigned order",
         "startup_delay_restored": False,
@@ -123,3 +128,13 @@ def initialization_metadata(assignments):
             "exhausted profiles have no invented allocation or completion"
         ),
     }
+    if case and case.get("occupancy_model"):
+        result.update(
+            startup_delay_restored=True,
+            exhausted_occupancy_restored=bool(case["model_exhausted_jobs"]),
+            interpretation=(
+                "causal occupancy estimates surround preserved classifier profiles; "
+                "exhausted residuals are labeled predictions, not observed completion"
+            ),
+        )
+    return result

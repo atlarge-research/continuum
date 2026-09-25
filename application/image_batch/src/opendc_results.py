@@ -254,7 +254,7 @@ def validate_provisional_results(directory, case):
     establish completed identities and CPU/memory admission. Provisional cases
     do not enforce placement; pinned cases additionally require the observed
     hosts at zero, no new cordon admissions and complete datacenter energy.
-    Startup delay and exhausted-work occupancy remain unmodeled. OpenDC starts
+    Explicit occupancy estimates, when present, remain modeled assumptions. OpenDC starts
     its clock at the earliest submission; returned lifecycle times restore the
     cutoff-relative origin, while native submission times already use that origin.
 
@@ -492,7 +492,10 @@ def validate_provisional_results(directory, case):
             "table_rows": {name: len(rows) for name, rows in tables.items()},
             "semantic_sha256": hashlib.sha256(canonical(semantic)).hexdigest(),
             "interpretation": (
-                "validated represented-task pinning; startup delay and exhausted occupancy "
+                "validated represented-task pinning and explicit causal occupancy estimates; "
+                "no claim of measured startup/residual accuracy"
+                if pinned and case.get("occupancy_model")
+                else "validated represented-task pinning; startup delay and exhausted occupancy "
                 "remain unmodeled"
                 if pinned
                 else "provisional trace replay; placement/startup occupancy not restored"
