@@ -400,6 +400,18 @@ class CaptureSession:
         Raises:
             ValueError: Application placement or fresh capture health is invalid.
         """
+        if self.args.admission_mode == "fifo":
+            latest = self.kubectl(
+                "logs", "-n", self.namespace, self.pod_name, "-c", "fifo-admission", "--tail=1"
+            ).strip()
+            if latest:
+                event = json.loads(latest)
+                if (
+                    event.get("event") == "admission.stopped"
+                    or event.get("status") == "uncertain_stop"
+                ):
+                    write_json(self.output / "admission-failure.json", event)
+                    raise ValueError("FIFO admission stopped; preserve the failed capture")
         pods = self.get("pods", "-n", self.namespace)["items"]
         capture = next(pod for pod in pods if pod["metadata"]["name"] == self.pod_name)
         if any(item["restartCount"] for item in capture["status"].get("containerStatuses", [])):

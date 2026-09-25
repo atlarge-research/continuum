@@ -3,7 +3,7 @@
 import copy
 import importlib
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 class AdmissionTests(unittest.TestCase):
@@ -122,9 +122,41 @@ class AdmissionTests(unittest.TestCase):
         for status, message, expected in [
             (409, "Conflict", "retry_snapshot"),
             (422, "testing value failed: test failed", "retry_snapshot"),
+            (
+                422,
+                "the server rejected our request due to an error in our request",
+                "retry_snapshot",
+            ),
             (500, "lost server outcome", "uncertain_stop"),
         ]:
             api.patch_namespaced_job.side_effect = module.client.exceptions.ApiException(
                 status=status, reason=message
             )
             self.assertEqual(module.release(api, "test", decision)["status"], expected)
+
+    def test_binding_timeout_stops_without_releasing_younger_jobs(self):
+        """The live loop halts after a30-second unbound reservation, including after restart."""
+        module = importlib.import_module("fifo_admission")
+        self.jobs[1]["spec"]["suspend"] = False
+        api_client, batch, core = Mock(), Mock(), Mock()
+        api_client.sanitize_for_serialization.side_effect = lambda value: value
+        batch.list_namespaced_job.return_value = {"items": self.jobs}
+        core.list_namespaced_pod.return_value = {"items": []}
+        core.list_node.return_value = {"items": self.nodes}
+        with patch.dict(
+            module.os.environ, {"JOB_NAMESPACE": "test", "ADMISSION_WORKERS": '{"w1":2}'}
+        ), patch.object(module.config, "load_incluster_config"), patch.object(
+            module.client, "ApiClient", return_value=api_client
+        ), patch.object(
+            module.client, "BatchV1Api", return_value=batch
+        ), patch.object(
+            module.client, "CoreV1Api", return_value=core
+        ), patch.object(
+            module.time, "monotonic", side_effect=[0, 31]
+        ), patch.object(
+            module, "halt", side_effect=RuntimeError("stopped")
+        ) as stop:
+            with self.assertRaisesRegex(RuntimeError, "stopped"):
+                module.main()
+        stop.assert_called_once_with("binding_timeout", job_uid="a")
+        batch.patch_namespaced_job.assert_not_called()

@@ -158,17 +158,28 @@ def release(api, namespace, decision):
     try:
         api.patch_namespaced_job(decision["job_name"], namespace, patch, _request_timeout=5)
     except client.exceptions.ApiException as exc:
-        rejected = exc.status in (404, 409) or (
-            exc.status == 422
-            and any(
-                text in str(exc).lower()
-                for text in ("test failed", "test operation", "testing value")
-            )
-        )
+        rejected = exc.status in (404, 409, 422)
         return dict(status="retry_snapshot" if rejected else "uncertain_stop", error=str(exc))
     except (HTTPError, OSError) as exc:
         return dict(status="uncertain_stop", error=str(exc))
     return dict(status="released")
+
+
+def halt(reason, **details):
+    """Record failed admission and remain stopped without restarting or releasing work.
+
+    Args:
+        reason (str): Explicit uncertainty, binding timeout or repeated-rejection reason.
+        details (dict): JSON-compatible failure evidence for the capture monitor.
+    """
+    print(
+        json.dumps(
+            dict(timestamp_ns=time.time_ns(), event="admission.stopped", reason=reason, **details)
+        ),
+        flush=True,
+    )
+    while True:
+        time.sleep(60)
 
 
 def main():
@@ -180,6 +191,7 @@ def main():
     workers = json.loads(os.environ["ADMISSION_WORKERS"])
     outstanding_uid, outstanding_since = None, None
     previous = None
+    rejections = 0
     while True:
         jobs = api_client.sanitize_for_serialization(
             batch.list_namespaced_job(namespace, label_selector=LABEL, _request_timeout=5)
@@ -197,13 +209,7 @@ def main():
         if uid != outstanding_uid:
             outstanding_uid, outstanding_since = uid, time.monotonic()
         if uid and time.monotonic() - outstanding_since > 30:
-            print(
-                json.dumps(dict(event="admission.stopped", reason="binding_timeout", job_uid=uid)),
-                flush=True,
-            )
-            # Stay alive but stop release permanently, preserving evidence and preventing retries.
-            while True:
-                time.sleep(60)
+            halt("binding_timeout", job_uid=uid)
         if result != previous:
             print(
                 json.dumps(dict(timestamp_ns=time.time_ns(), event="admission.decision", **result)),
@@ -224,8 +230,10 @@ def main():
                 flush=True,
             )
             if outcome["status"] == "uncertain_stop":
-                while True:
-                    time.sleep(60)
+                halt("uncertain_patch_outcome", job_uid=result["job_uid"], error=outcome["error"])
+            rejections = rejections + 1 if outcome["status"] == "retry_snapshot" else 0
+            if rejections >= 10:
+                halt("repeated_patch_rejection", job_uid=result["job_uid"], error=outcome["error"])
         time.sleep(0.2)
 
 
