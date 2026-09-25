@@ -20,6 +20,10 @@ from reporting.replay import render_replay_pages
 from reporting.study_evidence import SCHEMA as STUDY_SCHEMA
 from reporting.topics import render_topics
 from reporting.layout import SUPPLEMENT_SCHEMA
+from reporting.loop_study import (
+    render_pages as render_loop_study,
+    render_safety as render_loop_safety,
+)
 from reporting.controlled import (
     SCHEMA as CONTROLLED_SCHEMA,
     render_pages as render_controlled_pages,
@@ -100,6 +104,7 @@ def render_report(  # pylint: disable=too-many-arguments
         if closed_loop_reports:
             audit["closed_loop"] = render_loop_pages(pdf, closed_loop_reports)
             audit["section_order"].append("closed-loop-physical")
+            audit["section_order"].extend(render_loop_study(pdf, supplement or {}))
         if measured_reports or forecast_reports or study_reports:
             audit["topics"] = render_topics(
                 pdf, measured_reports, forecast_reports, study_reports, supplement or {}
@@ -142,6 +147,8 @@ def render_report(  # pylint: disable=too-many-arguments
             render_loop_validation(pdf, closed_loop_reports)
             render_loop_details(pdf, closed_loop_reports)
             audit["section_order"].append("closed-loop-validation")
+            if render_loop_safety(pdf, supplement or {}):
+                audit["section_order"].append("closed-loop-observed-safety")
     return audit
 
 

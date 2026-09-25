@@ -623,18 +623,20 @@ def _forecast_observation_page(pdf, run):
             color=color,
             label=label,
         )
-    for action in run["controller"].get("actions", []):
-        if action["observed"] is True:
-            at = (action["recorded_at_ns"] / 1e9 - origin) / 60
-            axes[1, 0].axvline(at, color=COLORS[1], linestyle=":", linewidth=1)
-            axes[1, 0].annotate(
-                "↓" if action["action"] == "scale-down" else "↑",
-                (at, 0),
-                xytext=(0, 6),
-                textcoords="offset points",
-                ha="center",
-                color=COLORS[1],
-            )
+    observed_actions = [
+        action for action in run["controller"].get("actions", []) if action["observed"] is True
+    ]
+    for action in observed_actions:
+        at = (action["recorded_at_ns"] / 1e9 - origin) / 60
+        axes[1, 0].axvline(at, color=COLORS[1], linestyle=":", linewidth=1)
+        axes[1, 0].annotate(
+            "↓" if action["action"] == "scale-down" else "↑",
+            (at, 0),
+            xytext=(0, 6),
+            textcoords="offset points",
+            ha="center",
+            color=COLORS[1],
+        )
     queue_times, queue_values = observed_series(series, origin, "queue")
     axes[1, 1].step(queue_times, queue_values, where="post", color="black")
     for axis in axes.flat:
@@ -656,13 +658,17 @@ def _forecast_observation_page(pdf, run):
     )
     panel(
         axes[1, 0],
-        "Dotted lines mark physically observed down/up actions",
+        (
+            "Dotted lines mark physically observed down/up actions"
+            if observed_actions
+            else "No confirmed capacity change in this run"
+        ),
         "Minutes after warm-up",
         "Application cores / accepting workers",
     )
     panel(
         axes[1, 1],
-        "The physical queue reveals pressure after capacity changes",
+        "Observed queue through the evaluation window",
         "Minutes after warm-up",
         "Queued Jobs",
     )
