@@ -710,13 +710,45 @@ class ResourceSampler:
             )
             self._observed_uids.add(uid)
 
+    def _missing_membership(self, jobs: list[Any], pods: list[Any]) -> list[str]:
+        """Find known unfinalized Jobs or Pod owners absent from the collected list.
+
+        Args:
+            jobs (list): Jobs returned by the current list request.
+            pods (list): Pods returned by the independent Pod request.
+
+        Returns:
+            list[str]: Sorted missing UIDs, without inferred phase or placement.
+        """
+        listed = {getattr(getattr(job, "metadata", None), "uid", None) for job in jobs}
+        owners = {
+            owner.uid
+            for pod in pods
+            for owner in (getattr(getattr(pod, "metadata", None), "owner_references", None) or [])
+            if getattr(owner, "kind", None) == "Job" and getattr(owner, "uid", None)
+        }
+        with self._lock:
+            known = self._observed_uids - self._finalized_uids
+        return sorted((known | owners) - listed)
+
     def collect_once(self, *, collect_resources: bool = True) -> None:
+        """Collect a bounded state snapshot before optionally sampling resources.
+
+        Args:
+            collect_resources (bool): Also query the configured resource metrics.
+        """
         # Terminal finalization must include the whole in-flight collection,
         # including flushed raw evidence, before detaching its sample list.
         with self._collection_lock:
             self._collect_once(collect_resources=collect_resources)
 
     def _collect_once(self, *, collect_resources: bool) -> None:
+        """Reconcile one observable list race without backdating evidence availability.
+
+        Args:
+            collect_resources (bool): Whether this tick also samples Prometheus.
+        """
+        collection_started = datetime.now(timezone.utc)
         try:
             jobs = self.batch_api.list_namespaced_job(
                 namespace=self.namespace, label_selector=self.label_selector
@@ -743,6 +775,17 @@ class ResourceSampler:
             return
 
         try:
+            passes = 1
+            if self._missing_membership(jobs.items, pods.items):
+                jobs = self.batch_api.list_namespaced_job(
+                    namespace=self.namespace, label_selector=self.label_selector
+                )
+                for job in jobs.items:
+                    self.observe_job(job)
+                pods = self.core_api.list_namespaced_pod(
+                    namespace=self.namespace, label_selector=self.label_selector
+                )
+                passes = 2
             nodes = self.core_api.list_node()
             state_record = build_cluster_state_record(
                 jobs.items,
@@ -753,6 +796,12 @@ class ResourceSampler:
                 label_selector=self.label_selector,
                 observed_at=datetime.now(timezone.utc),
             )
+            state_record["collection"] = {
+                "started_at": utc_iso(collection_started),
+                "passes": passes,
+                "missing_job_uids": self._missing_membership(jobs.items, pods.items),
+                "atomic": False,
+            }
         except Exception as exc:
             self.emit_diagnostic(
                 "cluster_state.capture_failed",
