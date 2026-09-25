@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from closed_loop_journal import Journal
-from test_closed_loop_guards import GuardTests
+import test_closed_loop_guards as guard_fixtures
 from opendc_scenarios import _down_worker
 
 
@@ -18,7 +18,7 @@ class ControllerTests(unittest.TestCase):
 
     def setUp(self):
         """Reuse realistic fresh observer inventory from guard regressions."""
-        fixture = GuardTests()
+        fixture = guard_fixtures.GuardTests()
         fixture.setUp()
         self.config = fixture.config
         self.snapshot = fixture.snapshot
