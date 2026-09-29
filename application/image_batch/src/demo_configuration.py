@@ -10,12 +10,12 @@ from infrastructure.network import generate_mahimati_command, mahimahi_values
 
 
 EXPERIMENT_DEFAULTS = {
-    "period_seconds": 480,
+    "period_seconds": 600,
     "cycles": 4,
     "warmup_cycles": 2,
     "minimum_rate": 0.02,
-    "peak_rate": 0.24,
-    "cadence_seconds": 60,
+    "peak_rate": 0.18,
+    "cadence_seconds": 90,
     "horizon_seconds": 180,
     "scenarios": 3,
     "scenario_seed": 20260929,
