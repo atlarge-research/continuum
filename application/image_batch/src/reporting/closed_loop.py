@@ -374,7 +374,12 @@ def render_validation(pdf, reports):
                 str(operation.get("fallback_invocations", "—"))
                 if run["arm"] == "forecast"
                 else "n/a",
-                "—" if fraction is None else f"{100*fraction:.0f}%",
+                (
+                    f'{control.get("complete_native_cycles", 0)}/{len(control.get("cycles", []))}\n'
+                    + ("—" if fraction is None else f"{100*fraction:.0f}%")
+                )
+                if run["arm"] == "forecast"
+                else "n/a",
             ]
         )
     table = axis.table(
@@ -389,7 +394,7 @@ def render_validation(pdf, reports):
             "Valid\nstreak",
             "Retries*",
             "Fallbacks*",
-            "Native in\nbudget",
+            "Native done* /\nin budget",
         ],
         loc="upper center",
         cellLoc="center",
@@ -410,8 +415,8 @@ def render_validation(pdf, reports):
         "benefit summaries. Rejected attempts remain archived.\n"
         "*Retries and fallback include controlled follow-up. One rejected incomplete prefix "
         "may be recollected; both attempts remain archived.\n"
-        "Horizon, scenarios and budgets are listed on the configuration page. Warm reserves "
-        "remain powered; C−1 application cores are applied once.",
+        "*Native done: complete/evaluated cycles; timing percentage uses complete cases only. "
+        "Warm reserves stay powered; C−1 is applied once.",
     )
 
     _configuration_page(pdf, runs)
