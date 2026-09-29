@@ -370,6 +370,7 @@ def render_validation(pdf, reports):
                 if run["arm"] == "forecast"
                 else "n/a",
                 str(control["longest_consecutive_valid_cycles"]),
+                str(operation.get("observation_retries", 0)),
                 str(operation.get("fallback_invocations", "—"))
                 if run["arm"] == "forecast"
                 else "n/a",
@@ -384,17 +385,18 @@ def render_validation(pdf, reports):
             "Capture",
             "Down",
             "Up",
-            "Forecast pairs",
-            "Valid streak",
+            "Forecast\npairs",
+            "Valid\nstreak",
+            "Retries*",
             "Fallbacks*",
-            "Native in budget",
+            "Native in\nbudget",
         ],
         loc="upper center",
         cellLoc="center",
     )
     table.auto_set_font_size(False)
     table.set_fontsize(9)
-    table.scale(1, 1.7)
+    table.scale(1, 2.2)
     for (row, _), cell in table.get_celld().items():
         cell.set_edgecolor("#dddddd")
         if row == 0:
@@ -406,8 +408,8 @@ def render_validation(pdf, reports):
         "Unconfirmed actions or skipped/invalid cycles break a streak.\n"
         "Pilots provide implementation/functional evidence, separate from held-out "
         "benefit summaries. Rejected attempts remain archived.\n"
-        "*Fallbacks include holds and controlled follow-up. Native completeness and timely "
-        "results do not imply forecast-selected action.\n"
+        "*Retries and fallback include controlled follow-up. One rejected incomplete prefix "
+        "may be recollected; both attempts remain archived.\n"
         "Horizon, scenarios and budgets are listed on the configuration page. Warm reserves "
         "remain powered; C−1 application cores are applied once.",
     )

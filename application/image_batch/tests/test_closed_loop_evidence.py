@@ -196,6 +196,27 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(result["fallback_invocations"], 1)
         self.assertEqual(result["fallback_categories"], {"timeout": 1})
 
+    def test_observation_recollection_is_reported_separately_from_fallback(self):
+        """Successful reacquisition cannot disappear from reliability diagnostics."""
+        records = [
+            {"event": "cycle.begin", "tick": 1, "started_at": 1000},
+            {
+                "event": "observation.retry",
+                "tick": 1,
+                "wait_seconds": 2,
+                "phase": "forecast_preparation",
+                "reason": "missing job",
+            },
+            {"event": "cycle.end", "tick": 1, "forecast_valid": True, "outcome": "held"},
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "journal.jsonl").write_text("\n".join(json.dumps(row) for row in records))
+            result = self.module().controller_outcomes(root, 1000, 1100)
+        self.assertEqual(result.get("observation_retries"), 1)
+        self.assertEqual(result["fallback_invocations"], 0)
+        self.assertEqual(result["cycles"][0]["observation_retries"][0]["wait_seconds"], 2)
+
     def test_action_lifecycle_requires_real_release_and_forecast_selected_reuse(self):
         """Cordon acknowledgment is distinct from an empty reserve and later reuse."""
         fixture = guard_fixtures.GuardTests()
@@ -241,6 +262,13 @@ class EvidenceTests(unittest.TestCase):
             ],
             0,
         )
+
+        later = copy.deepcopy(states[4])
+        later["timestamp"] = iso(1008000)
+        later["collection"]["started_at"] = later["timestamp"]
+        result = self.module().action_lifecycles(actions, states[:4] + [later], fixture.config)
+        self.assertIsNone(result["actions"][0]["first_observed_empty_seconds"])
+        self.assertEqual(result["forecast_down_up_pairs"], 0)
 
     def test_job_failed_before_evaluation_is_not_live_warmup_backlog(self):
         """Failure observed before the scoring boundary is a terminal outcome."""

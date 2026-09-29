@@ -237,6 +237,8 @@ def controller_outcomes(  # pylint: disable=too-many-locals
                 decision_age_seconds=record["recorded_at_ns"] / 1e9 - record["cutoff_seconds"],
                 shadow=record["shadow"],
             )
+        elif record["event"] == "observation.retry":
+            row.setdefault("observation_retries", []).append(record)
         elif record["event"] == "fallback.invoked":
             row["fallback_invoked"] = True
             row["failure_category"] = record.get("category", "unclassified")
@@ -359,6 +361,7 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         within_budget_native_fraction=on_time / len(eligible) if eligible else None,
         within30_native_cycles=legacy_on_time,
         within30_native_fraction=legacy_on_time / len(eligible) if eligible else None,
+        observation_retries=sum(len(row.get("observation_retries", [])) for row in rows),
         fallback_invocations=sum(row.get("fallback_invoked", False) for row in rows),
         fallback_categories=dict(
             Counter(
@@ -477,6 +480,7 @@ def action_lifecycles(actions, states, config):
             views.append(snapshot_view(state, config, now_seconds=at))
         except ValueError:
             continue
+    views.sort(key=lambda view: view["timestamp_seconds"])
     result, pending, pairs = [], {}, 0
     for action in actions:
         row = dict(action)
@@ -509,6 +513,10 @@ def action_lifecycles(actions, states, config):
             if down and down["node_uid"] == uid:
                 down["reused_at_seconds"] = acknowledged
                 empty = down["first_observed_empty_seconds"]
+                if empty is not None and empty > acknowledged:
+                    # An empty observation after reuse belongs to a later drain interval.
+                    down["first_observed_empty_seconds"] = None
+                    empty = None
                 if (
                     empty is not None
                     and empty <= acknowledged

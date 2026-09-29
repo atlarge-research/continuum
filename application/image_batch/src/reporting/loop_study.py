@@ -449,6 +449,45 @@ def _ranking_page(pdf, runs):
     )
 
 
+def _development_pages(pdf, evidence):
+    """Show bounded tuning evidence and the rationale frozen before fresh evaluation.
+
+    Args:
+        pdf (PdfPages): Open combined report destination.
+        evidence (dict): Saved timing rows, selection rows and explicit interpretation notes.
+    """
+    trials = evidence.get("timing_trials", [])
+    if trials:
+        _table_page(
+            pdf,
+            "Development timing trials",
+            "Development probes choose a practical protocol; they are separate from fresh results.",
+            ["Trial", "Input / scope", "Horizon (s)", "Futures", "Elapsed (s)", "Outcome"],
+            [
+                [
+                    row["trial"],
+                    row["scope"],
+                    row["horizon_seconds"],
+                    row["scenarios"],
+                    f'{row["elapsed_seconds"]:.2f}',
+                    row["outcome"],
+                ]
+                for row in trials
+            ],
+            evidence["timing_note"],
+        )
+    choices = evidence.get("selection", [])
+    if choices:
+        _table_page(
+            pdf,
+            "Why these settings were frozen",
+            "Physical development observations determine timing headroom and workload choices.",
+            ["Choice", "Frozen value", "Development evidence / limitation"],
+            [[row["choice"], row["value"], row["reason"]] for row in choices],
+            evidence["selection_note"],
+        )
+
+
 def render_pages(pdf, supplement):
     """Append available scheduling and ranking topics without importing historical study results.
 
@@ -460,6 +499,10 @@ def render_pages(pdf, supplement):
         list[str]: Topic names actually rendered.
     """
     sections = []
+    development = supplement.get("closed_loop_development")
+    if development:
+        _development_pages(pdf, development)
+        sections.append("closed-loop-development-choices")
     scheduling = supplement.get("closed_loop_scheduling")
     if scheduling:
         _scheduling_summary(pdf, scheduling)
