@@ -554,6 +554,21 @@ class CaptureSession:
             },
         )
 
+    def arrival_window_complete(self, *, now_seconds):
+        """Retain common-window observations when the last sampled arrival ends early.
+
+        Args:
+            now_seconds (float): Current host UTC epoch seconds.
+
+        Returns:
+            bool: Whether passive capture applies or the controlled arrival window ended.
+        """
+        if self.loop is None:
+            return True
+        return self.loop.origin is not None and now_seconds >= (
+            self.loop.origin + self.args.period_seconds * self.args.cycles
+        )
+
     def run(self):
         """Run and collect one capture, preserving failed attempts for diagnosis.
 
@@ -597,7 +612,9 @@ class CaptureSession:
                 if self.process.poll() is not None:
                     if self.process.returncode:
                         raise RuntimeError("endpoint failed; preserve capture resources")
-                    if sample["completed"] + sample["failed"] == sample["jobs"]:
+                    if sample["completed"] + sample["failed"] == sample[
+                        "jobs"
+                    ] and self.arrival_window_complete(now_seconds=time.time()):
                         break
                 time.sleep(5)
             else:

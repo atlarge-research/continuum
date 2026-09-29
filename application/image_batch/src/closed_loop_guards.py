@@ -172,7 +172,9 @@ def guard_action(before, fresh, proposal, config, *, decision_age):
     Raises:
         ValueError: Proposal age, topology, membership or admission preconditions changed.
     """
-    if not math.isfinite(decision_age) or not 0 <= decision_age <= 30:
+    if not math.isfinite(decision_age) or not 0 <= decision_age <= config.get(
+        "decision_age_seconds", 30
+    ):
         raise ValueError("decision is stale or its cutoff is in the future")
     if before["nodes"] != fresh["nodes"]:
         raise ValueError("worker topology, identity, capacity or admission state changed")

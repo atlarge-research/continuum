@@ -1,6 +1,7 @@
 """Cohort-complete physical outcomes and allocation for matched closed-loop captures."""
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import math
@@ -189,7 +190,10 @@ def responses(observations, start_ms, end_ms, *, deadline_seconds=120, followup_
     )
 
 
-def controller_outcomes(directory, start, end):
+# Cohesive journal reduction retains separate evidence for each failure and action stage.
+def controller_outcomes(  # pylint: disable=too-many-locals
+    directory, start, end, *, cadence_seconds=60, age_budget_seconds=30, arm=None
+):
     """Summarize actual cycle latency, acknowledged intents and observed action identities.
 
     Successful streaks require valid forecasts and completed feedback. An
@@ -199,7 +203,10 @@ def controller_outcomes(directory, start, end):
     Args:
         directory (Path): Controller journal and immutable per-cycle native evidence.
         start (float): Inclusive common evaluation boundary in epoch seconds.
-        end (float): Exclusive arrival-window boundary in epoch seconds.
+        end (float): Exclusive scoring boundary, including controlled follow-up when requested.
+        cadence_seconds (float): Configured interval between scheduled controller checks.
+        age_budget_seconds (float): Configured maximum causal decision age.
+        arm (str or None): Explicit policy arm, for action-source attribution.
 
     Returns:
         dict: Complete cycle rows and descriptive latency, CPU and physical-action counts.
@@ -230,6 +237,14 @@ def controller_outcomes(directory, start, end):
                 decision_age_seconds=record["recorded_at_ns"] / 1e9 - record["cutoff_seconds"],
                 shadow=record["shadow"],
             )
+        elif record["event"] == "fallback.invoked":
+            row["fallback_invoked"] = True
+            row["failure_category"] = record.get("category", "unclassified")
+        elif record["event"] == "forecast.invalid":
+            row["forecast_error"] = record["error"]
+            row["failure_category"] = record.get("category", "unclassified")
+        elif record["event"] == "action.timing":
+            row["guard_and_api_seconds"] = record["guard_and_api_seconds"]
         elif record["event"] == "action.request":
             action = dict(record)
             row["actions"].append(action)
@@ -239,8 +254,10 @@ def controller_outcomes(directory, start, end):
                 requests[record["action_id"]]["result"] = record
         elif record["event"] == "cycle.observed":
             row["action_observed"] = record.get("action_observed")
+            row["observation_seconds"] = record.get("state", {}).get("timestamp_seconds")
         elif record["event"] == "cycle.error":
             row["error"] = record["error"]
+            row["error_category"] = record.get("category", "unclassified")
         elif record["event"] == "cycle.skipped":
             row["skipped_after"] = row.get("skipped_after", 0) + record["count"]
     rows = [row for row in cycles.values() if start <= row["started_at"] < end]
@@ -250,7 +267,7 @@ def controller_outcomes(directory, start, end):
         if previous and (
             previous.get("skipped_after", 0)
             or row["tick"] != previous["tick"] + 1
-            or not 0 <= row["started_at"] - previous["started_at"] <= 90
+            or not 0 <= row["started_at"] - previous["started_at"] <= 1.5 * cadence_seconds
         ):
             consecutive = 0
         previous = row
@@ -263,7 +280,13 @@ def controller_outcomes(directory, start, end):
             valid = False
         consecutive = consecutive + 1 if valid else 0
         longest = max(longest, consecutive)
+        row["fallback_invoked"] = (
+            row.get("fallback_invoked", False) or row.get("proposal", {}).get("fallback") is True
+        )
         cycle = directory / f'cycle-{row["tick"]:04d}'
+        timing_path = cycle / "stage-timing.json"
+        if timing_path.exists():
+            row["stage_timing"] = json.loads(timing_path.read_text())
         forecast_path, collection_path = (
             cycle / "forecast/forecast.json",
             cycle / "native/collection.json",
@@ -287,6 +310,15 @@ def controller_outcomes(directory, start, end):
             if invalid:
                 row["decision_age_seconds"] = invalid[0]["recorded_at_ns"] / 1e9 - native_cutoff
             row["native_collection_seconds"] = collection["elapsed_seconds"]
+            row["native_stage_timing"] = {
+                key: collection[key]
+                for key in (
+                    "stage_inputs_seconds",
+                    "job_launch_and_execution_seconds",
+                    "artifact_collection_seconds",
+                )
+                if key in collection
+            }
             resource_path = cycle / "native/artifacts/results/batch/shared-resources.json"
             if resource_path.exists():
                 usage = json.loads(resource_path.read_text())
@@ -299,9 +331,20 @@ def controller_outcomes(directory, start, end):
                     "memory_peak_bytes"
                 )
     eligible = [row for row in rows if row["complete_native_eligible"]]
-    on_time = sum(0 <= row.get("decision_age_seconds", float("inf")) <= 30 for row in eligible)
+    on_time = sum(
+        0 <= row.get("decision_age_seconds", float("inf")) <= age_budget_seconds for row in eligible
+    )
+    legacy_on_time = sum(
+        0 <= row.get("decision_age_seconds", float("inf")) <= 30 for row in eligible
+    )
     actions = [
-        {**action, "tick": row["tick"], "observed": row.get("action_observed")}
+        {
+            **action,
+            "tick": row["tick"],
+            "observed": row.get("action_observed"),
+            "observation_seconds": row.get("observation_seconds"),
+            "decision_source": "reactive_fallback" if row.get("fallback_invoked") else arm,
+        }
         for row in rows
         for action in row["actions"]
     ]
@@ -310,8 +353,23 @@ def controller_outcomes(directory, start, end):
         cycles=rows,
         actions=actions,
         complete_native_cycles=len(eligible),
-        within30_native_cycles=on_time,
-        within30_native_fraction=on_time / len(eligible) if eligible else None,
+        age_budget_seconds=age_budget_seconds,
+        cadence_seconds=cadence_seconds,
+        within_budget_native_cycles=on_time,
+        within_budget_native_fraction=on_time / len(eligible) if eligible else None,
+        within30_native_cycles=legacy_on_time,
+        within30_native_fraction=legacy_on_time / len(eligible) if eligible else None,
+        fallback_invocations=sum(row.get("fallback_invoked", False) for row in rows),
+        fallback_categories=dict(
+            Counter(
+                row.get("failure_category", "unclassified")
+                for row in rows
+                if row.get("fallback_invoked")
+            )
+        ),
+        error_categories=dict(
+            Counter(row.get("error_category", "unclassified") for row in rows if row.get("error"))
+        ),
         longest_consecutive_valid_cycles=longest,
         observed_down=sum(
             row["action"] == "scale-down" and row["observed"] is True for row in actions
@@ -401,7 +459,76 @@ def sender_inventory(events, jobs, summary, run_id):
     return issues
 
 
-def capture_evidence(capture, role):
+def action_lifecycles(actions, states, config):
+    """Attach first-observed release and acknowledged reuse without inferring hidden timing.
+
+    Args:
+        actions (list[dict]): Ordered requests with source, identity and confirmed outcomes.
+        states (list[dict]): Complete capture snapshots, including controlled follow-up.
+        config (dict): Configured worker resources and bounds.
+
+    Returns:
+        dict: Action lifecycle records and conservative same-worker forecast down/up pairs.
+    """
+    views = []
+    for state in states:
+        try:
+            at = milliseconds(state["timestamp"]) / 1000
+            views.append(snapshot_view(state, config, now_seconds=at))
+        except ValueError:
+            continue
+    result, pending, pairs = [], {}, 0
+    for action in actions:
+        row = dict(action)
+        row["first_observed_empty_seconds"] = None
+        row["reused_at_seconds"] = None
+        result.append(row)
+        acknowledged = row.get("result", {}).get("last_action_at")
+        if (
+            row.get("result", {}).get("status") != "acknowledged"
+            or row.get("observed") is not True
+            or acknowledged is None
+        ):
+            continue
+        worker, uid = row["selected_worker"], row["node_uid"]
+        if row["action"] == "scale-down":
+            empty = next(
+                (
+                    view["timestamp_seconds"]
+                    for view in views
+                    if view["timestamp_seconds"] >= acknowledged
+                    and worker in view["reserve_workers"]
+                    and view["nodes"][worker]["uid"] == uid
+                ),
+                None,
+            )
+            row["first_observed_empty_seconds"] = empty
+            pending[worker] = row
+        elif row["action"] == "scale-up":
+            down = pending.pop(worker, None)
+            if down and down["node_uid"] == uid:
+                down["reused_at_seconds"] = acknowledged
+                empty = down["first_observed_empty_seconds"]
+                if (
+                    empty is not None
+                    and empty <= acknowledged
+                    and down.get("decision_source") == "forecast"
+                    and row.get("decision_source") == "forecast"
+                ):
+                    pairs += 1
+    return dict(
+        actions=result,
+        forecast_down_up_pairs=pairs,
+        interpretation=(
+            "Release is first observed empty after acknowledgment, not an exact physical "
+            "completion instant; pairs require confirmed forecast-selected reuse "
+            "of the same worker."
+        ),
+    )
+
+
+# One capture joins sender, observer, native and physical windows without hidden denominators.
+def capture_evidence(capture, role):  # pylint: disable=too-many-locals
     """Read one preserved capture with explicit study role and immutable provenance.
 
     Args:
@@ -444,7 +571,15 @@ def capture_evidence(capture, role):
     rows, boundaries = bounded_read(capture / "observer")
     trace, observations = read_observations(rows, invocation["namespace"])
     allocation_result = allocation([state for _, state in trace.states], config, start, end)
-    response_result = responses(observations, round(start * 1000), round(end * 1000))
+    followup_end = end + invocation.get("followup_seconds", 600)
+    deadline = invocation.get("deadline_seconds", 120)
+    response_result = responses(
+        observations,
+        round(start * 1000),
+        round(end * 1000),
+        deadline_seconds=deadline,
+        followup_end_ms=round(followup_end * 1000),
+    )
     inventory = json.loads((capture / "jobs.json").read_text())["items"]
     app_jobs = [
         job
@@ -485,14 +620,24 @@ def capture_evidence(capture, role):
     digest = hashlib.sha256(
         json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    controller = controller_outcomes(capture / "controller", start, end)
+    control_settings = dict(
+        cadence_seconds=invocation.get("cadence_seconds", 60),
+        age_budget_seconds=invocation.get("decision_age_seconds", 30),
+        arm=invocation.get("control_arm", "none"),
+    )
+    controller = controller_outcomes(capture / "controller", start, end, **control_settings)
+    operation = controller_outcomes(capture / "controller", start, followup_end, **control_settings)
+    state_rows = [state for _, state in trace.states]
+    controller["lifecycles"] = action_lifecycles(controller["actions"], state_rows, config)
+    operation["lifecycles"] = action_lifecycles(operation["actions"], state_rows, config)
     diagnostics = [
         cycle_diagnostic(
             capture / "controller" / f'cycle-{cycle["tick"]:04d}',
             cycle,
             observations,
             round(end * 1000),
-            round((end + 600) * 1000),
+            round(followup_end * 1000),
+            deadline_seconds=deadline,
         )
         for cycle in controller["cycles"]
     ]
@@ -507,6 +652,28 @@ def capture_evidence(capture, role):
         evaluation_start_seconds=start,
         arrival_end_seconds=end,
         config=config,
+        comparison_settings={
+            key: invocation.get(key)
+            for key in (
+                "deployment_sources",
+                "network_preset",
+                "replay_command",
+                "endpoint_image",
+                "worker_cores",
+                "worker_memory_mib",
+                "active_workers",
+                "template_namespace",
+                "template_deployment",
+                "period_seconds",
+                "cycles",
+                "warmup_cycles",
+                "minimum_rate",
+                "peak_rate",
+                "deadline_seconds",
+                "deadline_fraction",
+                "followup_seconds",
+            )
+        },
         arrival_plan_sha256=digest,
         arrival_plan=plan,
         invocation=invocation,
@@ -517,6 +684,8 @@ def capture_evidence(capture, role):
         allocation=allocation_result,
         responses=response_result,
         controller=controller,
+        controller_full_operation=operation,
+        followup_end_seconds=followup_end,
         forecast_diagnostics=[row for row in diagnostics if row is not None],
         observation_boundaries=boundaries,
         source_hashes=json.loads((capture / "source-hashes.json").read_text()),

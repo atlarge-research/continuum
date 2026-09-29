@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import unittest
 from argparse import Namespace
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -136,6 +137,22 @@ class CaptureTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(marker.read_text(), "original failure\n")
+
+    def test_completed_last_job_cannot_shorten_the_common_arrival_window(self):
+        """Sparse tail arrivals must not end allocation observation before the scored boundary."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            session = module.CaptureSession(
+                Namespace(
+                    output=Path(directory), namespace="fns-test", period_seconds=480, cycles=4
+                )
+            )
+            session.loop = SimpleNamespace(origin=1000)
+            self.assertTrue(hasattr(session, "arrival_window_complete"))
+            self.assertFalse(session.arrival_window_complete(now_seconds=2900))
+            self.assertTrue(session.arrival_window_complete(now_seconds=2920))
+            session.loop.origin = None
+            self.assertFalse(session.arrival_window_complete(now_seconds=2920))
 
     def test_restoration_refuses_replaced_node_before_cordon_mutation(self):
         """Original cordon settings cannot be applied to a replacement with the same name."""

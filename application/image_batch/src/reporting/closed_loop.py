@@ -43,6 +43,7 @@ def paired_savings(runs):
             or not np.allclose(window, fixed_window, rtol=0, atol=0.001)
             or run["admission"] != fixed["admission"]
             or run["config"] != fixed["config"]
+            or run.get("comparison_settings") != fixed.get("comparison_settings")
         ):
             continue
         lower, upper = run["allocation"]["allocated_core_seconds_bounds"]
@@ -110,13 +111,14 @@ def _outcomes(pdf, runs, pairs):
             for group in groups
         ],
     )
-    axes[0, 0].axhline(95, color="black", linestyle="--", linewidth=1)
+    for fraction in {r.get("invocation", {}).get("deadline_fraction", 0.95) for r in runs}:
+        axes[0, 0].axhline(100 * fraction, color="black", linestyle="--", linewidth=1)
     axes[0, 0].set_ylim(0, 103)
     panel(
         axes[0, 0],
         "Failures and unfinished Jobs remain in the denominator",
         "",
-        "Jobs completed within 120 s (%)",
+        "Jobs within configured deadline (%)",
     )
     _independent_points(
         axes[0, 1],
@@ -129,7 +131,8 @@ def _outcomes(pdf, runs, pairs):
             for group in groups
         ],
     )
-    axes[0, 1].axhline(120, color="black", linestyle="--", linewidth=1)
+    for deadline in {r.get("invocation", {}).get("deadline_seconds", 120) for r in runs}:
+        axes[0, 1].axhline(deadline, color="black", linestyle="--", linewidth=1)
     axes[0, 1].set_ylim(bottom=0)
     panel(
         axes[0, 1],
@@ -178,7 +181,7 @@ def _outcomes(pdf, runs, pairs):
         "not confidence intervals.\n"
         "Savings use accepting + draining application core-time; bounded intervals "
         "never identify a cheaper partial total.\n"
-        "Three powered worker VMs remain available throughout. No physical energy "
+        "Configured powered worker VMs remain available throughout. No physical energy "
         "saving is inferred.",
     )
 
@@ -253,8 +256,14 @@ def _timelines(pdf, runs):
                 s=14,
                 alpha=0.65,
             )
-    axes[1, 0].axvline(120, color="black", linestyle="--", linewidth=1)
-    axes[1, 1].axhline(30, color="black", linestyle="--", linewidth=1)
+    for deadline in {r.get("invocation", {}).get("deadline_seconds", 120) for r in runs}:
+        axes[1, 0].axvline(deadline, color="black", linestyle="--", linewidth=1)
+    for budget in {
+        r.get("invocation", {}).get("decision_age_seconds", 30)
+        for r in runs
+        if r["arm"] == "forecast"
+    }:
+        axes[1, 1].axhline(budget, color="black", linestyle="--", linewidth=1)
     for axis in axes.flat:
         axis.set_ylim(bottom=0)
     axes[0, 0].legend(fontsize=8, loc="lower left")
@@ -278,7 +287,7 @@ def _timelines(pdf, runs):
     )
     panel(
         axes[1, 1],
-        "Read-only native decisions must finish within 30 seconds",
+        "Dashed lines show the configured decision-age budgets",
         "Minutes after warm-up",
         "Decision age from forecast cutoff (s)",
     )
@@ -310,17 +319,19 @@ def render_pages(pdf, reports):
     action_runs = [run for run in heldout if run["controller"].get("actions")]
     for run in action_runs:
         _action_evidence_page(pdf, run)
+        _lifecycle_page(pdf, run)
     _timelines(pdf, heldout)
-    representative = next(
-        (run for run in heldout if run["seed"] == 63 and run["arm"] == "forecast"), None
+    diagnostic_runs = sorted(
+        (run for run in heldout if run["arm"] == "forecast"), key=lambda run: run["seed"]
     )
-    if representative is not None:
-        _forecast_observation_page(pdf, representative)
+    for run in diagnostic_runs:
+        _forecast_observation_page(pdf, run)
     return dict(
         heldout_runs=len(heldout),
         pilot_runs=sum(r["role"] == "pilot" for r in runs),
         rejected_runs=[r["run_id"] for r in runs if not r["accepted_capture"]],
         action_runs=[run["run_id"] for run in action_runs],
+        diagnostic_runs=[run["run_id"] for run in diagnostic_runs],
         pairs=pairs,
     )
 
@@ -344,7 +355,10 @@ def render_validation(pdf, reports):
     rows = []
     for run in runs:
         control = run["controller"]
-        fraction = control["within30_native_fraction"]
+        fraction = control.get(
+            "within_budget_native_fraction", control.get("within30_native_fraction")
+        )
+        operation = run.get("controller_full_operation", control)
         rows.append(
             [
                 f'{run["role"]} {run["seed"]}',
@@ -352,7 +366,13 @@ def render_validation(pdf, reports):
                 "accepted" if run["accepted_capture"] else "REJECTED",
                 str(control["observed_down"]),
                 str(control["observed_up"]),
+                str(control.get("lifecycles", {}).get("forecast_down_up_pairs", "—"))
+                if run["arm"] == "forecast"
+                else "n/a",
                 str(control["longest_consecutive_valid_cycles"]),
+                str(operation.get("fallback_invocations", "—"))
+                if run["arm"] == "forecast"
+                else "n/a",
                 "—" if fraction is None else f"{100*fraction:.0f}%",
             ]
         )
@@ -364,8 +384,10 @@ def render_validation(pdf, reports):
             "Capture",
             "Down",
             "Up",
-            "Successful streak",
-            "Native ≤30 s",
+            "Forecast pairs",
+            "Valid streak",
+            "Fallbacks*",
+            "Native in budget",
         ],
         loc="upper center",
         cellLoc="center",
@@ -384,9 +406,13 @@ def render_validation(pdf, reports):
         "Unconfirmed actions or skipped/invalid cycles break a streak.\n"
         "Pilots provide implementation/functional evidence, separate from held-out "
         "benefit summaries. Rejected attempts remain archived.\n"
-        "Model limits: 60-second arrival horizon; three sampled futures; warm "
-        "reserves; configured C−1 application cores once.",
+        "*Fallbacks include holds and controlled follow-up. Native completeness and timely "
+        "results do not imply forecast-selected action.\n"
+        "Horizon, scenarios and budgets are listed on the configuration page. Warm reserves "
+        "remain powered; C−1 application cores are applied once.",
     )
+
+    _configuration_page(pdf, runs)
 
 
 def _metric(value, digits=1):
@@ -490,15 +516,10 @@ def render_run_details(pdf, reports):
                 _metric(max(native_rss) if native_rss else None),
             ]
         )
-    pilot = next(
-        (
-            run
-            for run in runs
-            if run["role"] == "pilot" and run["seed"] == 61 and run["accepted_capture"]
-        ),
-        None,
-    )
-    if pilot is not None:
+    for pilot in sorted(
+        (run for run in runs if run["role"] == "pilot" and run["arm"] == "forecast"),
+        key=lambda run: run["seed"],
+    ):
         _forecast_observation_page(pdf, pilot)
     # Keep tables readable when failed attempts are explicitly supplied alongside the study matrix.
     for offset in range(0, len(runs), 14):
@@ -516,14 +537,14 @@ def render_run_details(pdf, reports):
                 "Median (s)",
                 "p95 (s)",
                 "Core-hours",
-                "≤120 s (%)",
+                "Within target (%)",
             ],
             physical[offset : offset + 14],
             "Responses start at original Job creation. Quantiles describe completed Jobs only.\n"
             "Core-hours include accepting and draining workers; bounds preserve "
             "missing observations.\n"
-            "Follow-up ends ten minutes after arrivals; completions after that "
-            "boundary remain censored.",
+            "Configured follow-up ends after the arrival window; completions beyond "
+            "that boundary remain censored. See configuration settings.",
         )
         _table_page(
             pdf,
@@ -700,7 +721,12 @@ def _action_evidence_page(pdf, run):
                 label=label,
                 s=22,
             )
-        axes[1, 1].axhline(30, color="black", linestyle="--", linewidth=1)
+        axes[1, 1].axhline(
+            run.get("invocation", {}).get("decision_age_seconds", 30),
+            color="black",
+            linestyle="--",
+            linewidth=1,
+        )
         axes[1, 1].set_ylim(bottom=0)
         axes[1, 1].set_xlim(0, (run["arrival_end_seconds"] - origin) / 60)
         axes[1, 1].legend(fontsize=7, loc="lower left")
@@ -727,12 +753,13 @@ def _forecast_observation_page(pdf, run):
 
     Args:
         pdf (PdfPages): Open report writer.
-        run (dict): Preselected seed63 held-out run, or explicitly labeled available pilot.
+        run (dict): Explicitly labeled held-out run or development pilot.
     """
     rows = [row for row in run.get("forecast_diagnostics", []) if row["complete_arrival_window"]]
     if not rows:
         return
     origin = run["evaluation_start_seconds"]
+    horizon = run.get("invocation", {}).get("horizon_seconds", rows[0].get("horizon_seconds", 60))
     times = [(row["cutoff_ms"] / 1000 - origin) / 60 for row in rows]
     figure, axes = page(
         f'Predictions and observations: {run["role"]} seed {run["seed"]}',
@@ -769,7 +796,12 @@ def _forecast_observation_page(pdf, run):
         marker=".",
         label="Observed completed cohort",
     )
-    axes[0, 1].axhline(120, color="black", linestyle="--", linewidth=1)
+    axes[0, 1].axhline(
+        run.get("invocation", {}).get("deadline_seconds", 120),
+        color="black",
+        linestyle="--",
+        linewidth=1,
+    )
     series = run["allocation"]["series"]
     for field, color, label in (
         ("allocated", COLORS[0], "Accepting + draining cores"),
@@ -814,7 +846,7 @@ def _forecast_observation_page(pdf, run):
     axes[1, 0].legend(fontsize=7, loc="upper left")
     panel(
         axes[0, 0],
-        "Forecast count versus actual arrivals in the next 60 seconds",
+        f"Forecast count versus arrivals in the next {horizon:g} s",
         "Minutes after warm-up",
         "Future Jobs",
     )
@@ -850,3 +882,152 @@ def _forecast_observation_page(pdf, run):
         "Later control can change completion times. This is a loop diagnostic, not "
         "isolated scaling-counterfactual validation.",
     )
+
+
+def _configuration_page(pdf, runs):
+    """Show the numerical protocol beside its measured outcomes, including pilot choices.
+
+    Args:
+        pdf (PdfPages): Open combined report writer.
+        runs (list[dict]): All supplied physical runs with frozen invocation settings.
+    """
+    if not runs:
+        return
+    rows = []
+    for run in runs:
+        settings = run.get("invocation", {})
+        rows.append(
+            [
+                f'{run["role"]} {run["seed"]} {run["arm"]}',
+                str(settings.get("period_seconds", "—")),
+                str(settings.get("cadence_seconds", 60)),
+                str(settings.get("horizon_seconds", 60)),
+                str(settings.get("scenarios", 3)),
+                str(settings.get("decision_age_seconds", 30)),
+                (
+                    f'{settings.get("deadline_fraction", .95)*100:g}% / '
+                    f'{settings.get("deadline_seconds", 120):g}s'
+                ),
+                f'{settings.get("warmup_cycles", "—")} / {settings.get("cycles", "—")}',
+                str(settings.get("followup_seconds", 600)),
+            ]
+        )
+    for offset in range(0, len(rows), 12):
+        _table_page(
+            pdf,
+            "Configuration choices and scope",
+            "Development trials and frozen evaluation retain separate roles; "
+            "units are seconds unless stated.",
+            [
+                "Role / seed / arm",
+                "Period",
+                "Cadence",
+                "Lookahead",
+                "Futures",
+                "Age budget",
+                "Service target",
+                "Warm/total cycles",
+                "Follow-up",
+            ],
+            rows[offset : offset + 12],
+            "Each run retains its archived policy and exact invocation; legacy settings "
+            "are labeled where this table cannot recover them.\n"
+            "Warm-up and response follow-up are distinct from the common allocation window.\n"
+            "Finite lookahead, frozen lifecycle estimates and few independent runs limit "
+            "generalization; warm reserves stay powered.",
+        )
+    choices = []
+    for run in runs:
+        settings = run.get("invocation", {})
+        choices.append(
+            [
+                f'{run["role"]} {run["seed"]} {run["arm"]}',
+                f'{settings.get("minimum_rate", "—")}–{settings.get("peak_rate", "—")}',
+                (
+                    f'{settings.get("reactive_up_threshold", "legacy")} / '
+                    f'{settings.get("reactive_down_threshold", "legacy")}'
+                ),
+                str(settings.get("residual_margin_seconds", 0)),
+                str(settings.get("allocation_seconds", 120)),
+                str(settings.get("native_timeout_seconds", 20)),
+            ]
+        )
+    for offset in range(0, len(choices), 12):
+        _table_page(
+            pdf,
+            "Demand, occupancy and computation settings",
+            "Thresholds and timing are development choices, not universal workload constants.",
+            [
+                "Role / seed / arm",
+                "Rate range (jobs/s)",
+                "Reactive up / down",
+                "Residual margin (s)",
+                "Allocation window (s)",
+                "Native timeout (s)",
+            ],
+            choices[offset : offset + 12],
+            "Four images and 128 inference repetitions retain the calibrated workload; "
+            "resource sampling remains five seconds.\n"
+            "Current overruns use the median residual of longer completed profiles, or a "
+            "five-second fallback, plus the declared margin.\n"
+            "Ready reserve acquisition is immediate in the model; measured decision, API "
+            "and observation delay remains explicit.",
+        )
+
+
+def _lifecycle_page(pdf, run):
+    """Expose measured release and reuse separately from the request and acknowledgement.
+
+    Args:
+        pdf (PdfPages): Open report writer.
+        run (dict): Physical run with lifecycle evidence, when available.
+    """
+    lifecycle = run["controller"].get("lifecycles", {})
+    actions = lifecycle.get("actions", [])
+    if not actions:
+        return
+    origin = run["evaluation_start_seconds"]
+    rows = []
+    for action in actions:
+        values = [
+            action["recorded_at_ns"] / 1e9,
+            action.get("result", {}).get("last_action_at"),
+            action.get("observation_seconds"),
+            action.get("first_observed_empty_seconds"),
+            action.get("reused_at_seconds"),
+        ]
+        rows.append(
+            [
+                f'{action["action"].replace("scale-", "")} {action["selected_worker"]}',
+                action.get("decision_source", "unknown"),
+                *[
+                    _metric((value - origin) / 60, 2) if value is not None else "—"
+                    for value in values
+                ],
+            ]
+        )
+    for offset in range(0, len(rows), 12):
+        _table_page(
+            pdf,
+            f'Capacity release and reuse: {run["arm"]} seed {run["seed"]}',
+            (
+                "Confirmed forecast-selected down/up pairs in evaluation: "
+                f'{lifecycle.get("forecast_down_up_pairs", 0)}.'
+            ),
+            [
+                "Action / worker",
+                "Source",
+                "Request min",
+                "Ack min",
+                "Observed min",
+                "Empty min",
+                "Reused min",
+            ],
+            rows[offset : offset + 12],
+            "Minutes are relative to evaluation start. Empty is the first valid observed "
+            "reserve after acknowledgment, not an exact resource-release instant.\n"
+            "A worker remains allocated while draining. Missing or unconfirmed outcomes "
+            "remain —; reserves remain powered.\n"
+            "Pairs require confirmed forecast-selected release and reuse of the same worker; "
+            "fallback actions cannot satisfy that count.",
+        )

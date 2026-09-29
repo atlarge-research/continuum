@@ -117,6 +117,15 @@ class GuardTests(unittest.TestCase):
                 before, self.view(after), proposal, self.config, decision_age=2
             )
 
+    def test_configured_age_budget_is_used_at_the_physical_guard(self):
+        """A measured budget applies at dispatch, not just during numerical selection."""
+        before = self.view()
+        proposal = {"action": "scale-up", "selected_worker": "w3"}
+        config = {**self.config, "decision_age_seconds": 60}
+        self.module().guard_action(before, before, proposal, config, decision_age=45)
+        with self.assertRaisesRegex(ValueError, "stale"):
+            self.module().guard_action(before, before, proposal, config, decision_age=61)
+
     def test_up_needs_an_empty_reserve_and_down_cannot_add_a_second_drain(self):
         """Only one worker changes admission and existing Pod assignments are retained."""
         before = self.view()

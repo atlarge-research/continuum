@@ -146,7 +146,7 @@ class ControllerTests(unittest.TestCase):
             loop.predict = Mock(return_value=(self.view, scores, 1000))
             with patch.object(module.time, "time", return_value=1001), patch.object(
                 module, "actuate", return_value=dict(last_action_at=1000)
-            ), patch.object(module.time, "monotonic", side_effect=[0, 4]):
+            ), patch.object(module.time, "monotonic", side_effect=[0, 0, 0, 4]):
                 loop.cycle()
             ended = loop.journal.records[-1]
             self.assertEqual(ended["outcome"], "acknowledged")
@@ -224,7 +224,7 @@ class ControllerTests(unittest.TestCase):
             )
             with patch.object(module.time, "time", return_value=1001), patch.object(
                 module, "actuate", return_value=dict(last_action_at=1000)
-            ), patch.object(module.time, "monotonic", side_effect=[0, 4]):
+            ), patch.object(module.time, "monotonic", side_effect=[0, 0, 0, 4]):
                 loop.cycle()
                 loop.cycle()
             proposals = [
@@ -324,6 +324,59 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(before["timestamp_seconds"], 1000)
             self.assertEqual(cutoff, 1000)
 
+    def test_prediction_uses_configured_horizon_scenarios_and_runtime_budgets(self):
+        """The prepared future and native scoring use the frozen experiment settings."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            loop = object.__new__(module.Controller)
+            loop.session = Mock(namespace="test")
+            loop.session.namespace = "test"
+            loop.args = Mock(period_seconds=480, warmup_cycles=2, native_image="test")
+            loop.origin, loop.tick_number = 900, 7
+            loop.template, loop.history, loop.cluster = {"saved": True}, {}, {}
+            loop.config = {
+                **self.config,
+                "horizon_seconds": 300,
+                "scenarios": 5,
+                "scenario_seed": 123,
+                "native_timeout_seconds": 55,
+                "allocation_seconds": 300,
+            }
+
+            def forecast(_prefix, destination, _cutoff, settings, _template, **_kwargs):
+                self.assertEqual(
+                    (settings.horizon_seconds, settings.scenarios, settings.seed), (300, 5, 130)
+                )
+                destination.mkdir()
+                (destination / "state.json").write_text(json.dumps(self.snapshot))
+                return (
+                    {
+                        "status": "ready",
+                        "simulation_inputs": {"status": "ready"},
+                        "cutoff": self.snapshot["timestamp"],
+                    },
+                    loop.template,
+                )
+
+            def native(_suite, _output, _image, _cluster, _name, *, timeout_seconds):
+                self.assertEqual(timeout_seconds, 55)
+                return root
+
+            def scores(_batch, *, scenarios, allocation_seconds):
+                self.assertEqual((scenarios, allocation_seconds), (5, 300))
+                return [], {}
+
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module, "run_once", side_effect=forecast
+            ), patch.object(module, "prepare_suite"), patch.object(
+                module, "run_control_plane_suite", side_effect=native
+            ), patch.object(
+                module, "load_scores", side_effect=scores
+            ):
+                loop.predict(root)
+            self.assertTrue((root / "stage-timing.json").exists())
+
     def test_replacement_node_does_not_confirm_the_original_action(self):
         """A matching cordon flag on a new UID is not observation of the requested worker."""
         module = self.module()
@@ -343,7 +396,7 @@ class ControllerTests(unittest.TestCase):
             with patch.object(module, "reactive_action", return_value=proposal), patch.object(
                 module, "actuate", return_value=dict(last_action_at=1002)
             ), patch.object(module.time, "time", return_value=1003), patch.object(
-                module.time, "monotonic", side_effect=[0, 4]
+                module.time, "monotonic", side_effect=[0, 0, 0, 4]
             ):
                 loop.cycle()
             observed = [r for r in loop.journal.records if r["event"] == "cycle.observed"]

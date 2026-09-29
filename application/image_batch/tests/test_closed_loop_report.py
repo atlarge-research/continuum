@@ -49,6 +49,51 @@ class ClosedLoopReportTests(unittest.TestCase):
         loop["arrival_plan_sha256"] = "different"
         self.assertEqual(module.paired_savings([fixed, loop]), [])
 
+    def test_current_report_uses_available_seed_and_configured_timing(self):
+        """A fresh evaluation seed must show diagnostics with its own horizon and budget."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = dict(
+            role="heldout",
+            seed=107,
+            arm="forecast",
+            run_id="fresh-107",
+            accepted_capture=True,
+            invocation={"horizon_seconds": 300, "decision_age_seconds": 55},
+            controller={"actions": []},
+        )
+        with mock.patch.object(module, "_outcomes"), mock.patch.object(
+            module, "_timelines"
+        ), mock.patch.object(module, "_forecast_observation_page") as rendered:
+            result = module.render_pages(None, [{"runs": [run]}])
+        self.assertEqual(result.get("diagnostic_runs"), ["fresh-107"])
+        self.assertEqual(rendered.call_args.args[1]["seed"], 107)
+
+    def test_pairing_rejects_deployment_changes_but_allows_policy_settings(self):
+        """A matching arrival hash cannot conceal a different replay/network deployment."""
+        module = importlib.import_module("reporting.closed_loop")
+        common = dict(
+            role="heldout",
+            seed=107,
+            arrival_plan_sha256="same",
+            accepted_capture=True,
+            origin_seconds=0,
+            admission="fifo",
+            evaluation_start_seconds=1000,
+            arrival_end_seconds=1120,
+            config={"workers": []},
+            comparison_settings={"network_preset": "wired"},
+        )
+        fixed = dict(common, arm="fixed", allocation={"allocated_core_seconds_bounds": [100, 100]})
+        forecast = dict(
+            common,
+            arm="forecast",
+            allocation={"allocated_core_seconds_bounds": [80, 80]},
+            invocation={"horizon_seconds": 300},
+        )
+        self.assertEqual(len(module.paired_savings([fixed, forecast])), 1)
+        forecast["comparison_settings"] = {"network_preset": "5g"}
+        self.assertEqual(module.paired_savings([fixed, forecast]), [])
+
     def test_combined_report_redraws_without_capture_directory(self):
         """Saved closed-loop payload is sufficient for every page and stays separate from pilots."""
         run = dict(

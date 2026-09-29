@@ -9,6 +9,7 @@ import uuid
 
 from closed_loop_guards import guard_action, reactive_action, reconcile_pending, snapshot_view
 from closed_loop_journal import Journal
+from demo_configuration import EXPERIMENT_DEFAULTS
 from closed_loop_policy import select_action
 from closed_loop_runner import load_scores, prepare_runner, run_control_plane_suite
 from forecast_trace import milliseconds
@@ -32,6 +33,30 @@ with p.open('rb') as f:
   print(json.dumps(value));break
  else:sys.exit('no complete observer state')
 """
+
+
+def failure_category(error):
+    """Classify a recorded failure without converting it into a valid hold.
+
+    Args:
+        error (Exception): Forecast, transport, native or observation failure.
+
+    Returns:
+        str: Stable diagnostic group; the original exception text is also retained.
+    """
+    message = str(error).lower()
+    if isinstance(error, subprocess.TimeoutExpired) or any(
+        word in message for word in ("timeout", "timed out", "outer deadline")
+    ):
+        return "timeout"
+    if any(word in message for word in ("stale", "decision age", "future timestamp")):
+        return "stale_input_or_decision"
+    if any(
+        word in message
+        for word in ("membership", "incomplete", "forecast not ready", "unreconciled")
+    ):
+        return "incomplete_input"
+    return "native_or_transport_failure"
 
 
 def last_tick(journal, directory):
@@ -143,6 +168,11 @@ class Controller:
         self.output = session.output / "controller"
         self.output.mkdir(exist_ok=True)
         self.config = {
+            **{
+                name: getattr(self.args, name, default)
+                for name, default in EXPERIMENT_DEFAULTS.items()
+            },
+            "modeled_reserve_acquisition_seconds": 0,
             "workers": [
                 dict(
                     node_name=name,
@@ -295,10 +325,11 @@ class Controller:
             return
         # Evaluation includes drain follow-up; arrivals themselves remain independent.
         self.cycle()
-        self.next_tick += 60
+        cadence = self.config.get("cadence_seconds", 60)
+        self.next_tick += cadence
         if self.next_tick <= time.time():
-            skipped = int((time.time() - self.next_tick) // 60) + 1
-            self.next_tick += skipped * 60
+            skipped = int((time.time() - self.next_tick) // cadence) + 1
+            self.next_tick += skipped * cadence
             self.history.pop("reactive_observation", None)
             self.journal.append("cycle.skipped", count=skipped, reason="nonoverlapping_cadence")
 
@@ -314,17 +345,19 @@ class Controller:
         Raises:
             ValueError: The forecast, membership or native results are incomplete.
         """
+        started = time.monotonic()
         prefix = directory / "observer"
         self.session.archive_observer(prefix)
+        collected = time.monotonic()
         captured_at = time.time()
         settings = Settings(
             run_id=self.session.namespace,
             origin_ms=round(self.origin * 1000),
             period_seconds=self.args.period_seconds,
             warmup_periods=self.args.warmup_cycles,
-            horizon_seconds=60,
-            scenarios=3,
-            seed=20261008 + self.tick_number,
+            horizon_seconds=self.config.get("horizon_seconds", 60),
+            scenarios=self.config.get("scenarios", 3),
+            seed=self.config.get("scenario_seed", 20261008) + self.tick_number,
         )
         forecast_dir = directory / "forecast"
         status, selected = run_once(
@@ -357,14 +390,30 @@ class Controller:
             },
         )
         prepare_suite(forecast_dir, prefix, config, directory / "suite", "pinned-trace")
+        prepared = time.monotonic()
         batch = run_control_plane_suite(
             directory / "suite",
             directory / "native",
             self.args.native_image,
             self.cluster,
             f"native-{self.tick_number:04d}",
+            timeout_seconds=self.config.get("native_timeout_seconds", 20),
         )
-        scores, _ = load_scores(batch)
+        returned = time.monotonic()
+        scores, _ = load_scores(
+            batch,
+            scenarios=self.config.get("scenarios", 3),
+            allocation_seconds=self.config.get("allocation_seconds", 120),
+        )
+        write_json(
+            directory / "stage-timing.json",
+            dict(
+                observer_collection_seconds=collected - started,
+                forecast_preparation_seconds=prepared - collected,
+                native_and_collection_seconds=returned - prepared,
+                score_validation_seconds=time.monotonic() - returned,
+            ),
+        )
         write_json(directory / "scores.json", scores)
         return before, scores, milliseconds(status["cutoff"]) / 1000
 
@@ -396,17 +445,34 @@ class Controller:
                     before, scores, cutoff = self.predict(directory)
                     age = time.time() - cutoff
                     proposal = select_action(
-                        scores, self.history, now_seconds=time.time(), decision_age=age
+                        scores,
+                        self.history,
+                        now_seconds=time.time(),
+                        decision_age=age,
+                        scenarios=self.config.get("scenarios", 3),
+                        age_budget_seconds=self.config.get("decision_age_seconds", 30),
+                        deadline_seconds=self.config.get("deadline_seconds", 120),
+                        deadline_fraction=self.config.get("deadline_fraction", 0.95),
                     )
-                    valid = age <= 30 and any(
+                    valid = age <= self.config.get("decision_age_seconds", 30) and any(
                         item["candidate"] == "unchanged" and item["valid"]
                         for item in proposal.get("scores", [])
                     )
                     if not valid:
-                        raise ValueError("native decision invalid or older than 30 seconds")
+                        raise ValueError("native decision invalid or exceeds decision age budget")
                 except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
-                    self.journal.append("forecast.invalid", tick=self.tick_number, error=str(exc))
-                    self.journal.append("fallback.invoked", tick=self.tick_number, reason=str(exc))
+                    self.journal.append(
+                        "forecast.invalid",
+                        tick=self.tick_number,
+                        error=str(exc),
+                        category=failure_category(exc),
+                    )
+                    self.journal.append(
+                        "fallback.invoked",
+                        tick=self.tick_number,
+                        reason=str(exc),
+                        category=failure_category(exc),
+                    )
                     before = self.fresh()
                     cutoff = before["timestamp_seconds"]
                     proposal = reactive_action(
@@ -438,6 +504,7 @@ class Controller:
                 forecast_valid=valid,
             )
             if proposal["action"] != "unchanged":
+                action_started = time.monotonic()
                 fresh = self.fresh()
                 result = actuate(
                     self.session,
@@ -447,6 +514,12 @@ class Controller:
                     proposal,
                     self.config,
                     cutoff_seconds=cutoff,
+                )
+                self.journal.append(
+                    "action.timing",
+                    tick=self.tick_number,
+                    action_id=result.get("action_id"),
+                    guard_and_api_seconds=time.monotonic() - action_started,
                 )
                 self.history.update(last_action_at=result["last_action_at"])
 
@@ -474,7 +547,14 @@ class Controller:
         except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
             outcome = "vetoed_or_failed"
             self.history.pop("reactive_observation", None)
-            self.journal.append("cycle.error", tick=self.tick_number, error=str(exc))
+            self.journal.append(
+                "cycle.error",
+                tick=self.tick_number,
+                error=str(exc),
+                category="action_cancelled"
+                if proposal["action"] != "unchanged" and isinstance(exc, ValueError)
+                else failure_category(exc),
+            )
         usage_after = resource.getrusage(resource.RUSAGE_SELF)
         self.journal.append(
             "cycle.end",
