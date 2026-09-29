@@ -123,19 +123,22 @@ Compatible pinned suites can run in one native process using `python /app/opendc
 
 ## Closed-loop physical experiments
 
-The capture command requires the calibrated demo cluster, SSH access to its controller and endpoint VMs, the tested native image, and the Python dependencies used by the forecasting workflow. It creates a fresh namespace, sends an independent workload, saves observer and controller evidence, and restores experiment-owned admission and network state after successful collection. Use the [handoff](OPENDT_HANDOFF.md#where-to-resume) for the current experiment protocol, infrastructure state and preserved evidence.
+The capture command requires an existing calibrated Continuum QEMU cloud cluster, its provisioning configuration and generated `inventory_vms`, SSH access, the tested native image, and the Python dependencies used by the forecasting workflow. It creates a fresh namespace, sends an independent workload, saves observer and controller evidence, and restores experiment-owned admission and network state after successful collection. It does not provision VMs. Use the [handoff](OPENDT_HANDOFF.md#where-to-resume) for the current experiment protocol, infrastructure state and preserved evidence.
 
 Set `CAPTURE_DIR`, `RUN_NAMESPACE` and `WORKLOAD_SEED` to fresh experiment values, then run:
 
 ```bash
-OPENDC_RUNTIME=fns-demo PYTHONPATH=application/image_batch/src \
+OPENDC_RUNTIME=fns-demo PYTHONPATH=application/image_batch/src:. \
   python3 -m capture_run --output "$CAPTURE_DIR" --namespace "$RUN_NAMESPACE" \
+  --continuum-config configuration/fns_demo_v1.cfg \
   --seed "$WORKLOAD_SEED" --admission-mode fifo --control-arm forecast
 ```
 
-The default geometry has three warm-up cycles followed by three evaluation cycles. `--control-arm fixed` and `--control-arm reactive` run the matched baselines. Use `--help` for explicit worker, SSH, image and workload settings. The output contains original request receipts, Job inventories, raw observer streams, frozen per-cycle forecasts and native results, and an action/outcome journal. Failed attempts preserve their resources and failure record for diagnosis.
+Add `--preview` to print resolved settings without contacting the cluster or creating a capture. Deployment identities, resources, SSH key and replay preset come from the supplied configuration and its `<base_path>/.continuum/inventory_vms`; `--inventory` selects another generated inventory. The live node names and addresses are checked before mutation. `--template-namespace` and `--template-deployment` select the existing application to clone.
 
-The current capture runner still contains deployment-specific defaults and a fixed replay endpoint address; CLI overrides do not yet make it portable to another Continuum deployment. Some supporting study workflows also rely on archived helper scripts. See the [portability work to complete](OPENDT_HANDOFF.md#portability-and-tracked-workflow-code) before using these workflows on another machine.
+The default workload has two eight-minute warm-up periods and two evaluation periods. These are development starting values, not a validated protocol. `--experiment-config` loads a JSON object of experiment settings; explicit CLI flags override it. `--control-arm fixed` and `--control-arm reactive` run the matched baselines. Use `--help` for workload, timing and policy parameters. Outputs include request receipts, final inventories, raw observer streams, frozen forecasts/native results and the controller journal. Failed attempts retain their resources and failure record for diagnosis.
+
+`python3 -m demo_workflow --help` exposes tracked source freezing, matrix execution, metric collection and read-only infrastructure snapshots/comparisons. Run from the repository root with the same Python path. Matrix execution uses an explicit protocol and checks that each full run, including follow-up and collection, fits before its closure deadline. Historical supporting-study scripts remain provenance; only workflows exercised on a configured deployment establish live portability.
 
 Produce a self-contained physical evidence file and an offline PDF in new destinations:
 

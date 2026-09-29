@@ -218,8 +218,8 @@ class ProvisionalTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify_inputs(source)
 
-    def test_manifest_cli_default_can_schedule_on_control_plane(self):
-        """Default node selection must carry the matching retained taint toleration."""
+    def test_manifest_cli_explicit_control_plane_can_schedule(self):
+        """Configured control-plane selection carries its explicitly requested toleration."""
         output = io.StringIO()
         with redirect_stdout(output):
             status = kubernetes_main(
@@ -233,11 +233,14 @@ class ProvisionalTests(unittest.TestCase):
                     "test:v1",
                     "--remote-dir",
                     "/var/tmp/fns-opendc-test",
+                    "--node",
+                    "other-controller",
+                    "--control-plane",
                 ]
             )
         self.assertEqual(status, 0)
         pod = json.loads(output.getvalue())["spec"]["template"]["spec"]
-        self.assertEqual(pod["nodeSelector"]["kubernetes.io/hostname"], "cloudcontrollermatthijs")
+        self.assertEqual(pod["nodeSelector"]["kubernetes.io/hostname"], "other-controller")
         self.assertEqual(pod["tolerations"][0]["key"], "node-role.kubernetes.io/control-plane")
 
     def test_delayed_first_arrival_restores_cutoff_relative_completion(self):

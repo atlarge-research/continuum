@@ -10,7 +10,7 @@
       "spec": {
         "restartPolicy": "Never",
         "automountServiceAccountToken": false,
-        "nodeSelector": {"kubernetes.io/hostname": "cloud0matthijs"},
+        "nodeSelector": {"kubernetes.io/hostname": "RENDER-NODE"},
         "securityContext": {"runAsNonRoot": true, "runAsUser": 1000, "runAsGroup": 1000},
         "containers": [{
           "name": "opendc",

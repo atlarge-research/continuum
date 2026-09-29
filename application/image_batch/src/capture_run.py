@@ -509,8 +509,19 @@ class CaptureSession:
             remove_namespace (bool): True only when final collection succeeded.
 
         Raises:
-            ValueError: Network or original deployment state differs after restoration.
+            ValueError: A node identity changed, or network/deployment restoration differs.
         """
+        if self.nodes:
+            current = {
+                node["metadata"]["name"]: node["metadata"]["uid"]
+                for node in self.get("nodes")["items"]
+            }
+            if any(
+                current.get(node["metadata"]["name"]) != node["metadata"]["uid"]
+                for node in self.nodes["items"]
+                if node["metadata"]["name"] in self.args.workers
+            ):
+                raise ValueError("worker identity changed; original cordons cannot be restored")
         for node in (self.nodes or {}).get("items", []):
             name = node["metadata"]["name"]
             if name in self.args.workers:

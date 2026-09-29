@@ -10,6 +10,8 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from argparse import Namespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -134,6 +136,24 @@ class CaptureTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(marker.read_text(), "original failure\n")
+
+    def test_restoration_refuses_replaced_node_before_cordon_mutation(self):
+        """Original cordon settings cannot be applied to a replacement with the same name."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            session = module.CaptureSession(
+                Namespace(
+                    output=Path(directory), namespace="fns-test", workers=["w1"], replay_command=[]
+                )
+            )
+            session.nodes = {"items": [{"metadata": {"name": "w1", "uid": "original"}, "spec": {}}]}
+            current = {"items": [{"metadata": {"name": "w1", "uid": "replacement"}, "spec": {}}]}
+            with patch.object(session, "get", return_value=current), patch.object(
+                session, "kubectl"
+            ) as mutate:
+                with self.assertRaisesRegex(ValueError, "identity"):
+                    session.restore(remove_namespace=False)
+                mutate.assert_not_called()
 
 
 if __name__ == "__main__":

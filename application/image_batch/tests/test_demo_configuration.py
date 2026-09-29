@@ -1,6 +1,8 @@
 """Deployment resolution uses Continuum evidence rather than machine-specific defaults."""
 
 import importlib
+import contextlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -142,6 +144,30 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(values["horizon_seconds"], 240)
         self.assertEqual(values["scenarios"], 5)
         self.assertFalse(output.exists())
+
+    def test_native_placement_requires_explicit_control_plane_role(self):
+        """A historic personal node name must not implicitly grant a control-plane toleration."""
+        module = importlib.import_module("opendc_kubernetes")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = module.main(
+                [
+                    "manifest",
+                    "--namespace",
+                    "fns-test",
+                    "--job",
+                    "native",
+                    "--remote-dir",
+                    "/var/tmp/fns-opendc-test",
+                    "--image",
+                    "test:pinned",
+                    "--node",
+                    "cloudcontrollermatthijs",
+                ]
+            )
+        self.assertEqual(code, 0)
+        spec = json.loads(output.getvalue())["spec"]["template"]["spec"]
+        self.assertFalse(spec.get("tolerations"))
 
 
 if __name__ == "__main__":

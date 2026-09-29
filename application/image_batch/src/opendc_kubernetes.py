@@ -448,7 +448,7 @@ def main(argv=None):
         command.add_argument("--job", required=True)
         command.add_argument("--remote-dir", required=True)
     render.add_argument("--image", required=True)
-    render.add_argument("--node", default="cloudcontrollermatthijs")
+    render.add_argument("--node", required=True)
     render.add_argument(
         "--control-plane",
         action="store_true",
@@ -471,9 +471,7 @@ def main(argv=None):
                         args.node,
                         args.remote_dir,
                         args.timeout_seconds,
-                        control_plane=(
-                            args.control_plane or args.node == "cloudcontrollermatthijs"
-                        ),
+                        control_plane=args.control_plane,
                     ),
                     indent=2,
                 )
