@@ -9,7 +9,7 @@ import pyarrow.parquet as pq
 
 from forecast_trace import canonical
 from opendc_inputs import fixture_tasks
-from opendc_pinning import PINNED_MODE, initial_assignments
+from opendc_pinning import PINNED_MODE, initial_assignments, cordoned_worker
 from opendc_energy import datacenter_series, energy_tolerance
 
 
@@ -254,7 +254,7 @@ def validate_provisional_results(directory, case):
     establish completed identities and CPU/memory admission. Provisional cases
     do not enforce placement; pinned cases additionally require the observed
     hosts at zero, no new cordon admissions and complete datacenter energy.
-    Startup delay and exhausted-work occupancy remain unmodeled. OpenDC starts
+    Explicit occupancy estimates, when present, remain modeled assumptions. OpenDC starts
     its clock at the earliest submission; returned lifecycle times restore the
     cutoff-relative origin, while native submission times already use that origin.
 
@@ -273,7 +273,7 @@ def validate_provisional_results(directory, case):
     tables = {}
     pinned = case.get("initialization_mode") == PINNED_MODE
     assignments = initial_assignments(case) if pinned else {}
-    removed = case.get("selected_worker") if pinned and case["candidate"] == "scale-down" else None
+    removed = cordoned_worker(case) if pinned else None
     try:
         for name in ("task", "host", "service", "powerSource"):
             table = pq.ParquetFile(raw / f"{name}.parquet").read()
@@ -492,7 +492,10 @@ def validate_provisional_results(directory, case):
             "table_rows": {name: len(rows) for name, rows in tables.items()},
             "semantic_sha256": hashlib.sha256(canonical(semantic)).hexdigest(),
             "interpretation": (
-                "validated represented-task pinning; startup delay and exhausted occupancy "
+                "validated represented-task pinning and explicit causal occupancy estimates; "
+                "no claim of measured startup/residual accuracy"
+                if pinned and case.get("occupancy_model")
+                else "validated represented-task pinning; startup delay and exhausted occupancy "
                 "remain unmodeled"
                 if pinned
                 else "provisional trace replay; placement/startup occupancy not restored"

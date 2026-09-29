@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -641,6 +642,7 @@ class ResourceSampler:
         self._sample_keys: set[tuple[str, float]] = set()
         self._observed_uids: set[str] = set()
         self._finalized_uids: set[str] = set()
+        self._retired_uids: set[str] = set()
         self._collection_lock = threading.Lock()
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -660,6 +662,68 @@ class ResourceSampler:
         with self._collection_lock, self._lock:
             self._finalized_uids.add(job_uid)
             return self._snapshots.pop(job_uid, [])
+
+    def retire_job(self, job_uid: str) -> None:
+        """Stop repeating a completed Job only after its workload and emission records are flushed.
+
+        Args:
+            job_uid (str): Successful terminal Job whose causal evidence is already persisted.
+
+        Raises:
+            ValueError: The Job's sampling lifetime has not been finalized.
+        """
+        with self._lock:
+            if job_uid not in self._finalized_uids:
+                raise ValueError("cannot retire a Job before sampling finalization")
+            self._retired_uids.add(job_uid)
+
+    def _list_inventory(self, resource: str) -> Any:
+        """Decode live/unemitted inventory without repeatedly rebuilding archived SDK objects.
+
+        Raw API membership is still read on every pass. Only UIDs with durable
+        successful completion evidence are omitted; failed/malformed/unemitted
+        Jobs and unresolved Pod owners retain the existing reconciliation path.
+
+        Args:
+            resource (str): ``jobs`` or ``pods`` in this workload namespace.
+
+        Returns:
+            Any: Standard Kubernetes list model containing all unretired members.
+
+        Raises:
+            ValueError: Raw API JSON is malformed or the resource name is unsupported.
+        """
+        if resource == "jobs":
+            api, method, model = self.batch_api, self.batch_api.list_namespaced_job, "V1JobList"
+        elif resource == "pods":
+            api, method, model = self.core_api, self.core_api.list_namespaced_pod, "V1PodList"
+        else:
+            raise ValueError("unsupported observer inventory resource")
+        response = method(
+            namespace=self.namespace, label_selector=self.label_selector, _preload_content=False
+        )
+        try:
+            payload = json.loads(response.data)
+        finally:
+            response.release_conn()
+        with self._lock:
+            retired = set(self._retired_uids)
+        kept = []
+        for item in payload["items"]:
+            metadata = item["metadata"]
+            if resource == "jobs":
+                archived = metadata.get("uid") in retired
+            else:
+                owners = {
+                    owner.get("uid")
+                    for owner in metadata.get("ownerReferences", [])
+                    if owner.get("kind") == "Job"
+                }
+                archived = bool(owners) and owners <= retired
+            if not archived:
+                kept.append(item)
+        payload["items"] = kept
+        return api.api_client.deserialize(SimpleNamespace(data=json.dumps(payload)), model)
 
     def execution_interval(self, job_uid: str, request_id: str) -> tuple[datetime, datetime]:
         pods = self.core_api.list_namespaced_pod(
@@ -710,17 +774,47 @@ class ResourceSampler:
             )
             self._observed_uids.add(uid)
 
+    def _missing_membership(self, jobs: list[Any], pods: list[Any]) -> list[str]:
+        """Find known unfinalized Jobs or Pod owners absent from the collected list.
+
+        Args:
+            jobs (list): Jobs returned by the current list request.
+            pods (list): Pods returned by the independent Pod request.
+
+        Returns:
+            list[str]: Sorted missing UIDs, without inferred phase or placement.
+        """
+        listed = {getattr(getattr(job, "metadata", None), "uid", None) for job in jobs}
+        owners = {
+            owner.uid
+            for pod in pods
+            for owner in (getattr(getattr(pod, "metadata", None), "owner_references", None) or [])
+            if getattr(owner, "kind", None) == "Job" and getattr(owner, "uid", None)
+        }
+        with self._lock:
+            known = self._observed_uids - self._finalized_uids
+        return sorted((known | owners) - listed)
+
     def collect_once(self, *, collect_resources: bool = True) -> None:
+        """Collect a bounded state snapshot before optionally sampling resources.
+
+        Args:
+            collect_resources (bool): Also query the configured resource metrics.
+        """
         # Terminal finalization must include the whole in-flight collection,
         # including flushed raw evidence, before detaching its sample list.
         with self._collection_lock:
             self._collect_once(collect_resources=collect_resources)
 
     def _collect_once(self, *, collect_resources: bool) -> None:
+        """Reconcile one observable list race without backdating evidence availability.
+
+        Args:
+            collect_resources (bool): Whether this tick also samples Prometheus.
+        """
+        collection_started = datetime.now(timezone.utc)
         try:
-            jobs = self.batch_api.list_namespaced_job(
-                namespace=self.namespace, label_selector=self.label_selector
-            )
+            jobs = self._list_inventory("jobs")
         except Exception as exc:
             self.emit_diagnostic(
                 "cluster_state.capture_failed",
@@ -732,9 +826,7 @@ class ResourceSampler:
             self.observe_job(job)
 
         try:
-            pods = self.core_api.list_namespaced_pod(
-                namespace=self.namespace, label_selector=self.label_selector
-            )
+            pods = self._list_inventory("pods")
         except Exception as exc:
             self.emit_diagnostic(
                 "cluster_state.capture_failed",
@@ -743,6 +835,13 @@ class ResourceSampler:
             return
 
         try:
+            passes = 1
+            if self._missing_membership(jobs.items, pods.items):
+                jobs = self._list_inventory("jobs")
+                for job in jobs.items:
+                    self.observe_job(job)
+                pods = self._list_inventory("pods")
+                passes = 2
             nodes = self.core_api.list_node()
             state_record = build_cluster_state_record(
                 jobs.items,
@@ -753,6 +852,13 @@ class ResourceSampler:
                 label_selector=self.label_selector,
                 observed_at=datetime.now(timezone.utc),
             )
+            state_record["collection"] = {
+                "started_at": utc_iso(collection_started),
+                "passes": passes,
+                "retired_completed_jobs": len(self._retired_uids),
+                "missing_job_uids": self._missing_membership(jobs.items, pods.items),
+                "atomic": False,
+            }
         except Exception as exc:
             self.emit_diagnostic(
                 "cluster_state.capture_failed",
@@ -903,6 +1009,18 @@ class OpenDTObserver:
         )
 
     def handle_job(self, job: Any) -> bool:
+        """Finalize terminal evidence before retiring successful Jobs from recurring snapshots.
+
+        Args:
+            job (Any): Kubernetes Job received from the initial list or resumed watch.
+
+        Returns:
+            bool: True only when a new successful workload record was emitted.
+
+        Raises:
+            OSError: A workload or diagnostic write fails.
+            ApiException: Kubernetes execution-interval lookup fails.
+        """
         if hasattr(self.sampler, "observe_job"):
             self.sampler.observe_job(job)
         state, _ = terminal_status(job)
@@ -956,6 +1074,8 @@ class OpenDTObserver:
                 "resource_sample_count": record["source"]["resource_sample_count"],
             },
         )
+        if uid:
+            self.sampler.retire_job(uid)
         self._next_task_id += 1
         return True
 

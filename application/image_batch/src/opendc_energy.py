@@ -1,6 +1,8 @@
 """Complete worker-pool energy from the FNS engine's datacenter accumulator."""
 import math
 
+from opendc_pinning import cordoned_worker
+
 
 def energy_tolerance(*values):
     """Bound float32 cumulative-energy rounding at compared sample endpoints.
@@ -41,7 +43,7 @@ def datacenter_series(case, rows, native_time_origin_ms=0):
     origin = float(native_time_origin_ms)
     if not math.isfinite(origin) or origin < 0:
         raise ValueError("invalid datacenter native time origin")
-    removed = case.get("selected_worker") if case["candidate"] == "scale-down" else None
+    removed = cordoned_worker(case)
     idle = sum(w["idle_power_w"] for w in case["workers"] if w["node_name"] != removed)
     maximum = sum(w["max_power_w"] for w in case["workers"])
     samples = {0.0: 0.0, origin: idle * origin / 1000}

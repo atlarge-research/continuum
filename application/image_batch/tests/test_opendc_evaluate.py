@@ -121,6 +121,33 @@ def comparison_cases(count=3):
 class EvaluationTests(unittest.TestCase):
     """Protect the two interpretation windows and immutable evidence checks."""
 
+    def test_release_occupancy_is_separate_from_classifier_response(self):
+        """Observed classifier completion and predicted slot release have distinct endpoints."""
+        case = evaluation_case()
+        case["tasks"] = case["tasks"][:1]
+        case["tasks"][0]["metadata"].update(
+            phase="release",
+            occupancy={
+                "release_only": True,
+                "observed_classifier_finish_ms": 999000,
+                "release_ms": 0,
+                "classifier_profile_ms": 0,
+            },
+        )
+        series = {
+            "worker-0": {
+                "samples": [(0, 0), (20000, 200)],
+                "idle_power_w": 10,
+                "native_last_timestamp_ms": 20000,
+            }
+        }
+        with patch("opendc_evaluate._energy_series", return_value=series):
+            result = analyze_case(case, [{"task_id": 1, "finish_time": 1000}], [])
+        cohort = result["windows"]["cohort_through_completion"]["cohorts"]["backlog"]
+        self.assertEqual(cohort["response_seconds"]["mean"], 2)
+        self.assertEqual(result["lifecycles"][0]["resource_release_response_seconds"], 4)
+        self.assertEqual(result["boundaries"]["last_resource_release_seconds"], 1)
+
     def test_saved_metrics_render_without_loading_original_experiments(self):
         """Allow report-only changes with unavailable raw evidence and preserve the reference."""
         report = {

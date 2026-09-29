@@ -38,6 +38,7 @@ def build_job_manifest(
     worker_image: str,
     ttl_seconds: int,
     scheduler_name: str = "default-scheduler",
+    suspend: bool = False,
 ) -> dict[str, Any]:
     """Build a worker-only classifier Job with one CPU and bounded memory.
 
@@ -47,6 +48,7 @@ def build_job_manifest(
         worker_image (str): Calibrated classifier image reference.
         ttl_seconds (int): Retention after completion in seconds.
         scheduler_name (str): Installed scheduler profile; does not bypass resource admission.
+        suspend (bool): Retain original Job creation time while waiting for FIFO admission.
 
     Returns:
         dict: Native Job excluding both control-plane role labels.
@@ -106,6 +108,7 @@ def build_job_manifest(
         },
         "spec": {
             "backoffLimit": 0,
+            "suspend": suspend,
             "ttlSecondsAfterFinished": ttl_seconds,
             "template": {
                 "metadata": {"labels": labels},
@@ -158,6 +161,7 @@ class KubernetesJobSubmitter:
         ttl_seconds: int,
         kubeconfig: str | None = None,
         scheduler_name: str = "default-scheduler",
+        suspend_jobs: bool = False,
     ):
         """Configure the client and placement profile.
 
@@ -167,6 +171,7 @@ class KubernetesJobSubmitter:
             ttl_seconds (int): Completed Job retention in seconds.
             kubeconfig (str or None): Explicit client configuration, otherwise auto-detected.
             scheduler_name (str): Installed profile used by application Pods.
+            suspend_jobs (bool): Create Jobs immediately but await explicit FIFO release.
         """
         if kubeconfig:
             config.load_kube_config(config_file=kubeconfig)
@@ -181,6 +186,7 @@ class KubernetesJobSubmitter:
         self.worker_image = worker_image
         self.ttl_seconds = ttl_seconds
         self.scheduler_name = scheduler_name
+        self.suspend_jobs = suspend_jobs
 
     def submit(self, request: JobRequest) -> None:
         """Create one worker-only Job, retaining scheduler resource-fit checks.
@@ -194,6 +200,7 @@ class KubernetesJobSubmitter:
             worker_image=self.worker_image,
             ttl_seconds=self.ttl_seconds,
             scheduler_name=self.scheduler_name,
+            suspend=self.suspend_jobs,
         )
         self._api.create_namespaced_job(namespace=self.namespace, body=manifest)
 

@@ -1,0 +1,243 @@
+"""Controller action durability and shadow-phase safety regressions."""
+
+import importlib
+import json
+import subprocess
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
+
+from closed_loop_journal import Journal
+import test_closed_loop_guards as guard_fixtures
+from opendc_scenarios import _down_worker
+
+
+class ControllerTests(unittest.TestCase):
+    """Physical changes must follow a durable guarded intent and require live mode."""
+
+    def setUp(self):
+        """Reuse realistic fresh observer inventory from guard regressions."""
+        fixture = guard_fixtures.GuardTests()
+        fixture.setUp()
+        self.config = fixture.config
+        self.snapshot = fixture.snapshot
+        self.view = fixture.view()
+        self.node = {
+            "metadata": {"name": "w1", "uid": "uid-w1", "resourceVersion": "42"},
+            "spec": {},
+            "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+        }
+
+    def module(self):
+        """Load the production controller.
+
+        Returns:
+            module: Controller implementation.
+        """
+        self.assertIsNotNone(importlib.util.find_spec("closed_loop_controller"))
+        return importlib.import_module("closed_loop_controller")
+
+    def test_intent_is_durable_before_uid_and_resource_version_guarded_patch(self):
+        """An API call is issued only after its exact target and intent can be recovered."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = Journal(Path(temporary) / "journal.jsonl")
+            calls = []
+
+            def api(*args):
+                pending = journal.pending_action()
+                self.assertEqual(pending["selected_worker"], "w1")
+                patch_value = json.loads(args[-1])
+                self.assertEqual(
+                    patch_value[:2],
+                    [
+                        {"op": "test", "path": "/metadata/uid", "value": "uid-w1"},
+                        {"op": "test", "path": "/metadata/resourceVersion", "value": "42"},
+                    ],
+                )
+                calls.append(patch_value)
+                return b"{}"
+
+            session = type(
+                "Session", (), {"get": lambda _, *args: self.node, "kubectl": staticmethod(api)}
+            )()
+            with patch.object(module.time, "time", return_value=1002):
+                result = module.actuate(
+                    session,
+                    journal,
+                    self.view,
+                    self.view,
+                    {"action": "scale-down", "selected_worker": "w1"},
+                    self.config,
+                    cutoff_seconds=1000,
+                )
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(result["status"], "acknowledged")
+            self.assertIsNone(journal.pending_action())
+            self.assertEqual(journal.history()["last_action_at"], 1002)
+            journal.close()
+
+    def test_uncertain_api_outcome_stays_pending_and_cannot_be_reissued(self):
+        """A lost API reply requires observation; a second request is forbidden."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = Journal(Path(temporary) / "journal.jsonl")
+
+            def fail(*_args):
+                raise RuntimeError("lost API acknowledgement")
+
+            session = type(
+                "Session", (), {"get": lambda _, *args: self.node, "kubectl": staticmethod(fail)}
+            )()
+            proposal = {"action": "scale-down", "selected_worker": "w1"}
+            with patch.object(module.time, "time", return_value=1002):
+                with self.assertRaisesRegex(RuntimeError, "acknowledgement"):
+                    module.actuate(
+                        session,
+                        journal,
+                        self.view,
+                        self.view,
+                        proposal,
+                        self.config,
+                        cutoff_seconds=1000,
+                    )
+                self.assertIsNotNone(journal.pending_action())
+                with self.assertRaisesRegex(ValueError, "unresolved"):
+                    module.actuate(
+                        session,
+                        journal,
+                        self.view,
+                        self.view,
+                        proposal,
+                        self.config,
+                        cutoff_seconds=1000,
+                    )
+            journal.close()
+
+    def test_shadow_requires_two_consecutive_valid_cycles(self):
+        """Invalid forecasts reset readiness and cannot consume the safety shadow phase."""
+        module = self.module()
+        self.assertEqual(module.shadow_progress(0, True), (1, True))
+        self.assertEqual(module.shadow_progress(1, False), (0, True))
+        self.assertEqual(module.shadow_progress(1, True), (2, True))
+        self.assertEqual(module.shadow_progress(2, True), (2, False))
+
+    def test_final_node_read_rejects_readiness_loss(self):
+        """A worker becoming unready before dispatch vetoes the pending capacity change."""
+        module = self.module()
+        self.node["status"]["conditions"][0]["status"] = "False"
+        session = Mock()
+        session.get.return_value = self.node
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = Journal(Path(temporary) / "journal.jsonl")
+            with patch.object(module.time, "time", return_value=1002):
+                with self.assertRaisesRegex(ValueError, "Ready"):
+                    module.actuate(
+                        session,
+                        journal,
+                        self.view,
+                        self.view,
+                        {"action": "scale-down", "selected_worker": "w1"},
+                        self.config,
+                        cutoff_seconds=1000,
+                    )
+            session.kubectl.assert_not_called()
+            journal.close()
+
+    def test_state_failure_resets_shadow_and_timeout_ends_cycle(self):
+        """Recovery continues after transport timeout without credit for broken shadow streaks."""
+        module = self.module()
+        for failure in (ValueError("stale"), subprocess.TimeoutExpired("ssh", 3)):
+            with self.subTest(
+                failure=type(failure).__name__
+            ), tempfile.TemporaryDirectory() as temporary:
+                loop = object.__new__(module.Controller)
+                loop.output = Path(temporary)
+                loop.journal = Journal(loop.output / "journal.jsonl")
+                loop.tick_number, loop.shadow, loop.history = 0, 1, {}
+                loop.fresh = Mock(side_effect=failure)
+                loop.cycle()
+                self.assertEqual(loop.shadow, 0)
+                self.assertEqual(loop.journal.records[-1]["event"], "cycle.end")
+                self.assertEqual(loop.journal.records[-1]["outcome"], "vetoed_or_failed")
+                loop.journal.close()
+
+    def test_restart_skips_orphaned_cycle_directory(self):
+        """A crash after directory creation cannot cause evidence overwrite or endless failure."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            journal = Journal(root / "journal.jsonl")
+            journal.append("cycle.begin", tick=2)
+            (root / "cycle-0003").mkdir()
+            self.assertEqual(module.last_tick(journal, root), 3)
+            journal.close()
+
+    def test_down_candidate_continues_the_previous_target_without_reusing_its_score(self):
+        """A now-busy prior target can be resimulated instead of resetting on a new empty worker."""
+        backlog = [{"metadata": {"preserved_assignment": "w2", "first_assignment_observed_ms": 1}}]
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="w2"), "w2")
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="removed"), "w1")
+
+    def test_initial_freshness_is_measured_at_collection_before_forecast_computation(self):
+        """Ten seconds of valid computation ages the decision, not its collection precondition."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            loop = object.__new__(module.Controller)
+            loop.session = Mock(namespace="test")
+            loop.session.namespace = "test"
+            loop.args = Mock(period_seconds=120, warmup_cycles=1, native_image="test")
+            loop.origin, loop.tick_number = 900, 1
+            loop.template, loop.config, loop.history = {"saved": True}, self.config, {}
+            loop.cluster = {}
+
+            def forecast(_prefix, destination, _cutoff, _settings, _template, **_kwargs):
+                destination.mkdir()
+                (destination / "state.json").write_text(json.dumps(self.snapshot))
+                return (
+                    {
+                        "status": "ready",
+                        "simulation_inputs": {"status": "ready"},
+                        "cutoff": self.snapshot["timestamp"],
+                    },
+                    loop.template,
+                )
+
+            with patch.object(module.time, "time", side_effect=[1001, 1010]), patch.object(
+                module, "run_once", side_effect=forecast
+            ), patch.object(module, "prepare_suite"), patch.object(
+                module, "run_control_plane_suite", return_value=root
+            ), patch.object(
+                module, "load_scores", return_value=([], {})
+            ):
+                before, _, cutoff = loop.predict(root)
+            self.assertEqual(before["timestamp_seconds"], 1000)
+            self.assertEqual(cutoff, 1000)
+
+    def test_replacement_node_does_not_confirm_the_original_action(self):
+        """A matching cordon flag on a new UID is not observation of the requested worker."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 2, {}
+            loop.args = Mock(control_arm="reactive")
+            loop.config, loop.session = self.config, Mock()
+            replacement = json.loads(json.dumps(self.view))
+            replacement["timestamp_seconds"] = 1003
+            replacement["nodes"]["w1"].update(uid="replacement", accepting=False)
+            loop.fresh = Mock(side_effect=[self.view, self.view, replacement, replacement])
+            loop.recover = Mock()
+            proposal = dict(action="scale-down", selected_worker="w1", state={})
+            with patch.object(module, "reactive_action", return_value=proposal), patch.object(
+                module, "actuate", return_value=dict(last_action_at=1002)
+            ), patch.object(module.time, "time", return_value=1003), patch.object(
+                module.time, "monotonic", side_effect=[0, 4]
+            ):
+                loop.cycle()
+            observed = [r for r in loop.journal.records if r["event"] == "cycle.observed"]
+            self.assertFalse(observed[-1]["action_observed"])
+            loop.journal.close()
