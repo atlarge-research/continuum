@@ -296,7 +296,7 @@ def _timelines(pdf, runs):
         figure,
         "Capacity/queue lines: independent-run median; shading: min–max. Gaps are "
         "retained when any run lacks fresh data.\n"
-        "Response curves exclude unfinished Jobs; the preceding page keeps them in "
+        "Response curves exclude unfinished Jobs; the physical-outcomes summary keeps them in "
         "the deadline denominator.\n"
         "Decision-age dots are repeated cycles within runs, not independent workload repetitions.",
     )

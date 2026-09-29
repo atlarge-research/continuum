@@ -416,7 +416,7 @@ class ScenarioPreparationTests(unittest.TestCase):
             )
 
     def test_selection_retains_assignments_but_avoids_unknown_residuals(self):
-        """An unknown residual cannot beat a known release, while assignment evidence stays intact."""
+        """Unknown residuals cannot beat a known release; assignment evidence stays intact."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             forecast, observer = make_forecast(root)
