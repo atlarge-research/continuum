@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -15,7 +16,11 @@ import xml.etree.ElementTree as ET
 from capture_run import CaptureSession
 from closed_loop_audit import audit_capture
 from closed_loop_evidence import capture_evidence
-from demo_configuration import resolve_deployment, validate_live_inventory
+from demo_configuration import (
+    resolve_deployment,
+    validate_experiment,
+    validate_live_inventory,
+)
 from opendc_inputs import file_hashes, write_json
 from opendc_kubernetes import ssh
 
@@ -98,6 +103,86 @@ def verify_frozen_source(source):
         != recorded["archive_sha256"]
     ):
         raise ValueError("frozen source or archive changed")
+
+
+def seal_protocol(protocol_path, output):
+    """Copy numerical/deployment inputs and bind the matrix to source and image identity.
+
+    Args:
+        protocol_path (Path): Draft matrix with paths to existing source/configuration.
+        output (Path): New directory holding the sealed protocol and exact input bytes.
+
+    Returns:
+        Path: Sealed protocol.json ready for the matrix runner.
+
+    Raises:
+        ValueError: Settings, source identity or matrix entries are invalid.
+        FileExistsError: The protocol destination already exists.
+        subprocess.CalledProcessError: The declared local native image is unavailable.
+    """
+    protocol = json.loads(Path(protocol_path).read_text(encoding="utf-8"))
+    validate_experiment(json.loads(Path(protocol["experiment_config"]).read_text(encoding="utf-8")))
+    verify_frozen_source(Path(protocol["source_root"]))
+    matrix_commands(protocol, output)
+    output = Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    origins, hashes = {}, {}
+    for key, name in (
+        ("continuum_config", "continuum.cfg"),
+        ("inventory", "inventory.ini"),
+        ("experiment_config", "experiment.json"),
+    ):
+        source = Path(protocol[key]).resolve()
+        destination = output / name
+        shutil.copyfile(source, destination)
+        origins[key] = str(source)
+        protocol[key] = str(destination)
+        hashes[key] = hashlib.sha256(destination.read_bytes()).hexdigest()
+    protocol.update(
+        input_origins=origins,
+        input_sha256=hashes,
+        native_image_id=subprocess.check_output(
+            ["docker", "image", "inspect", protocol["native_image"], "--format", "{{.Id}}"],
+            text=True,
+        ).strip(),
+        sealed_at_seconds=time.time(),
+    )
+    destination = output / "protocol.json"
+    write_json(destination, protocol)
+    write_json(
+        output / "seal.json",
+        dict(protocol_sha256=hashlib.sha256(destination.read_bytes()).hexdigest()),
+    )
+    return destination
+
+
+def verify_protocol(protocol_path):
+    """Verify sealed study inputs and the local image before each physical run.
+
+    Args:
+        protocol_path (Path): Sealed protocol.json beside its seal and copied inputs.
+
+    Returns:
+        dict: Verified matrix and immutable input locations.
+
+    Raises:
+        ValueError: Protocol, input bytes, source or native image identity changed.
+    """
+    path = Path(protocol_path)
+    seal = json.loads((path.parent / "seal.json").read_text())
+    if hashlib.sha256(path.read_bytes()).hexdigest() != seal["protocol_sha256"]:
+        raise ValueError("sealed protocol changed")
+    protocol = json.loads(path.read_text(encoding="utf-8"))
+    for key, expected in protocol["input_sha256"].items():
+        if hashlib.sha256(Path(protocol[key]).read_bytes()).hexdigest() != expected:
+            raise ValueError(f"sealed input changed: {key}")
+    verify_frozen_source(Path(protocol["source_root"]))
+    image_id = subprocess.check_output(
+        ["docker", "image", "inspect", protocol["native_image"], "--format", "{{.Id}}"], text=True
+    ).strip()
+    if image_id != protocol["native_image_id"]:
+        raise ValueError("frozen native image identity changed")
+    return protocol
 
 
 def matrix_commands(protocol, output):
@@ -212,7 +297,7 @@ def run_matrix(protocol_path, output):
         RuntimeError: A capture fails or does not restore its infrastructure.
         FileExistsError: A run or its execution log already exists.
     """
-    protocol = json.loads(Path(protocol_path).read_text(encoding="utf-8"))
+    protocol = verify_protocol(protocol_path)
     settings = json.loads(Path(protocol["experiment_config"]).read_text(encoding="utf-8"))
     source = Path(protocol["source_root"])
     verify_frozen_source(source)
@@ -228,6 +313,7 @@ def run_matrix(protocol_path, output):
     commands = matrix_commands(protocol, output)
     (Path(output) / "experiments").mkdir(exist_ok=True)
     for row in commands:
+        verify_protocol(protocol_path)
         require_time(settings, now=time.time(), closure_at=protocol["closure_at_seconds"])
         capture = Path(row["output"])
         if capture.exists():
@@ -401,6 +487,9 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     freeze = commands.add_parser("freeze-source")
     freeze.add_argument("--output", type=Path, required=True)
+    seal = commands.add_parser("seal-protocol")
+    seal.add_argument("--protocol", type=Path, required=True)
+    seal.add_argument("--output", type=Path, required=True)
     matrix = commands.add_parser("matrix")
     matrix.add_argument("--protocol", type=Path, required=True)
     matrix.add_argument("--output", type=Path, required=True)
@@ -415,6 +504,8 @@ def main():
     args = parser.parse_args()
     if args.command == "freeze-source":
         print(json.dumps(freeze_source(args.output)))
+    elif args.command == "seal-protocol":
+        print(seal_protocol(args.protocol, args.output))
     elif args.command == "matrix":
         run_matrix(args.protocol, args.output)
     elif args.command == "collect":

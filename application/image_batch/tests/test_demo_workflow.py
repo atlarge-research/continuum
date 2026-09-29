@@ -2,9 +2,13 @@
 
 import copy
 import importlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+
+from demo_configuration import EXPERIMENT_DEFAULTS
 
 
 class WorkflowTests(unittest.TestCase):
@@ -123,6 +127,40 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(len(frozen["archive_sha256"]), 64)
             with self.assertRaises(FileExistsError):
                 module.freeze_source(Path(directory) / "source")
+
+    def test_protocol_freeze_rejects_changed_settings_and_image_identity(self):
+        """A frozen matrix cannot silently execute modified inputs or a retagged image."""
+        module = self.module()
+        self.assertTrue(hasattr(module, "seal_protocol"))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frozen = module.freeze_source(root / "source")
+            for name in ("continuum.cfg", "inventory.ini"):
+                (root / name).write_text("preserved input")
+            (root / "settings.json").write_text(json.dumps(EXPERIMENT_DEFAULTS))
+            protocol = dict(
+                source_root=frozen["source_root"],
+                continuum_config=str(root / "continuum.cfg"),
+                inventory=str(root / "inventory.ini"),
+                experiment_config=str(root / "settings.json"),
+                native_image="exact:tag",
+                matrix=[dict(seed=107, arm="forecast")],
+                run_prefix="fns-sealed",
+                role="heldout",
+                closure_at_seconds=9999999999,
+            )
+            source = root / "draft.json"
+            source.write_text(json.dumps(protocol))
+            with patch.object(module.subprocess, "check_output", return_value="sha256:original"):
+                sealed = module.seal_protocol(source, root / "protocol")
+                module.verify_protocol(sealed)
+            with patch.object(module.subprocess, "check_output", return_value="sha256:changed"):
+                with self.assertRaisesRegex(ValueError, "image"):
+                    module.verify_protocol(sealed)
+            settings = root / "protocol/experiment.json"
+            settings.write_text("changed settings")
+            with self.assertRaisesRegex(ValueError, "input"):
+                module.verify_protocol(sealed)
 
     def test_modified_frozen_source_is_rejected(self):
         """A source tree changed after freezing cannot masquerade as the committed revision."""
