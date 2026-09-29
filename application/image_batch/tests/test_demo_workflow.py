@@ -31,6 +31,9 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reserve"):
             module.require_time(settings, now=1000, closure_at=3999)
         module.require_time(settings, now=1000, closure_at=4000)
+        with self.assertRaisesRegex(ValueError, "reserve"):
+            module.require_time(settings, now=1000, closure_at=9999, runs=3)
+        module.require_time(settings, now=1000, closure_at=10000, runs=3)
 
     def test_commands_preserve_one_protocol_and_isolate_each_seed_arm(self):
         """Matched arms share settings/source while outputs and namespaces remain unique."""
@@ -164,9 +167,26 @@ class WorkflowTests(unittest.TestCase):
             )
             source = root / "draft.json"
             source.write_text(json.dumps(protocol))
-            with patch.object(module.subprocess, "check_output", return_value="sha256:original"):
+            with patch.object(
+                module.subprocess, "check_output", return_value="sha256:original"
+            ), patch.object(
+                module,
+                "deployment_identity",
+                return_value={"worker": "sha256:worker-original"},
+                create=True,
+            ):
                 sealed = module.seal_protocol(source, root / "protocol")
                 module.verify_protocol(sealed)
+            with patch.object(
+                module.subprocess, "check_output", return_value="sha256:original"
+            ), patch.object(
+                module,
+                "deployment_identity",
+                return_value={"worker": "sha256:worker-changed"},
+                create=True,
+            ):
+                with self.assertRaisesRegex(ValueError, "deployment"):
+                    module.verify_protocol(sealed)
             with patch.object(module.subprocess, "check_output", return_value="sha256:changed"):
                 with self.assertRaisesRegex(ValueError, "image"):
                     module.verify_protocol(sealed)
@@ -174,6 +194,60 @@ class WorkflowTests(unittest.TestCase):
             settings.write_text("changed settings")
             with self.assertRaisesRegex(ValueError, "input"):
                 module.verify_protocol(sealed)
+
+    def test_runtime_image_identity_uses_resolved_hosts_and_template_images(self):
+        """Every physical image is read from its actual runtime, using configured identities."""
+        module = self.module()
+        deployment = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "adapter",
+                                "image": "custom:adapter",
+                                "env": [{"name": "WORKER_IMAGE", "value": "custom:worker"}],
+                            },
+                            {"name": "opendt-observer", "image": "custom:adapter"},
+                            {"name": "forecast", "image": "unused:forecast"},
+                        ]
+                    }
+                }
+            }
+        }
+        settings = {
+            "controller": "alice@control",
+            "endpoint": "alice@endpoint",
+            "ssh_key": "/key",
+            "workers": ["workera"],
+            "inventory_hosts": [
+                {"name": "worker_a", "ansible_user": "alice", "ansible_host": "worker-ip"}
+            ],
+        }
+
+        def remote(host, key, command):
+            self.assertEqual(key, "/key")
+            if command[0] == "kubectl":
+                self.assertEqual(host, "alice@control")
+                return json.dumps(deployment).encode()
+            if "crictl" in command:
+                self.assertEqual(host, "alice@worker-ip")
+                return json.dumps({"status": {"id": "digest:" + command[-1]}}).encode()
+            self.assertEqual(host, "alice@endpoint")
+            self.assertIn("custom:endpoint", command)
+            return b"sha256:endpoint\n"
+
+        with patch.object(module, "resolve_deployment", return_value=settings), patch.object(
+            module, "ssh", side_effect=remote
+        ):
+            identity = module.deployment_identity(
+                {"continuum_config": "cfg", "inventory": "ini", "endpoint_image": "custom:endpoint"}
+            )
+        self.assertEqual(
+            set(identity["worker_images"]["workera"]), {"custom:adapter", "custom:worker"}
+        )
+        self.assertEqual(identity["endpoint_image_id"], "sha256:endpoint")
+        self.assertEqual(len(identity["deployment_spec_sha256"]), 64)
 
     def test_modified_frozen_source_is_rejected(self):
         """A source tree changed after freezing cannot masquerade as the committed revision."""

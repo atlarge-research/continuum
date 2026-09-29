@@ -13,7 +13,7 @@ import tarfile
 import time
 import xml.etree.ElementTree as ET
 
-from capture_run import CaptureSession
+from capture_run import CaptureSession, ENDPOINT_IMAGE
 from closed_loop_audit import audit_capture
 from closed_loop_evidence import SCHEMA as EVIDENCE_SCHEMA, capture_evidence
 from demo_cleanup import cleanup_native
@@ -40,18 +40,19 @@ def run_budget_seconds(settings):
     )
 
 
-def require_time(settings, *, now, closure_at):
+def require_time(settings, *, now, closure_at, runs=1):
     """Keep the final closure reserve unavailable to experiment launches.
 
     Args:
         settings (dict): Complete experiment settings.
         now (float): Current UTC epoch seconds.
         closure_at (float): Absolute start of the protected closure window.
+        runs (int): Number of complete bounded captures that must fit before any launch.
 
     Raises:
         ValueError: The full run budget would cross the closure boundary.
     """
-    if now + run_budget_seconds(settings) > closure_at:
+    if now + runs * run_budget_seconds(settings) > closure_at:
         raise ValueError("insufficient time before the protected closure reserve")
 
 
@@ -106,6 +107,82 @@ def verify_frozen_source(source):
         raise ValueError("frozen source or archive changed")
 
 
+def deployment_identity(protocol):
+    """Read the original deployment and exact images used by the physical comparison.
+
+    Args:
+        protocol (dict): Continuum config/inventory, template identity and optional endpoint image.
+
+    Returns:
+        dict: Deployment specification hash and runtime image IDs on each required host.
+
+    Raises:
+        ValueError: The source deployment lacks its required image configuration.
+        RuntimeError: A remote deployment or image inventory cannot be read.
+    """
+    settings = resolve_deployment(protocol["continuum_config"], protocol["inventory"])
+    key = settings["ssh_key"]
+    deployment = json.loads(
+        ssh(
+            settings["controller"],
+            key,
+            [
+                "kubectl",
+                "get",
+                "deployment",
+                protocol.get("template_deployment", "image-batch-adapter"),
+                "-n",
+                protocol.get("template_namespace", "fns-demo"),
+                "-o",
+                "json",
+            ],
+        )
+    )
+    containers = {row["name"]: row for row in deployment["spec"]["template"]["spec"]["containers"]}
+    adapter = containers.get("adapter", {})
+    environment = {row["name"]: row.get("value") for row in adapter.get("env", [])}
+    worker_image = environment.get("WORKER_IMAGE")
+    if not worker_image or not {"adapter", "opendt-observer"} <= set(containers):
+        raise ValueError("deployment lacks calibrated worker/observer image configuration")
+    images = sorted(
+        {worker_image, containers["adapter"]["image"], containers["opendt-observer"]["image"]}
+    )
+    workers = {}
+    for host in settings["inventory_hosts"]:
+        node = host["name"].replace("_", "")
+        if node not in settings["workers"]:
+            continue
+        target = f'{host["ansible_user"]}@{host["ansible_host"]}'
+        workers[node] = {
+            image: json.loads(ssh(target, key, ["sudo", "-n", "crictl", "inspecti", image]))[
+                "status"
+            ]["id"]
+            for image in images
+        }
+    endpoint_image = protocol.get("endpoint_image", ENDPOINT_IMAGE)
+    endpoint_id = (
+        ssh(
+            settings["endpoint"],
+            key,
+            ["sudo", "-n", "docker", "image", "inspect", endpoint_image, "--format", "{{.Id}}"],
+        )
+        .decode()
+        .strip()
+    )
+    if not endpoint_id or any(
+        not identity for row in workers.values() for identity in row.values()
+    ):
+        raise ValueError("deployment runtime image identity is missing")
+    return {
+        "deployment_spec_sha256": hashlib.sha256(
+            json.dumps(deployment["spec"], sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "worker_images": workers,
+        "endpoint_image": endpoint_image,
+        "endpoint_image_id": endpoint_id,
+    }
+
+
 def seal_protocol(protocol_path, output):
     """Copy numerical/deployment inputs and bind the matrix to source and image identity.
 
@@ -146,6 +223,7 @@ def seal_protocol(protocol_path, output):
             ["docker", "image", "inspect", protocol["native_image"], "--format", "{{.Id}}"],
             text=True,
         ).strip(),
+        deployment_identity=deployment_identity(protocol),
         sealed_at_seconds=time.time(),
     )
     destination = output / "protocol.json"
@@ -158,7 +236,7 @@ def seal_protocol(protocol_path, output):
 
 
 def verify_protocol(protocol_path):
-    """Verify sealed study inputs and the local image before each physical run.
+    """Verify sealed inputs, deployment specification and runtime images before each run.
 
     Args:
         protocol_path (Path): Sealed protocol.json beside its seal and copied inputs.
@@ -167,7 +245,7 @@ def verify_protocol(protocol_path):
         dict: Verified matrix and immutable input locations.
 
     Raises:
-        ValueError: Protocol, input bytes, source or native image identity changed.
+        ValueError: Protocol, input bytes, source, deployment or runtime image identity changed.
     """
     path = Path(protocol_path)
     seal = json.loads((path.parent / "seal.json").read_text())
@@ -183,6 +261,11 @@ def verify_protocol(protocol_path):
     ).strip()
     if image_id != protocol["native_image_id"]:
         raise ValueError("frozen native image identity changed")
+    if (
+        "deployment_identity" in protocol
+        and deployment_identity(protocol) != protocol["deployment_identity"]
+    ):
+        raise ValueError("frozen deployment specification or image identity changed")
     return protocol
 
 
@@ -236,6 +319,8 @@ def matrix_commands(protocol, output):
             protocol["experiment_config"],
             "--native-image",
             protocol["native_image"],
+            "--endpoint-image",
+            protocol.get("endpoint_image", ENDPOINT_IMAGE),
             "--source-dir",
             str(Path(protocol["source_root"]) / "application/image_batch/src"),
             "--template-namespace",
@@ -315,6 +400,10 @@ def run_matrix(protocol_path, output):
         "MPLCONFIGDIR": str(Path(output) / "mpl-cache"),
     }
     commands = matrix_commands(protocol, output)
+    if protocol.get("require_complete_budget"):
+        require_time(
+            settings, now=time.time(), closure_at=protocol["closure_at_seconds"], runs=len(commands)
+        )
     (Path(output) / "experiments").mkdir(exist_ok=True)
     for row in commands:
         verify_protocol(protocol_path)
