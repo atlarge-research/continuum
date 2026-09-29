@@ -748,15 +748,15 @@ def _action_evidence_page(pdf, run):
         figure,
         "Dashed timeline markers show API request times; the table distinguishes "
         "confirmed outcomes from requests.\n"
-        "Observation gaps remain blank. Evaluation-window actions are shown; "
-        "the full journal retains follow-up.\n"
+        "Observation gaps remain blank. Actions belong to cycles started in the "
+        "evaluation window; requests may finish during follow-up.\n"
         "This run is shown because actions occurred, not as a representative "
         "forecast-quality sample. Warm reserves remain powered.",
     )
 
 
 def _forecast_observation_page(pdf, run):
-    """Place a declared representative run's predictions directly beside physical outcomes.
+    """Place a supplied run's predictions directly beside its physical outcomes.
 
     Args:
         pdf (PdfPages): Open report writer.
@@ -882,7 +882,7 @@ def _forecast_observation_page(pdf, run):
     finish(
         pdf,
         figure,
-        "Shading spans three sampled futures, not a confidence interval. Response "
+        "Shading spans sampled futures, not a confidence interval. Response "
         "predictions add measured decision age.\n"
         "Observed response quantiles cover completed cohort Jobs; failed/censored "
         "counts remain in the per-run evidence.\n"
@@ -939,7 +939,8 @@ def _configuration_page(pdf, runs):
             rows[offset : offset + 12],
             "Each run retains its archived policy and exact invocation; legacy settings "
             "are labeled where this table cannot recover them.\n"
-            "Warm-up and response follow-up are distinct from the common allocation window.\n"
+            "Forecast-only settings do not run in fixed/reactive arms. Warm-up and follow-up "
+            "are distinct from the allocation window.\n"
             "Finite lookahead, frozen lifecycle estimates and few independent runs limit "
             "generalization; warm reserves stay powered.",
         )
@@ -1018,7 +1019,7 @@ def _lifecycle_page(pdf, run):
             pdf,
             f'Capacity release and reuse: {run["arm"]} seed {run["seed"]}',
             (
-                "Confirmed forecast-selected down/up pairs in evaluation: "
+                "Confirmed forecast pairs from cycles started during evaluation: "
                 f'{lifecycle.get("forecast_down_up_pairs", 0)}.'
             ),
             [
