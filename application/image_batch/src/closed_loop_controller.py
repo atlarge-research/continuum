@@ -169,6 +169,8 @@ class Controller:
             "minimum_workers": self.args.minimum_workers,
             "maximum_workers": self.args.maximum_workers,
             "occupancy_model": "causal-occupancy-v1",
+            "reactive_up_threshold": self.args.reactive_up_threshold,
+            "reactive_down_threshold": self.args.reactive_down_threshold,
         }
         self.cluster = dict(
             controller=self.args.controller,
@@ -196,6 +198,7 @@ class Controller:
             write_json(identity_path, dict(owner=self.owner, settings=identity))
         self.history = self.journal.history()
         self.history.update(down_worker=None, down_wins=0)
+        self.history.pop("reactive_observation", None)
         self.shadow = 0
         self.tick_number = last_tick(self.journal, self.output)
         self.next_tick = None
@@ -288,6 +291,7 @@ class Controller:
                 last_action_at=now,
             )
             self.history.update(last_action_at=now, down_worker=None, down_wins=0)
+            self.history.pop("reactive_observation", None)
             self.shadow = 0
 
     def maybe_tick(self):
@@ -313,6 +317,7 @@ class Controller:
             skipped = int((time.time() - self.next_tick) // 60) + 1
             self.next_tick += skipped * 60
             self.history.update(down_worker=None, down_wins=0)
+            self.history.pop("reactive_observation", None)
             self.journal.append("cycle.skipped", count=skipped, reason="nonoverlapping_cadence")
 
     def predict(self, directory):
@@ -399,6 +404,14 @@ class Controller:
             before = self.fresh()
             self.recover(before)
             cutoff = before["timestamp_seconds"]
+            reactive = reactive_action(
+                before,
+                self.history,
+                now_seconds=time.time(),
+                fallback=False,
+                tick_id=self.tick_number,
+            )
+            self.history = reactive["state"]
             if self.args.control_arm == "forecast":
                 try:
                     before, scores, cutoff = self.predict(directory)
@@ -414,15 +427,18 @@ class Controller:
                         raise ValueError("native decision invalid or older than 30 seconds")
                 except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
                     self.journal.append("forecast.invalid", tick=self.tick_number, error=str(exc))
+                    self.journal.append("fallback.invoked", tick=self.tick_number, reason=str(exc))
                     before = self.fresh()
                     cutoff = before["timestamp_seconds"]
                     proposal = reactive_action(
-                        before, self.history, now_seconds=time.time(), fallback=True
+                        before,
+                        self.history,
+                        now_seconds=time.time(),
+                        fallback=True,
+                        tick_id=self.tick_number,
                     )
             elif self.args.control_arm == "reactive":
-                proposal = reactive_action(
-                    before, self.history, now_seconds=time.time(), fallback=False
-                )
+                proposal = reactive
                 valid = True
             else:
                 proposal = {
@@ -459,6 +475,7 @@ class Controller:
                 self.history.update(
                     last_action_at=result["last_action_at"], down_worker=None, down_wins=0
                 )
+                self.history.pop("reactive_observation", None)
                 outcome = "acknowledged"
             elif shadow_only:
                 outcome = "shadow"
@@ -486,6 +503,7 @@ class Controller:
             if self.shadow < 2:
                 self.shadow = 0
             self.history.update(down_worker=None, down_wins=0)
+            self.history.pop("reactive_observation", None)
             self.journal.append("cycle.error", tick=self.tick_number, error=str(exc))
         usage_after = resource.getrusage(resource.RUSAGE_SELF)
         self.journal.append(

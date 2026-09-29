@@ -135,28 +135,97 @@ class GuardTests(unittest.TestCase):
                 decision_age=2,
             )
 
-    def test_fallback_is_up_only_and_reactive_down_needs_two_empty_ticks(self):
-        """Invalid forecasts cannot authorize down even during an idle interval."""
+    def test_fallback_uses_two_scheduled_checks_without_counting_repeated_reads(self):
+        """Fresh fallback reads cannot manufacture a second empty observation."""
         empty = self.view()
-        first = self.module().reactive_action(empty, {}, now_seconds=1001, fallback=False)
-        self.assertEqual(first["action"], "unchanged")
+        first = self.module().reactive_action(
+            empty, {}, now_seconds=1001, fallback=False, tick_id=1
+        )
+        repeated = self.module().reactive_action(
+            empty, first["state"], now_seconds=1002, fallback=True, tick_id=1
+        )
+        self.assertEqual(repeated["action"], "unchanged")
         second = self.module().reactive_action(
-            empty, first["state"], now_seconds=1061, fallback=False
+            empty, repeated["state"], now_seconds=1061, fallback=True, tick_id=2
         )
         self.assertEqual(second["action"], "scale-down")
-        self.assertEqual(
-            self.module().reactive_action(empty, first["state"], now_seconds=1061, fallback=True)[
-                "action"
-            ],
-            "unchanged",
+        self.assertTrue(second["fallback"])
+
+    def test_empty_set_intersection_survives_rotated_first_worker(self):
+        """A continuously qualifying worker survives a change in the first empty name."""
+        self.snapshot["workers"][2]["schedulable"] = True
+        self.snapshot["jobs"]["active"] = [self.job(node="w2")]
+        first = self.module().reactive_action(
+            self.view(), {}, now_seconds=1001, fallback=False, tick_id=1
         )
-        self.snapshot["jobs"]["queued"] = [self.job()]
-        self.assertEqual(
-            self.module().reactive_action(self.view(), {}, now_seconds=1001, fallback=True)[
-                "action"
-            ],
-            "scale-up",
+        self.snapshot["jobs"]["active"] = [self.job(node="w1")]
+        second = self.module().reactive_action(
+            self.view(), first["state"], now_seconds=1061, fallback=False, tick_id=2
         )
+        self.assertEqual(second["selected_worker"], "w3")
+        self.assertEqual(second["action"], "scale-down")
+
+    def test_missed_or_nonqualifying_checks_reset_down_eligibility(self):
+        """A gap or intervening high demand prevents combining unrelated empty checks."""
+        empty = self.view()
+        first = self.module().reactive_action(
+            empty, {}, now_seconds=1001, fallback=False, tick_id=1
+        )
+        gap = self.module().reactive_action(
+            empty, first["state"], now_seconds=1121, fallback=False, tick_id=3
+        )
+        self.assertEqual(gap["action"], "unchanged")
+        self.snapshot["jobs"]["queued"] = [self.job(str(i)) for i in range(3)]
+        busy = self.module().reactive_action(
+            self.view(), first["state"], now_seconds=1061, fallback=False, tick_id=2
+        )
+        third = self.module().reactive_action(
+            empty, busy["state"], now_seconds=1121, fallback=False, tick_id=3
+        )
+        self.assertEqual(third["action"], "unchanged")
+
+    def test_cpu_demand_includes_queued_and_unreleased_finished_jobs(self):
+        """Demand uses requested cores, including classifier-finished retained resources."""
+        queued, assigned, released = self.job("q"), self.job("a", "w1"), self.job("r", "w1")
+        queued["requested_cpu_count"] = 2.5
+        assigned["requested_cpu_count"] = 3
+        assigned["execution_state"] = "terminated"
+        released["pod_phase"] = "Succeeded"
+        self.snapshot["jobs"].update(queued=[queued], finished=[assigned, released])
+        state = self.view()
+        self.assertEqual(state.get("requested_cpu_demand"), 5.5)
+        action = self.module().reactive_action(
+            state, {"last_action_at": 1000}, now_seconds=1001, fallback=True, tick_id=1
+        )
+        self.assertEqual(action["action"], "scale-up")
+
+    def test_down_threshold_uses_capacity_after_removal(self):
+        """Demand fitting today's capacity must also fit the reduced threshold."""
+        self.snapshot["jobs"]["queued"] = [self.job(str(i)) for i in range(3)]
+        first = self.module().reactive_action(
+            self.view(), {}, now_seconds=1001, fallback=False, tick_id=1
+        )
+        second = self.module().reactive_action(
+            self.view(), first["state"], now_seconds=1061, fallback=False, tick_id=2
+        )
+        self.assertEqual(second["action"], "unchanged")
+        self.snapshot["jobs"]["queued"].pop()
+        third = self.module().reactive_action(
+            self.view(), second["state"], now_seconds=1121, fallback=False, tick_id=3
+        )
+        fourth = self.module().reactive_action(
+            self.view(), third["state"], now_seconds=1181, fallback=False, tick_id=4
+        )
+        self.assertEqual(fourth["action"], "scale-down")
+
+    def test_unknown_or_unfittable_queued_requests_fail_closed(self):
+        """Queued work cannot disappear from demand or require an impossible worker."""
+        for cpu in (None, float("nan"), 4):
+            job = self.job()
+            job["requested_cpu_count"] = cpu
+            self.snapshot["jobs"]["queued"] = [job]
+            with self.assertRaises(ValueError):
+                self.view()
 
     def test_uncertain_api_result_is_reconciled_without_repeating_the_request(self):
         """A restart observes the target's UID and admission state before proceeding."""

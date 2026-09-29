@@ -75,6 +75,7 @@ def snapshot_view(snapshot, config, *, now_seconds):
         }
     assignments, queue, seen = {}, [], set()
     used = {name: [0, 0] for name in nodes}
+    demand = 0
     for group in ("queued", "active", "finished"):
         for job in snapshot["jobs"].get(group, []):
             uid = job.get("kubernetes_job_uid")
@@ -88,21 +89,29 @@ def snapshot_view(snapshot, config, *, now_seconds):
             created = milliseconds(job["creation_time"]) / 1000
             if created > at:
                 raise ValueError("Job creation is later than its observation")
-            node = job.get("node_name")
-            if not node:
-                if group == "finished":
-                    raise ValueError("unfinished release has no assigned worker")
-                queue.append({"uid": uid, "created_at": created})
-                continue
             cpu, memory = job.get("requested_cpu_count"), job.get("requested_memory_mb")
-            if node not in nodes or not all(
+            if not all(
                 isinstance(value, (int, float))
                 and not isinstance(value, bool)
                 and math.isfinite(value)
                 and value > 0
                 for value in (cpu, memory)
             ):
-                raise ValueError("assignment or requested resources are unknown")
+                raise ValueError("requested resources are unknown")
+            if not any(
+                cpu <= worker["application_cores"] and memory <= worker["memory_mib"]
+                for worker in nodes.values()
+            ):
+                raise ValueError("Job requests cannot fit any configured worker")
+            demand += cpu
+            node = job.get("node_name")
+            if not node:
+                if group == "finished":
+                    raise ValueError("unfinished release has no assigned worker")
+                queue.append({"uid": uid, "created_at": created, "requested_cpu_count": cpu})
+                continue
+            if node not in nodes:
+                raise ValueError("assignment is unknown")
             used[node][0] += cpu
             used[node][1] += memory
             if (
@@ -137,6 +146,9 @@ def snapshot_view(snapshot, config, *, now_seconds):
         "draining_workers": draining,
         "reserve_workers": reserves,
         "empty_workers": sorted(name for name in accepting if not used[name][0]),
+        "requested_cpu_demand": demand,
+        "reactive_up_threshold": config.get("reactive_up_threshold", 0.9),
+        "reactive_down_threshold": config.get("reactive_down_threshold", 0.7),
         "application_slots": sum(nodes[name]["application_cores"] for name in accepting),
         "allocated_application_cores": sum(
             nodes[name]["application_cores"] for name in accepting + draining
@@ -194,70 +206,88 @@ def guard_action(before, fresh, proposal, config, *, decision_age):
         raise ValueError("unknown action")
 
 
-def reactive_action(view, history, *, now_seconds, fallback):
-    """Apply the approved reactive baseline or its up-only forecast fallback.
+def reactive_action(view, history, *, now_seconds, fallback, tick_id):
+    """Compare unfinished CPU demand with current or reduced accepting capacity.
+
+    Every scheduled check tracks all qualifying empty workers, independently of
+    forecast decisions. Re-reading a tick reuses its preceding check, so fallback
+    cannot manufacture two observations. A skipped ID breaks consecutiveness.
 
     Args:
-        view (dict): Fresh validated physical queue and allocation inventory.
-        history (dict): Previous acknowledged action time and empty-worker streak.
-        now_seconds (float): UTC epoch seconds for the shared cooldown.
-        fallback (bool): True forbids down when the forecast is invalid or unavailable.
+        view (dict): Fresh validated physical demand and allocation inventory.
+        history (dict): Durable history containing an independent reactive observation.
+        now_seconds (float): UTC epoch seconds of this observation.
+        fallback (bool): Whether an unavailable forecast invoked this same policy.
+        tick_id (int): Monotonic scheduled check identity, shared by reads within a check.
 
     Returns:
-        dict: Proposal, explicit reason and next history; no physical action is performed.
+        dict: Proposal, reason and next history; no physical action is performed.
+
+    Raises:
+        ValueError: The clock or scheduled check identity is invalid.
     """
+    if (
+        not math.isfinite(now_seconds)
+        or isinstance(tick_id, bool)
+        or not isinstance(tick_id, int)
+        or tick_id < 1
+    ):
+        raise ValueError("invalid reactive clock or scheduled check identity")
     state = copy.deepcopy(history)
-    state.update(down_worker=None, down_wins=0)
+    previous = history.get("reactive_observation", {})
+    if previous.get("tick_id") == tick_id:
+        prior = set(previous.get("prior_eligible_workers", []))
+    elif previous.get("tick_id") == tick_id - 1:
+        prior = set(previous.get("eligible_workers", []))
+    else:
+        prior = set()
+    demand, capacity = view["requested_cpu_demand"], view["application_slots"]
+    eligible = {
+        name
+        for name in view["empty_workers"]
+        if not view["draining_workers"]
+        and len(view["active_workers"]) > view["minimum_workers"]
+        and demand
+        <= view["reactive_down_threshold"] * (capacity - view["nodes"][name]["application_cores"])
+    }
+    state["reactive_observation"] = dict(
+        tick_id=tick_id,
+        observed_at_seconds=now_seconds,
+        eligible_workers=sorted(eligible),
+        prior_eligible_workers=sorted(prior),
+    )
     result = {
         "action": "unchanged",
         "selected_worker": None,
         "reason": "reactive_hold",
         "state": state,
         "fallback": fallback,
+        "requested_cpu_demand": demand,
+        "accepting_application_cores": capacity,
     }
-    last = history.get("last_action_at")
-    if last is not None and (
-        not isinstance(last, (float, int))
-        or isinstance(last, bool)
-        or not math.isfinite(last)
-        or not 0 <= now_seconds - last
-        or now_seconds - last < 120
-    ):
-        return {**result, "reason": "action_cooldown_or_invalid_history"}
     if (
         view["reserve_workers"]
         and len(view["active_workers"]) < view["maximum_workers"]
-        and (
-            view["oldest_queue_wait_seconds"] > 30 or len(view["queue"]) > view["application_slots"]
-        )
+        and demand > view["reactive_up_threshold"] * capacity
     ):
+        state["reactive_observation"]["eligible_workers"] = []
         return {
             **result,
             "action": "scale-up",
             "selected_worker": view["reserve_workers"][0],
-            "reason": "reactive_queue_pressure",
+            "reason": "reactive_cpu_demand",
         }
-    if (
-        fallback
-        or view["queue"]
-        or view["draining_workers"]
-        or not view["empty_workers"]
-        or len(view["active_workers"]) <= view["minimum_workers"]
-    ):
-        return result
-    worker = view["empty_workers"][0]
-    wins = history.get("down_wins", 0) if history.get("down_worker") == worker else 0
-    if type(wins) is not int or wins < 0:
-        return {**result, "reason": "proposal_history_invalid"}
-    state.update(down_worker=worker, down_wins=wins + 1)
-    if wins < 1:
+    persistent = sorted(eligible & prior)
+    if persistent:
+        return {
+            **result,
+            "action": "scale-down",
+            "selected_worker": persistent[0],
+            "reason": "reactive_two_empty_checks_with_capacity",
+        }
+    if eligible:
         return {**result, "reason": "awaiting_second_empty_tick"}
-    return {
-        **result,
-        "action": "scale-down",
-        "selected_worker": worker,
-        "reason": "reactive_two_empty_ticks",
-    }
+    return result
 
 
 def reconcile_pending(pending, view):

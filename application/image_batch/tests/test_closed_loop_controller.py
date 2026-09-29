@@ -163,6 +163,74 @@ class ControllerTests(unittest.TestCase):
                 self.assertEqual(loop.journal.records[-1]["outcome"], "vetoed_or_failed")
                 loop.journal.close()
 
+    def test_forecast_observations_feed_independent_fallback_history(self):
+        """A failed second forecast can use the first scheduled empty observation."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 2, {}
+            loop.args = Mock(control_arm="forecast")
+            loop.config, loop.session = self.config, Mock()
+            loop.fresh = Mock(return_value=self.view)
+            loop.recover = Mock()
+            scores = [
+                {
+                    "candidate": "unchanged",
+                    "selected_worker": None,
+                    "scenarios": [
+                        {
+                            "complete": True,
+                            "cohort_size": 0,
+                            "responses_seconds": [],
+                            "allocated_core_seconds": 100,
+                        }
+                        for _ in range(3)
+                    ],
+                }
+            ]
+            loop.predict = Mock(
+                side_effect=[(self.view, scores, 1000), ValueError("forecast missing")]
+            )
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module, "actuate", return_value=dict(last_action_at=1000)
+            ), patch.object(module.time, "monotonic", side_effect=[0, 4]):
+                loop.cycle()
+                loop.cycle()
+            proposals = [
+                r["proposal"] for r in loop.journal.records if r["event"] == "cycle.proposal"
+            ]
+            self.assertEqual([p["action"] for p in proposals], ["unchanged", "scale-down"])
+            self.assertEqual(
+                len([r for r in loop.journal.records if r["event"] == "fallback.invoked"]), 1
+            )
+            loop.journal.close()
+
+    def test_first_tick_fallback_hold_is_counted(self):
+        """Fallback metrics include holds, without counting fresh reads as extra checks."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 2, {}
+            loop.args = Mock(control_arm="forecast")
+            loop.config, loop.session = self.config, Mock()
+            loop.fresh = Mock(return_value=self.view)
+            loop.recover = Mock()
+            loop.predict = Mock(side_effect=ValueError("forecast missing"))
+            with patch.object(module.time, "time", return_value=1001):
+                loop.cycle()
+            proposals = [
+                r["proposal"] for r in loop.journal.records if r["event"] == "cycle.proposal"
+            ]
+            self.assertEqual(proposals[0]["action"], "unchanged")
+            self.assertEqual(
+                len([r for r in loop.journal.records if r["event"] == "fallback.invoked"]), 1
+            )
+            loop.journal.close()
+
     def test_restart_skips_orphaned_cycle_directory(self):
         """A crash after directory creation cannot cause evidence overwrite or endless failure."""
         module = self.module()
