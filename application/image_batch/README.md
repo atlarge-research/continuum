@@ -135,6 +135,8 @@ OPENDC_RUNTIME=fns-demo PYTHONPATH=application/image_batch/src \
 
 The default geometry has three warm-up cycles followed by three evaluation cycles. `--control-arm fixed` and `--control-arm reactive` run the matched baselines. Use `--help` for explicit worker, SSH, image and workload settings. The output contains original request receipts, Job inventories, raw observer streams, frozen per-cycle forecasts and native results, and an action/outcome journal. Failed attempts preserve their resources and failure record for diagnosis.
 
+The current capture runner still contains deployment-specific defaults and a fixed replay endpoint address; CLI overrides do not yet make it portable to another Continuum deployment. Some supporting study workflows also rely on archived helper scripts. See the [portability work to complete](OPENDT_HANDOFF.md#portability-and-tracked-workflow-code) before using these workflows on another machine.
+
 Produce a self-contained physical evidence file and an offline PDF in new destinations:
 
 ```bash
