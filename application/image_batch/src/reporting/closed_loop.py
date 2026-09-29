@@ -416,7 +416,9 @@ def render_validation(pdf, reports):
         "*Retries and fallback include controlled follow-up. One rejected incomplete prefix "
         "may be recollected; both attempts remain archived.\n"
         "*Native done: complete/evaluated cycles; timing percentage uses complete cases only. "
-        "Warm reserves stay powered; C−1 is applied once.",
+        "Warm reserves stay powered; C−1 is applied once.\n"
+        "Forecast targets: at least two confirmed down/up pairs per fresh run and zero "
+        "fallback invocations, including holds and follow-up.",
     )
 
     _configuration_page(pdf, runs)
