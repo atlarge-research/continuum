@@ -636,6 +636,29 @@ def action_evidence(run):
     return rows
 
 
+def _action_summary_rows(actions):
+    """Count every request by source without expanding the overview beyond its panel.
+
+    Args:
+        actions (list[dict]): Normalized requests and confirmation flags from action_evidence.
+
+    Returns:
+        list[list[str]]: Source and down/up confirmed/requested counts for the overview table.
+    """
+    rows = []
+    for source in dict.fromkeys(action["source"] for action in actions):
+        row = [source]
+        for kind in ("scale-down", "scale-up"):
+            requests = [
+                action
+                for action in actions
+                if action["source"] == source and action["action"] == kind
+            ]
+            row.append(f'{sum(action["confirmed"] for action in requests)}/{len(requests)}')
+        rows.append(row)
+    return rows
+
+
 def _action_evidence_page(pdf, run):
     """Show actual actuation, including fallback and rejected native decisions.
 
@@ -677,21 +700,11 @@ def _action_evidence_page(pdf, run):
         axis.set_ylim(bottom=0)
         panel(axis, title, "Minutes after warm-up", ylabel)
     axes[1, 0].axis("off")
-    axes[1, 0].set_title(
-        "API acknowledgment and observation are both required", fontsize=10, pad=10
-    )
+    axes[1, 0].set_title("Confirmed actions / all requests", fontsize=10, pad=10)
     table = axes[1, 0].table(
-        cellText=[
-            [
-                action["action"].replace("scale-", "").title(),
-                action["source"],
-                f'{(action["request_seconds"] - origin) / 60:.2f}',
-                "Yes" if action["confirmed"] else "No",
-            ]
-            for action in actions
-        ],
-        colLabels=["Request", "Decision source", "Minute", "Confirmed"],
-        colWidths=[0.19, 0.39, 0.16, 0.26],
+        cellText=_action_summary_rows(actions),
+        colLabels=["Decision source", "Down\nconfirmed / requested", "Up\nconfirmed / requested"],
+        colWidths=[0.44, 0.28, 0.28],
         cellLoc="center",
         loc="upper center",
     )
@@ -746,8 +759,9 @@ def _action_evidence_page(pdf, run):
     finish(
         pdf,
         figure,
-        "Dashed timeline markers show API request times; the table distinguishes "
-        "confirmed outcomes from requests.\n"
+        "Dashed markers show API request times; confirmation requires acknowledgment "
+        "and observation. Counts retain every request.\n"
+        "Per-action timing remains on lifecycle pages when available and in the saved metrics.\n"
         "Observation gaps remain blank. Actions belong to cycles started in the "
         "evaluation window; requests may finish during follow-up.\n"
         "This run is shown because actions occurred, not as a representative "
@@ -976,6 +990,10 @@ def _configuration_page(pdf, runs):
             choices[offset : offset + 12],
             "Four images and 128 inference repetitions retain the calibrated workload; "
             "resource sampling remains five seconds.\n"
+            "Reactive demand counts requested CPU of unfinished assigned/queued Jobs; "
+            "up compares with accepting capacity.\n"
+            "Down compares with capacity after removal and requires a worker empty at "
+            "two consecutive scheduled checks.\n"
             "Current overruns use the median residual of longer completed profiles, or a "
             "five-second fallback, plus the declared margin.\n"
             "Ready reserve acquisition is immediate in the model; measured decision, API "
@@ -1021,6 +1039,11 @@ def _lifecycle_page(pdf, run):
             (
                 "Confirmed forecast pairs from cycles started during evaluation: "
                 f'{lifecycle.get("forecast_down_up_pairs", 0)}.'
+            )
+            if run["arm"] == "forecast"
+            else (
+                "Reactive release and reuse are reported separately "
+                "from the forecast-only target."
             ),
             [
                 "Action / worker",

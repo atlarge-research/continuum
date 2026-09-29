@@ -221,3 +221,55 @@ class ClosedLoopReportTests(unittest.TestCase):
             self.assertIsNone(figure.axes[3].get_legend())
         finally:
             plt.close(figure)
+
+    def test_many_actions_fit_above_notes_without_losing_confirmation_counts(self):
+        """Repeated scaling stays readable while uncertain and fallback requests remain counted."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = dict(
+            seed=107,
+            arm="forecast",
+            evaluation_start_seconds=0,
+            arrival_end_seconds=120,
+            allocation=dict(series=[]),
+            controller=dict(
+                cycles=[
+                    dict(tick=i, forecast_valid=i < 8, proposal=dict(fallback=8 <= i < 10))
+                    for i in range(12)
+                ],
+                actions=[
+                    dict(
+                        tick=i,
+                        action="scale-down" if i % 2 == 0 else "scale-up",
+                        recorded_at_ns=(i + 1) * 10_000_000_000,
+                        observed=i < 9 and i != 6,
+                        result=dict(status="acknowledged" if i < 9 and i != 6 else "uncertain"),
+                    )
+                    for i in range(12)
+                ],
+            ),
+        )
+        with mock.patch("reporting.closed_loop.finish") as saved:
+            module._action_evidence_page(None, run)  # pylint: disable=protected-access
+        figure = saved.call_args.args[1]
+        try:
+            figure.canvas.draw()
+            table = figure.axes[2].tables[0]
+            bounds = table.get_window_extent(figure.canvas.get_renderer())
+            self.assertGreaterEqual(bounds.y0, 0.15 * figure.bbox.height)
+            cells = table.get_celld()
+            rows = {
+                cells[row, 0]
+                .get_text()
+                .get_text(): [cells[row, column].get_text().get_text() for column in (1, 2)]
+                for row in sorted({row for row, _ in cells if row > 0})
+            }
+            self.assertEqual(
+                rows,
+                {
+                    "Forecast": ["3/4", "4/4"],
+                    "Reactive fallback": ["1/1", "0/1"],
+                    "Unknown": ["0/1", "0/1"],
+                },
+            )
+        finally:
+            plt.close(figure)
