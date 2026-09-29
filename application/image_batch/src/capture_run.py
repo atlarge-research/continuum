@@ -478,6 +478,15 @@ class CaptureSession:
         for resource, filename in [("jobs", "jobs.json"), ("pods", "pods-final.json")]:
             write_json(self.output / filename, self.get(resource, "-n", self.namespace))
         write_json(self.output / "nodes-final.json", self.get("nodes"))
+        pods = json.loads((self.output / "pods-final.json").read_text(encoding="utf-8"))
+        for pod in pods["items"]:
+            if any(item["name"] == "opendc" for item in pod["spec"].get("containers", [])):
+                destination = self.output / "native-pod-logs"
+                destination.mkdir(exist_ok=True)
+                name = pod["metadata"]["name"]
+                (destination / (name + ".log")).write_bytes(
+                    self.kubectl("logs", "-n", self.namespace, name, "-c", "opendc")
+                )
         if self.pod_name:
             containers = ["adapter", "opendt-observer"]
             if self.args.admission_mode == "fifo":

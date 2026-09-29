@@ -113,6 +113,19 @@ class WorkflowTests(unittest.TestCase):
         cleanup["network_restored"] = False
         self.assertFalse(module.cleanup_complete(cleanup))
 
+    def test_collected_metrics_are_direct_report_inputs(self):
+        """Tracked collection emits the report schema rather than an unrecognized bare run."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            capture = Path(directory) / "capture"
+            with patch.object(
+                module, "capture_evidence", return_value={"run_id": "capture"}
+            ), patch.object(module, "audit_capture", return_value={"violations": False}):
+                paths = module.collect_metrics(capture, "pilot")
+            saved = json.loads(Path(paths["metrics"]).read_text(encoding="utf-8"))
+            self.assertEqual(saved.get("schema_version"), "opendc-closed-loop-evidence-v1")
+            self.assertEqual(saved["runs"], [{"run_id": "capture"}])
+
     def test_source_freeze_retains_required_sibling_manifests(self):
         """A frozen source must include manifests and Continuum configuration helpers."""
         module = self.module()

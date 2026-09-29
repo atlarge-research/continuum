@@ -15,7 +15,8 @@ import xml.etree.ElementTree as ET
 
 from capture_run import CaptureSession
 from closed_loop_audit import audit_capture
-from closed_loop_evidence import capture_evidence
+from closed_loop_evidence import SCHEMA as EVIDENCE_SCHEMA, capture_evidence
+from demo_cleanup import cleanup_native
 from demo_configuration import (
     resolve_deployment,
     validate_experiment,
@@ -280,7 +281,10 @@ def collect_metrics(capture, role):
     }
     if any(path.exists() for path in paths.values()):
         raise FileExistsError("analysis output already exists")
-    write_json(paths["metrics"], capture_evidence(capture, role))
+    write_json(
+        paths["metrics"],
+        {"schema_version": EVIDENCE_SCHEMA, "runs": [capture_evidence(capture, role)]},
+    )
     write_json(paths["safety"], audit_capture(capture))
     return {name: str(path) for name, path in paths.items()}
 
@@ -336,6 +340,7 @@ def run_matrix(protocol_path, output):
         cleanup = json.loads((capture / "cleanup.json").read_text(encoding="utf-8"))
         if not cleanup_complete(cleanup):
             raise RuntimeError(f"capture restoration incomplete: {capture}")
+        cleanup_native(capture)
         metrics = collect_metrics(capture, protocol["role"])
         print(
             json.dumps({**row, "collected": metrics, "finished_at_seconds": time.time()}),

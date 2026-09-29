@@ -154,6 +154,32 @@ class CaptureTests(unittest.TestCase):
             session.loop.origin = None
             self.assertFalse(session.arrival_window_complete(now_seconds=2920))
 
+    def test_collection_retains_failed_native_pod_logs_before_namespace_removal(self):
+        """A forecast timeout retains its native log without successful batch collection."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            session = module.CaptureSession(Namespace(output=Path(directory), namespace="fns-test"))
+            session.pod_name = None
+            pods = {
+                "items": [
+                    {
+                        "metadata": {
+                            "name": "native-0003-abc",
+                            "labels": {"job-name": "native-0003"},
+                        },
+                        "spec": {"containers": [{"name": "opendc"}]},
+                    }
+                ]
+            }
+            with patch.object(
+                session, "get", side_effect=[{"items": []}, pods, {"items": []}]
+            ), patch.object(session, "kubectl", return_value=b"native timed out\n"):
+                session.collect()
+            self.assertEqual(
+                (Path(directory) / "native-pod-logs/native-0003-abc.log").read_text(),
+                "native timed out\n",
+            )
+
     def test_restoration_refuses_replaced_node_before_cordon_mutation(self):
         """Original cordon settings cannot be applied to a replacement with the same name."""
         module = self.module()
