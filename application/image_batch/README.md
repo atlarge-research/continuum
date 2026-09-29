@@ -50,7 +50,7 @@ python3 application/image_batch/src/configure_cadvisor_scrape.py
 kubectl apply -f application/image_batch/manifests/adapter.yaml
 ```
 
-Run the endpoint against `http://<cloud-node-ip>:30080`. Keep the calibrated four-image batches and 128 inference repetitions. Use 120-second cycles for functional checks and 240-second cycles for evaluation, with `--arrival-cycles 6 --minimum-rate 0.02 --peak-rate 0.30`. Keep the adapter at one replica and restart the experiment if it or the observer crashes or is replaced.
+Run the endpoint against `http://<cloud-node-ip>:30080`. Keep the calibrated four-image batches and 128 inference repetitions. Use the [closed-loop workflow](#closed-loop-physical-experiments) for the selected workload and matched evaluation settings. Keep the adapter at one replica and restart the experiment if it or the observer crashes or is replaced.
 
 ## Save observations and generate a run report
 
