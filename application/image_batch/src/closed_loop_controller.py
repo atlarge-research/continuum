@@ -313,8 +313,8 @@ class Controller:
             self.history.update(last_action_at=now)
             self.history.pop("reactive_observation", None)
 
-    def maybe_tick(self):
-        """Run at most one due cycle, skipping missed ticks rather than overlapping work."""
+    def discover_origin(self):
+        """Read the sender's preserved schedule without taking a controller action."""
         if self.origin is None:
             for line in (self.session.output / "endpoint.jsonl").read_text().splitlines():
                 try:
@@ -327,6 +327,10 @@ class Controller:
                         self.origin + self.args.period_seconds * self.args.warmup_cycles + 5
                     )
                     break
+
+    def maybe_tick(self):
+        """Run at most one due cycle, skipping missed ticks rather than overlapping work."""
+        self.discover_origin()
         if self.origin is None or time.time() < self.next_tick:
             return
         # Evaluation includes drain follow-up; arrivals themselves remain independent.

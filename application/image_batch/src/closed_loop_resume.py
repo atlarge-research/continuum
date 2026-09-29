@@ -54,14 +54,20 @@ def main():
         loop.prepare(stage_runner=False)
         loop.recover(loop.fresh())
         while True:
-            loop.maybe_tick()
-            jobs, sample = session.observe()
+            loop.discover_origin()
+            finish = None
             if loop.origin is not None:
                 finish = loop.origin + session.args.period_seconds * session.args.cycles
-                if time.time() >= finish + 600 or (
+                deadline = finish + getattr(session.args, "followup_seconds", 600)
+                if time.time() >= deadline:
+                    break
+            jobs, sample = session.observe()
+            if finish is not None:
+                if time.time() >= deadline or (
                     time.time() >= finish and sample["completed"] + sample["failed"] == len(jobs)
                 ):
                     break
+            loop.maybe_tick()
             time.sleep(5)
     finally:
         loop.close()
