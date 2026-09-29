@@ -49,21 +49,6 @@ def last_tick(journal, directory):
     return max([0, *recorded, *reserved])
 
 
-def shadow_progress(completed, valid):
-    """Require two consecutive verified cycles before the first physical proposal.
-
-    Args:
-        completed (int): Consecutive valid shadow cycles, capped at two.
-        valid (bool): Whether the current forecast and native evaluation are complete.
-
-    Returns:
-        tuple[int, bool]: Updated progress and whether this cycle remains shadow-only.
-    """
-    if completed >= 2:
-        return 2, False
-    return (min(2, completed + 1) if valid else 0), True
-
-
 def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds):
     """Journal then atomically guard one cordon/uncordon against node replacement.
 
@@ -81,7 +66,7 @@ def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds
         cutoff_seconds (float): Original proposal cutoff in UTC epoch seconds.
 
     Returns:
-        dict: Acknowledged action identity and cooldown timestamp.
+        dict: Acknowledged action identity and timestamp.
 
     Raises:
         ValueError: State, action age, worker identity or pending journal intent is unsafe.
@@ -143,7 +128,7 @@ def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds
 
 
 class Controller:
-    """Own one sequential controller with durable evidence and two shadow cycles.
+    """Own one sequential controller with durable evidence and causal workload warmup.
 
     Args:
         session (CaptureSession): Prepared isolated capture and its command-line settings.
@@ -169,6 +154,7 @@ class Controller:
             "minimum_workers": self.args.minimum_workers,
             "maximum_workers": self.args.maximum_workers,
             "occupancy_model": "causal-occupancy-v1",
+            "residual_margin_seconds": self.args.residual_margin_seconds,
             "reactive_up_threshold": self.args.reactive_up_threshold,
             "reactive_down_threshold": self.args.reactive_down_threshold,
         }
@@ -197,9 +183,7 @@ class Controller:
             self.owner = uuid.uuid4().hex
             write_json(identity_path, dict(owner=self.owner, settings=identity))
         self.history = self.journal.history()
-        self.history.update(down_worker=None, down_wins=0)
         self.history.pop("reactive_observation", None)
-        self.shadow = 0
         self.tick_number = last_tick(self.journal, self.output)
         self.next_tick = None
         self.origin = None
@@ -281,7 +265,7 @@ class Controller:
         pending = self.journal.pending_action()
         if pending:
             status = reconcile_pending(pending, view)
-            # Both outcomes receive a conservative cooldown after uncertain mutation.
+            # Reconciliation resolves intent; current guards decide subsequent eligibility.
             now = time.time()
             self.journal.append(
                 "action.result",
@@ -290,9 +274,8 @@ class Controller:
                 attribution="uncertain_after_reconciliation",
                 last_action_at=now,
             )
-            self.history.update(last_action_at=now, down_worker=None, down_wins=0)
+            self.history.update(last_action_at=now)
             self.history.pop("reactive_observation", None)
-            self.shadow = 0
 
     def maybe_tick(self):
         """Run at most one due cycle, skipping missed ticks rather than overlapping work."""
@@ -316,7 +299,6 @@ class Controller:
         if self.next_tick <= time.time():
             skipped = int((time.time() - self.next_tick) // 60) + 1
             self.next_tick += skipped * 60
-            self.history.update(down_worker=None, down_wins=0)
             self.history.pop("reactive_observation", None)
             self.journal.append("cycle.skipped", count=skipped, reason="nonoverlapping_cadence")
 
@@ -366,9 +348,6 @@ class Controller:
             "active_workers": before["active_workers"],
             "draining_workers": before["draining_workers"],
         }
-        wins = self.history.get("down_wins", 0)
-        if isinstance(wins, int) and not isinstance(wins, bool) and wins > 0:
-            config["preferred_down_worker"] = self.history.get("down_worker")
         write_json(
             directory / "collection-timing.json",
             {
@@ -448,9 +427,6 @@ class Controller:
                     "state": self.history,
                 }
                 valid = True
-            shadow_only = False
-            if self.args.control_arm == "forecast":
-                self.shadow, shadow_only = shadow_progress(self.shadow, valid)
             self.history = proposal["state"]
             self.journal.append(
                 "cycle.proposal",
@@ -458,10 +434,10 @@ class Controller:
                 proposal=proposal,
                 before=before,
                 cutoff_seconds=cutoff,
-                shadow=shadow_only,
+                shadow=False,
                 forecast_valid=valid,
             )
-            if proposal["action"] != "unchanged" and not shadow_only:
+            if proposal["action"] != "unchanged":
                 fresh = self.fresh()
                 result = actuate(
                     self.session,
@@ -472,13 +448,10 @@ class Controller:
                     self.config,
                     cutoff_seconds=cutoff,
                 )
-                self.history.update(
-                    last_action_at=result["last_action_at"], down_worker=None, down_wins=0
-                )
+                self.history.update(last_action_at=result["last_action_at"])
+
                 self.history.pop("reactive_observation", None)
                 outcome = "acknowledged"
-            elif shadow_only:
-                outcome = "shadow"
             observed = self.fresh()
             confirmed = None
             if outcome == "acknowledged":
@@ -500,9 +473,6 @@ class Controller:
             )
         except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
             outcome = "vetoed_or_failed"
-            if self.shadow < 2:
-                self.shadow = 0
-            self.history.update(down_worker=None, down_wins=0)
             self.history.pop("reactive_observation", None)
             self.journal.append("cycle.error", tick=self.tick_number, error=str(exc))
         usage_after = resource.getrusage(resource.RUSAGE_SELF)

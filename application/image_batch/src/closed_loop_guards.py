@@ -196,8 +196,6 @@ def guard_action(before, fresh, proposal, config, *, decision_age):
             "minimum_workers", 1
         ):
             raise ValueError("scale-down target is not accepting or violates capacity bounds")
-        if not before["queue"] and fresh["queue"]:
-            raise ValueError("new queue pressure vetoes down selected from an empty queue")
         previous = {uid for uid, node in before["assignments"].items() if node == worker}
         current = {uid for uid, node in fresh["assignments"].items() if node == worker}
         if not current <= previous:

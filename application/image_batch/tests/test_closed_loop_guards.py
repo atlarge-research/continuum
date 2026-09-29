@@ -98,8 +98,8 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(state["reserve_workers"], [])
         self.assertEqual(state["allocated_application_cores"], 9)
 
-    def test_changed_node_identity_and_new_queue_veto_down(self):
-        """The proposal cannot silently cross topology replacement or fresh queue pressure."""
+    def test_changed_identity_vetoes_but_queue_appearance_does_not(self):
+        """Topology replacement vetoes a proposal; queued arrivals remain forecast uncertainty."""
         before = self.view()
         after = copy.deepcopy(self.snapshot)
         after["workers"][0]["kubernetes_node_uid"] = "replacement"
@@ -110,7 +110,9 @@ class GuardTests(unittest.TestCase):
             )
         after = copy.deepcopy(self.snapshot)
         after["jobs"]["queued"] = [self.job()]
-        with self.assertRaisesRegex(ValueError, "queue"):
+        self.module().guard_action(before, self.view(after), proposal, self.config, decision_age=2)
+        after["jobs"]["active"] = [self.job("new", "w1")]
+        with self.assertRaisesRegex(ValueError, "new assignment"):
             self.module().guard_action(
                 before, self.view(after), proposal, self.config, decision_age=2
             )

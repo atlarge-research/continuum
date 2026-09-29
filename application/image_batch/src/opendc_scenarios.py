@@ -572,30 +572,37 @@ def _worker_records(worker_config, trace, template, backlog, exhausted):
     return configured, sorted(active)
 
 
-def _down_worker(active, backlog, exhausted, *, preferred=None):
-    """Choose one deterministic scale-down worker from assignment observations.
+def _down_worker(active, backlog, exhausted, *, calibration=None, cutoff_ms=0):
+    """Choose the worker whose last assigned resource release is predicted soonest.
+
+    Empty workers have zero drain time. Lifecycle and overrun estimates are
+    produced by the same occupancy function used in every native alternative.
+    Without an occupancy model, unmodeled exhausted work has infinite duration.
 
     Args:
-        active (list[str]): Active worker names.
-        backlog (list[dict]): Enriched executable backlog.
-        exhausted (list[dict]): Enriched model-exhausted evidence.
-        preferred (str or None): Prior winning target to resimulate while still accepting.
+        active (list[str]): Accepting worker names.
+        backlog (list[dict]): Executable backlog, including retained release tasks.
+        exhausted (list[dict]): Raw model-exhausted observations.
+        calibration (dict or None): Frozen lifecycle and conditional residual estimates.
+        cutoff_ms (int): Shared causal cutoff for remaining startup estimates.
 
     Returns:
-        str: Selected worker name; scores are always recomputed from the new state.
+        str: Soonest final predicted release, breaking ties by worker name.
     """
-    if preferred in active:
-        return preferred
-    assigned = {name: [] for name in active}
-    for item in backlog + exhausted:
-        metadata = item["metadata"]
-        name = metadata.get("preserved_assignment")
-        if name in assigned:
-            assigned[name].append(metadata["first_assignment_observed_ms"])
-    empty = sorted(name for name, timestamps in assigned.items() if not timestamps)
-    if empty:
-        return empty[0]
-    return min(active, key=lambda name: (max(assigned[name]), name))
+    case = dict(tasks=backlog, model_exhausted_jobs=exhausted, cutoff_ms=cutoff_ms)
+    if calibration:
+        case = apply_occupancy(case, calibration)
+    release = {name: 0 for name in active}
+    for item in case["tasks"]:
+        name = item["metadata"].get("preserved_assignment")
+        if name in release:
+            release[name] = max(release[name], item["task"]["duration"])
+    if not calibration:
+        for item in exhausted:
+            name = item["metadata"].get("preserved_assignment")
+            if name in release:
+                release[name] = float("inf")
+    return min(active, key=lambda name: (release[name], name))
 
 
 def _topology(workers):
@@ -775,7 +782,17 @@ def prepare_occupancy_model(worker_config, forecast, template, observer_dir, bou
     trace = read_trace(
         rows, forecast["settings"]["run_id"], milliseconds(template["selection_cutoff"])
     )
-    return calibrate_occupancy(trace, template)
+    calibration = calibrate_occupancy(trace, template)
+    margin = worker_config.get("residual_margin_seconds", 0)
+    if (
+        isinstance(margin, bool)
+        or not isinstance(margin, (int, float))
+        or not math.isfinite(margin)
+        or margin < 0
+    ):
+        raise ValueError("invalid residual margin")
+    calibration["residual_margin_ms"] = math.ceil(margin * 1000)
+    return calibration
 
 
 def prepare_suite(
@@ -848,16 +865,22 @@ def prepare_suite(
             unavailable.append({"candidate": "scale-up", "reason": "no_configured_reserve"})
     if draining:
         unavailable.append({"candidate": "scale-down", "reason": "worker_already_draining"})
-    elif occupancy_model and (exhausted or not simulation["membership"]["complete"]):
-        unavailable.append({"candidate": "scale-down", "reason": "exhausted_or_unresolved_work"})
+    elif not simulation["membership"]["complete"]:
+        unavailable.append({"candidate": "scale-down", "reason": "unresolved_membership"})
     elif len(active) <= worker_config.get("minimum_workers", 1):
         unavailable.append({"candidate": "scale-down", "reason": "minimum_worker_count"})
     else:
         selected = _down_worker(
-            active, backlog, exhausted, preferred=worker_config.get("preferred_down_worker")
+            active,
+            backlog,
+            exhausted,
+            calibration=occupancy_model,
+            cutoff_ms=simulation["cutoff_ms"],
         )
-        if pinned and any(
-            item["metadata"].get("preserved_assignment") == selected for item in exhausted
+        if (
+            pinned
+            and not occupancy_model
+            and any(item["metadata"].get("preserved_assignment") == selected for item in exhausted)
         ):
             unavailable.append(
                 {"candidate": "scale-down", "reason": "selected_worker_has_exhausted_work"}
@@ -923,7 +946,7 @@ def prepare_suite(
         "source_prefixes": boundaries,
         "initial_membership": copy.deepcopy(simulation["membership"]),
         "active_workers": active,
-        "down_target_preference": worker_config.get("preferred_down_worker"),
+        "down_target_method": "earliest_predicted_last_resource_release",
         "draining_workers": draining,
         "experiments": experiments,
         "unavailable_candidates": unavailable,

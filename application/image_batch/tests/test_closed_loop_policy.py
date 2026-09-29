@@ -1,4 +1,4 @@
-"""Action choices require complete forecasts, response guardrails and hysteresis."""
+"""Action choices require complete forecasts, response guardrails and allocation comparisons."""
 
 import copy
 import importlib
@@ -57,16 +57,13 @@ class PolicyTests(unittest.TestCase):
         module = importlib.import_module("closed_loop_policy")
         return module.select_action(candidates, state or {}, now_seconds=now, decision_age=age)
 
-    def test_down_needs_two_consecutive_wins_and_ten_percent_savings(self):
-        """A single attractive forecast cannot immediately reduce capacity."""
-        candidates = [candidate("unchanged", 1080), candidate("scale-down", 720, worker="w2")]
-        first = self.choose(candidates)
-        self.assertEqual(first["action"], "unchanged")
-        second = self.choose(candidates, state=first["state"], now=1060)
-        self.assertEqual(second["action"], "scale-down")
-        self.assertEqual(second["selected_worker"], "w2")
-        low_saving = [candidate("unchanged", 1080), candidate("scale-down", 1000, worker="w2")]
-        self.assertEqual(self.choose(low_saving, state=first["state"])["action"], "unchanged")
+    def test_first_feasible_saving_acts_even_below_ten_percent(self):
+        """A complete feasible first evaluation may reduce capacity immediately."""
+        result = self.choose(
+            [candidate("unchanged", 1080), candidate("scale-down", 1000, worker="w2")]
+        )
+        self.assertEqual(result["action"], "scale-down")
+        self.assertEqual(result["selected_worker"], "w2")
 
     def test_one_bad_future_prevents_down_even_when_mean_response_is_good(self):
         """Every sampled future must satisfy the response guardrail."""
@@ -106,17 +103,15 @@ class PolicyTests(unittest.TestCase):
         up["scenarios"] = copy.deepcopy(hold["scenarios"])
         self.assertEqual(self.choose([hold, up])["action"], "unchanged")
 
-    def test_cooldown_and_changed_down_target_reset_the_streak(self):
-        """Proposal history cannot bypass cooldown or transfer a win to another worker."""
+    def test_recent_action_and_prior_target_do_not_override_current_forecast(self):
+        """Guarded current observations replace fixed cooldown and forecast-win streaks."""
         candidates = [candidate("unchanged", 1080), candidate("scale-down", 720, worker="w2")]
-        state = {"last_action_at": 950, "down_worker": "w2", "down_wins": 1}
+        state = {"last_action_at": 950, "reactive_observation": {"tick_id": 1}}
         before = copy.deepcopy(state)
         result = self.choose(candidates, state=state)
-        self.assertEqual(result["action"], "unchanged")
+        self.assertEqual(result["action"], "scale-down")
         self.assertEqual(state, before)
-        changed = self.choose(candidates, state={"down_worker": "w1", "down_wins": 1})
-        self.assertEqual(changed["action"], "unchanged")
-        self.assertEqual(changed["state"]["down_wins"], 1)
+        self.assertEqual(result["state"], before)
 
     def test_empty_cohort_is_valid_but_incomplete_identity_count_is_not(self):
         """Zero arrivals differ from missing responses for represented Jobs."""
@@ -127,14 +122,28 @@ class PolicyTests(unittest.TestCase):
         down["scenarios"][0]["cohort_size"] = 1
         self.assertEqual(self.choose([hold, down], state=state)["action"], "unchanged")
 
-    def test_invalid_history_cannot_bypass_two_wins(self):
-        """Noninteger history must fail closed rather than authorize a reduction."""
-        candidates = [candidate("unchanged", 1080), candidate("scale-down", 720, worker="w2")]
-        for wins in (float("nan"), float("inf"), True, "1", -1):
-            with self.subTest(wins=wins):
-                result = self.choose(candidates, state={"down_worker": "w2", "down_wins": wins})
-                self.assertEqual(result["action"], "unchanged")
-                self.assertEqual(result["reason"], "proposal_history_invalid")
+    def test_infeasible_actions_rank_lateness_then_tardiness_then_allocation(self):
+        """No feasible future is labeled honestly, even when the best alternative is down."""
+        result = self.choose(
+            [
+                candidate("unchanged", 1080, response=150),
+                candidate("scale-up", 1440, response=150),
+                candidate("scale-down", 720, response=150, worker="w2"),
+            ]
+        )
+        self.assertEqual(result["action"], "scale-down")
+        self.assertFalse(result["guardrail_feasible"])
+        self.assertIn("infeasible", result["reason"])
+
+    def test_numerical_allocation_ties_prefer_hold(self):
+        """Floating-point export noise cannot turn an allocation tie into a mutation."""
+        result = self.choose(
+            [
+                candidate("unchanged", 720.000000001),
+                candidate("scale-down", 720, worker="w2"),
+            ]
+        )
+        self.assertEqual(result["action"], "unchanged")
 
     def test_scale_up_requires_an_explicit_worker(self):
         """An otherwise useful action needs an auditable physical target."""

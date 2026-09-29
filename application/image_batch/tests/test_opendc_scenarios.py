@@ -385,14 +385,14 @@ class ScenarioPreparationTests(unittest.TestCase):
                 for row in cases[("unchanged", 0)][1]["tasks"]
                 if row["metadata"]["cohort"] == "backlog"
             }
-            self.assertNotIn(task_ids["running"], down_tasks)
+            self.assertIn(task_ids["running"], down_tasks)
             self.assertIn(task_ids["queued"], down_tasks)
-            self.assertIn(task_ids["starting"], down_tasks)
+            self.assertNotIn(task_ids["starting"], down_tasks)
             self.assertEqual(down_case["scope"], "remaining_workers_only")
-            self.assertEqual(down_case["selected_worker"], "worker-a")
+            self.assertEqual(down_case["selected_worker"], "worker-b")
             self.assertEqual(
                 [row["task"]["id"] for row in down_case["omitted_tasks"]],
-                [task_ids["running"]],
+                [task_ids["starting"]],
             )
             exhausted = down_case["model_exhausted_jobs"][0]
             self.assertEqual(exhausted["metadata"]["kubernetes_job_uid"], "exhausted")
@@ -415,8 +415,8 @@ class ScenarioPreparationTests(unittest.TestCase):
                 (forecast / "template.json").read_bytes(),
             )
 
-    def test_selection_uses_first_assignment_observation_including_starting_jobs(self):
-        """Include starting work when deriving the oldest latest assignment."""
+    def test_selection_retains_assignments_but_avoids_unknown_residuals(self):
+        """An unknown residual cannot beat a known release, while assignment evidence stays intact."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             forecast, observer = make_forecast(root)
@@ -424,7 +424,7 @@ class ScenarioPreparationTests(unittest.TestCase):
             down = next(row for row in manifest["experiments"] if row["candidate"] == "scale-down")
             case = json.loads((root / "suite" / down["input_dir"] / "case.json").read_text())
 
-            self.assertEqual(case["selected_worker"], "worker-a")
+            self.assertEqual(case["selected_worker"], "worker-b")
             metadata = {
                 row["metadata"]["kubernetes_job_uid"]: row["metadata"]
                 for row in case["tasks"] + case["omitted_tasks"]

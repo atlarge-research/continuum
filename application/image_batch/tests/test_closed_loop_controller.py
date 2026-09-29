@@ -115,13 +115,42 @@ class ControllerTests(unittest.TestCase):
                     )
             journal.close()
 
-    def test_shadow_requires_two_consecutive_valid_cycles(self):
-        """Invalid forecasts reset readiness and cannot consume the safety shadow phase."""
+    def test_first_valid_forecast_can_act_after_workload_warmup(self):
+        """A complete first decision is not consumed by an extra controller shadow phase."""
         module = self.module()
-        self.assertEqual(module.shadow_progress(0, True), (1, True))
-        self.assertEqual(module.shadow_progress(1, False), (0, True))
-        self.assertEqual(module.shadow_progress(1, True), (2, True))
-        self.assertEqual(module.shadow_progress(2, True), (2, False))
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 0, {}
+            loop.args = Mock(control_arm="forecast")
+            loop.config, loop.session = self.config, Mock()
+            loop.fresh = Mock(return_value=self.view)
+            loop.recover = Mock()
+            scores = [
+                {
+                    "candidate": name,
+                    "selected_worker": worker,
+                    "scenarios": [
+                        {
+                            "complete": True,
+                            "cohort_size": 0,
+                            "responses_seconds": [],
+                            "allocated_core_seconds": cost,
+                        }
+                        for _ in range(3)
+                    ],
+                }
+                for name, worker, cost in [("unchanged", None, 100), ("scale-down", "w1", 99)]
+            ]
+            loop.predict = Mock(return_value=(self.view, scores, 1000))
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module, "actuate", return_value=dict(last_action_at=1000)
+            ), patch.object(module.time, "monotonic", side_effect=[0, 4]):
+                loop.cycle()
+            ended = loop.journal.records[-1]
+            self.assertEqual(ended["outcome"], "acknowledged")
+            loop.journal.close()
 
     def test_final_node_read_rejects_readiness_loss(self):
         """A worker becoming unready before dispatch vetoes the pending capacity change."""
@@ -145,8 +174,8 @@ class ControllerTests(unittest.TestCase):
             session.kubectl.assert_not_called()
             journal.close()
 
-    def test_state_failure_resets_shadow_and_timeout_ends_cycle(self):
-        """Recovery continues after transport timeout without credit for broken shadow streaks."""
+    def test_state_failure_resets_reactive_history_and_timeout_ends_cycle(self):
+        """Recovery continues after transport timeout without credit for invalid observations."""
         module = self.module()
         for failure in (ValueError("stale"), subprocess.TimeoutExpired("ssh", 3)):
             with self.subTest(
@@ -155,10 +184,10 @@ class ControllerTests(unittest.TestCase):
                 loop = object.__new__(module.Controller)
                 loop.output = Path(temporary)
                 loop.journal = Journal(loop.output / "journal.jsonl")
-                loop.tick_number, loop.shadow, loop.history = 0, 1, {}
+                loop.tick_number, loop.history = 0, {"reactive_observation": {"tick_id": 1}}
                 loop.fresh = Mock(side_effect=failure)
                 loop.cycle()
-                self.assertEqual(loop.shadow, 0)
+                self.assertNotIn("reactive_observation", loop.history)
                 self.assertEqual(loop.journal.records[-1]["event"], "cycle.end")
                 self.assertEqual(loop.journal.records[-1]["outcome"], "vetoed_or_failed")
                 loop.journal.close()
@@ -242,11 +271,22 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(module.last_tick(journal, root), 3)
             journal.close()
 
-    def test_down_candidate_continues_the_previous_target_without_reusing_its_score(self):
-        """A now-busy prior target can be resimulated instead of resetting on a new empty worker."""
-        backlog = [{"metadata": {"preserved_assignment": "w2", "first_assignment_observed_ms": 1}}]
-        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="w2"), "w2")
-        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="removed"), "w1")
+    def test_down_candidate_uses_last_predicted_release_not_oldest_assignment(self):
+        """The oldest assigned worker can have the longest remaining drain."""
+        backlog = [
+            {
+                "task": {"duration": duration},
+                "metadata": {
+                    "preserved_assignment": name,
+                    "first_assignment_observed_ms": assigned,
+                },
+            }
+            for name, duration, assigned in [("w1", 10000, 1), ("w2", 2000, 2)]
+        ]
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, []), "w2")
+        self.assertEqual(_down_worker(["w1", "w2", "w3"], backlog, []), "w3")
+        backlog.append({"task": {"duration": 15000}, "metadata": {"preserved_assignment": "w2"}})
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, []), "w1")
 
     def test_initial_freshness_is_measured_at_collection_before_forecast_computation(self):
         """Ten seconds of valid computation ages the decision, not its collection precondition."""
