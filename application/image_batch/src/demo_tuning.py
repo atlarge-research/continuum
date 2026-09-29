@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+import uuid
 
 from closed_loop_guards import snapshot_view
 from closed_loop_policy import select_action
@@ -15,6 +16,45 @@ from forecast_trace import milliseconds
 from forecast_workload import Settings, run_once
 from opendc_inputs import write_json
 from opendc_scenarios import prepare_suite
+
+
+class NativeCleanupError(RuntimeError):
+    """An owned local native container could not be verified absent after timeout."""
+
+
+def _cleanup_timed_out_container(name):
+    """Remove only the named attempt and retain bounded cleanup/absence evidence.
+
+    Args:
+        name (str): Unique container name assigned before the attempted native launch.
+
+    Returns:
+        dict: Removal and inventory command outcomes, including verified absence.
+    """
+    commands = [
+        ["docker", "rm", "--force", name],
+        ["docker", "ps", "--all", "--filter", f"name=^/{name}$", "--format", "{{.Names}}"],
+    ]
+    attempts = []
+    for command in commands:
+        try:
+            result = subprocess.run(command, capture_output=True, timeout=10, check=False)
+            attempts.append(
+                dict(
+                    command=command,
+                    exit_code=result.returncode,
+                    stdout=result.stdout.decode(errors="replace"),
+                    stderr=result.stderr.decode(errors="replace"),
+                )
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            attempts.append(dict(command=command, error=str(exc)))
+    inventory = attempts[-1]
+    return dict(
+        container_name=name,
+        attempts=attempts,
+        verified_absent=inventory.get("exit_code") == 0 and not inventory["stdout"].strip(),
+    )
 
 
 def execute_native(suite, output, image, *, scenarios, timeout_seconds, allocation_seconds):
@@ -34,14 +74,19 @@ def execute_native(suite, output, image, *, scenarios, timeout_seconds, allocati
     Raises:
         FileExistsError: Evidence output already exists.
         RuntimeError: Native execution failed, with stdout/stderr retained.
-        subprocess.TimeoutExpired: Outer container deadline elapsed.
+        subprocess.TimeoutExpired: Outer deadline elapsed and the owned container is absent.
+        NativeCleanupError: Timeout cleanup could not verify absence; stop further native work.
+        OSError: Evidence could not be written; timeout cleanup is still attempted.
     """
     suite, output = Path(suite).resolve(), Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
+    container_name = "fns-opendc-local-" + uuid.uuid4().hex
     command = [
         "docker",
         "run",
         "--rm",
+        "--name",
+        container_name,
         "--pull=never",
         "--user",
         f"{os.getuid()}:{os.getgid()}",
@@ -78,12 +123,21 @@ def execute_native(suite, output, image, *, scenarios, timeout_seconds, allocati
             command, capture_output=True, timeout=timeout_seconds + 60, check=False
         )
     except subprocess.TimeoutExpired as exc:
-        (output / "stdout.txt").write_bytes(exc.stdout or b"")
-        (output / "stderr.txt").write_bytes(exc.stderr or b"")
-        write_json(
-            output / "container.json",
-            dict(status="outer_timeout", elapsed_seconds=time.monotonic() - started),
+        outcome = dict(
+            status="outer_timeout",
+            container_name=container_name,
+            elapsed_seconds=time.monotonic() - started,
         )
+        outcome["cleanup"] = _cleanup_timed_out_container(container_name)
+        try:
+            (output / "stdout.txt").write_bytes(exc.stdout or b"")
+            (output / "stderr.txt").write_bytes(exc.stderr or b"")
+            write_json(output / "container.json", outcome)
+        finally:
+            if not outcome["cleanup"]["verified_absent"]:
+                raise NativeCleanupError(
+                    f"native timeout cleanup remains unverified: {output}"
+                ) from exc
         raise
     (output / "stdout.txt").write_bytes(result.stdout)
     (output / "stderr.txt").write_bytes(result.stderr)

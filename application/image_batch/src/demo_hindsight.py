@@ -8,7 +8,7 @@ import time
 
 from closed_loop_counterfactuals import prepare_known_ranking
 from closed_loop_policy import select_action
-from demo_tuning import execute_native
+from demo_tuning import NativeCleanupError, execute_native
 from demo_workflow import cleanup_complete, matrix_commands, verify_protocol
 from opendc_inputs import write_json
 from opendc_validation import prepare_validation_suite
@@ -30,6 +30,7 @@ def evaluate_cycle(capture, tick, output, image):
         ValueError: Known arrivals change causal calibration, membership or eligible actions.
         FileExistsError: Diagnostic output already exists.
         RuntimeError: Native execution fails, retaining its command and artifacts.
+        NativeCleanupError: A timed-out native container could not be verified absent.
     """
     original = capture / "controller" / f"cycle-{tick:04d}"
     if not (original / "scores.json").exists():
@@ -109,6 +110,7 @@ def run_diagnostics(protocol_path, evaluation_root, output):
     Raises:
         ValueError: Protocol, bounded cutoff inventory or physical completion is invalid.
         FileExistsError: Diagnostic output already exists.
+        NativeCleanupError: Stop all remaining diagnostics after unverified native cleanup.
     """
     protocol = verify_protocol(protocol_path)
     ticks = protocol.get("hindsight_ticks", [])
@@ -125,21 +127,25 @@ def run_diagnostics(protocol_path, evaluation_root, output):
         if not cleanup.exists() or not cleanup_complete(json.loads(cleanup.read_text())):
             raise ValueError("physical matrix has not completed and restored")
     output.mkdir(parents=True, exist_ok=False)
+    forecasts = [row for row in commands if row["arm"] == "forecast"]
     result = {
         "protocol": str(protocol_path),
         "expected_ticks": ticks,
-        "runs": [],
+        "runs": [
+            {
+                "run_id": Path(row["output"]).name,
+                "comparisons": [{"tick": tick, "excluded": "not attempted"} for tick in ticks],
+            }
+            for row in forecasts
+        ],
         "interpretation": "Known arrivals only; causal profiles, backlog and candidate set "
         "are preserved. Per-cutoff choices are not trajectory regret, deployable foresight "
         "or measured physical benefit. Single-candidate agreement is uninformative.",
     }
-    for row in commands:
-        if row["arm"] != "forecast":
-            continue
+    write_json(output / "summary.json", result)
+    for row, run in zip(forecasts, result["runs"]):
         capture = Path(row["output"])
-        run = {"run_id": capture.name, "comparisons": []}
-        result["runs"].append(run)
-        for tick in ticks:
+        for index, tick in enumerate(ticks):
             if time.time() + 180 > protocol["closure_at_seconds"]:
                 comparison = {"tick": tick, "excluded": "protected closure reserve"}
             else:
@@ -150,9 +156,14 @@ def run_diagnostics(protocol_path, evaluation_root, output):
                         output / capture.name / f"cycle-{tick:04d}",
                         protocol["native_image"],
                     )
+                except NativeCleanupError as exc:
+                    run["comparisons"][index] = {"tick": tick, "excluded": str(exc)}
+                    result["fatal_cleanup_error"] = str(exc)
+                    write_json(output / "summary.json", result)
+                    raise
                 except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
                     comparison = {"tick": tick, "excluded": str(exc)}
-            run["comparisons"].append(comparison)
+            run["comparisons"][index] = comparison
             write_json(output / "summary.json", result)
     return result
 
