@@ -6,6 +6,10 @@ import math
 from forecast_trace import milliseconds
 
 
+class IncompleteMembership(ValueError):
+    """A non-atomic observer inventory still lacks a known unfinished Job."""
+
+
 def snapshot_view(snapshot, config, *, now_seconds):
     """Validate a fresh worker/Job inventory and classify accepting/draining/reserves.
 
@@ -35,7 +39,7 @@ def snapshot_view(snapshot, config, *, now_seconds):
     if not started <= at or not 0 <= now_seconds - started <= 3:
         raise ValueError("collection is stale or its temporal bounds are invalid")
     if collection.get("missing_job_uids") != []:
-        raise ValueError("observation membership is incomplete or unreconciled")
+        raise IncompleteMembership("observation membership is incomplete or unreconciled")
     configured = {worker["node_name"]: worker for worker in config["workers"]}
     observed = {worker["node_name"]: worker for worker in snapshot["workers"]}
     if (
@@ -211,7 +215,9 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
 
     Every scheduled check tracks all qualifying empty workers, independently of
     forecast decisions. Re-reading a tick reuses its preceding check, so fallback
-    cannot manufacture two observations. A skipped ID breaks consecutiveness.
+    cannot manufacture two observations. Refreshes may only remove eligibility
+    from the scheduled check, never revive a nonqualifying observation. A skipped
+    ID breaks consecutiveness.
 
     Args:
         view (dict): Fresh validated physical demand and allocation inventory.
@@ -250,6 +256,8 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
         and demand
         <= view["reactive_down_threshold"] * (capacity - view["nodes"][name]["application_cores"])
     }
+    if previous.get("tick_id") == tick_id:
+        eligible &= set(previous.get("eligible_workers", []))
     state["reactive_observation"] = dict(
         tick_id=tick_id,
         observed_at_seconds=now_seconds,

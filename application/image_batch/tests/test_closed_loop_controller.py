@@ -324,6 +324,76 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(before["timestamp_seconds"], 1000)
             self.assertEqual(cutoff, 1000)
 
+    def test_incomplete_membership_gets_one_preserved_preparation_retry(self):
+        """A new complete prefix may recover a list race without simulating an incomplete one."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            loop = object.__new__(module.Controller)
+            loop.session = Mock(namespace="test")
+            loop.session.namespace = "test"
+            loop.args = Mock(period_seconds=480, warmup_cycles=2, native_image="test")
+            loop.origin, loop.tick_number = 900, 1
+            loop.output = root
+            loop.journal = Journal(root / "journal.jsonl")
+            loop.template, loop.config, loop.cluster = {"saved": True}, self.config, {}
+            loop.history = {"reactive_observation": {"eligible_workers": ["w1"]}}
+            attempts = []
+
+            def forecast(_prefix, destination, _cutoff, _settings, _template, **_kwargs):
+                snapshot = json.loads(json.dumps(self.snapshot))
+                if not attempts:
+                    snapshot["collection"]["missing_job_uids"] = ["new-job"]
+                attempts.append(snapshot)
+                destination.mkdir()
+                (destination / "state.json").write_text(json.dumps(snapshot))
+                return (
+                    {
+                        "status": "ready",
+                        "simulation_inputs": {"status": "ready"},
+                        "cutoff": snapshot["timestamp"],
+                    },
+                    loop.template,
+                )
+
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module.time, "sleep"
+            ), patch.object(module, "run_once", side_effect=forecast), patch.object(
+                module, "prepare_suite"
+            ), patch.object(
+                module, "run_control_plane_suite", return_value=root
+            ) as native, patch.object(
+                module, "load_scores", return_value=([], {})
+            ):
+                before, _, _ = loop.predict(root)
+            self.assertEqual(before["timestamp_seconds"], 1000)
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(native.call_count, 1)
+            self.assertNotIn("reactive_observation", loop.history)
+            rejected = json.loads((root / "rejected-preparation/forecast/state.json").read_text())
+            self.assertEqual(rejected["collection"]["missing_job_uids"], ["new-job"])
+            self.assertEqual([row["event"] for row in loop.journal.records], ["observation.retry"])
+            loop.journal.close()
+
+    def test_recollection_is_bounded_and_does_not_retry_other_failures(self):
+        """Persistent missing membership fails after two attempts; native errors get one."""
+        module = self.module()
+        for error, expected_calls in (
+            (module.IncompleteMembership("missing"), 2),
+            (RuntimeError("native failed"), 1),
+        ):
+            with self.subTest(error=str(error)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                loop = object.__new__(module.Controller)
+                loop.journal = Journal(root / "journal.jsonl")
+                loop.history, loop.tick_number = {}, 1
+                with patch.object(
+                    loop, "_predict_once", side_effect=error
+                ) as predict, patch.object(module.time, "sleep"), self.assertRaises(type(error)):
+                    loop.predict(root)
+                self.assertEqual(predict.call_count, expected_calls)
+                loop.journal.close()
+
     def test_prediction_uses_configured_horizon_scenarios_and_runtime_budgets(self):
         """The prepared future and native scoring use the frozen experiment settings."""
         module = self.module()

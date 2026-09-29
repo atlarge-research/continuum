@@ -195,6 +195,21 @@ class GuardTests(unittest.TestCase):
         )
         self.assertEqual(third["action"], "unchanged")
 
+    def test_later_fallback_read_cannot_restore_a_nonqualifying_scheduled_check(self):
+        """A busy scheduled check breaks history even if work drains during forecasting."""
+        empty = self.view()
+        first = self.module().reactive_action(
+            empty, {}, now_seconds=1001, fallback=False, tick_id=1
+        )
+        self.snapshot["jobs"]["queued"] = [self.job(str(i)) for i in range(3)]
+        busy = self.module().reactive_action(
+            self.view(), first["state"], now_seconds=1061, fallback=False, tick_id=2
+        )
+        fallback = self.module().reactive_action(
+            empty, busy["state"], now_seconds=1090, fallback=True, tick_id=2
+        )
+        self.assertEqual(fallback["action"], "unchanged")
+
     def test_cpu_demand_includes_queued_and_unreleased_finished_jobs(self):
         """Demand uses requested cores, including classifier-finished retained resources."""
         queued, assigned, released = self.job("q"), self.job("a", "w1"), self.job("r", "w1")

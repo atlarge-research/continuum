@@ -7,7 +7,13 @@ import subprocess
 import time
 import uuid
 
-from closed_loop_guards import guard_action, reactive_action, reconcile_pending, snapshot_view
+from closed_loop_guards import (
+    IncompleteMembership,
+    guard_action,
+    reactive_action,
+    reconcile_pending,
+    snapshot_view,
+)
 from closed_loop_journal import Journal
 from demo_configuration import EXPERIMENT_DEFAULTS
 from closed_loop_policy import select_action
@@ -334,6 +340,52 @@ class Controller:
             self.journal.append("cycle.skipped", count=skipped, reason="nonoverlapping_cadence")
 
     def predict(self, directory):
+        """Retry one incomplete preparation with a new prefix, retaining the rejected evidence.
+
+        This bounded two-second wait addresses a non-atomic Job-list race only.
+        It never retries native computation or accepts an incomplete snapshot.
+        The selected prefix's cutoff governs decision age; cycle wall time includes
+        both attempts, and rejected preparation remains available for diagnostics.
+
+        Args:
+            directory (Path): New cycle evidence directory.
+
+        Returns:
+            tuple: Complete proposal state, scores and the selected prefix's cutoff.
+
+        Raises:
+            ValueError: Preparation remains invalid after the single allowed recollection.
+            RuntimeError: Native or collection operations fail.
+        """
+        started = time.monotonic()
+        try:
+            return self._predict_once(directory)
+        except IncompleteMembership as exc:
+            self.history.pop("reactive_observation", None)
+            rejected = directory / "rejected-preparation"
+            rejected.mkdir()
+            for name in ("observer", "observer.tar", "forecast"):
+                source = directory / name
+                if source.exists():
+                    source.rename(rejected / name)
+            self.journal.append(
+                "observation.retry",
+                tick=self.tick_number,
+                phase="forecast_preparation",
+                reason=str(exc),
+                wait_seconds=2,
+                rejected_directory=str(rejected),
+            )
+            time.sleep(2)
+        recollection = time.monotonic() - started
+        result = self._predict_once(directory)
+        timing_path = directory / "stage-timing.json"
+        timing = json.loads(timing_path.read_text(encoding="utf-8"))
+        timing["rejected_preparation_and_wait_seconds"] = recollection
+        write_json(timing_path, timing)
+        return result
+
+    def _predict_once(self, directory):
         """Freeze a causal prefix and evaluate all complete shared-future capacity choices.
 
         Args:
@@ -370,12 +422,12 @@ class Controller:
         )
         if status["status"] != "ready" or status["simulation_inputs"]["status"] != "ready":
             raise ValueError("forecast not ready: " + json.dumps(status.get("simulation_inputs")))
-        if self.template is None:
-            self.template = selected
-            write_json(self.output / "frozen-template.json", selected)
         state = json.loads((forecast_dir / "state.json").read_text())
         # Initial freshness belongs to collection; computation ages the separately guarded decision.
         before = snapshot_view(state, self.config, now_seconds=captured_at)
+        if self.template is None:
+            self.template = selected
+            write_json(self.output / "frozen-template.json", selected)
         config = {
             **copy.deepcopy(self.config),
             "active_workers": before["active_workers"],
