@@ -17,6 +17,8 @@ from capture_run import CaptureSession, ENDPOINT_IMAGE
 from closed_loop_audit import audit_capture
 from closed_loop_evidence import SCHEMA as EVIDENCE_SCHEMA, capture_evidence
 from demo_cleanup import cleanup_native
+from demo_lifetime import PHASE_SECONDS, PHASE_STOP_SECONDS, PhaseFailure, run_phase
+from demo_recovery import recover_capture
 from demo_configuration import (
     resolve_deployment,
     validate_experiment,
@@ -26,21 +28,33 @@ from opendc_inputs import file_hashes, write_json
 from opendc_kubernetes import ssh
 
 
-def run_budget_seconds(settings):
-    """Bound one run including response follow-up, profile emission and setup/collection.
+def capture_budget_seconds(settings):
+    """Reserve the capture child lifetime, independently of parent orchestration phases.
 
     Args:
         settings (dict): Complete experiment settings.
 
     Returns:
-        float: Seconds reserved before launching another physical run.
+        float: Capture seconds including follow-up, profile emission and setup/collection.
     """
     return (
         settings["period_seconds"] * settings["cycles"] + settings["followup_seconds"] + 180 + 300
     )
 
 
-def require_time(settings, *, now, closure_at, runs=1):
+def run_budget_seconds(settings):
+    """Reserve every per-run phase, possible recovery and process-group stop overhead.
+
+    Args:
+        settings (dict): Complete experiment settings.
+
+    Returns:
+        float: Bounded success-or-failure lifetime; restoration is not guaranteed on failure.
+    """
+    return capture_budget_seconds(settings) + sum(PHASE_SECONDS.values()) + 5 * PHASE_STOP_SECONDS
+
+
+def require_time(settings, *, now, closure_at, runs=1, initial_verification=False):
     """Keep the final closure reserve unavailable to experiment launches.
 
     Args:
@@ -48,11 +62,13 @@ def require_time(settings, *, now, closure_at, runs=1):
         now (float): Current UTC epoch seconds.
         closure_at (float): Absolute start of the protected closure window.
         runs (int): Number of complete bounded captures that must fit before any launch.
+        initial_verification (bool): Include the matrix's initial verification and stop allowance.
 
     Raises:
         ValueError: The full run budget would cross the closure boundary.
     """
-    if now + runs * run_budget_seconds(settings) > closure_at:
+    initial = PHASE_SECONDS["verify"] + PHASE_STOP_SECONDS if initial_verification else 0
+    if now + initial + runs * run_budget_seconds(settings) > closure_at:
         raise ValueError("insufficient time before the protected closure reserve")
 
 
@@ -374,6 +390,73 @@ def collect_metrics(capture, role):
     return {name: str(path) for name, path in paths.items()}
 
 
+def workflow_phase(kind, output, *, protocol=None, capture=None, role=None):
+    """Execute blocking workflow work in a bounded, separately supervised process.
+
+    Args:
+        kind (str): Verification, archival, metrics or recovery phase.
+        output (Path): New phase artifact stem.
+        protocol (Path or None): Sealed protocol for verification.
+        capture (Path or None): Exact capture for archival, metrics or recovery.
+        role (str or None): Report role for metric collection.
+
+    Returns:
+        dict: Preserved phase result, only after successful whole-group termination.
+
+    Raises:
+        PhaseFailure: A phase fails, times out or leaves unverified descendants.
+        OSError: Phase evidence cannot be read or created.
+    """
+    output = Path(output)
+    result = output.with_suffix(".result.json")
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "phase",
+        "--kind",
+        kind,
+        "--result",
+        str(result),
+    ]
+    for name, value in (("protocol", protocol), ("capture", capture), ("role", role)):
+        if value is not None:
+            command.extend(["--" + name, str(value)])
+    run_phase(command, output.with_suffix(".log"), timeout_seconds=PHASE_SECONDS[kind])
+    return json.loads(result.read_text(encoding="utf-8"))
+
+
+def record_matrix_failure(capture, phase_directory, stage, error):
+    """Retain failure and attempt sender recovery only after local controller termination.
+
+    Args:
+        capture (Path): Exact failed capture output.
+        phase_directory (Path): Matrix-owned phase evidence directory.
+        stage (str): Capture, archival or metrics stage that failed.
+        error (Exception): Original failure, including group-termination knowledge when available.
+    """
+    failure = {
+        "stage": stage,
+        "error": str(error),
+        "requires_reconciliation": True,
+        "may_continue": False,
+        "local_group_stopped": error.group_stopped if isinstance(error, PhaseFailure) else True,
+    }
+    destination = capture.with_suffix(".matrix-failure.json")
+    try:
+        write_json(destination, failure)
+    finally:
+        if stage == "capture" and failure["local_group_stopped"]:
+            try:
+                failure["recovery"] = workflow_phase(
+                    "recovery", phase_directory / "recovery", capture=capture
+                )
+            except (RuntimeError, OSError, ValueError) as exc:
+                failure["recovery_error"] = str(exc)
+        else:
+            failure["recovery"] = "not attempted; preserve evidence and reconcile explicitly"
+        write_json(destination, failure)
+
+
 def run_matrix(protocol_path, output):
     """Run a frozen matrix sequentially, stopping on capture or restoration failure.
 
@@ -386,10 +469,25 @@ def run_matrix(protocol_path, output):
         RuntimeError: A capture fails or does not restore its infrastructure.
         FileExistsError: A run or its execution log already exists.
     """
-    protocol = verify_protocol(protocol_path)
+    # Read only the small local declaration to reserve time before blocking verification.
+    protocol_path = Path(protocol_path)
+    protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
     settings = json.loads(Path(protocol["experiment_config"]).read_text(encoding="utf-8"))
+    commands = matrix_commands(protocol, output)
+    require_time(
+        settings,
+        now=time.time(),
+        closure_at=protocol["closure_at_seconds"],
+        runs=len(commands) if protocol.get("require_complete_budget") else 1,
+        initial_verification=True,
+    )
+    matrix_id = hashlib.sha256(protocol_path.read_bytes()).hexdigest()[:16]
+    orchestration = Path(output) / "orchestration" / matrix_id
+    orchestration.mkdir(parents=True, exist_ok=False)
+    protocol = workflow_phase("verify", orchestration / "initial", protocol=protocol_path)
+    settings = json.loads(Path(protocol["experiment_config"]).read_text(encoding="utf-8"))
+    commands = matrix_commands(protocol, output)
     source = Path(protocol["source_root"])
-    verify_frozen_source(source)
     environment = {
         **os.environ,
         "PYTHONPATH": os.pathsep.join((str(source / "application/image_batch/src"), str(source))),
@@ -399,38 +497,43 @@ def run_matrix(protocol_path, output):
         "OMP_NUM_THREADS": "1",
         "MPLCONFIGDIR": str(Path(output) / "mpl-cache"),
     }
-    commands = matrix_commands(protocol, output)
     if protocol.get("require_complete_budget"):
         require_time(
             settings, now=time.time(), closure_at=protocol["closure_at_seconds"], runs=len(commands)
         )
     (Path(output) / "experiments").mkdir(exist_ok=True)
     for row in commands:
-        verify_protocol(protocol_path)
         require_time(settings, now=time.time(), closure_at=protocol["closure_at_seconds"])
         capture = Path(row["output"])
         if capture.exists():
             raise FileExistsError(capture)
+        phase_directory = orchestration / capture.name
+        verified = workflow_phase("verify", phase_directory / "verify", protocol=protocol_path)
+        if verified != protocol:
+            raise ValueError("sealed protocol differs from matrix startup")
         write_json(capture.with_suffix(".command.json"), {**row, "started_at_seconds": time.time()})
-        with capture.with_suffix(".log").open("xb") as stream:
-            result = subprocess.run(
+        stage = "capture"
+        try:
+            run_phase(
                 row["command"],
+                capture.with_suffix(".log"),
                 cwd=source,
-                env=environment,
-                stdout=stream,
-                stderr=subprocess.STDOUT,
-                check=False,
-                timeout=run_budget_seconds(settings),
+                environment=environment,
+                timeout_seconds=capture_budget_seconds(settings),
             )
-        if result.returncode or not (capture / "cleanup.json").exists():
-            raise RuntimeError(
-                f"capture failed; preserve and reconcile before continuing: {capture}"
+            if not (capture / "cleanup.json").exists() or not cleanup_complete(
+                json.loads((capture / "cleanup.json").read_text())
+            ):
+                raise RuntimeError(f"capture restoration incomplete: {capture}")
+            stage = "archive"
+            workflow_phase("archive", phase_directory / "archive", capture=capture)
+            stage = "metrics"
+            metrics = workflow_phase(
+                "metrics", phase_directory / "metrics", capture=capture, role=protocol["role"]
             )
-        cleanup = json.loads((capture / "cleanup.json").read_text(encoding="utf-8"))
-        if not cleanup_complete(cleanup):
-            raise RuntimeError(f"capture restoration incomplete: {capture}")
-        cleanup_native(capture)
-        metrics = collect_metrics(capture, protocol["role"])
+        except (RuntimeError, OSError, ValueError) as exc:
+            record_matrix_failure(capture, phase_directory, stage, exc)
+            raise
         print(
             json.dumps({**row, "collected": metrics, "finished_at_seconds": time.time()}),
             flush=True,
@@ -590,6 +693,12 @@ def main():
     collect = commands.add_parser("collect")
     collect.add_argument("--capture", type=Path, required=True)
     collect.add_argument("--role", choices=("pilot", "heldout"), required=True)
+    phase = commands.add_parser("phase", help="internal bounded orchestration phase")
+    phase.add_argument("--kind", choices=tuple(PHASE_SECONDS), required=True)
+    phase.add_argument("--protocol", type=Path)
+    phase.add_argument("--capture", type=Path)
+    phase.add_argument("--role", choices=("pilot", "heldout"))
+    phase.add_argument("--result", type=Path, required=True)
     snapshot = commands.add_parser("snapshot")
     snapshot.add_argument("--continuum-config", type=Path, required=True)
     snapshot.add_argument("--inventory", type=Path)
@@ -604,6 +713,17 @@ def main():
         run_matrix(args.protocol, args.output)
     elif args.command == "collect":
         print(json.dumps(collect_metrics(args.capture, args.role)))
+    elif args.command == "phase":
+        if args.kind == "verify":
+            result = verify_protocol(args.protocol)
+        elif args.kind == "archive":
+            cleanup = cleanup_native(args.capture)
+            result = {"verified_absent": cleanup["verified_absent"]}
+        elif args.kind == "metrics":
+            result = collect_metrics(args.capture, args.role)
+        else:
+            result = recover_capture(args.capture)
+        write_json(args.result, result)
     else:
         settings = resolve_deployment(args.continuum_config, args.inventory)
         current = snapshot_infrastructure(settings, args.output)

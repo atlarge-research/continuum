@@ -27,13 +27,16 @@ class WorkflowTests(unittest.TestCase):
         """A run cannot consume the protected closure window even if arrivals fit."""
         module = self.module()
         settings = {"period_seconds": 480, "cycles": 4, "followup_seconds": 600}
-        self.assertEqual(module.run_budget_seconds(settings), 3000)
+        self.assertEqual(module.capture_budget_seconds(settings), 3000)
+        self.assertEqual(module.run_budget_seconds(settings), 3890)
         with self.assertRaisesRegex(ValueError, "reserve"):
-            module.require_time(settings, now=1000, closure_at=3999)
-        module.require_time(settings, now=1000, closure_at=4000)
+            module.require_time(settings, now=1000, closure_at=4889)
+        module.require_time(settings, now=1000, closure_at=4890)
         with self.assertRaisesRegex(ValueError, "reserve"):
-            module.require_time(settings, now=1000, closure_at=9999, runs=3)
-        module.require_time(settings, now=1000, closure_at=10000, runs=3)
+            module.require_time(
+                settings, now=1000, closure_at=12799, runs=3, initial_verification=True
+            )
+        module.require_time(settings, now=1000, closure_at=12800, runs=3, initial_verification=True)
 
     def test_commands_preserve_one_protocol_and_isolate_each_seed_arm(self):
         """Matched arms share settings/source while outputs and namespaces remain unique."""
@@ -69,6 +72,54 @@ class WorkflowTests(unittest.TestCase):
         protocol["matrix"].append(protocol["matrix"][0])
         with self.assertRaisesRegex(ValueError, "duplicate"):
             module.matrix_commands(protocol, Path("/new/evidence"))
+
+    def test_matrix_timeout_records_recovery_and_never_launches_next_capture(self):
+        """All phases are bounded; a capture timeout stops even after sender recovery."""
+        module = self.module()
+        for stopped in (True, False):
+            with self.subTest(group_stopped=stopped), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                settings = root / "settings.json"
+                settings.write_text(json.dumps(EXPERIMENT_DEFAULTS))
+                protocol = {
+                    "source_root": str(root),
+                    "experiment_config": str(settings),
+                    "closure_at_seconds": 100000,
+                    "require_complete_budget": True,
+                    "role": "heldout",
+                }
+                protocol_path = root / "protocol.json"
+                protocol_path.write_text(json.dumps(protocol))
+                rows = [
+                    {
+                        "seed": 1,
+                        "arm": arm,
+                        "output": str(root / "evaluation/experiments" / arm),
+                        "command": ["capture", arm],
+                    }
+                    for arm in ("fixed", "forecast")
+                ]
+                with patch.object(module.time, "time", return_value=1000), patch.object(
+                    module, "matrix_commands", return_value=rows
+                ), patch.object(
+                    module, "workflow_phase", return_value=protocol
+                ) as phase, patch.object(
+                    module,
+                    "run_phase",
+                    side_effect=module.PhaseFailure("timed out", group_stopped=stopped),
+                ) as capture:
+                    with self.assertRaises(module.PhaseFailure):
+                        module.run_matrix(protocol_path, root / "evaluation")
+                capture.assert_called_once()
+                self.assertEqual(capture.call_args.args[0], ["capture", "fixed"])
+                self.assertEqual(capture.call_args.kwargs["timeout_seconds"], 3480)
+                kinds = [call.args[0] for call in phase.call_args_list]
+                self.assertEqual(kinds, ["verify", "verify"] + (["recovery"] if stopped else []))
+                failure = json.loads(
+                    (root / "evaluation/experiments/fixed.matrix-failure.json").read_text()
+                )
+                self.assertTrue(failure["requires_reconciliation"])
+                self.assertFalse(failure["may_continue"])
 
     def test_restore_comparison_detects_identity_drift_and_new_active_jobs(self):
         """Matching names alone cannot prove VM/node preservation or cleanup."""
