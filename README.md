@@ -3,7 +3,7 @@
 
 This demo consists of 5 parts:
 
-1. Access the Kubernetes cluster.
+1. Access your Kubernetes cluster.
 2. Inspect the cluster via the terminal and browser.
 3. Deploy a *parallel* MPI application on a single node.
 4. Deploy a *distributed* MPI application across two nodes.
@@ -24,23 +24,20 @@ For this demo, each group gets access to a Kubernetes that runs on 2 virtual mac
       "ssh -tt nodeX 'ssh -tt -i ~/.ssh/id_rsa_continuum cloud_controller_cont-nX-Y@192.168.ZZZ.2'"
     ```
     Fill in the missing parts of the commands (e.g., X, Y, the path to your key).
-    If this command does not work, try using your public key instead of the private key; this is operating systems-specific.
+    If this command does not work, try using your public key (*.pub) instead of the private key; this is operating systems-specific.
 
 ## Part 2: Inspect the Kubernetes Cluster
-In this part, you inspect the Kubernetes cluster running on 2 VMs to see what the cluster does under the hood. 
+You inspect the Kubernetes cluster running on 2 VMs to see what the cluster does under the hood. 
 
-1. The main tool for users to inspect the current state of Kubernetes is called `kubectl`, which is installed in the cloud_controller VM. You can find a cheat sheet for kubectl here: https://kubernetes.io/docs/reference/kubectl/cheatsheet/#viewing-and-finding-resources. Try to answer the following questions using kubectl (hint: You need to use `kubectl get ...` or `kubectl describe ...` for most questions):
+1. The main tool for users to inspect the current state of Kubernetes is `kubectl`, which is installed in the cloud_controller VM. You can find a cheat sheet for kubectl here: https://kubernetes.io/docs/reference/kubectl/cheatsheet/#viewing-and-finding-resources. Try to answer the following questions using kubectl (hint: You need to use `kubectl get ...` or `kubectl describe ...` for most questions):
     1. How many nodes are in the Kubernetes cluster? What are their names?
-        - Example solution: `kubectl get nodes`, optionally with `-o wide`.
-    2. How many applications (pods) are running or have run across all namespaces in the cluster?
-        - Hint: Use `--all-namespaces`, see the URL above.
-    3. What is the current state of the application(s)? Are they running, finished, or crashed?
-        - Hint: This is shown in the output from step 2.
-    4. What is the output of these application(s)?
-        - Hint: `kubectl logs ...`
-    5. How many CPU and memory resources are these applications using?
-        - Hint: `kubectl describe pod ...`
-2. Kubernetes can also be inspected in the browser using a tool called `Grafana` (https://grafana.com/). Grafana provides interactive real-time dashboards that consume metrics produced by Kubernetes and stored in Prometheus (https://prometheus.io/). Grafana and Prometheus are running in the Kubernetes control-plane VM and can be accessed locally because you have connected to the control-plane VM using port-forwarding (see the SSH commands with `-L` flags you used to access the VM).
+        1. Hint: `kubectl get ...`
+    3. How many applications (pods) are running or have run across all namespaces in the cluster?
+    4. What is the current state of the application(s)? Are they running, finished, or crashed?
+    5. What is the output of these application(s)?
+    6. How many CPU and memory resources are these applications requesting?
+        1. Hint: `kubectl describe ...`
+2. Kubernetes can also be inspected in the browser using `Grafana` (https://grafana.com/). Grafana provides interactive real-time dashboards that consume metrics produced by Kubernetes and stored in Prometheus (https://prometheus.io/). Grafana and Prometheus are running in the Kubernetes control-plane VM and can be accessed locally because you have connected to the control-plane VM using port-forwarding (see the SSH commands with `-L` flags you used to access the VM).
     1. Go to http://localhost:3000 in a browser. This opens the Grafana dashboards. Log in with username and password `admin`, and skip creating a new password.
     2. Click on the menu icon next to `home` in the top-left corner, and then click on `Dashboards`.
     3. Grafana offers many `Default` dashboards, such as:
@@ -52,11 +49,11 @@ In this part, you inspect the Kubernetes cluster running on 2 VMs to see what th
     You can select in the top right corner of each dashboard the time range you want to see data in. You may want to see all data produced in the last hour, or maybe only from the last 5 minutes. Keep the Grafana dashboard open for the remainder of the tutorial.
 
 ## Part 3: Deploy a *parallel* MPI application on a single node.
-Following the HPC-style of MPI deployment, you now deploy an MPI application on a cloud-native Kubernetes cluster. To start, you deploy an MPI application for matrix multiplication, where 1 master splits workload across 4 workers. These workers have to do local computation followed by communication multiple times. We launch this application on a single VM, meaning that network communication is relatively cheap. Each master and worker runs in a dedicated container.
+You deploy an MPI application on a Kubernetes cluster. To start, you deploy an MPI application for matrix multiplication, where 1 master splits workload across 4 workers. These workers have to do local computation followed by communication multiple times. We launch this application on a single VM, meaning that network communication is relatively cheap. Each master and worker runs in a dedicated container.
 
 1. Install MPI for Kubernetes: `kubectl apply --server-side -f https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.7.0/deploy/v2beta1/mpi-operator.yaml`.
 2. Allow pods to be scheduled on the control-plane VM: `kubectl taint nodes -l node-role.kubernetes.io/control-plane= node-role.kubernetes.io/control-plane:NoSchedule-`
-3. Create a new Kubernetes deployment file while in the cloud_controller VM:
+3. Create a new Kubernetes deployment file while in the cloud_controller VM that enforces single-node deployment of MPI:
 ```bash
 cat > ~/mpi-array.yml <<'EOF'
 apiVersion: kubeflow.org/v2beta1
@@ -169,10 +166,10 @@ EOF
 We now deploy the workers from the same application across our 2 VMs. What difference in performance do you expect?
 
 1. Delete the previous application: `kubectl delete -f mpi-array.yml`
-2. To enforce worker placement across nodes, we need to stop enforcing MPI workers to be placed on the same node. This same-node-placement behaviour is enforced by the `affinity` configurations defined in `mpi-array.yml` that you created in step 1 from part 3. Copy the command from that step, but remove all `affininty` lines marked between the `#######` lines -- that is 7 lines to comment in the `Launcher` part and 7 lines in the `Worker` part. Make sure to execute this command to create the new deployment file. Use `cat mpi-array.yml` in your terminal afterward to inspect that the affinity lines have been removed.
+2. To enable worker placement across nodes, we need to stop enforcing MPI workers to be placed on the same node. This same-node-placement behaviour is enforced by the `affinity` configurations defined in `mpi-array.yml` that you created in step 1 from part 3. Copy the command from that step, but remove all `affininty` lines marked between the `#######` lines -- that is 7 lines to comment in the `Launcher` part and 7 lines in the `Worker` part. Make sure to execute this command to create the new deployment file. Use `cat mpi-array.yml` in your terminal afterward to inspect that the affinity lines have been removed.
 3. Deploy the application: `kubectl apply -f mpi-array.yml`
 4. Inspect the application at runtime and post-mortem, similar to Part 3. If you're quick with executing `kubectl get pods -o wide`, you should be able to see that the worker pods are assigned to different nodes, contrary to what we did in Part 3.
-5. Take note of the execution time. This should exceed the execution time from the application deployed in step 3 because the network latency between VMs significantly exceeds the latency between pods within a single VM.
+5. Take note of the execution time. Does it differ compared to the parallel execution from Part 3? If so, reason why if differs, and try to find data to back up your claim. If the data is not available, reason about what you would need to do to get this data.
 
 ## Part 5: Analyze the impact of networks on distributed MPI applications.
 We had a quick glimpse on the impact of network latency on the performance of distributed applications in Part 4. Here, we take this one step further by artificially adding latency between the VMs to emulate a scenario where computers are either far apart or the network is unreliable.
