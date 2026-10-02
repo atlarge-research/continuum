@@ -475,7 +475,11 @@ class CaptureSession:
 
     def collect(self):
         """Preserve complete terminal inventories, logs, observer evidence and results."""
-        for resource, filename in [("jobs", "jobs.json"), ("pods", "pods-final.json")]:
+        for resource, filename in [
+            ("jobs", "jobs.json"),
+            ("pods", "pods-final.json"),
+            ("events", "events.json"),
+        ]:
             write_json(self.output / filename, self.get(resource, "-n", self.namespace))
         write_json(self.output / "nodes-final.json", self.get("nodes"))
         pods = json.loads((self.output / "pods-final.json").read_text(encoding="utf-8"))

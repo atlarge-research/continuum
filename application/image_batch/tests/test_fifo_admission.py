@@ -2,6 +2,7 @@
 
 import copy
 import importlib
+import json
 import unittest
 from unittest.mock import Mock, patch
 
@@ -160,3 +161,75 @@ class AdmissionTests(unittest.TestCase):
                 module.main()
         stop.assert_called_once_with("binding_timeout", job_uid="a")
         batch.patch_namespaced_job.assert_not_called()
+
+    def test_collection_separates_sdk_calls_from_serialization(self):
+        """Slow list processing is visible separately from the dictionary conversion."""
+        module = importlib.import_module("fifo_admission")
+        api_client, batch, core = Mock(), Mock(), Mock()
+        api_client.sanitize_for_serialization.side_effect = lambda value: value
+        batch.list_namespaced_job.return_value = {"items": self.jobs}
+        core.list_namespaced_pod.return_value = {"items": []}
+        core.list_node.return_value = {"items": self.nodes}
+        with patch.object(module.time, "perf_counter", side_effect=range(9)):
+            inventory = module.collect_inventory(api_client, batch, core, "test")
+        self.assertEqual([job["metadata"]["uid"] for job in inventory["jobs"]], ["b", "a"])
+        self.assertEqual(inventory["pods"], [])
+        self.assertEqual(inventory["nodes"], self.nodes)
+        self.assertEqual(
+            inventory["timings"],
+            {
+                "jobs_api_seconds": 1,
+                "jobs_serialization_seconds": 1,
+                "pods_api_seconds": 1,
+                "pods_serialization_seconds": 1,
+                "nodes_api_seconds": 1,
+                "nodes_serialization_seconds": 1,
+            },
+        )
+        self.assertEqual(
+            module.choose(inventory["jobs"], inventory["pods"], inventory["nodes"], self.workers)[
+                "job_uid"
+            ],
+            "a",
+        )
+
+    def test_live_cycle_records_decision_cost_and_inventory_counts(self):
+        """Every admission iteration exposes cost, even without a changing decision."""
+        module = importlib.import_module("fifo_admission")
+        api_client, batch, core = Mock(), Mock(), Mock()
+        api_client.sanitize_for_serialization.side_effect = lambda value: value
+        batch.list_namespaced_job.return_value = {"items": self.jobs}
+        core.list_namespaced_pod.return_value = {"items": []}
+        core.list_node.return_value = {"items": self.nodes}
+        with patch.dict(
+            module.os.environ, {"JOB_NAMESPACE": "test", "ADMISSION_WORKERS": '{"w1":2}'}
+        ), patch.object(module.config, "load_incluster_config"), patch.object(
+            module.client, "ApiClient", return_value=api_client
+        ), patch.object(
+            module.client, "BatchV1Api", return_value=batch
+        ), patch.object(
+            module.client, "CoreV1Api", return_value=core
+        ), patch.object(
+            module.time, "sleep", side_effect=RuntimeError("end iteration")
+        ), patch(
+            "builtins.print"
+        ) as output:
+            with self.assertRaisesRegex(RuntimeError, "end iteration"):
+                module.main()
+        records = [json.loads(call.args[0]) for call in output.call_args_list]
+        cycles = [row for row in records if row["event"] == "admission.cycle"]
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(cycles[0]["inventory_counts"], {"jobs": 2, "pods": 0, "nodes": 1})
+        self.assertEqual(cycles[0]["reason"], "admit")
+        self.assertEqual(cycles[0]["job_uid"], "a")
+        for key in [
+            "jobs_api_seconds",
+            "pods_api_seconds",
+            "nodes_api_seconds",
+            "decision_seconds",
+            "patch_seconds",
+            "cpu_seconds",
+            "wall_seconds",
+        ]:
+            self.assertGreaterEqual(cycles[0]["timings"][key], 0)
+        self.assertEqual(batch.patch_namespaced_job.call_count, 1)

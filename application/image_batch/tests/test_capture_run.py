@@ -154,6 +154,22 @@ class CaptureTests(unittest.TestCase):
             session.loop.origin = None
             self.assertFalse(session.arrival_window_complete(now_seconds=2920))
 
+    def test_collection_retains_scheduler_events_before_namespace_removal(self):
+        """Binding/failure Events remain evidence after experiment cleanup deletes them."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            session = module.CaptureSession(Namespace(output=Path(directory), namespace="fns-test"))
+            session.pod_name = None
+            events = {"items": [{"reason": "Scheduled", "involvedObject": {"uid": "pod-a"}}]}
+            with patch.object(
+                session,
+                "get",
+                side_effect=lambda kind, *args: events if kind == "events" else {"items": []},
+            ):
+                session.collect()
+            self.assertTrue((Path(directory) / "events.json").is_file())
+            self.assertEqual(json.loads((Path(directory) / "events.json").read_text()), events)
+
     def test_collection_retains_failed_native_pod_logs_before_namespace_removal(self):
         """A forecast timeout retains its native log without successful batch collection."""
         module = self.module()
@@ -172,7 +188,7 @@ class CaptureTests(unittest.TestCase):
                 ]
             }
             with patch.object(
-                session, "get", side_effect=[{"items": []}, pods, {"items": []}]
+                session, "get", side_effect=[{"items": []}, pods, {"items": []}, {"items": []}]
             ), patch.object(session, "kubectl", return_value=b"native timed out\n"):
                 session.collect()
             self.assertEqual(

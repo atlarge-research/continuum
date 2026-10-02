@@ -182,6 +182,34 @@ def halt(reason, **details):
         time.sleep(60)
 
 
+def collect_inventory(api_client, batch, core, namespace):
+    """Collect the unchanged admission lists with separate SDK/conversion timings.
+
+    Args:
+        api_client (ApiClient): Kubernetes client used for object serialization.
+        batch (BatchV1Api): Namespace Job-list client.
+        core (CoreV1Api): Namespace Pod and cluster Node-list client.
+        namespace (str): Isolated application namespace.
+
+    Returns:
+        dict: Original list dictionaries and elapsed seconds for each collection stage.
+    """
+    result = {"timings": {}}
+    for kind, method, arguments in (
+        ("jobs", batch.list_namespaced_job, {"namespace": namespace, "label_selector": LABEL}),
+        ("pods", core.list_namespaced_pod, {"namespace": namespace, "label_selector": LABEL}),
+        ("nodes", core.list_node, {}),
+    ):
+        started = time.perf_counter()
+        response = method(**arguments, _request_timeout=5)
+        received = time.perf_counter()
+        result[kind] = api_client.sanitize_for_serialization(response)["items"]
+        converted = time.perf_counter()
+        result["timings"][kind + "_api_seconds"] = received - started
+        result["timings"][kind + "_serialization_seconds"] = converted - received
+    return result
+
+
 def main():
     """Release one oldest Job, await binding, and fail closed on prolonged uncertainty."""
     config.load_incluster_config()
@@ -193,18 +221,17 @@ def main():
     previous = None
     rejections = 0
     while True:
-        jobs = api_client.sanitize_for_serialization(
-            batch.list_namespaced_job(namespace, label_selector=LABEL, _request_timeout=5)
-        )["items"]
-        pods = api_client.sanitize_for_serialization(
-            core.list_namespaced_pod(namespace, label_selector=LABEL, _request_timeout=5)
-        )["items"]
-        nodes = api_client.sanitize_for_serialization(core.list_node(_request_timeout=5))["items"]
+        cycle_started, cpu_started = time.perf_counter(), time.process_time()
+        inventory = collect_inventory(api_client, batch, core, namespace)
+        decision_started = time.perf_counter()
         try:
-            result = choose(jobs, pods, nodes, workers)
+            result = choose(inventory["jobs"], inventory["pods"], inventory["nodes"], workers)
         except ValueError as exc:
             # A concurrent creation can temporarily produce a Pod absent from the older Job list.
             result = dict(reason="invalid_snapshot", error=str(exc))
+        timings = inventory["timings"]
+        timings["decision_seconds"] = time.perf_counter() - decision_started
+        timings["patch_seconds"] = 0.0
         uid = result.get("outstanding_uid")
         if uid != outstanding_uid:
             outstanding_uid, outstanding_since = uid, time.monotonic()
@@ -217,7 +244,9 @@ def main():
             )
             previous = result
         if result["reason"] == "admit":
+            patch_started = time.perf_counter()
             outcome = release(batch, namespace, result)
+            timings["patch_seconds"] = time.perf_counter() - patch_started
             print(
                 json.dumps(
                     dict(
@@ -234,6 +263,25 @@ def main():
             rejections = rejections + 1 if outcome["status"] == "retry_snapshot" else 0
             if rejections >= 10:
                 halt("repeated_patch_rejection", job_uid=result["job_uid"], error=outcome["error"])
+        timings["wall_seconds"] = time.perf_counter() - cycle_started
+        timings["cpu_seconds"] = time.process_time() - cpu_started
+        print(
+            json.dumps(
+                dict(
+                    timestamp_ns=time.time_ns(),
+                    event="admission.cycle",
+                    reason=result["reason"],
+                    job_uid=result.get("job_uid")
+                    or result.get("outstanding_uid")
+                    or result.get("head_uid"),
+                    inventory_counts={
+                        kind: len(inventory[kind]) for kind in ("jobs", "pods", "nodes")
+                    },
+                    timings=timings,
+                )
+            ),
+            flush=True,
+        )
         time.sleep(0.2)
 
 
