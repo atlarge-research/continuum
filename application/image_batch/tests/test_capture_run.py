@@ -83,6 +83,77 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(binding["metadata"]["name"], "fns-test-new")
         self.assertEqual(binding["subjects"][0]["namespace"], "fns-test-new")
 
+    def test_refreshed_fifo_template_rebuilds_namespace_source_and_worker_pool(self):
+        """A presentation template cannot leak duplicate FIFO or stale source into captures."""
+        module = self.module()
+        original = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "adapter",
+                                "image": "adapter:calibrated",
+                                "env": [
+                                    {"name": "WORKER_IMAGE", "value": "worker:calibrated"},
+                                    {"name": "WORKER_ADMISSION_MODE", "value": "fifo"},
+                                ],
+                                "volumeMounts": [
+                                    {"name": "presentation-source", "mountPath": "/review"}
+                                ],
+                            },
+                            {"name": "opendt-observer", "image": "adapter:calibrated"},
+                            {
+                                "name": "fifo-admission",
+                                "env": [{"name": "ADMISSION_WORKERS", "value": '{"old-worker":4}'}],
+                            },
+                        ],
+                        "volumes": [
+                            {"name": "data", "emptyDir": {}},
+                            {"name": "presentation-source", "configMap": {"name": "old-source"}},
+                            {"name": "capture-source", "configMap": {"name": "old-capture"}},
+                        ],
+                    }
+                }
+            }
+        }
+        before = copy.deepcopy(original)
+        docs = module.capture_manifests(
+            original,
+            "fns-refreshed-new",
+            {"adapter.py": "fresh"},
+            admission_workers={"new-worker": 5},
+        )
+        spec = next(row for row in docs if row["kind"] == "Deployment")["spec"]["template"]["spec"]
+        self.assertEqual(
+            [row["name"] for row in spec["containers"]],
+            ["adapter", "opendt-observer", "fifo-admission"],
+        )
+        self.assertEqual(
+            spec["volumes"],
+            [
+                {"name": "data", "emptyDir": {}},
+                {"name": "capture-source", "configMap": {"name": "capture-source"}},
+            ],
+        )
+        fifo_env = {row["name"]: row["value"] for row in spec["containers"][-1]["env"]}
+        self.assertEqual(fifo_env["JOB_NAMESPACE"], "fns-refreshed-new")
+        self.assertEqual(json.loads(fifo_env["ADMISSION_WORKERS"]), {"new-worker": 5})
+        self.assertEqual(
+            spec["containers"][0]["volumeMounts"],
+            [{"name": "capture-source", "mountPath": "/review", "readOnly": True}],
+        )
+        scheduler = module.capture_manifests(
+            original, "fns-refreshed-scheduler", {"adapter.py": "fresh"}
+        )
+        containers = next(row for row in scheduler if row["kind"] == "Deployment")["spec"][
+            "template"
+        ]["spec"]["containers"]
+        self.assertNotIn("fifo-admission", [row["name"] for row in containers])
+        scheduler_env = {row["name"]: row["value"] for row in containers[0]["env"]}
+        self.assertEqual(scheduler_env["WORKER_ADMISSION_MODE"], "scheduler")
+        self.assertEqual(original, before)
+
     def test_existing_output_is_never_reused(self):
         """A rerun must not overwrite invocation or historical capture files."""
         module = self.module()

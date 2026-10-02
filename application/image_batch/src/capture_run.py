@@ -63,6 +63,9 @@ def prepare_output(output, invocation):
 def capture_manifests(original, namespace, source, *, admission_workers=None):
     """Clone the calibrated deployment into an isolated capture namespace.
 
+    Rebuild managed source mounts and FIFO admission for the new namespace and
+    worker pool, including when the template is a refreshed presentation deployment.
+
     Args:
         original (dict): Retrieved live deployment, never modified.
         namespace (str): New experiment namespace beginning with fns-.
@@ -107,12 +110,21 @@ def capture_manifests(original, namespace, source, *, admission_workers=None):
     template = deployment["spec"]["template"]
     template.setdefault("metadata", {}).pop("annotations", None)
     spec = template["spec"]
-    spec["containers"] = [item for item in spec["containers"] if item["name"] != "forecast"]
-    spec.setdefault("volumes", []).append(
-        {"name": "capture-source", "configMap": {"name": "capture-source"}}
-    )
+    managed_sources = {"capture-source", "presentation-source"}
+    spec["containers"] = [
+        item for item in spec["containers"] if item["name"] not in {"forecast", "fifo-admission"}
+    ]
+    spec["volumes"] = [
+        item for item in spec.get("volumes", []) if item["name"] not in managed_sources
+    ]
+    spec["volumes"].append({"name": "capture-source", "configMap": {"name": "capture-source"}})
     for container in spec["containers"]:
-        container.setdefault("volumeMounts", []).append(
+        container["volumeMounts"] = [
+            item
+            for item in container.get("volumeMounts", [])
+            if item["name"] not in managed_sources
+        ]
+        container["volumeMounts"].append(
             {"name": "capture-source", "mountPath": "/review", "readOnly": True}
         )
         env = {item["name"]: item for item in container.get("env", [])}
