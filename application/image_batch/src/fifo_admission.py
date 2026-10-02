@@ -182,31 +182,55 @@ def halt(reason, **details):
         time.sleep(60)
 
 
-def collect_inventory(api_client, batch, core, namespace):
-    """Collect the unchanged admission lists with separate SDK/conversion timings.
+def collect_inventory(api_client, namespace):
+    """Read complete fresh inventory dictionaries without repeated SDK model conversion.
+
+    The same current lists and collection order feed FIFO selection. Retained
+    terminal objects remain available for ownership and release accounting.
+    Direct dictionary responses avoid building and then serializing typed models
+    for every retained Job and Pod under the admission container's CPU quota.
 
     Args:
-        api_client (ApiClient): Kubernetes client used for object serialization.
-        batch (BatchV1Api): Namespace Job-list client.
-        core (CoreV1Api): Namespace Pod and cluster Node-list client.
+        api_client (ApiClient): Configured authenticated Kubernetes client.
         namespace (str): Isolated application namespace.
 
     Returns:
-        dict: Original list dictionaries and elapsed seconds for each collection stage.
+        dict: Full Job/Pod/Node dictionaries and API/JSON collection timings.
+
+    Raises:
+        ValueError: A list is malformed or paginated, so complete inventory is unavailable.
+        client.exceptions.ApiException: A current authenticated inventory request fails.
     """
     result = {"timings": {}}
-    for kind, method, arguments in (
-        ("jobs", batch.list_namespaced_job, {"namespace": namespace, "label_selector": LABEL}),
-        ("pods", core.list_namespaced_pod, {"namespace": namespace, "label_selector": LABEL}),
-        ("nodes", core.list_node, {}),
+    for kind, path in (
+        ("jobs", "/apis/batch/v1/namespaces/{namespace}/jobs"),
+        ("pods", "/api/v1/namespaces/{namespace}/pods"),
+        ("nodes", "/api/v1/nodes"),
     ):
         started = time.perf_counter()
-        response = method(**arguments, _request_timeout=5)
-        received = time.perf_counter()
-        result[kind] = api_client.sanitize_for_serialization(response)["items"]
-        converted = time.perf_counter()
-        result["timings"][kind + "_api_seconds"] = received - started
-        result["timings"][kind + "_serialization_seconds"] = converted - received
+        response = api_client.call_api(
+            path,
+            "GET",
+            path_params={"namespace": namespace},
+            query_params=[("labelSelector", LABEL)] if kind != "nodes" else [],
+            header_params={"Accept": "application/json"},
+            response_type="object",
+            auth_settings=["BearerToken"],
+            _return_http_data_only=True,
+            _request_timeout=5,
+        )
+        result["timings"][kind + "_api_seconds"] = time.perf_counter() - started
+        # Kept for comparison with instrumented typed-list captures; no second conversion occurs.
+        result["timings"][kind + "_serialization_seconds"] = 0.0
+        if (
+            not isinstance(response, dict)
+            or not isinstance(response.get("items"), list)
+            or not all(isinstance(item, dict) for item in response["items"])
+            or not isinstance(response.get("metadata", {}), dict)
+            or response.get("metadata", {}).get("continue")
+        ):
+            raise ValueError("complete admission inventory unavailable")
+        result[kind] = response["items"]
     return result
 
 
@@ -214,7 +238,7 @@ def main():
     """Release one oldest Job, await binding, and fail closed on prolonged uncertainty."""
     config.load_incluster_config()
     api_client = client.ApiClient()
-    batch, core = client.BatchV1Api(api_client), client.CoreV1Api(api_client)
+    batch = client.BatchV1Api(api_client)
     namespace = os.environ["JOB_NAMESPACE"]
     workers = json.loads(os.environ["ADMISSION_WORKERS"])
     outstanding_uid, outstanding_since = None, None
@@ -222,7 +246,7 @@ def main():
     rejections = 0
     while True:
         cycle_started, cpu_started = time.perf_counter(), time.process_time()
-        inventory = collect_inventory(api_client, batch, core, namespace)
+        inventory = collect_inventory(api_client, namespace)
         decision_started = time.perf_counter()
         try:
             result = choose(inventory["jobs"], inventory["pods"], inventory["nodes"], workers)

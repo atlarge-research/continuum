@@ -139,19 +139,18 @@ class AdmissionTests(unittest.TestCase):
         """The live loop halts after a30-second unbound reservation, including after restart."""
         module = importlib.import_module("fifo_admission")
         self.jobs[1]["spec"]["suspend"] = False
-        api_client, batch, core = Mock(), Mock(), Mock()
-        api_client.sanitize_for_serialization.side_effect = lambda value: value
-        batch.list_namespaced_job.return_value = {"items": self.jobs}
-        core.list_namespaced_pod.return_value = {"items": []}
-        core.list_node.return_value = {"items": self.nodes}
+        api_client, batch = Mock(), Mock()
+        api_client.call_api.side_effect = [
+            {"items": self.jobs},
+            {"items": []},
+            {"items": self.nodes},
+        ]
         with patch.dict(
             module.os.environ, {"JOB_NAMESPACE": "test", "ADMISSION_WORKERS": '{"w1":2}'}
         ), patch.object(module.config, "load_incluster_config"), patch.object(
             module.client, "ApiClient", return_value=api_client
         ), patch.object(
             module.client, "BatchV1Api", return_value=batch
-        ), patch.object(
-            module.client, "CoreV1Api", return_value=core
         ), patch.object(
             module.time, "monotonic", side_effect=[0, 31]
         ), patch.object(
@@ -162,16 +161,67 @@ class AdmissionTests(unittest.TestCase):
         stop.assert_called_once_with("binding_timeout", job_uid="a")
         batch.patch_namespaced_job.assert_not_called()
 
-    def test_collection_separates_sdk_calls_from_serialization(self):
-        """Slow list processing is visible separately from the dictionary conversion."""
+    def test_collection_uses_complete_dictionary_lists_without_typed_model_walks(self):
+        """Full fresh inventories retain fields and FIFO order without SDK model conversion."""
         module = importlib.import_module("fifo_admission")
-        api_client, batch, core = Mock(), Mock(), Mock()
-        api_client.sanitize_for_serialization.side_effect = lambda value: value
-        batch.list_namespaced_job.return_value = {"items": self.jobs}
-        core.list_namespaced_pod.return_value = {"items": []}
-        core.list_node.return_value = {"items": self.nodes}
-        with patch.object(module.time, "perf_counter", side_effect=range(9)):
-            inventory = module.collect_inventory(api_client, batch, core, "test")
+        api = Mock()
+        api.call_api.side_effect = [{"items": self.jobs}, {"items": []}, {"items": self.nodes}]
+        inventory = module.collect_inventory(api, "test")
+        self.assertEqual(inventory["jobs"], self.jobs)
+        self.assertEqual(inventory["nodes"], self.nodes)
+        self.assertEqual(
+            module.choose(inventory["jobs"], inventory["pods"], inventory["nodes"], self.workers)[
+                "job_uid"
+            ],
+            "a",
+        )
+        api.sanitize_for_serialization.assert_not_called()
+        self.assertEqual(
+            [call.args[0] for call in api.call_api.call_args_list],
+            [
+                "/apis/batch/v1/namespaces/{namespace}/jobs",
+                "/api/v1/namespaces/{namespace}/pods",
+                "/api/v1/nodes",
+            ],
+        )
+        for call in api.call_api.call_args_list:
+            self.assertEqual(call.args[1], "GET")
+            self.assertEqual(call.kwargs["response_type"], "object")
+            self.assertEqual(call.kwargs["_request_timeout"], 5)
+        self.assertEqual(
+            api.call_api.call_args_list[0].kwargs["path_params"], {"namespace": "test"}
+        )
+        self.assertEqual(
+            api.call_api.call_args_list[0].kwargs["query_params"], [("labelSelector", module.LABEL)]
+        )
+        self.assertEqual(api.call_api.call_args_list[2].kwargs["query_params"], [])
+
+    def test_collection_rejects_partial_or_invalid_lists_before_admission(self):
+        """Pagination cannot conceal an outstanding admission or occupied resources."""
+        module = importlib.import_module("fifo_admission")
+        for response in (
+            {"items": self.jobs, "metadata": {"continue": "next-page"}},
+            {"items": None},
+            {"items": [None]},
+            [],
+        ):
+            with self.subTest(response=response):
+                api = Mock()
+                api.call_api.return_value = response
+                with self.assertRaisesRegex(ValueError, "inventory"):
+                    module.collect_inventory(api, "test")
+
+    def test_collection_retains_comparable_timings_without_a_second_conversion(self):
+        """Direct-list timing includes JSON parsing; reserialization is explicitly zero."""
+        module = importlib.import_module("fifo_admission")
+        api_client = Mock()
+        api_client.call_api.side_effect = [
+            {"items": self.jobs},
+            {"items": []},
+            {"items": self.nodes},
+        ]
+        with patch.object(module.time, "perf_counter", side_effect=range(6)):
+            inventory = module.collect_inventory(api_client, "test")
         self.assertEqual([job["metadata"]["uid"] for job in inventory["jobs"]], ["b", "a"])
         self.assertEqual(inventory["pods"], [])
         self.assertEqual(inventory["nodes"], self.nodes)
@@ -179,11 +229,11 @@ class AdmissionTests(unittest.TestCase):
             inventory["timings"],
             {
                 "jobs_api_seconds": 1,
-                "jobs_serialization_seconds": 1,
+                "jobs_serialization_seconds": 0,
                 "pods_api_seconds": 1,
-                "pods_serialization_seconds": 1,
+                "pods_serialization_seconds": 0,
                 "nodes_api_seconds": 1,
-                "nodes_serialization_seconds": 1,
+                "nodes_serialization_seconds": 0,
             },
         )
         self.assertEqual(
@@ -196,19 +246,18 @@ class AdmissionTests(unittest.TestCase):
     def test_live_cycle_records_decision_cost_and_inventory_counts(self):
         """Every admission iteration exposes cost, even without a changing decision."""
         module = importlib.import_module("fifo_admission")
-        api_client, batch, core = Mock(), Mock(), Mock()
-        api_client.sanitize_for_serialization.side_effect = lambda value: value
-        batch.list_namespaced_job.return_value = {"items": self.jobs}
-        core.list_namespaced_pod.return_value = {"items": []}
-        core.list_node.return_value = {"items": self.nodes}
+        api_client, batch = Mock(), Mock()
+        api_client.call_api.side_effect = [
+            {"items": self.jobs},
+            {"items": []},
+            {"items": self.nodes},
+        ]
         with patch.dict(
             module.os.environ, {"JOB_NAMESPACE": "test", "ADMISSION_WORKERS": '{"w1":2}'}
         ), patch.object(module.config, "load_incluster_config"), patch.object(
             module.client, "ApiClient", return_value=api_client
         ), patch.object(
             module.client, "BatchV1Api", return_value=batch
-        ), patch.object(
-            module.client, "CoreV1Api", return_value=core
         ), patch.object(
             module.time, "sleep", side_effect=RuntimeError("end iteration")
         ), patch(
