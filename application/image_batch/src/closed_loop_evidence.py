@@ -224,6 +224,8 @@ def controller_outcomes(  # pylint: disable=too-many-locals
             continue
         row = cycles[current]
         if record["event"] == "cycle.end":
+            if "recorded_at_ns" in record:
+                row["outcome_recorded_seconds"] = record["recorded_at_ns"] / 1e9
             row.update(
                 {
                     key: value
@@ -234,6 +236,7 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         elif record["event"] == "cycle.proposal":
             row.update(
                 proposal=record["proposal"],
+                proposal_seconds=record["recorded_at_ns"] / 1e9,
                 decision_age_seconds=record["recorded_at_ns"] / 1e9 - record["cutoff_seconds"],
                 shadow=record["shadow"],
             )
@@ -351,7 +354,13 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         for action in row["actions"]
     ]
     latencies = [row["elapsed_seconds"] for row in rows if "elapsed_seconds" in row]
+    identity_path = directory / "identity.json"
+    identity = json.loads(identity_path.read_text()) if identity_path.exists() else {}
+    down_observations = (
+        identity.get("settings", {}).get("config", {}).get("reactive_down_observations", 2)
+    )
     return dict(
+        reactive_down_observations=down_observations,
         cycles=rows,
         actions=actions,
         complete_native_cycles=len(eligible),

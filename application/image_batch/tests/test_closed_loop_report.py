@@ -16,6 +16,109 @@ from reporting.assembly import write_report
 class ClosedLoopReportTests(unittest.TestCase):
     """Hand-computed paired savings reject unrelated plans and unknown cheap totals."""
 
+    def test_response_cdf_weights_seeds_equally_and_retains_missing_outcomes(self):
+        """Large cohorts cannot dominate, and failed/censored Jobs cannot raise the CDF."""
+        module = importlib.import_module("reporting.closed_loop")
+        result = module.response_cdf(
+            [
+                {"seed": 1, "responses": {"jobs": 10, "completed_responses_seconds": [60] * 9}},
+                {"seed": 2, "responses": {"jobs": 2, "completed_responses_seconds": [120]}},
+            ]
+        )
+        self.assertEqual(result["seconds"], [0.0, 60.0, 120.0])
+        self.assertEqual(result["mean_percent"], [0.0, 45.0, 70.0])
+        self.assertEqual(result["lower_percent"], [0.0, 0.0, 50.0])
+        self.assertEqual(result["upper_percent"], [0.0, 90.0, 90.0])
+        self.assertIsNone(result["all_job_p95_seconds"])
+
+    def test_response_cdf_reports_a_reachable_95_percent_intersection(self):
+        """The percentile crossing belongs to the all-Job curve, not completed-only times."""
+        module = importlib.import_module("reporting.closed_loop")
+        result = module.response_cdf(
+            [
+                {"seed": 1, "responses": {"jobs": 20, "completed_responses_seconds": [50] * 19}},
+            ]
+        )
+        self.assertEqual(result["all_job_p95_seconds"], 50)
+        self.assertEqual(result["mean_percent"][-1], 95)
+
+    def test_actual_arrival_bins_are_nonoverlapping_with_cycle_totals(self):
+        """Boundary arrivals enter exactly one bin and the common arrival end is excluded."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = {
+            "evaluation_start_seconds": 1000,
+            "arrival_end_seconds": 1120,
+            "invocation": {"period_seconds": 60},
+            "responses": {
+                "cohort": [
+                    {"creation_ms": at * 1000}
+                    for at in (999, 1000, 1029.9, 1030, 1059.9, 1060, 1119.9, 1120)
+                ]
+            },
+        }
+        result = module.arrival_bins(run)
+        self.assertEqual(result["counts"], [2, 2, 1, 1])
+        self.assertEqual(result["cycle_totals"], [4, 2])
+        self.assertEqual(result["edges_seconds"], [0, 30, 60, 90, 120])
+
+    def test_action_timeline_separates_cancellation_request_and_observation(self):
+        """Cancelled proposals have no API request; uncertain requests are not observed actions."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = dict(
+            arm="forecast",
+            controller=dict(
+                cycles=[
+                    dict(
+                        tick=1,
+                        forecast_valid=True,
+                        proposal_seconds=10,
+                        outcome_recorded_seconds=12,
+                        outcome="vetoed_or_failed",
+                        proposal=dict(action="scale-down"),
+                        actions=[],
+                    ),
+                    dict(
+                        tick=2,
+                        forecast_valid=True,
+                        proposal_seconds=20,
+                        outcome="acknowledged",
+                        proposal=dict(action="scale-up"),
+                        actions=[dict(action="scale-up")],
+                    ),
+                ],
+                actions=[
+                    dict(
+                        tick=2,
+                        action="scale-up",
+                        recorded_at_ns=22_000_000_000,
+                        observation_seconds=25,
+                        observed=True,
+                        result=dict(status="acknowledged"),
+                    ),
+                    dict(
+                        tick=3,
+                        action="scale-down",
+                        recorded_at_ns=30_000_000_000,
+                        observation_seconds=32,
+                        observed=True,
+                        result=dict(status="uncertain"),
+                    ),
+                ],
+            ),
+        )
+        rows = module.action_timeline(run)
+        self.assertEqual(
+            [(row["stage"], row["seconds"]) for row in rows],
+            [
+                ("Proposed", 10),
+                ("Cancelled before API", 12),
+                ("Proposed", 20),
+                ("API requested", 22),
+                ("Observed", 25),
+                ("API requested", 30),
+            ],
+        )
+
     def test_paired_savings_use_bounds_and_matching_plans(self):
         """An incomplete allocation interval cannot be treated as a measured saving."""
         self.assertIsNotNone(importlib.util.find_spec("reporting.closed_loop"))

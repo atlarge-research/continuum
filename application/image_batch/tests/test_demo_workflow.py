@@ -73,6 +73,36 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             module.matrix_commands(protocol, Path("/new/evidence"))
 
+    def test_sealed_arm_cadences_are_explicit_and_strictly_validated(self):
+        """Reactive can check more often while sharing the frozen workload and deployment."""
+        module = self.module()
+        protocol = dict(
+            source_root="/frozen",
+            continuum_config="/cluster.cfg",
+            inventory="/inventory",
+            experiment_config="/settings.json",
+            native_image="native:pinned",
+            run_prefix="cadence",
+            matrix=[dict(seed=1, arm=arm) for arm in ("fixed", "reactive", "forecast")],
+            arm_cadence_seconds={"reactive": 30},
+        )
+        rows = module.matrix_commands(protocol, Path("/new/evidence"))
+        self.assertNotIn("--cadence-seconds", rows[0]["command"])
+        self.assertNotIn("--cadence-seconds", rows[2]["command"])
+        command = rows[1]["command"]
+        self.assertEqual(command[command.index("--cadence-seconds") + 1], "30")
+        for invalid in (
+            {"unknown": 30},
+            {"reactive": 0},
+            {"reactive": True},
+            {"reactive": 1.5},
+            {"reactive": "30"},
+        ):
+            with self.subTest(invalid=invalid):
+                protocol["arm_cadence_seconds"] = invalid
+                with self.assertRaisesRegex(ValueError, "cadence"):
+                    module.matrix_commands(protocol, Path("/new/evidence"))
+
     def test_matrix_timeout_records_recovery_and_never_launches_next_capture(self):
         """All phases are bounded; a capture timeout stops even after sender recovery."""
         module = self.module()

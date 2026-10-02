@@ -296,8 +296,17 @@ def matrix_commands(protocol, output):
         list[dict]: Seed/arm identities, output paths and complete argv lists.
 
     Raises:
-        ValueError: An arm is unsupported or the matrix duplicates a seed/arm pair.
+        ValueError: An arm, seed or cadence is invalid, or the matrix duplicates a seed/arm pair.
     """
+    cadences = protocol.get("arm_cadence_seconds", {})
+    if not isinstance(cadences, dict) or any(
+        arm not in ("fixed", "reactive", "forecast")
+        or isinstance(seconds, bool)
+        or not isinstance(seconds, int)
+        or seconds <= 0
+        for arm, seconds in cadences.items()
+    ):
+        raise ValueError("invalid arm cadence")
     result, seen = [], set()
     for row in protocol["matrix"]:
         seed, arm = row["seed"], row["arm"]
@@ -344,6 +353,8 @@ def matrix_commands(protocol, output):
             "--template-deployment",
             protocol.get("template_deployment", "image-batch-adapter"),
         ]
+        if arm in cadences:
+            command.extend(["--cadence-seconds", str(cadences[arm])])
         result.append(dict(seed=seed, arm=arm, output=str(destination), command=command))
     return result
 
