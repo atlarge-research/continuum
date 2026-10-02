@@ -193,6 +193,7 @@ class Controller:
             "residual_margin_seconds": self.args.residual_margin_seconds,
             "reactive_up_threshold": self.args.reactive_up_threshold,
             "reactive_down_threshold": self.args.reactive_down_threshold,
+            "reactive_down_observations": 1,
         }
         self.cluster = dict(
             controller=self.args.controller,

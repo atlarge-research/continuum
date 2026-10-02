@@ -237,7 +237,7 @@ class ControllerTests(unittest.TestCase):
             loop.journal.close()
 
     def test_first_tick_fallback_hold_is_counted(self):
-        """Fallback metrics include holds, without counting fresh reads as extra checks."""
+        """Fallback metrics include holds when current demand prevents safe down."""
         module = self.module()
         with tempfile.TemporaryDirectory() as temporary:
             loop = object.__new__(module.Controller)
@@ -246,7 +246,11 @@ class ControllerTests(unittest.TestCase):
             loop.tick_number, loop.shadow, loop.history = 0, 2, {}
             loop.args = Mock(control_arm="forecast")
             loop.config, loop.session = self.config, Mock()
-            loop.fresh = Mock(return_value=self.view)
+            self.snapshot["jobs"]["queued"] = [
+                guard_fixtures.GuardTests().job(str(i)) for i in range(3)
+            ]
+            hold_view = module.snapshot_view(self.snapshot, self.config, now_seconds=1001)
+            loop.fresh = Mock(return_value=hold_view)
             loop.recover = Mock()
             loop.predict = Mock(side_effect=ValueError("forecast missing"))
             with patch.object(module.time, "time", return_value=1001):

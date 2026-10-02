@@ -213,15 +213,14 @@ def guard_action(before, fresh, proposal, config, *, decision_age):
 def reactive_action(view, history, *, now_seconds, fallback, tick_id):
     """Compare unfinished CPU demand with current or reduced accepting capacity.
 
-    Every scheduled check tracks all qualifying empty workers, independently of
-    forecast decisions. Re-reading a tick reuses its preceding check, so fallback
-    cannot manufacture two observations. Refreshes may only remove eligibility
-    from the scheduled check, never revive a nonqualifying observation. A skipped
-    ID breaks consecutiveness.
+    One fresh complete observation is sufficient, including a fallback refresh.
+    Down compares demand with capacity after removing a currently empty worker.
+    Physical guards and intent reconciliation independently prevent unsafe or
+    duplicate dispatch; earlier observation history does not delay eligibility.
 
     Args:
         view (dict): Fresh validated physical demand and allocation inventory.
-        history (dict): Durable history containing an independent reactive observation.
+        history (dict): Controller history to preserve without obsolete empty-check votes.
         now_seconds (float): UTC epoch seconds of this observation.
         fallback (bool): Whether an unavailable forecast invoked this same policy.
         tick_id (int): Monotonic scheduled check identity, shared by reads within a check.
@@ -240,13 +239,7 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
     ):
         raise ValueError("invalid reactive clock or scheduled check identity")
     state = copy.deepcopy(history)
-    previous = history.get("reactive_observation", {})
-    if previous.get("tick_id") == tick_id:
-        prior = set(previous.get("prior_eligible_workers", []))
-    elif previous.get("tick_id") == tick_id - 1:
-        prior = set(previous.get("eligible_workers", []))
-    else:
-        prior = set()
+    state.pop("reactive_observation", None)
     demand, capacity = view["requested_cpu_demand"], view["application_slots"]
     eligible = {
         name
@@ -256,14 +249,6 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
         and demand
         <= view["reactive_down_threshold"] * (capacity - view["nodes"][name]["application_cores"])
     }
-    if previous.get("tick_id") == tick_id:
-        eligible &= set(previous.get("eligible_workers", []))
-    state["reactive_observation"] = dict(
-        tick_id=tick_id,
-        observed_at_seconds=now_seconds,
-        eligible_workers=sorted(eligible),
-        prior_eligible_workers=sorted(prior),
-    )
     result = {
         "action": "unchanged",
         "selected_worker": None,
@@ -278,23 +263,19 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
         and len(view["active_workers"]) < view["maximum_workers"]
         and demand > view["reactive_up_threshold"] * capacity
     ):
-        state["reactive_observation"]["eligible_workers"] = []
         return {
             **result,
             "action": "scale-up",
             "selected_worker": view["reserve_workers"][0],
             "reason": "reactive_cpu_demand",
         }
-    persistent = sorted(eligible & prior)
-    if persistent:
+    if eligible:
         return {
             **result,
             "action": "scale-down",
-            "selected_worker": persistent[0],
-            "reason": "reactive_two_empty_checks_with_capacity",
+            "selected_worker": min(eligible),
+            "reason": "reactive_empty_worker_with_capacity",
         }
-    if eligible:
-        return {**result, "reason": "awaiting_second_empty_tick"}
     return result
 
 
