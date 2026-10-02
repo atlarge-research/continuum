@@ -38,12 +38,10 @@ class PinnedInputTests(unittest.TestCase):
                 forecast, observer, configuration(), root / "suite", "pinned-trace"
             )
             self.assertEqual(
-                {entry["candidate"] for entry in suite["experiments"]}, {"unchanged", "scale-up"}
+                {entry["candidate"] for entry in suite["experiments"]},
+                {"unchanged", "scale-up", "scale-down"},
             )
-            self.assertEqual(
-                suite["unavailable_candidates"],
-                [{"candidate": "scale-down", "reason": "selected_worker_has_exhausted_work"}],
-            )
+            self.assertEqual(suite["unavailable_candidates"], [])
             for entry in suite["experiments"]:
                 path = root / "suite" / entry["input_dir"]
                 self.assertEqual(verify_inputs(path)["contract"], "opendc-fns-v1")

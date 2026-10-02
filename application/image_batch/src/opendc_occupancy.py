@@ -115,8 +115,8 @@ def apply_occupancy(case, calibration):
 
     Raw exhausted diagnostics remain present. Each estimated Task carries an
     explicit occupancy annotation; its completion is a prediction, never new
-    evidence of observed success. Down candidates are excluded by the producer
-    whenever any exhausted or unresolved work exists.
+    evidence of observed success. A configured residual margin extends both the
+    conditional estimate and the five-second fallback; raw evidence is retained.
 
     Args:
         case (dict): Prepared classifier-only Tasks and original exhausted diagnostics.
@@ -128,8 +128,14 @@ def apply_occupancy(case, calibration):
     Raises:
         ValueError: Calibration is malformed or newer than the simulation cutoff.
     """
+    # This boundary validates one calibration record; exact integers exclude booleans.
+    # pylint: disable=too-many-boolean-expressions,unidiomatic-typecheck
+    margin = calibration.get("residual_margin_ms", 0)
     if (
-        calibration.get("contract") != "causal-occupancy-v1"
+        isinstance(margin, bool)
+        or not isinstance(margin, int)
+        or margin < 0
+        or calibration.get("contract") != "causal-occupancy-v1"
         or calibration["cutoff_ms"] > case["cutoff_ms"]
         or any(
             type(calibration.get(key)) is not int or calibration[key] < 0
@@ -151,7 +157,7 @@ def apply_occupancy(case, calibration):
             for duration in calibration["duration_samples_ms"]
             if duration > elapsed
         ]
-        residual = math.ceil(median(longer)) if longer else 5000
+        residual = (math.ceil(median(longer)) if longer else 5000) + margin
         resources = calibration["residual_resources"]
         task = {key: resources[key] for key in ("cpu_count", "cpu_capacity", "mem_capacity")}
         task.update(
@@ -169,6 +175,7 @@ def apply_occupancy(case, calibration):
         )
         metadata["occupancy"] = {
             "profile_exhausted": True,
+            "residual_margin_ms": margin,
             "residual_basis": "conditional_completed_durations"
             if longer
             else "five_second_fallback",

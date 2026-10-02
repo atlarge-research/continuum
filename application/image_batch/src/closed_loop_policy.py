@@ -84,101 +84,116 @@ def summarize_candidate(candidate, decision_age, *, scenarios=3, deadline_second
     }
 
 
-def select_action(candidates, state, *, now_seconds, decision_age, scenarios=3):
-    """Choose an action without performing I/O or modifying controller history.
+def _least_cost(scores, fields):
+    """Rank measurements lexicographically, preferring hold on numerical ties.
 
-    Candidate comparison requires all scenarios and complete represented work.
-    Empty cohorts are explicitly valid; incomplete results cannot appear cheap.
-    Only acknowledged physical actions update ``last_action_at`` in the caller.
-    The native-result adapter must verify identical scenario identities and Job
-    cohorts across actions before supplying these numerical summaries.
+    Args:
+        scores (list[dict]): Nonempty valid candidate summaries.
+        fields (tuple[str]): Ordered objective fields, most important first.
+
+    Returns:
+        dict: Deterministic winning candidate.
+    """
+    remaining = scores
+    for field in fields:
+        best = min(item[field] for item in remaining)
+        remaining = [
+            item
+            for item in remaining
+            if math.isclose(item[field], best, rel_tol=1e-9, abs_tol=1e-9)
+        ]
+    return min(remaining, key=lambda item: (item["candidate"] != "unchanged", item["candidate"]))
+
+
+def select_action(
+    candidates,
+    state,
+    *,
+    now_seconds,
+    decision_age,
+    scenarios=3,
+    age_budget_seconds=30,
+    deadline_seconds=120,
+    deadline_fraction=0.95,
+):
+    """Select the least allocated capacity satisfying every sampled future.
+
+    All-infeasible choices minimize worst late fraction, mean tardiness, then
+    allocation and are explicitly labeled infeasible. Numerical ties prefer hold.
+    Complete current evidence suffices; no forecast-win streak or cooldown is
+    imposed. Physical guards and unresolved-intent reconciliation remain the
+    caller's responsibility. The adapter verifies shared cohorts across actions.
 
     Args:
         candidates (list[dict]): Shared-future unchanged/up/down score inputs.
-        state (dict): Persisted last action time and consecutive down-proposal history.
-        now_seconds (float): Current UTC epoch seconds, allowing restart reconciliation.
+        state (dict): Persisted history, passed through without policy mutation.
+        now_seconds (float): Current UTC epoch seconds.
         decision_age (float): Cutoff-to-decision duration in seconds.
-        scenarios (int): Required sampled-future count, initially three.
+        scenarios (int): Required sampled-future count.
+        age_budget_seconds (float): Maximum causal decision age.
+        deadline_seconds (float): Original-creation response deadline.
+        deadline_fraction (float): Required within-deadline fraction in every future.
 
     Returns:
-        dict: Chosen action, reason, target, scored alternatives and next history.
+        dict: Chosen action, feasibility, explanation, alternatives and copied history.
 
     Raises:
-        ValueError: Candidate actions, scenario count or supplied clock values are invalid.
+        ValueError: Candidate actions, policy settings or clocks are invalid.
     """
+    # One boundary validates the complete policy contract; keep related checks together.
+    # pylint: disable=too-many-boolean-expressions
     actions = [item.get("candidate") for item in candidates]
     if (
         len(set(actions)) != len(actions)
         or not set(actions) <= {"unchanged", "scale-up", "scale-down"}
         or not _finite_nonnegative(now_seconds)
         or not _finite_nonnegative(decision_age)
-        or type(scenarios) is not int
+        or isinstance(scenarios, bool)
+        or not isinstance(scenarios, int)
         or scenarios < 1
+        or not _finite_nonnegative(age_budget_seconds)
+        or age_budget_seconds <= 0
+        or not _finite_nonnegative(deadline_seconds)
+        or deadline_seconds <= 0
+        or not _finite_nonnegative(deadline_fraction)
+        or not 0 < deadline_fraction <= 1
     ):
-        raise ValueError("invalid policy candidates, clocks or scenario count")
-    history = copy.deepcopy(state)
-    history.update(down_worker=None, down_wins=0)
+        raise ValueError("invalid policy candidates, clocks or settings")
     result = {
         "action": "unchanged",
         "selected_worker": None,
-        "state": history,
+        "state": copy.deepcopy(state),
         "guardrail_feasible": False,
         "reason": "no_valid_unchanged",
         "scores": [],
     }
-    if decision_age > 30:
+    if decision_age > age_budget_seconds:
         return {**result, "reason": "decision_stale"}
-    if type(state.get("down_wins", 0)) is not int or state.get("down_wins", 0) < 0:
-        return {**result, "reason": "proposal_history_invalid"}
-    scores = [summarize_candidate(item, decision_age, scenarios=scenarios) for item in candidates]
-    result["scores"] = scores
-    valid = {item["candidate"]: item for item in scores if item["valid"]}
-    if "unchanged" not in valid:
-        return result
-    hold = valid["unchanged"]
-    qualifying = [item for item in valid.values() if item["worst_late_fraction"] <= 0.05]
-    result["guardrail_feasible"] = bool(qualifying)
-    previous_action = state.get("last_action_at")
-    if previous_action is not None:
-        if not _finite_nonnegative(previous_action) or now_seconds < previous_action:
-            return {**result, "reason": "clock_or_action_history_invalid"}
-        if now_seconds - previous_action < 120:
-            return {**result, "reason": "action_cooldown"}
-    if qualifying:
-        selected = min(
-            qualifying,
-            key=lambda item: (
-                item["allocated_core_seconds"],
-                item["candidate"] != "unchanged",
-                item["candidate"],
-            ),
+    scores = [
+        summarize_candidate(
+            item, decision_age, scenarios=scenarios, deadline_seconds=deadline_seconds
         )
+        for item in candidates
+    ]
+    result["scores"] = scores
+    valid = [item for item in scores if item["valid"]]
+    if not any(item["candidate"] == "unchanged" for item in valid):
+        return result
+    qualifying = [
+        item for item in valid if item["worst_late_fraction"] <= 1 - deadline_fraction + 1e-12
+    ]
+    result["guardrail_feasible"] = bool(qualifying)
+    if qualifying:
+        selected = _least_cost(qualifying, ("allocated_core_seconds",))
         reason = "least_allocation_with_response_guardrail"
     else:
-        up = valid.get("scale-up")
-        if up is None or (up["worst_late_fraction"], up["mean_tardiness_seconds"]) >= (
-            hold["worst_late_fraction"],
-            hold["mean_tardiness_seconds"],
-        ):
-            return {**result, "reason": "guardrail_infeasible_no_improving_action"}
-        selected, reason = up, "guardrail_infeasible_scale_up_improves"
-    action = selected["candidate"]
-    if action == "scale-down":
-        cost = hold["allocated_core_seconds"]
-        saving = (cost - selected["allocated_core_seconds"]) / cost if cost else 0
-        if saving < 0.10 and not math.isclose(saving, 0.10, rel_tol=1e-12):
-            return {**result, "reason": "insufficient_savings_or_target"}
-        wins = (
-            state.get("down_wins", 0)
-            if state.get("down_worker") == selected["selected_worker"]
-            else 0
+        selected = _least_cost(
+            valid, ("worst_late_fraction", "mean_tardiness_seconds", "allocated_core_seconds")
         )
-        history.update(down_worker=selected["selected_worker"], down_wins=wins + 1)
-        if history["down_wins"] < 2:
-            return {**result, "reason": "awaiting_second_down_win"}
+        reason = "guardrail_infeasible_least_violation_then_allocation"
     return {
         **result,
-        "action": action,
+        "action": selected["candidate"],
         "selected_worker": selected["selected_worker"],
         "reason": reason,
     }

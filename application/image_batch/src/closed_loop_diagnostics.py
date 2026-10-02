@@ -7,7 +7,9 @@ import numpy as np
 from forecast_trace import milliseconds
 
 
-def cycle_diagnostic(directory, cycle, observations, arrival_end_ms, followup_end_ms):
+def cycle_diagnostic(
+    directory, cycle, observations, arrival_end_ms, followup_end_ms, *, deadline_seconds=120
+):
     """Compare one saved forecast with its later actual arrival and original-creation cohort.
 
     This is a closed-loop diagnostic, not validation of an isolated counterfactual:
@@ -19,6 +21,7 @@ def cycle_diagnostic(directory, cycle, observations, arrival_end_ms, followup_en
         observations (list[dict]): Full observed application Job UID inventory.
         arrival_end_ms (int): End of planned physical arrivals; exclude truncated forecast windows.
         followup_end_ms (int): Last allowed actual terminal time for physical completion scoring.
+        deadline_seconds (float): Configured Job response deadline.
 
     Returns:
         dict or None: Self-contained prediction/observation pair, or no ready forecast.
@@ -41,6 +44,8 @@ def cycle_diagnostic(directory, cycle, observations, arrival_end_ms, followup_en
         tick=cycle["tick"],
         cutoff_ms=cutoff,
         horizon_end_ms=end,
+        horizon_seconds=forecast["settings"]["horizon_seconds"],
+        deadline_seconds=deadline_seconds,
         complete_arrival_window=end <= arrival_end_ms,
         predicted_mean_future_jobs=sum(row["mean_count"] for row in forecast["predictions"]),
         sampled_future_job_counts=forecast["scenario_job_counts"],
@@ -90,7 +95,8 @@ def cycle_diagnostic(directory, cycle, observations, arrival_end_ms, followup_en
         observed_cohort_unmatched_uids=sorted(uids - {row["uid"] for row in cohort}),
         observed_cohort_completed=len(completed),
         observed_cohort_response_p95_seconds=float(np.percentile(values, 95)) if values else None,
-        observed_cohort_deadline_fraction=sum(value <= 120 for value in values) / len(uids)
+        observed_cohort_deadline_fraction=sum(value <= deadline_seconds for value in values)
+        / len(uids)
         if uids
         else None,
         decision_age_seconds=age,

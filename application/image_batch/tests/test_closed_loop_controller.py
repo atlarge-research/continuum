@@ -115,13 +115,42 @@ class ControllerTests(unittest.TestCase):
                     )
             journal.close()
 
-    def test_shadow_requires_two_consecutive_valid_cycles(self):
-        """Invalid forecasts reset readiness and cannot consume the safety shadow phase."""
+    def test_first_valid_forecast_can_act_after_workload_warmup(self):
+        """A complete first decision is not consumed by an extra controller shadow phase."""
         module = self.module()
-        self.assertEqual(module.shadow_progress(0, True), (1, True))
-        self.assertEqual(module.shadow_progress(1, False), (0, True))
-        self.assertEqual(module.shadow_progress(1, True), (2, True))
-        self.assertEqual(module.shadow_progress(2, True), (2, False))
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 0, {}
+            loop.args = Mock(control_arm="forecast")
+            loop.config, loop.session = self.config, Mock()
+            loop.fresh = Mock(return_value=self.view)
+            loop.recover = Mock()
+            scores = [
+                {
+                    "candidate": name,
+                    "selected_worker": worker,
+                    "scenarios": [
+                        {
+                            "complete": True,
+                            "cohort_size": 0,
+                            "responses_seconds": [],
+                            "allocated_core_seconds": cost,
+                        }
+                        for _ in range(3)
+                    ],
+                }
+                for name, worker, cost in [("unchanged", None, 100), ("scale-down", "w1", 99)]
+            ]
+            loop.predict = Mock(return_value=(self.view, scores, 1000))
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module, "actuate", return_value=dict(last_action_at=1000)
+            ), patch.object(module.time, "monotonic", side_effect=[0, 0, 0, 4]):
+                loop.cycle()
+            ended = loop.journal.records[-1]
+            self.assertEqual(ended["outcome"], "acknowledged")
+            loop.journal.close()
 
     def test_final_node_read_rejects_readiness_loss(self):
         """A worker becoming unready before dispatch vetoes the pending capacity change."""
@@ -145,8 +174,8 @@ class ControllerTests(unittest.TestCase):
             session.kubectl.assert_not_called()
             journal.close()
 
-    def test_state_failure_resets_shadow_and_timeout_ends_cycle(self):
-        """Recovery continues after transport timeout without credit for broken shadow streaks."""
+    def test_state_failure_resets_reactive_history_and_timeout_ends_cycle(self):
+        """Recovery continues after transport timeout without credit for invalid observations."""
         module = self.module()
         for failure in (ValueError("stale"), subprocess.TimeoutExpired("ssh", 3)):
             with self.subTest(
@@ -155,13 +184,81 @@ class ControllerTests(unittest.TestCase):
                 loop = object.__new__(module.Controller)
                 loop.output = Path(temporary)
                 loop.journal = Journal(loop.output / "journal.jsonl")
-                loop.tick_number, loop.shadow, loop.history = 0, 1, {}
+                loop.tick_number, loop.history = 0, {"reactive_observation": {"tick_id": 1}}
                 loop.fresh = Mock(side_effect=failure)
                 loop.cycle()
-                self.assertEqual(loop.shadow, 0)
+                self.assertNotIn("reactive_observation", loop.history)
                 self.assertEqual(loop.journal.records[-1]["event"], "cycle.end")
                 self.assertEqual(loop.journal.records[-1]["outcome"], "vetoed_or_failed")
                 loop.journal.close()
+
+    def test_forecast_observations_feed_independent_fallback_history(self):
+        """A failed second forecast can use the first scheduled empty observation."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 2, {}
+            loop.args = Mock(control_arm="forecast")
+            loop.config, loop.session = self.config, Mock()
+            loop.fresh = Mock(return_value=self.view)
+            loop.recover = Mock()
+            scores = [
+                {
+                    "candidate": "unchanged",
+                    "selected_worker": None,
+                    "scenarios": [
+                        {
+                            "complete": True,
+                            "cohort_size": 0,
+                            "responses_seconds": [],
+                            "allocated_core_seconds": 100,
+                        }
+                        for _ in range(3)
+                    ],
+                }
+            ]
+            loop.predict = Mock(
+                side_effect=[(self.view, scores, 1000), ValueError("forecast missing")]
+            )
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module, "actuate", return_value=dict(last_action_at=1000)
+            ), patch.object(module.time, "monotonic", side_effect=[0, 0, 0, 4]):
+                loop.cycle()
+                loop.cycle()
+            proposals = [
+                r["proposal"] for r in loop.journal.records if r["event"] == "cycle.proposal"
+            ]
+            self.assertEqual([p["action"] for p in proposals], ["unchanged", "scale-down"])
+            self.assertEqual(
+                len([r for r in loop.journal.records if r["event"] == "fallback.invoked"]), 1
+            )
+            loop.journal.close()
+
+    def test_first_tick_fallback_hold_is_counted(self):
+        """Fallback metrics include holds, without counting fresh reads as extra checks."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = object.__new__(module.Controller)
+            loop.output = Path(temporary)
+            loop.journal = Journal(loop.output / "journal.jsonl")
+            loop.tick_number, loop.shadow, loop.history = 0, 2, {}
+            loop.args = Mock(control_arm="forecast")
+            loop.config, loop.session = self.config, Mock()
+            loop.fresh = Mock(return_value=self.view)
+            loop.recover = Mock()
+            loop.predict = Mock(side_effect=ValueError("forecast missing"))
+            with patch.object(module.time, "time", return_value=1001):
+                loop.cycle()
+            proposals = [
+                r["proposal"] for r in loop.journal.records if r["event"] == "cycle.proposal"
+            ]
+            self.assertEqual(proposals[0]["action"], "unchanged")
+            self.assertEqual(
+                len([r for r in loop.journal.records if r["event"] == "fallback.invoked"]), 1
+            )
+            loop.journal.close()
 
     def test_restart_skips_orphaned_cycle_directory(self):
         """A crash after directory creation cannot cause evidence overwrite or endless failure."""
@@ -174,11 +271,22 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(module.last_tick(journal, root), 3)
             journal.close()
 
-    def test_down_candidate_continues_the_previous_target_without_reusing_its_score(self):
-        """A now-busy prior target can be resimulated instead of resetting on a new empty worker."""
-        backlog = [{"metadata": {"preserved_assignment": "w2", "first_assignment_observed_ms": 1}}]
-        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="w2"), "w2")
-        self.assertEqual(_down_worker(["w1", "w2"], backlog, [], preferred="removed"), "w1")
+    def test_down_candidate_uses_last_predicted_release_not_oldest_assignment(self):
+        """The oldest assigned worker can have the longest remaining drain."""
+        backlog = [
+            {
+                "task": {"duration": duration},
+                "metadata": {
+                    "preserved_assignment": name,
+                    "first_assignment_observed_ms": assigned,
+                },
+            }
+            for name, duration, assigned in [("w1", 10000, 1), ("w2", 2000, 2)]
+        ]
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, []), "w2")
+        self.assertEqual(_down_worker(["w1", "w2", "w3"], backlog, []), "w3")
+        backlog.append({"task": {"duration": 15000}, "metadata": {"preserved_assignment": "w2"}})
+        self.assertEqual(_down_worker(["w1", "w2"], backlog, []), "w1")
 
     def test_initial_freshness_is_measured_at_collection_before_forecast_computation(self):
         """Ten seconds of valid computation ages the decision, not its collection precondition."""
@@ -216,6 +324,129 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(before["timestamp_seconds"], 1000)
             self.assertEqual(cutoff, 1000)
 
+    def test_incomplete_membership_gets_one_preserved_preparation_retry(self):
+        """A new complete prefix may recover a list race without simulating an incomplete one."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            loop = object.__new__(module.Controller)
+            loop.session = Mock(namespace="test")
+            loop.session.namespace = "test"
+            loop.args = Mock(period_seconds=480, warmup_cycles=2, native_image="test")
+            loop.origin, loop.tick_number = 900, 1
+            loop.output = root
+            loop.journal = Journal(root / "journal.jsonl")
+            loop.template, loop.config, loop.cluster = {"saved": True}, self.config, {}
+            loop.history = {"reactive_observation": {"eligible_workers": ["w1"]}}
+            attempts = []
+
+            def forecast(_prefix, destination, _cutoff, _settings, _template, **_kwargs):
+                snapshot = json.loads(json.dumps(self.snapshot))
+                if not attempts:
+                    snapshot["collection"]["missing_job_uids"] = ["new-job"]
+                attempts.append(snapshot)
+                destination.mkdir()
+                (destination / "state.json").write_text(json.dumps(snapshot))
+                return (
+                    {
+                        "status": "ready",
+                        "simulation_inputs": {"status": "ready"},
+                        "cutoff": snapshot["timestamp"],
+                    },
+                    loop.template,
+                )
+
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module.time, "sleep"
+            ), patch.object(module, "run_once", side_effect=forecast), patch.object(
+                module, "prepare_suite"
+            ), patch.object(
+                module, "run_control_plane_suite", return_value=root
+            ) as native, patch.object(
+                module, "load_scores", return_value=([], {})
+            ):
+                before, _, _ = loop.predict(root)
+            self.assertEqual(before["timestamp_seconds"], 1000)
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(native.call_count, 1)
+            self.assertNotIn("reactive_observation", loop.history)
+            rejected = json.loads((root / "rejected-preparation/forecast/state.json").read_text())
+            self.assertEqual(rejected["collection"]["missing_job_uids"], ["new-job"])
+            self.assertEqual([row["event"] for row in loop.journal.records], ["observation.retry"])
+            loop.journal.close()
+
+    def test_recollection_is_bounded_and_does_not_retry_other_failures(self):
+        """Persistent missing membership fails after two attempts; native errors get one."""
+        module = self.module()
+        for error, expected_calls in (
+            (module.IncompleteMembership("missing"), 2),
+            (RuntimeError("native failed"), 1),
+        ):
+            with self.subTest(error=str(error)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                loop = object.__new__(module.Controller)
+                loop.journal = Journal(root / "journal.jsonl")
+                loop.history, loop.tick_number = {}, 1
+                with patch.object(
+                    loop, "_predict_once", side_effect=error
+                ) as predict, patch.object(module.time, "sleep"), self.assertRaises(type(error)):
+                    loop.predict(root)
+                self.assertEqual(predict.call_count, expected_calls)
+                loop.journal.close()
+
+    def test_prediction_uses_configured_horizon_scenarios_and_runtime_budgets(self):
+        """The prepared future and native scoring use the frozen experiment settings."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            loop = object.__new__(module.Controller)
+            loop.session = Mock(namespace="test")
+            loop.session.namespace = "test"
+            loop.args = Mock(period_seconds=480, warmup_cycles=2, native_image="test")
+            loop.origin, loop.tick_number = 900, 7
+            loop.template, loop.history, loop.cluster = {"saved": True}, {}, {}
+            loop.config = {
+                **self.config,
+                "horizon_seconds": 300,
+                "scenarios": 5,
+                "scenario_seed": 123,
+                "native_timeout_seconds": 55,
+                "allocation_seconds": 300,
+            }
+
+            def forecast(_prefix, destination, _cutoff, settings, _template, **_kwargs):
+                self.assertEqual(
+                    (settings.horizon_seconds, settings.scenarios, settings.seed), (300, 5, 130)
+                )
+                destination.mkdir()
+                (destination / "state.json").write_text(json.dumps(self.snapshot))
+                return (
+                    {
+                        "status": "ready",
+                        "simulation_inputs": {"status": "ready"},
+                        "cutoff": self.snapshot["timestamp"],
+                    },
+                    loop.template,
+                )
+
+            def native(_suite, _output, _image, _cluster, _name, *, timeout_seconds):
+                self.assertEqual(timeout_seconds, 55)
+                return root
+
+            def scores(_batch, *, scenarios, allocation_seconds):
+                self.assertEqual((scenarios, allocation_seconds), (5, 300))
+                return [], {}
+
+            with patch.object(module.time, "time", return_value=1001), patch.object(
+                module, "run_once", side_effect=forecast
+            ), patch.object(module, "prepare_suite"), patch.object(
+                module, "run_control_plane_suite", side_effect=native
+            ), patch.object(
+                module, "load_scores", side_effect=scores
+            ):
+                loop.predict(root)
+            self.assertTrue((root / "stage-timing.json").exists())
+
     def test_replacement_node_does_not_confirm_the_original_action(self):
         """A matching cordon flag on a new UID is not observation of the requested worker."""
         module = self.module()
@@ -235,7 +466,7 @@ class ControllerTests(unittest.TestCase):
             with patch.object(module, "reactive_action", return_value=proposal), patch.object(
                 module, "actuate", return_value=dict(last_action_at=1002)
             ), patch.object(module.time, "time", return_value=1003), patch.object(
-                module.time, "monotonic", side_effect=[0, 4]
+                module.time, "monotonic", side_effect=[0, 0, 0, 4]
             ):
                 loop.cycle()
             observed = [r for r in loop.journal.records if r["event"] == "cycle.observed"]

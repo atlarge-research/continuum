@@ -16,6 +16,12 @@ import time
 import yaml
 
 from closed_loop_controller import Controller
+from demo_configuration import (
+    EXPERIMENT_DEFAULTS,
+    resolve_deployment,
+    validate_experiment,
+    validate_live_inventory,
+)
 from opendc_batch import remote_input
 from opendc_inputs import write_json
 from opendc_kubernetes import extract_artifacts, ssh
@@ -23,11 +29,6 @@ from opendc_kubernetes import extract_artifacts, ssh
 
 SOURCE = Path(__file__).resolve().parent
 MANIFEST = SOURCE.parent / "manifests" / "adapter.yaml"
-CONTROLLER = "cloud_controller_matthijs@192.168.210.2"
-ENDPOINT = "endpoint0_matthijs@192.168.210.6"
-KEY = "/home/matthijs/.ssh/id_rsa_continuum"
-CONTROL_NODE = "cloudcontrollermatthijs"
-WORKERS = ["cloud0matthijs", "cloud1matthijs", "cloud2matthijs"]
 ENDPOINT_IMAGE = "continuum/image-batch-endpoint:fns-forecast-20260907-v1"
 FREEZE_SCRIPT = """import pathlib,sys,tarfile
 root=pathlib.Path(sys.argv[1])
@@ -244,13 +245,18 @@ class CaptureSession:
             },
         )
         self.output_created = True
+        if self.namespace == self.args.template_namespace:
+            raise ValueError("capture namespace must differ from the source deployment")
         jobs = self.get("jobs", "-A")["items"]
         if any(job.get("status", {}).get("active", 0) for job in jobs):
             raise ValueError("another workload is active")
-        self.original = self.get("deployment", "image-batch-adapter", "-n", "fns-demo")
+        self.original = self.get(
+            "deployment", self.args.template_deployment, "-n", self.args.template_namespace
+        )
         self.nodes = self.get("nodes")
         write_json(self.output / "original-deployment.json", self.original)
         write_json(self.output / "nodes-before.json", self.nodes)
+        validate_live_inventory(self.nodes, vars(self.args))
         observed = {node["metadata"]["name"]: node for node in self.nodes["items"]}
         for worker in self.args.workers:
             if worker not in observed or not any(
@@ -281,22 +287,16 @@ class CaptureSession:
                 "endpoint_source": self.remote_source,
             },
         )
-        if not self.replay_was_active:
+        if self.args.replay_command and not self.replay_was_active:
             ssh(
                 self.args.endpoint,
                 self.args.ssh_key,
-                self.base_replay
-                + [
-                    "start",
-                    "192.168.210.6",
-                    "/home/mahimahi/traces/KPN_5G.up",
-                    "/home/mahimahi/traces/KPN_5G.down",
-                    *[node["status"]["addresses"][0]["address"] for node in self.nodes["items"]],
-                ],
+                self.args.replay_command,
             )
-        (self.output / "replay-check.txt").write_bytes(
-            ssh(self.args.endpoint, self.args.ssh_key, self.base_replay + ["check"])
-        )
+        if self.args.replay_command:
+            (self.output / "replay-check.txt").write_bytes(
+                ssh(self.args.endpoint, self.args.ssh_key, self.base_replay + ["check"])
+            )
         source = {path.name: path.read_text() for path in self.args.source_dir.glob("*.py")}
         write_json(
             self.output / "source-hashes.json",
@@ -478,6 +478,15 @@ class CaptureSession:
         for resource, filename in [("jobs", "jobs.json"), ("pods", "pods-final.json")]:
             write_json(self.output / filename, self.get(resource, "-n", self.namespace))
         write_json(self.output / "nodes-final.json", self.get("nodes"))
+        pods = json.loads((self.output / "pods-final.json").read_text(encoding="utf-8"))
+        for pod in pods["items"]:
+            if any(item["name"] == "opendc" for item in pod["spec"].get("containers", [])):
+                destination = self.output / "native-pod-logs"
+                destination.mkdir(exist_ok=True)
+                name = pod["metadata"]["name"]
+                (destination / (name + ".log")).write_bytes(
+                    self.kubectl("logs", "-n", self.namespace, name, "-c", "opendc")
+                )
         if self.pod_name:
             containers = ["adapter", "opendt-observer"]
             if self.args.admission_mode == "fifo":
@@ -509,13 +518,24 @@ class CaptureSession:
             remove_namespace (bool): True only when final collection succeeded.
 
         Raises:
-            ValueError: Network or original deployment state differs after restoration.
+            ValueError: A node identity changed, or network/deployment restoration differs.
         """
+        if self.nodes:
+            current = {
+                node["metadata"]["name"]: node["metadata"]["uid"]
+                for node in self.get("nodes")["items"]
+            }
+            if any(
+                current.get(node["metadata"]["name"]) != node["metadata"]["uid"]
+                for node in self.nodes["items"]
+                if node["metadata"]["name"] in self.args.workers
+            ):
+                raise ValueError("worker identity changed; original cordons cannot be restored")
         for node in (self.nodes or {}).get("items", []):
             name = node["metadata"]["name"]
             if name in self.args.workers:
                 self.kubectl("cordon" if node["spec"].get("unschedulable") else "uncordon", name)
-        if self.replay_was_active is False:
+        if self.args.replay_command and self.replay_was_active is False:
             ssh(self.args.endpoint, self.args.ssh_key, self.base_replay + ["stop"])
         if remove_namespace:
             self.kubectl("delete", "namespace", self.namespace, "--wait=true")
@@ -528,7 +548,9 @@ class CaptureSession:
                 raise ValueError("endpoint network configuration changed")
         if (
             self.original is not None
-            and self.get("deployment", "image-batch-adapter", "-n", "fns-demo")["spec"]
+            and self.get(
+                "deployment", self.args.template_deployment, "-n", self.args.template_namespace
+            )["spec"]
             != self.original["spec"]
         ):
             raise ValueError("original deployment changed")
@@ -539,6 +561,21 @@ class CaptureSession:
                 "network_restored": True,
                 "original_deployment_preserved": True,
             },
+        )
+
+    def arrival_window_complete(self, *, now_seconds):
+        """Retain common-window observations when the last sampled arrival ends early.
+
+        Args:
+            now_seconds (float): Current host UTC epoch seconds.
+
+        Returns:
+            bool: Whether passive capture applies or the controlled arrival window ended.
+        """
+        if self.loop is None:
+            return True
+        return self.loop.origin is not None and now_seconds >= (
+            self.loop.origin + self.args.period_seconds * self.args.cycles
         )
 
     def run(self):
@@ -571,7 +608,11 @@ class CaptureSession:
                 stdout=stdout,
                 stderr=stderr,
             )
-            deadline = time.monotonic() + self.args.period_seconds * self.args.cycles + 600
+            deadline = (
+                time.monotonic()
+                + self.args.period_seconds * self.args.cycles
+                + self.args.followup_seconds
+            )
             while time.monotonic() < deadline:
                 _, sample = self.observe()
                 print(json.dumps(sample), flush=True)
@@ -580,7 +621,9 @@ class CaptureSession:
                 if self.process.poll() is not None:
                     if self.process.returncode:
                         raise RuntimeError("endpoint failed; preserve capture resources")
-                    if sample["completed"] + sample["failed"] == sample["jobs"]:
+                    if sample["completed"] + sample["failed"] == sample[
+                        "jobs"
+                    ] and self.arrival_window_complete(now_seconds=time.time()):
                         break
                 time.sleep(5)
             else:
@@ -635,33 +678,39 @@ class CaptureSession:
         print("CAPTURE_COLLECTED", flush=True)
 
 
-def main():
-    """Run a calibrated capture using new evidence and namespace destinations."""
+def parse_arguments(argv=None):
+    """Resolve capture settings before remote mutation, with explicit CLI overrides.
+
+    Args:
+        argv (list[str] or None): CLI arguments; None reads the process arguments.
+
+    Returns:
+        argparse.Namespace: Validated deployment and experiment configuration.
+
+    Raises:
+        ValueError: A settings file contains unknown or invalid experiment values.
+        OSError: Configuration or inventory cannot be read.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--continuum-config", type=Path, required=True)
+    parser.add_argument("--inventory", type=Path)
+    parser.add_argument("--experiment-config", type=Path)
+    parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--template-namespace", default="fns-demo")
+    parser.add_argument("--template-deployment", default="image-batch-adapter")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--seed", type=int, required=True)
-    parser.add_argument("--period-seconds", type=int, default=240)
-    parser.add_argument("--cycles", type=int, default=6)
-    parser.add_argument("--minimum-rate", type=float, default=0.02)
-    parser.add_argument("--peak-rate", type=float, default=0.30)
-    parser.add_argument("--active-workers", type=int, default=3)
+    for name, default in EXPERIMENT_DEFAULTS.items():
+        parser.add_argument("--" + name.replace("_", "-"), type=type(default), default=default)
+    parser.add_argument("--active-workers", type=int)
     parser.add_argument("--admission-mode", choices=("scheduler", "fifo"), default="scheduler")
     parser.add_argument(
         "--control-arm", choices=("none", "fixed", "reactive", "forecast"), default="none"
     )
-    parser.add_argument("--warmup-cycles", type=int, default=3)
-    parser.add_argument("--worker-cores", type=int, default=4)
-    parser.add_argument("--worker-memory-mib", type=int, default=16384)
     parser.add_argument("--minimum-workers", type=int, default=1)
-    parser.add_argument("--maximum-workers", type=int, default=3)
+    parser.add_argument("--maximum-workers", type=int)
     parser.add_argument("--native-image", default="continuum/opendc:fns-loop-20260925-122a859")
-    parser.add_argument("--workers", nargs="+", default=WORKERS)
-    parser.add_argument("--controller", default=CONTROLLER)
-    parser.add_argument("--endpoint", default=ENDPOINT)
-    parser.add_argument("--ssh-key", default=KEY)
-    parser.add_argument("--control-node", default=CONTROL_NODE)
-    parser.add_argument("--adapter-address", default="192.168.210.3")
     parser.add_argument("--endpoint-image", default=ENDPOINT_IMAGE)
     parser.add_argument(
         "--source-dir",
@@ -669,7 +718,19 @@ def main():
         default=SOURCE,
         help="frozen application source directory for matched comparisons",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.experiment_config:
+        supplied = json.loads(args.experiment_config.read_text())
+        if not isinstance(supplied, dict) or set(supplied) - set(EXPERIMENT_DEFAULTS):
+            raise ValueError("experiment configuration contains unknown settings")
+        parser.set_defaults(**supplied)
+        args = parser.parse_args(argv)
+    vars(args).update(resolve_deployment(args.continuum_config, args.inventory))
+    if args.active_workers is None:
+        args.active_workers = len(args.workers)
+    if args.maximum_workers is None:
+        args.maximum_workers = len(args.workers)
+    validate_experiment(vars(args))
     if not 1 <= args.active_workers <= len(args.workers):
         parser.error("active worker count must fit the worker inventory")
     if (
@@ -683,6 +744,15 @@ def main():
         parser.error("controller worker bounds must contain the initial accepting pool")
     if args.control_arm != "none" and (args.warmup_cycles < 1 or args.warmup_cycles >= args.cycles):
         parser.error("warmup must contain complete cycles and leave evaluation cycles")
+    return args
+
+
+def main():
+    """Preview resolved settings or capture into a new evidence directory and namespace."""
+    args = parse_arguments()
+    if args.preview:
+        print(json.dumps(vars(args), default=str, indent=2))
+        return
     session = CaptureSession(args)
     try:
         session.run()

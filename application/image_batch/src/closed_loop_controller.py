@@ -7,8 +7,15 @@ import subprocess
 import time
 import uuid
 
-from closed_loop_guards import guard_action, reactive_action, reconcile_pending, snapshot_view
+from closed_loop_guards import (
+    IncompleteMembership,
+    guard_action,
+    reactive_action,
+    reconcile_pending,
+    snapshot_view,
+)
 from closed_loop_journal import Journal
+from demo_configuration import EXPERIMENT_DEFAULTS
 from closed_loop_policy import select_action
 from closed_loop_runner import load_scores, prepare_runner, run_control_plane_suite
 from forecast_trace import milliseconds
@@ -34,6 +41,30 @@ with p.open('rb') as f:
 """
 
 
+def failure_category(error):
+    """Classify a recorded failure without converting it into a valid hold.
+
+    Args:
+        error (Exception): Forecast, transport, native or observation failure.
+
+    Returns:
+        str: Stable diagnostic group; the original exception text is also retained.
+    """
+    message = str(error).lower()
+    if isinstance(error, subprocess.TimeoutExpired) or any(
+        word in message for word in ("timeout", "timed out", "outer deadline")
+    ):
+        return "timeout"
+    if any(word in message for word in ("stale", "decision age", "future timestamp")):
+        return "stale_input_or_decision"
+    if any(
+        word in message
+        for word in ("membership", "incomplete", "forecast not ready", "unreconciled")
+    ):
+        return "incomplete_input"
+    return "native_or_transport_failure"
+
+
 def last_tick(journal, directory):
     """Recover the last reserved cycle without overwriting orphaned crash evidence.
 
@@ -47,21 +78,6 @@ def last_tick(journal, directory):
     recorded = [row["tick"] for row in journal.records if row["event"] == "cycle.begin"]
     reserved = [int(path.name[6:]) for path in directory.glob("cycle-*") if path.name[6:].isdigit()]
     return max([0, *recorded, *reserved])
-
-
-def shadow_progress(completed, valid):
-    """Require two consecutive verified cycles before the first physical proposal.
-
-    Args:
-        completed (int): Consecutive valid shadow cycles, capped at two.
-        valid (bool): Whether the current forecast and native evaluation are complete.
-
-    Returns:
-        tuple[int, bool]: Updated progress and whether this cycle remains shadow-only.
-    """
-    if completed >= 2:
-        return 2, False
-    return (min(2, completed + 1) if valid else 0), True
 
 
 def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds):
@@ -81,7 +97,7 @@ def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds
         cutoff_seconds (float): Original proposal cutoff in UTC epoch seconds.
 
     Returns:
-        dict: Acknowledged action identity and cooldown timestamp.
+        dict: Acknowledged action identity and timestamp.
 
     Raises:
         ValueError: State, action age, worker identity or pending journal intent is unsafe.
@@ -143,7 +159,7 @@ def actuate(session, journal, before, fresh, proposal, config, *, cutoff_seconds
 
 
 class Controller:
-    """Own one sequential controller with durable evidence and two shadow cycles.
+    """Own one sequential controller with durable evidence and causal workload warmup.
 
     Args:
         session (CaptureSession): Prepared isolated capture and its command-line settings.
@@ -158,6 +174,11 @@ class Controller:
         self.output = session.output / "controller"
         self.output.mkdir(exist_ok=True)
         self.config = {
+            **{
+                name: getattr(self.args, name, default)
+                for name, default in EXPERIMENT_DEFAULTS.items()
+            },
+            "modeled_reserve_acquisition_seconds": 0,
             "workers": [
                 dict(
                     node_name=name,
@@ -169,6 +190,9 @@ class Controller:
             "minimum_workers": self.args.minimum_workers,
             "maximum_workers": self.args.maximum_workers,
             "occupancy_model": "causal-occupancy-v1",
+            "residual_margin_seconds": self.args.residual_margin_seconds,
+            "reactive_up_threshold": self.args.reactive_up_threshold,
+            "reactive_down_threshold": self.args.reactive_down_threshold,
         }
         self.cluster = dict(
             controller=self.args.controller,
@@ -195,8 +219,7 @@ class Controller:
             self.owner = uuid.uuid4().hex
             write_json(identity_path, dict(owner=self.owner, settings=identity))
         self.history = self.journal.history()
-        self.history.update(down_worker=None, down_wins=0)
-        self.shadow = 0
+        self.history.pop("reactive_observation", None)
         self.tick_number = last_tick(self.journal, self.output)
         self.next_tick = None
         self.origin = None
@@ -278,7 +301,7 @@ class Controller:
         pending = self.journal.pending_action()
         if pending:
             status = reconcile_pending(pending, view)
-            # Both outcomes receive a conservative cooldown after uncertain mutation.
+            # Reconciliation resolves intent; current guards decide subsequent eligibility.
             now = time.time()
             self.journal.append(
                 "action.result",
@@ -287,11 +310,11 @@ class Controller:
                 attribution="uncertain_after_reconciliation",
                 last_action_at=now,
             )
-            self.history.update(last_action_at=now, down_worker=None, down_wins=0)
-            self.shadow = 0
+            self.history.update(last_action_at=now)
+            self.history.pop("reactive_observation", None)
 
-    def maybe_tick(self):
-        """Run at most one due cycle, skipping missed ticks rather than overlapping work."""
+    def discover_origin(self):
+        """Read the sender's preserved schedule without taking a controller action."""
         if self.origin is None:
             for line in (self.session.output / "endpoint.jsonl").read_text().splitlines():
                 try:
@@ -304,18 +327,69 @@ class Controller:
                         self.origin + self.args.period_seconds * self.args.warmup_cycles + 5
                     )
                     break
+
+    def maybe_tick(self):
+        """Run at most one due cycle, skipping missed ticks rather than overlapping work."""
+        self.discover_origin()
         if self.origin is None or time.time() < self.next_tick:
             return
         # Evaluation includes drain follow-up; arrivals themselves remain independent.
         self.cycle()
-        self.next_tick += 60
+        cadence = self.config.get("cadence_seconds", 60)
+        self.next_tick += cadence
         if self.next_tick <= time.time():
-            skipped = int((time.time() - self.next_tick) // 60) + 1
-            self.next_tick += skipped * 60
-            self.history.update(down_worker=None, down_wins=0)
+            skipped = int((time.time() - self.next_tick) // cadence) + 1
+            self.next_tick += skipped * cadence
+            self.history.pop("reactive_observation", None)
             self.journal.append("cycle.skipped", count=skipped, reason="nonoverlapping_cadence")
 
     def predict(self, directory):
+        """Retry one incomplete preparation with a new prefix, retaining the rejected evidence.
+
+        This bounded two-second wait addresses a non-atomic Job-list race only.
+        It never retries native computation or accepts an incomplete snapshot.
+        The selected prefix's cutoff governs decision age; cycle wall time includes
+        both attempts, and rejected preparation remains available for diagnostics.
+
+        Args:
+            directory (Path): New cycle evidence directory.
+
+        Returns:
+            tuple: Complete proposal state, scores and the selected prefix's cutoff.
+
+        Raises:
+            ValueError: Preparation remains invalid after the single allowed recollection.
+            RuntimeError: Native or collection operations fail.
+        """
+        started = time.monotonic()
+        try:
+            return self._predict_once(directory)
+        except IncompleteMembership as exc:
+            self.history.pop("reactive_observation", None)
+            rejected = directory / "rejected-preparation"
+            rejected.mkdir()
+            for name in ("observer", "observer.tar", "forecast"):
+                source = directory / name
+                if source.exists():
+                    source.rename(rejected / name)
+            self.journal.append(
+                "observation.retry",
+                tick=self.tick_number,
+                phase="forecast_preparation",
+                reason=str(exc),
+                wait_seconds=2,
+                rejected_directory=str(rejected),
+            )
+            time.sleep(2)
+        recollection = time.monotonic() - started
+        result = self._predict_once(directory)
+        timing_path = directory / "stage-timing.json"
+        timing = json.loads(timing_path.read_text(encoding="utf-8"))
+        timing["rejected_preparation_and_wait_seconds"] = recollection
+        write_json(timing_path, timing)
+        return result
+
+    def _predict_once(self, directory):
         """Freeze a causal prefix and evaluate all complete shared-future capacity choices.
 
         Args:
@@ -327,17 +401,19 @@ class Controller:
         Raises:
             ValueError: The forecast, membership or native results are incomplete.
         """
+        started = time.monotonic()
         prefix = directory / "observer"
         self.session.archive_observer(prefix)
+        collected = time.monotonic()
         captured_at = time.time()
         settings = Settings(
             run_id=self.session.namespace,
             origin_ms=round(self.origin * 1000),
             period_seconds=self.args.period_seconds,
             warmup_periods=self.args.warmup_cycles,
-            horizon_seconds=60,
-            scenarios=3,
-            seed=20261008 + self.tick_number,
+            horizon_seconds=self.config.get("horizon_seconds", 60),
+            scenarios=self.config.get("scenarios", 3),
+            seed=self.config.get("scenario_seed", 20261008) + self.tick_number,
         )
         forecast_dir = directory / "forecast"
         status, selected = run_once(
@@ -350,20 +426,17 @@ class Controller:
         )
         if status["status"] != "ready" or status["simulation_inputs"]["status"] != "ready":
             raise ValueError("forecast not ready: " + json.dumps(status.get("simulation_inputs")))
-        if self.template is None:
-            self.template = selected
-            write_json(self.output / "frozen-template.json", selected)
         state = json.loads((forecast_dir / "state.json").read_text())
         # Initial freshness belongs to collection; computation ages the separately guarded decision.
         before = snapshot_view(state, self.config, now_seconds=captured_at)
+        if self.template is None:
+            self.template = selected
+            write_json(self.output / "frozen-template.json", selected)
         config = {
             **copy.deepcopy(self.config),
             "active_workers": before["active_workers"],
             "draining_workers": before["draining_workers"],
         }
-        wins = self.history.get("down_wins", 0)
-        if isinstance(wins, int) and not isinstance(wins, bool) and wins > 0:
-            config["preferred_down_worker"] = self.history.get("down_worker")
         write_json(
             directory / "collection-timing.json",
             {
@@ -373,14 +446,30 @@ class Controller:
             },
         )
         prepare_suite(forecast_dir, prefix, config, directory / "suite", "pinned-trace")
+        prepared = time.monotonic()
         batch = run_control_plane_suite(
             directory / "suite",
             directory / "native",
             self.args.native_image,
             self.cluster,
             f"native-{self.tick_number:04d}",
+            timeout_seconds=self.config.get("native_timeout_seconds", 20),
         )
-        scores, _ = load_scores(batch)
+        returned = time.monotonic()
+        scores, _ = load_scores(
+            batch,
+            scenarios=self.config.get("scenarios", 3),
+            allocation_seconds=self.config.get("allocation_seconds", 120),
+        )
+        write_json(
+            directory / "stage-timing.json",
+            dict(
+                observer_collection_seconds=collected - started,
+                forecast_preparation_seconds=prepared - collected,
+                native_and_collection_seconds=returned - prepared,
+                score_validation_seconds=time.monotonic() - returned,
+            ),
+        )
         write_json(directory / "scores.json", scores)
         return before, scores, milliseconds(status["cutoff"]) / 1000
 
@@ -399,30 +488,58 @@ class Controller:
             before = self.fresh()
             self.recover(before)
             cutoff = before["timestamp_seconds"]
+            reactive = reactive_action(
+                before,
+                self.history,
+                now_seconds=time.time(),
+                fallback=False,
+                tick_id=self.tick_number,
+            )
+            self.history = reactive["state"]
             if self.args.control_arm == "forecast":
                 try:
                     before, scores, cutoff = self.predict(directory)
                     age = time.time() - cutoff
                     proposal = select_action(
-                        scores, self.history, now_seconds=time.time(), decision_age=age
+                        scores,
+                        self.history,
+                        now_seconds=time.time(),
+                        decision_age=age,
+                        scenarios=self.config.get("scenarios", 3),
+                        age_budget_seconds=self.config.get("decision_age_seconds", 30),
+                        deadline_seconds=self.config.get("deadline_seconds", 120),
+                        deadline_fraction=self.config.get("deadline_fraction", 0.95),
                     )
-                    valid = age <= 30 and any(
+                    valid = age <= self.config.get("decision_age_seconds", 30) and any(
                         item["candidate"] == "unchanged" and item["valid"]
                         for item in proposal.get("scores", [])
                     )
                     if not valid:
-                        raise ValueError("native decision invalid or older than 30 seconds")
+                        raise ValueError("native decision invalid or exceeds decision age budget")
                 except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
-                    self.journal.append("forecast.invalid", tick=self.tick_number, error=str(exc))
+                    self.journal.append(
+                        "forecast.invalid",
+                        tick=self.tick_number,
+                        error=str(exc),
+                        category=failure_category(exc),
+                    )
+                    self.journal.append(
+                        "fallback.invoked",
+                        tick=self.tick_number,
+                        reason=str(exc),
+                        category=failure_category(exc),
+                    )
                     before = self.fresh()
                     cutoff = before["timestamp_seconds"]
                     proposal = reactive_action(
-                        before, self.history, now_seconds=time.time(), fallback=True
+                        before,
+                        self.history,
+                        now_seconds=time.time(),
+                        fallback=True,
+                        tick_id=self.tick_number,
                     )
             elif self.args.control_arm == "reactive":
-                proposal = reactive_action(
-                    before, self.history, now_seconds=time.time(), fallback=False
-                )
+                proposal = reactive
                 valid = True
             else:
                 proposal = {
@@ -432,9 +549,6 @@ class Controller:
                     "state": self.history,
                 }
                 valid = True
-            shadow_only = False
-            if self.args.control_arm == "forecast":
-                self.shadow, shadow_only = shadow_progress(self.shadow, valid)
             self.history = proposal["state"]
             self.journal.append(
                 "cycle.proposal",
@@ -442,10 +556,11 @@ class Controller:
                 proposal=proposal,
                 before=before,
                 cutoff_seconds=cutoff,
-                shadow=shadow_only,
+                shadow=False,
                 forecast_valid=valid,
             )
-            if proposal["action"] != "unchanged" and not shadow_only:
+            if proposal["action"] != "unchanged":
+                action_started = time.monotonic()
                 fresh = self.fresh()
                 result = actuate(
                     self.session,
@@ -456,12 +571,16 @@ class Controller:
                     self.config,
                     cutoff_seconds=cutoff,
                 )
-                self.history.update(
-                    last_action_at=result["last_action_at"], down_worker=None, down_wins=0
+                self.journal.append(
+                    "action.timing",
+                    tick=self.tick_number,
+                    action_id=result.get("action_id"),
+                    guard_and_api_seconds=time.monotonic() - action_started,
                 )
+                self.history.update(last_action_at=result["last_action_at"])
+
+                self.history.pop("reactive_observation", None)
                 outcome = "acknowledged"
-            elif shadow_only:
-                outcome = "shadow"
             observed = self.fresh()
             confirmed = None
             if outcome == "acknowledged":
@@ -483,10 +602,15 @@ class Controller:
             )
         except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
             outcome = "vetoed_or_failed"
-            if self.shadow < 2:
-                self.shadow = 0
-            self.history.update(down_worker=None, down_wins=0)
-            self.journal.append("cycle.error", tick=self.tick_number, error=str(exc))
+            self.history.pop("reactive_observation", None)
+            self.journal.append(
+                "cycle.error",
+                tick=self.tick_number,
+                error=str(exc),
+                category="action_cancelled"
+                if proposal["action"] != "unchanged" and isinstance(exc, ValueError)
+                else failure_category(exc),
+            )
         usage_after = resource.getrusage(resource.RUSAGE_SELF)
         self.journal.append(
             "cycle.end",

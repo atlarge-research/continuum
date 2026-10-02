@@ -449,6 +449,92 @@ def _ranking_page(pdf, runs):
     )
 
 
+def _development_pages(pdf, evidence):
+    """Show bounded tuning evidence and the rationale frozen before fresh evaluation.
+
+    Args:
+        pdf (PdfPages): Open combined report destination.
+        evidence (dict): Saved timing rows, selection rows and explicit interpretation notes.
+    """
+    trials = evidence.get("timing_trials", [])
+    if trials:
+        _table_page(
+            pdf,
+            "Development timing trials",
+            "Development probes choose a practical protocol; they are separate from fresh results.",
+            ["Trial", "Input / scope", "Horizon (s)", "Futures", "Elapsed (s)", "Outcome"],
+            [
+                [
+                    row["trial"],
+                    row["scope"],
+                    row["horizon_seconds"],
+                    row["scenarios"],
+                    f'{row["elapsed_seconds"]:.2f}',
+                    row["outcome"],
+                ]
+                for row in trials
+            ],
+            evidence["timing_note"],
+        )
+    choices = evidence.get("selection", [])
+    if choices:
+        _table_page(
+            pdf,
+            "Why these settings were frozen",
+            "Physical development observations determine timing headroom and workload choices.",
+            ["Choice", "Frozen value", "Development evidence / limitation"],
+            [[row["choice"], row["value"], row["reason"]] for row in choices],
+            evidence["selection_note"],
+        )
+
+
+def _hindsight_page(pdf, evidence):
+    """Keep local arrival-knowledge comparisons separate from physical policy benefit.
+
+    Args:
+        pdf (PdfPages): Open combined report destination.
+        evidence (dict): Saved bounded diagnostics with all prescribed cutoff identities.
+    """
+    rows, excluded, informative, agreements = [], 0, 0, 0
+    for run in evidence["runs"]:
+        for comparison in run["comparisons"]:
+            missing = comparison.get("excluded")
+            choices = comparison.get("choices", {})
+            count = comparison.get("eligible_candidates", 0)
+            excluded += bool(missing)
+            informative += not missing and count >= 2
+            agreements += not missing and count >= 2 and comparison["agrees"]
+            rows.append(
+                [
+                    run["run_id"].split("-s")[-1],
+                    str(comparison["tick"]),
+                    "unavailable" if missing else str(count),
+                    choices.get("sampled", {}).get("action", "—"),
+                    choices.get("known", {}).get("action", "—"),
+                    "—" if missing or count < 2 else ("yes" if comparison["agrees"] else "no"),
+                ]
+            )
+    if not rows:
+        return
+    ticks = "/".join(str(tick) for tick in evidence["expected_ticks"])
+    for offset in range(0, len(rows), 12):
+        _table_page(
+            pdf,
+            "Lightweight hindsight: local action choices",
+            f"Sampled and known arrivals agree at {agreements}/{informative} "
+            "cutoffs with at least two eligible actions.",
+            ["Run", "Tick", "Eligible actions", "Sampled arrivals", "Known arrivals", "Agree"],
+            rows[offset : offset + 12],
+            f"Predeclared ticks {ticks}; {excluded} unavailable cutoffs retained, never replaced.\n"
+            "Both variants preserve causal profiles, backlog, calibration, candidate eligibility "
+            "and the original decision-age margin.\n"
+            "Known arrivals are retrospective. These are local objective choices before physical "
+            "guards, not deployable foresight or trajectory regret.\n"
+            "No per-cutoff saving is summed into a trajectory optimum; only matched physical "
+            "runs establish achieved benefit.",
+        )
+
+
 def render_pages(pdf, supplement):
     """Append available scheduling and ranking topics without importing historical study results.
 
@@ -460,6 +546,14 @@ def render_pages(pdf, supplement):
         list[str]: Topic names actually rendered.
     """
     sections = []
+    development = supplement.get("closed_loop_development")
+    if development:
+        _development_pages(pdf, development)
+        sections.append("closed-loop-development-choices")
+    hindsight = supplement.get("closed_loop_hindsight")
+    if hindsight:
+        _hindsight_page(pdf, hindsight)
+        sections.append("closed-loop-lightweight-hindsight")
     scheduling = supplement.get("closed_loop_scheduling")
     if scheduling:
         _scheduling_summary(pdf, scheduling)

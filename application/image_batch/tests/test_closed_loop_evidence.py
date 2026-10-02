@@ -176,6 +176,100 @@ class EvidenceTests(unittest.TestCase):
                 result = self.module().controller_outcomes(root, 1000, 1180)
                 self.assertEqual(result["longest_consecutive_valid_cycles"], expected)
 
+    def test_fallback_holds_and_custom_cadence_remain_visible(self):
+        """All reliability failures count even when no physical action follows."""
+        records = []
+        for tick, started in [(1, 1000), (2, 1120), (3, 1240)]:
+            records.append(dict(event="cycle.begin", tick=tick, started_at=started))
+            if tick == 3:
+                records.append(dict(event="fallback.invoked", tick=tick, category="timeout"))
+            records.append(
+                dict(event="cycle.end", tick=tick, outcome="held", forecast_valid=tick < 3)
+            )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "journal.jsonl").write_text("\n".join(json.dumps(row) for row in records))
+            result = self.module().controller_outcomes(
+                root, 1000, 1400, cadence_seconds=120, age_budget_seconds=60
+            )
+        self.assertEqual(result["longest_consecutive_valid_cycles"], 2)
+        self.assertEqual(result["fallback_invocations"], 1)
+        self.assertEqual(result["fallback_categories"], {"timeout": 1})
+
+    def test_observation_recollection_is_reported_separately_from_fallback(self):
+        """Successful reacquisition cannot disappear from reliability diagnostics."""
+        records = [
+            {"event": "cycle.begin", "tick": 1, "started_at": 1000},
+            {
+                "event": "observation.retry",
+                "tick": 1,
+                "wait_seconds": 2,
+                "phase": "forecast_preparation",
+                "reason": "missing job",
+            },
+            {"event": "cycle.end", "tick": 1, "forecast_valid": True, "outcome": "held"},
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "journal.jsonl").write_text("\n".join(json.dumps(row) for row in records))
+            result = self.module().controller_outcomes(root, 1000, 1100)
+        self.assertEqual(result.get("observation_retries"), 1)
+        self.assertEqual(result["fallback_invocations"], 0)
+        self.assertEqual(result["cycles"][0]["observation_retries"][0]["wait_seconds"], 2)
+
+    def test_action_lifecycle_requires_real_release_and_forecast_selected_reuse(self):
+        """Cordon acknowledgment is distinct from an empty reserve and later reuse."""
+        fixture = guard_fixtures.GuardTests()
+        fixture.setUp()
+        states = []
+        for second in range(7):
+            state = copy.deepcopy(fixture.snapshot)
+            state["timestamp"] = iso((1000 + second) * 1000)
+            state["collection"]["started_at"] = state["timestamp"]
+            state["workers"][1]["schedulable"] = second < 1 or second >= 6
+            if second < 4:
+                state["jobs"]["active"] = [fixture.job(node="w2")]
+            states.append(state)
+        actions = [
+            dict(
+                action="scale-down",
+                selected_worker="w2",
+                node_uid="uid-w2",
+                decision_source="forecast",
+                observed=True,
+                recorded_at_ns=1001000000000,
+                result={"status": "acknowledged", "last_action_at": 1001},
+            ),
+            dict(
+                action="scale-up",
+                selected_worker="w2",
+                node_uid="uid-w2",
+                decision_source="forecast",
+                observed=True,
+                recorded_at_ns=1006000000000,
+                result={"status": "acknowledged", "last_action_at": 1006},
+            ),
+        ]
+        self.assertTrue(hasattr(self.module(), "action_lifecycles"))
+        result = self.module().action_lifecycles(actions, states, fixture.config)
+        self.assertEqual(result["forecast_down_up_pairs"], 1)
+        self.assertEqual(result["actions"][0]["first_observed_empty_seconds"], 1004)
+        self.assertEqual(result["actions"][0]["reused_at_seconds"], 1006)
+        actions[1]["decision_source"] = "reactive_fallback"
+        self.assertEqual(
+            self.module().action_lifecycles(actions, states, fixture.config)[
+                "forecast_down_up_pairs"
+            ],
+            0,
+        )
+
+        later = copy.deepcopy(states[4])
+        later["timestamp"] = iso(1008000)
+        later["collection"]["started_at"] = later["timestamp"]
+        result = self.module().action_lifecycles(actions, states[:4] + [later], fixture.config)
+        self.assertIsNone(result["actions"][0]["first_observed_empty_seconds"])
+        self.assertEqual(result["forecast_down_up_pairs"], 0)
+
     def test_job_failed_before_evaluation_is_not_live_warmup_backlog(self):
         """Failure observed before the scoring boundary is a terminal outcome."""
         result = self.module().responses(

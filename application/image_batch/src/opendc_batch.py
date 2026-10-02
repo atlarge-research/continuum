@@ -474,14 +474,14 @@ def main(argv=None):
     parser.add_argument("--controller")
     parser.add_argument("--runner-host")
     parser.add_argument("--ssh-key", type=Path)
-    parser.add_argument("--node", default="cloudcontrollermatthijs")
+    parser.add_argument("--node")
     parser.add_argument("--namespace")
     args = parser.parse_args(argv)
     cluster = None
     if args.backend == "kubernetes":
-        if not all((args.controller, args.runner_host, args.ssh_key, args.namespace)):
+        if not all((args.controller, args.runner_host, args.ssh_key, args.namespace, args.node)):
             parser.error(
-                "Kubernetes requires --controller, --runner-host, --ssh-key and --namespace"
+                "Kubernetes requires --controller, --runner-host, --ssh-key, --namespace and --node"
             )
         cluster = {
             "controller": args.controller,

@@ -10,6 +10,9 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from argparse import Namespace
+from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -134,6 +137,66 @@ class CaptureTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(marker.read_text(), "original failure\n")
+
+    def test_completed_last_job_cannot_shorten_the_common_arrival_window(self):
+        """Sparse tail arrivals must not end allocation observation before the scored boundary."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            session = module.CaptureSession(
+                Namespace(
+                    output=Path(directory), namespace="fns-test", period_seconds=480, cycles=4
+                )
+            )
+            session.loop = SimpleNamespace(origin=1000)
+            self.assertTrue(hasattr(session, "arrival_window_complete"))
+            self.assertFalse(session.arrival_window_complete(now_seconds=2900))
+            self.assertTrue(session.arrival_window_complete(now_seconds=2920))
+            session.loop.origin = None
+            self.assertFalse(session.arrival_window_complete(now_seconds=2920))
+
+    def test_collection_retains_failed_native_pod_logs_before_namespace_removal(self):
+        """A forecast timeout retains its native log without successful batch collection."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            session = module.CaptureSession(Namespace(output=Path(directory), namespace="fns-test"))
+            session.pod_name = None
+            pods = {
+                "items": [
+                    {
+                        "metadata": {
+                            "name": "native-0003-abc",
+                            "labels": {"job-name": "native-0003"},
+                        },
+                        "spec": {"containers": [{"name": "opendc"}]},
+                    }
+                ]
+            }
+            with patch.object(
+                session, "get", side_effect=[{"items": []}, pods, {"items": []}]
+            ), patch.object(session, "kubectl", return_value=b"native timed out\n"):
+                session.collect()
+            self.assertEqual(
+                (Path(directory) / "native-pod-logs/native-0003-abc.log").read_text(),
+                "native timed out\n",
+            )
+
+    def test_restoration_refuses_replaced_node_before_cordon_mutation(self):
+        """Original cordon settings cannot be applied to a replacement with the same name."""
+        module = self.module()
+        with tempfile.TemporaryDirectory() as directory:
+            session = module.CaptureSession(
+                Namespace(
+                    output=Path(directory), namespace="fns-test", workers=["w1"], replay_command=[]
+                )
+            )
+            session.nodes = {"items": [{"metadata": {"name": "w1", "uid": "original"}, "spec": {}}]}
+            current = {"items": [{"metadata": {"name": "w1", "uid": "replacement"}, "spec": {}}]}
+            with patch.object(session, "get", return_value=current), patch.object(
+                session, "kubectl"
+            ) as mutate:
+                with self.assertRaisesRegex(ValueError, "identity"):
+                    session.restore(remove_namespace=False)
+                mutate.assert_not_called()
 
 
 if __name__ == "__main__":

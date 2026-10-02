@@ -142,12 +142,13 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
     return list(grouped.values())
 
 
-def load_scores(batch_dir, *, scenarios=3):
+def load_scores(batch_dir, *, scenarios=3, allocation_seconds=120):
     """Read one immutable native batch and verify its complete policy inputs.
 
     Args:
         batch_dir (Path): Collected successful native batch directory.
         scenarios (int): Required shared scenario count.
+        allocation_seconds (float): Shared application allocation integration window.
 
     Returns:
         tuple: Candidate score inputs and the verified batch manifest.
@@ -167,7 +168,7 @@ def load_scores(batch_dir, *, scenarios=3):
         ) or execution.get("status") != "succeeded":
             raise ValueError("native case identity or execution status differs from batch")
         rows.append({"case": case, "validation": execution["validation"]})
-    scores = score_cases(rows, scenarios=scenarios)
+    scores = score_cases(rows, scenarios=scenarios, allocation_seconds=allocation_seconds)
     scores.extend(
         {
             "candidate": item["candidate"],
@@ -225,6 +226,7 @@ def run_control_plane_suite(suite, output, image, cluster, name, *, timeout_seco
     started = time.monotonic()
     remote = f'/var/tmp/fns-opendc-{cluster["namespace"]}-{name}'
     _stage_inputs(suite, remote, cluster["runner_host"], cluster["key"])
+    staged = time.monotonic()
     job = job_manifest(
         cluster["namespace"],
         name,
@@ -234,7 +236,7 @@ def run_control_plane_suite(suite, output, image, cluster, name, *, timeout_seco
         timeout_seconds,
         control_plane=True,
     )
-    job["spec"]["activeDeadlineSeconds"] = 40
+    job["spec"]["activeDeadlineSeconds"] = math.ceil(timeout_seconds) + 20
     container = job["spec"]["template"]["spec"]["containers"][0]
     container["command"] = ["python", "-u", "/app/opendc_native_batch.py"]
     container["args"] = [
@@ -255,7 +257,7 @@ def run_control_plane_suite(suite, output, image, cluster, name, *, timeout_seco
         )
     )
     write_json(output / "job-created.json", created)
-    deadline = time.monotonic() + 50
+    deadline = time.monotonic() + timeout_seconds + 30
     while True:
         pods = json.loads(
             ssh(
@@ -283,6 +285,7 @@ def run_control_plane_suite(suite, output, image, cluster, name, *, timeout_seco
         if time.monotonic() > deadline:
             raise RuntimeError("native Job did not reach terminal state within its outer deadline")
         time.sleep(0.2)
+    terminal = time.monotonic()
     pod = verify_collection_source(created, pods["items"], remote, cluster["node"])
     if pod["spec"].get("nodeName") != cluster["node"]:
         raise ValueError("native runner was not placed on the control plane")
@@ -318,6 +321,10 @@ def run_control_plane_suite(suite, output, image, cluster, name, *, timeout_seco
             "pod_uid": pod["metadata"]["uid"],
             "image_id": statuses[0].get("imageID"),
             "elapsed_seconds": time.monotonic() - started,
+            "stage_inputs_seconds": staged - started,
+            "job_launch_and_execution_seconds": terminal - staged,
+            "artifact_collection_seconds": time.monotonic() - terminal,
+            "native_timeout_seconds": timeout_seconds,
             "remote_directory": remote,
         },
     )

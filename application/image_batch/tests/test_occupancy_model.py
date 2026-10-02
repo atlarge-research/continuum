@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from forecast_trace import iso
 from opendc_inputs import verify_inputs
-from opendc_scenarios import prepare_suite
+from opendc_scenarios import prepare_suite, _down_worker
 from opendc_native_batch import plan_suite
 from opendc_validation import compare_tasks
 from test_opendc_scenarios import CUTOFF, configuration, make_forecast, observer_rows, job
@@ -113,6 +113,51 @@ class OccupancyModelTests(unittest.TestCase):
         )
         self.assertIs(modeled["model_exhausted_jobs"][0]["observed_completed"], False)
 
+    def test_residual_margin_extends_conditional_estimate_and_fallback(self):
+        """A positive explicit margin preserves overruns beyond the point estimate."""
+        calibration = {**self.calibration(), "residual_margin_ms": 3000}
+        case = self.case()
+        modeled = self.module().apply_occupancy(case, calibration)
+        self.assertEqual(modeled["tasks"][1]["task"]["duration"], 8000)
+        case["model_exhausted_jobs"][0]["metadata"]["elapsed_ms"] = 45000
+        modeled = self.module().apply_occupancy(case, calibration)
+        self.assertEqual(modeled["tasks"][1]["task"]["duration"], 9000)
+        for margin in (-1, float("nan"), True):
+            calibration["residual_margin_ms"] = margin
+            with self.assertRaises(ValueError):
+                self.module().apply_occupancy(case, calibration)
+
+    def test_down_target_includes_the_same_conditional_margin_as_cases(self):
+        """Residual padding can change which busy worker is predicted to release first."""
+        case = self.case()
+        task = case["tasks"][0]
+        task["task"]["duration"] = 6000
+        task["task"]["fragments"][0]["duration"] = 6000
+        task["metadata"] = {"phase": "running", "preserved_assignment": "w2"}
+        case["model_exhausted_jobs"][0]["metadata"]["preserved_assignment"] = "w1"
+        calibration = self.calibration()
+        self.assertEqual(
+            _down_worker(
+                ["w1", "w2"],
+                case["tasks"],
+                case["model_exhausted_jobs"],
+                calibration=calibration,
+                cutoff_ms=110000,
+            ),
+            "w1",
+        )
+        calibration["residual_margin_ms"] = 3000
+        self.assertEqual(
+            _down_worker(
+                ["w1", "w2"],
+                case["tasks"],
+                case["model_exhausted_jobs"],
+                calibration=calibration,
+                cutoff_ms=110000,
+            ),
+            "w2",
+        )
+
     def test_future_calibration_is_rejected(self):
         """A later calibration cannot silently leak into an earlier replay."""
         calibration = self.calibration()
@@ -208,16 +253,15 @@ class OccupancyModelTests(unittest.TestCase):
             self.module().calibrate_occupancy(trace, template)
 
     @patch.dict(os.environ, {"OPENDC_RUNTIME": "fns-demo"})
-    def test_prepared_cases_retain_exhausted_identity_and_block_down(self):
+    def test_prepared_cases_retain_exhausted_identity_including_down(self):
         """An estimated residual occupies its original worker in every shared future."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             forecast, observer = make_forecast(root)
             config = {**configuration(), "occupancy_model": "causal-occupancy-v1"}
             manifest = prepare_suite(forecast, observer, config, root / "suite", "pinned-trace")
-            self.assertIn(
-                {"candidate": "scale-down", "reason": "exhausted_or_unresolved_work"},
-                manifest["unavailable_candidates"],
+            self.assertNotIn(
+                "scale-down", [r["candidate"] for r in manifest["unavailable_candidates"]]
             )
             for entry in manifest["experiments"]:
                 path = root / "suite" / entry["input_dir"]
@@ -227,7 +271,9 @@ class OccupancyModelTests(unittest.TestCase):
                 estimate = next(row for row in case["tasks"] if row["task"]["id"] == raw["task_id"])
                 self.assertEqual(estimate["metadata"]["preserved_assignment"], "worker-a")
                 self.assertIs(raw["observed_completed"], False)
-            self.assertEqual(plan_suite(root / "suite")["actions"], ["unchanged", "scale-up"])
+            self.assertEqual(
+                plan_suite(root / "suite")["actions"], ["unchanged", "scale-up", "scale-down"]
+            )
 
     @patch.dict(os.environ, {"OPENDC_RUNTIME": "fns-demo"})
     def test_finished_classifier_retains_pod_requests_without_predicting_another_finish(self):
