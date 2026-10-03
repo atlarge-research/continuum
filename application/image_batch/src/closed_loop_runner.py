@@ -10,6 +10,7 @@ from opendc_evaluate import load_batch
 from opendc_inputs import write_json
 from opendc_kubernetes import extract_artifacts, job_manifest, ssh, verify_collection_source
 from opendc_native_batch import plan_suite
+from opendc_acquisition import application_tasks
 from opendc_pinning import cordoned_worker
 from opendc_occupancy import estimated_exhausted_ids
 
@@ -84,7 +85,7 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
                 - item["metadata"]["original_creation_ms"]
             )
             / 1000
-            for item in case["tasks"]
+            for item in application_tasks(case)
         ]
         if any(not math.isfinite(value) or value < 0 for value in responses):
             raise ValueError("invalid original-creation response")
@@ -101,6 +102,11 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
             if removed
             else 0
         )
+        charged = set(
+            case.get("acquisition", {}).get(
+                "allocated_workers", [worker["node_name"] for worker in case["workers"]]
+            )
+        )
         allocation = sum(
             worker["modeled_cores"]
             * (
@@ -109,6 +115,7 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
                 else allocation_seconds
             )
             for worker in case["workers"]
+            if worker["node_name"] in charged
         )
         score = grouped.setdefault(
             action,
@@ -122,7 +129,7 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
             {
                 "scenario": scenario,
                 "responses_seconds": responses,
-                "cohort_size": len(expected),
+                "cohort_size": len(application_tasks(case)),
                 "complete": True,
                 "allocated_core_seconds": allocation,
                 "allocation_window_seconds": allocation_seconds,

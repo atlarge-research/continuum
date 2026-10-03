@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pyarrow.parquet as pq
 
+from opendc_acquisition import apply_acquisition, native_cordons
 from opendc_occupancy import apply_occupancy, calibrate_occupancy
 
 from forecast_trace import (
@@ -685,6 +686,7 @@ def _write_case(
     experiment_kind,
     draining_worker=None,
     occupancy_model=None,
+    acquisition=None,
 ):
     """Write one experiment and publish its ready case manifest last.
 
@@ -703,6 +705,7 @@ def _write_case(
         experiment_kind (str): Observed or explicitly synthetic experiment label.
         draining_worker (str or None): Existing cordon whose assigned work still drains.
         occupancy_model (dict or None): Frozen causal lifecycle and residual estimates.
+        acquisition (dict or None): Common full topology and synthetic availability settings.
 
     Returns:
         dict: Published case manifest.
@@ -733,12 +736,15 @@ def _write_case(
     if occupancy_model:
         case = apply_occupancy(case, occupancy_model)
         tasks = [item["task"] for item in case["tasks"]]
+    if acquisition:
+        case = apply_acquisition(case, acquisition)
+        tasks = [item["task"] for item in case["tasks"]]
+        workers = case["workers"]
     assignments = initial_assignments(case) if pinned else None
     config = experiment_config()
     if pinned:
         case["initialization"] = initialization_metadata(assignments, case)
-        cordon = draining_worker or (selected_worker if candidate == "scale-down" else None)
-        config["cordonHosts"] = [[cordon] if cordon else []]
+        config["cordonHosts"] = [native_cordons(case)]
         config["exportModels"][0]["filesToExport"].append("datacenter")
     directory.mkdir(parents=True, exist_ok=False)
     parquet_tasks(tasks, directory / "source")
@@ -855,7 +861,12 @@ def prepare_suite(
     occupied = sorted(active + draining)
     candidates = [("unchanged", occupied, None)]
     unavailable = []
-    if len(active) >= worker_config.get("maximum_workers", 3):
+    pending_workers = {
+        row["selected_worker"] for row in worker_config.get("pending_acquisitions", [])
+    }
+    if pending_workers:
+        unavailable.append({"candidate": "scale-up", "reason": "pending_capacity_acquisition"})
+    elif len(active) >= worker_config.get("maximum_workers", 3):
         unavailable.append({"candidate": "scale-up", "reason": "maximum_worker_count"})
     else:
         reserves = sorted(set(configured) - set(occupied))
@@ -863,7 +874,9 @@ def prepare_suite(
             candidates.append(("scale-up", sorted(occupied + [reserves[0]]), reserves[0]))
         else:
             unavailable.append({"candidate": "scale-up", "reason": "no_configured_reserve"})
-    if draining:
+    if pending_workers:
+        unavailable.append({"candidate": "scale-down", "reason": "pending_capacity_acquisition"})
+    elif draining:
         unavailable.append({"candidate": "scale-down", "reason": "worker_already_draining"})
     elif not simulation["membership"]["complete"]:
         unavailable.append({"candidate": "scale-down", "reason": "unresolved_membership"})
@@ -899,6 +912,20 @@ def prepare_suite(
     write_json(evidence / "forecast-file-sha256.json", source_hashes)
 
     backlog_metadata = {item["task"]["id"]: item["metadata"] for item in backlog}
+    acquisition = None
+    if worker_config.get("acquisition_seconds", 0) or worker_config.get("pending_acquisitions"):
+        if not pinned:
+            raise ValueError("delayed acquisition requires pinned native initialization")
+        identities = [task["id"] for sample in scenarios for task in sample]
+        identities += [row["task_id"] for row in exhausted]
+        identities += [row["task"]["id"] for row in releasing]
+        acquisition = {
+            "acquisition_seconds": worker_config.get("acquisition_seconds", 0),
+            "workers": [copy.deepcopy(configured[name]) for name in sorted(configured)],
+            "active_workers": active,
+            "pending_acquisitions": copy.deepcopy(worker_config.get("pending_acquisitions", [])),
+            "first_synthetic_task_id": max(identities, default=-1) + 1,
+        }
     experiments = []
     for candidate, worker_names, selected_worker in candidates:
         workers = [copy.deepcopy(configured[name]) for name in worker_names]
@@ -927,6 +954,7 @@ def prepare_suite(
                 experiment_kind,
                 draining[0] if draining else None,
                 occupancy_model,
+                acquisition,
             )
             experiments.append(
                 {

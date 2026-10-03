@@ -8,6 +8,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 
 from forecast_trace import canonical
+from opendc_acquisition import native_cordons, validate_acquisition_results
 from opendc_inputs import fixture_tasks
 from opendc_pinning import PINNED_MODE, initial_assignments, cordoned_worker
 from opendc_energy import datacenter_series, energy_tolerance
@@ -363,6 +364,8 @@ def validate_provisional_results(directory, case):
                     )
                 }
             )
+        validate_acquisition_results(case, completed, assignments)
+        closed_hosts = set(native_cordons(case)) if pinned else set()
         for name, host in hosts.items():
             events = []
             for row in completed:
@@ -415,7 +418,9 @@ def validate_provisional_results(directory, case):
             samples = [row for row in tables["host"] if row["host_name"] == name]
             _require(
                 all(math.isfinite(row["timestamp"]) and row["timestamp"] >= 0 for row in samples)
-                and (name == removed or max(row["timestamp"] for row in samples) + origin >= end),
+                and (
+                    name in closed_hosts or max(row["timestamp"] for row in samples) + origin >= end
+                ),
                 "native host energy coverage ends before included completion",
             )
         energy = None
@@ -426,7 +431,7 @@ def validate_provisional_results(directory, case):
                 "native service coverage ends before completion",
             )
             _require(
-                service["hosts_up"] == len(hosts) - int(removed is not None),
+                service["hosts_up"] == len(hosts) - len(closed_hosts),
                 "cordoned host did not close or remaining host is unavailable",
             )
             series = datacenter_series(case, tables["dataCenter"], origin)["modeled-worker-pool"]

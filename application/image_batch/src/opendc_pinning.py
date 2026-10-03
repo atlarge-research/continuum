@@ -54,8 +54,8 @@ def initial_assignments(case):
             continue
         if (
             host not in workers
-            or metadata.get("cohort") != "backlog"
-            or metadata.get("phase") not in ("running", "startup", "release")
+            or metadata.get("cohort") not in ("backlog", "infrastructure")
+            or metadata.get("phase") not in ("running", "startup", "release", "acquisition")
             or task["submission_time"] != 0
         ):
             raise ValueError("invalid initial pinned assignment")
@@ -137,4 +137,7 @@ def initialization_metadata(assignments, case=None):
                 "exhausted residuals are labeled predictions, not observed completion"
             ),
         )
+    if case and case.get("acquisition"):
+        result["acquisition_synthetic_task_ids"] = case["acquisition"]["synthetic_task_ids"]
+        result["interpretation"] += "; synthetic slot reservations model delayed admission"
     return result

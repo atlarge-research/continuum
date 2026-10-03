@@ -9,7 +9,8 @@ import sys
 import time
 
 from opendc_inputs import file_hashes, verify_inputs, write_json
-from opendc_pinning import FNS_CONTRACT, PINNED_MODE, cordoned_worker
+from opendc_acquisition import native_cordons
+from opendc_pinning import FNS_CONTRACT, PINNED_MODE
 from opendc_process import run_process
 from opendc_results import validate_provisional_results
 from opendc_run import execute, runtime_provenance, utc_now
@@ -112,8 +113,7 @@ def plan_suite(suite_dir):
     for action in actions:
         action_reference = cases[(action, samples[0])][1]
         names = {worker["node_name"] for worker in action_reference["workers"]}
-        removed = cordoned_worker(action_reference)
-        cordon = sorted((union_names - names) | ({removed} if removed else set()))
+        cordon = sorted((union_names - names) | set(native_cordons(action_reference)))
         if cordon in cordons:
             raise ValueError("distinct actions would collapse to one native cordon specification")
         cordons.append(cordon)
