@@ -463,6 +463,23 @@ def acquisition_rows(run):
     ]
 
 
+def acquisition_series(run, field):
+    """Read acquisition components without inventing capacity across missing observations.
+
+    Args:
+        run (dict): Frozen allocation evidence and workload clock.
+        field (str): Charged, physical or pending application-core component.
+
+    Returns:
+        tuple[list[float], list[float]]: Relative minutes and values with explicit NaN gaps.
+    """
+    points = [dict(point) for point in run["allocation"]["series"]]
+    for point in points:
+        point.setdefault("accepting_draining_cores", point.get("allocated"))
+        point.setdefault("pending_application_cores", 0)
+    return observed_series(points, run["origin_seconds"], field)
+
+
 def _acquisition_page(pdf, run):
     """Display charged, available and pending capacity with physical activation clocks.
 
@@ -476,15 +493,14 @@ def _acquisition_page(pdf, run):
         rows=2,
         columns=1,
     )
-    points = [p for p in run["allocation"]["series"] if p["valid"]]
-    times = [(p["time"] - run["origin_seconds"]) / 60 for p in points]
     axis = axes[0, 0]
     for field, label, color in (
         ("allocated", "Charged cores", COLORS[0]),
         ("accepting_draining_cores", "Accepting + draining cores", COLORS[1]),
         ("pending_application_cores", "Requested pending cores", COLORS[2]),
     ):
-        axis.step(times, [p.get(field) for p in points], where="post", label=label, color=color)
+        times, values = acquisition_series(run, field)
+        axis.step(times, values, where="post", label=label, color=color)
     panel(
         axis,
         "Requested versus available capacity",

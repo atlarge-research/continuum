@@ -9,7 +9,7 @@ import unittest
 from acquisition_evidence import acquisition_history, acquisition_audit
 from closed_loop_evidence import allocation, controller_outcomes
 from forecast_trace import iso
-from reporting.closed_loop import acquisition_rows
+from reporting.closed_loop import acquisition_rows, acquisition_series
 import test_closed_loop_guards as guard_fixtures
 
 
@@ -196,6 +196,25 @@ class AcquisitionEvidenceTests(unittest.TestCase):
         self.assertEqual(row["latency"], 6)
         run["controller"]["acquisitions"] = acquisition_history(records(observed=None))
         self.assertIsNone(acquisition_rows(run)[0]["observed"])
+
+    def test_capacity_plot_retains_unknown_intervals_and_zero_pending_fixed_capacity(self):
+        """A fixed baseline has physical cores; missing snapshots never become a connecting line."""
+        run = {
+            "origin_seconds": 1000,
+            "allocation": {
+                "series": [
+                    {"time": 1000, "valid": True, "allocated": 16},
+                    {"time": 1005, "valid": True, "allocated": 16},
+                    {"time": 1006, "valid": False},
+                ]
+            },
+        }
+        times, values = acquisition_series(run, "accepting_draining_cores")
+        self.assertEqual(len(times), 4)
+        self.assertEqual(values[0], 16)
+        self.assertTrue(values[1] != values[1])
+        self.assertTrue(values[-1] != values[-1])
+        self.assertEqual(acquisition_series(run, "pending_application_cores")[1][0], 0)
 
     def test_zero_delay_history_is_empty_without_invented_activation(self):
         """Historical direct uncordon runs keep their original accounting semantics."""
