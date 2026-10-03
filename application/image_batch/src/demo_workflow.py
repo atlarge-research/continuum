@@ -307,6 +307,17 @@ def matrix_commands(protocol, output):
         for arm, seconds in cadences.items()
     ):
         raise ValueError("invalid arm cadence")
+    bounds = protocol.get("worker_bounds")
+    if bounds is not None and (
+        not isinstance(bounds, dict)
+        or set(bounds) != {"active_workers", "minimum_workers", "maximum_workers"}
+        or any(isinstance(value, bool) or not isinstance(value, int) for value in bounds.values())
+        or not 1
+        <= bounds["minimum_workers"]
+        <= bounds["active_workers"]
+        <= bounds["maximum_workers"]
+    ):
+        raise ValueError("invalid worker bounds")
     result, seen = [], set()
     for row in protocol["matrix"]:
         seed, arm = row["seed"], row["arm"]
@@ -353,6 +364,9 @@ def matrix_commands(protocol, output):
             "--template-deployment",
             protocol.get("template_deployment", "image-batch-adapter"),
         ]
+        if bounds is not None:
+            for name in ("active_workers", "minimum_workers", "maximum_workers"):
+                command.extend(["--" + name.replace("_", "-"), str(bounds[name])])
         if arm in cadences:
             command.extend(["--cadence-seconds", str(cadences[arm])])
         result.append(dict(seed=seed, arm=arm, output=str(destination), command=command))
