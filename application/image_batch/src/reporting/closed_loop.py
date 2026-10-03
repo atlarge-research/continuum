@@ -390,6 +390,7 @@ def _timelines(pdf, runs):
             )
     for deadline in {r.get("invocation", {}).get("deadline_seconds", 120) for r in runs}:
         axes[1, 0].axvline(deadline, color="black", linestyle="--", linewidth=1)
+        axes[1, 0].axhline(0.95, color="black", linestyle="--", linewidth=1)
     for budget in {
         r.get("invocation", {}).get("decision_age_seconds", 30)
         for r in runs
