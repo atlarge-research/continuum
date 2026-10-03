@@ -780,4 +780,13 @@ class Controller:
 
     def close(self):
         """Close durable ownership when the enclosing measured capture stops."""
+        request = pending_activation(self.journal)
+        if request and "dispatch" not in request:
+            self.journal.append(
+                "activation.result",
+                activation_id=request["activation_id"],
+                selected_worker=request["selected_worker"],
+                status="cancelled",
+                reason="capture_closed_before_dispatch",
+            )
         self.journal.close()

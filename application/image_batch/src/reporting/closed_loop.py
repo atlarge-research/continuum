@@ -311,7 +311,8 @@ def _outcomes(pdf, runs, pairs):
         "dots mark its 95% crossing.\n"
         "Other dots: independent workload runs. Black bars: median and descriptive min–max, "
         "not confidence intervals.\n"
-        "Core-hours count accepting + draining capacity; dots are interval midpoints, "
+        "Core-hours count accepting + draining + requested pending capacity; "
+        "dots are interval midpoints, "
         "colored spans are coverage bounds.\n"
         "Configured powered worker VMs remain available throughout. No physical energy "
         "saving is inferred.",
@@ -435,6 +436,104 @@ def _timelines(pdf, runs):
     )
 
 
+def acquisition_rows(run):
+    """Retain request, minimum availability and observed clocks for report tables.
+
+    Args:
+        run (dict): Frozen run evidence with controller acquisition history.
+
+    Returns:
+        list[dict]: Relative clocks and measured request-to-observation latency.
+    """
+    origin = run["origin_seconds"]
+    return [
+        dict(
+            worker=row["selected_worker"],
+            status=row["status"],
+            requested=row["requested_at_seconds"] - origin,
+            due=row["ready_at_seconds"] - origin,
+            observed=(
+                row["observed_at_seconds"] - origin
+                if row.get("observed_at_seconds") is not None
+                else None
+            ),
+            latency=row.get("request_to_observed_seconds"),
+        )
+        for row in run["controller"].get("acquisitions", [])
+    ]
+
+
+def _acquisition_page(pdf, run):
+    """Display charged, available and pending capacity with physical activation clocks.
+
+    Args:
+        pdf (PdfPages): Open combined report writer.
+        run (dict): One frozen delayed-acquisition run, retaining its study role.
+    """
+    figure, axes = page(
+        f'Capacity acquisition: {run["role"]} {run["seed"]} {run["arm"]}',
+        "Requested capacity is charged immediately; only observed accepting capacity runs Jobs.",
+        rows=2,
+        columns=1,
+    )
+    points = [p for p in run["allocation"]["series"] if p["valid"]]
+    times = [(p["time"] - run["origin_seconds"]) / 60 for p in points]
+    axis = axes[0, 0]
+    for field, label, color in (
+        ("allocated", "Charged cores", COLORS[0]),
+        ("accepting_draining_cores", "Accepting + draining cores", COLORS[1]),
+        ("pending_application_cores", "Requested pending cores", COLORS[2]),
+    ):
+        axis.step(times, [p.get(field) for p in points], where="post", label=label, color=color)
+    panel(
+        axis,
+        "Requested versus available capacity",
+        "Minutes from workload start",
+        "Application cores",
+    )
+    axis.legend(fontsize=8)
+    rows = acquisition_rows(run)
+    table_axis = axes[1, 0]
+    table_axis.axis("off")
+    if rows:
+        table = table_axis.table(
+            cellText=[
+                [
+                    r["worker"],
+                    r["status"],
+                    _metric(r["requested"]),
+                    _metric(r["due"]),
+                    _metric(r["observed"]),
+                    _metric(r["latency"]),
+                ]
+                for r in rows
+            ],
+            colLabels=[
+                "Worker",
+                "Status",
+                "Request (s)",
+                "Earliest (s)",
+                "Observed (s)",
+                "Latency (s)",
+            ],
+            cellLoc="center",
+            loc="center",
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(8)
+        table.scale(1, 1.45)
+    else:
+        table_axis.text(0.5, 0.5, "No capacity acquisitions in the evaluation window", ha="center")
+    finish(
+        pdf,
+        figure,
+        "Controlled admission delay on powered Ready reserves. Cost starts at request; "
+        "API acknowledgement is not observed availability.\n"
+        "Accepting + draining capacity includes workers finishing assigned Jobs; reserve "
+        "power and physical boot/join latency are not measured.",
+    )
+
+
 def render_pages(pdf, reports):
     """Render physical outcomes before validation while retaining pilot/held-out separation.
 
@@ -450,6 +549,9 @@ def render_pages(pdf, reports):
     pairs = paired_savings(runs)
     _outcomes(pdf, heldout, pairs)
     _timelines(pdf, heldout)
+    for run in heldout:
+        if run.get("invocation", {}).get("acquisition_seconds", 0):
+            _acquisition_page(pdf, run)
     action_runs = [run for run in heldout if run["controller"].get("actions")]
     for run in action_runs:
         _action_evidence_page(pdf, run)
@@ -613,6 +715,9 @@ def render_run_details(pdf, reports):
     runs = [run for report in reports for run in report["runs"]]
     physical, overhead = [], []
     for run in runs:
+        if run["role"] == "pilot" and run.get("invocation", {}).get("acquisition_seconds", 0):
+            _acquisition_page(pdf, run)
+    for run in runs:
         response, control = run["responses"], run["controller"]
         identity = f'{run["role"]} {run["seed"]} {run["arm"]}'
         if not run["accepted_capture"]:
@@ -685,7 +790,7 @@ def render_run_details(pdf, reports):
             ],
             physical[offset : offset + 14],
             "Responses start at original Job creation. Quantiles describe completed Jobs only.\n"
-            "Core-hours include accepting and draining workers; bounds preserve "
+            "Core-hours include accepting, draining and requested pending workers; bounds preserve "
             "missing observations.\n"
             "Configured follow-up ends after the arrival window; completions beyond "
             "that boundary remain censored. See configuration settings.",
@@ -886,7 +991,7 @@ def _action_evidence_page(pdf, run):
         (
             axes[0, 0],
             "allocated",
-            "Capacity counts accepting and draining workers",
+            "Capacity counts accepting, draining and requested pending workers",
             "Application cores",
         ),
         (
@@ -1209,7 +1314,7 @@ def _forecast_observation_page(pdf, run):
     )
     series = run["allocation"]["series"]
     for field, color, label in (
-        ("allocated", COLORS[0], "Accepting + draining cores"),
+        ("allocated", COLORS[0], "Charged application cores"),
         ("accepting", COLORS[2], "Accepting workers"),
     ):
         state_times, state_values = observed_series(series, origin, field)
@@ -1356,6 +1461,7 @@ def _configuration_page(pdf, runs):
                 str(settings.get("residual_margin_seconds", 0)),
                 str(settings.get("allocation_seconds", 120)),
                 str(settings.get("native_timeout_seconds", 20)),
+                str(settings.get("acquisition_seconds", 0)),
                 str(run["controller"].get("reactive_down_observations", 2)),
             ]
         )
@@ -1371,6 +1477,7 @@ def _configuration_page(pdf, runs):
                 "Residual margin (s)",
                 "Allocation window (s)",
                 "Native timeout (s)",
+                "Acquisition (s)",
                 "Down observations",
             ],
             choices[offset : offset + 12],
@@ -1384,8 +1491,8 @@ def _configuration_page(pdf, runs):
             "all physical guards apply.\n"
             "Current overruns use the median residual of longer completed profiles, or a "
             "five-second fallback, plus the declared margin.\n"
-            "Ready reserve acquisition is immediate in the model; measured decision, API "
-            "and observation delay remains explicit.",
+            "Configured acquisition delay gates reserve admission; request-to-observation "
+            "latency is measured separately from decision latency.",
         )
 
 

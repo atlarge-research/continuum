@@ -188,6 +188,24 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(dispatch.call_count, 1)
         self.assertIsNotNone(pending_activation(self.journal))
 
+    def test_capture_close_cancels_only_requests_without_api_dispatch(self):
+        """Stopping ends logical reservations but preserves uncertain API intent."""
+        request = self.request()
+        loop = self.loop()
+        loop.close()
+        self.assertIsNone(pending_activation(self.journal))
+        self.assertEqual(self.journal.records[-1]["reason"], "capture_closed_before_dispatch")
+        self.journal = Journal(self.path)
+        request = self.request()
+        self.journal.append(
+            "activation.dispatch",
+            activation_id=request["activation_id"],
+            dispatched_at_seconds=1061,
+        )
+        loop = self.loop()
+        loop.close()
+        self.assertIsNotNone(pending_activation(self.journal))
+
     def test_zero_delay_uses_existing_guarded_api_path(self):
         """Zero-delay control retains the established direct actuation behavior."""
         loop = self.loop()

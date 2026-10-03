@@ -2,10 +2,13 @@
 
 import argparse
 from collections import Counter
+
 import hashlib
 import json
 import math
 from pathlib import Path
+
+from acquisition_evidence import acquisition_history, charge_acquisitions
 
 import numpy as np
 
@@ -19,7 +22,7 @@ from opendc_validation import read_observations
 SCHEMA = "opendc-closed-loop-evidence-v1"
 
 
-def allocation(states, config, start, end):
+def allocation(states, config, start, end, *, activation_records=None):
     """Integrate accepting plus draining application cores over a common physical window.
 
     Each observed state holds until the next snapshot only when the gap is at
@@ -33,6 +36,7 @@ def allocation(states, config, start, end):
         config (dict): Explicit worker resources and accepting-worker bounds.
         start (float): Inclusive evaluation boundary in UTC epoch seconds.
         end (float): Exclusive common arrival-window boundary in epoch seconds.
+        activation_records (list[dict] or None): Optional durable acquisition journal.
 
     Returns:
         dict: Complete or explicitly unavailable allocation, coverage and plotted state series.
@@ -64,6 +68,7 @@ def allocation(states, config, start, end):
                     lower=lower,
                     upper=upper,
                     membership_complete=membership,
+                    allocated_workers=view["active_workers"] + view["draining_workers"],
                     accepting=len(view["active_workers"]),
                     draining=len(view["draining_workers"]),
                     powered=view["powered_worker_count"],
@@ -102,7 +107,7 @@ def allocation(states, config, start, end):
         gaps.append(dict(start=cursor, end=end, reason="missing_final_state"))
         upper_cost += (end - cursor) * maximum
     complete = not gaps and math.isclose(covered, end - start, abs_tol=1e-6)
-    return dict(
+    result = dict(
         start_seconds=start,
         end_seconds=end,
         covered_seconds=covered,
@@ -121,6 +126,7 @@ def allocation(states, config, start, end):
             "No physical energy estimate."
         ),
     )
+    return charge_acquisitions(result, activation_records or [], maximum)
 
 
 def responses(observations, start_ms, end_ms, *, deadline_seconds=120, followup_end_ms=None):
@@ -213,6 +219,8 @@ def controller_outcomes(  # pylint: disable=too-many-locals
     """
     path = directory / "journal.jsonl"
     records = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    acquisitions = acquisition_history(records)
+    acquired = {row.get("api_action_id"): row for row in acquisitions if row.get("api_action_id")}
     cycles = {}
     requests = {}
     current = None
@@ -353,6 +361,17 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         for row in rows
         for action in row["actions"]
     ]
+    for action in actions:
+        acquisition = acquired.get(action["action_id"])
+        if acquisition:
+            action["activation_id"] = acquisition["activation_id"]
+            action["acquisition_requested_seconds"] = acquisition["requested_at_seconds"]
+            action["observed"] = acquisition["status"] == "observed"
+            action["observation_seconds"] = acquisition.get("observed_at_seconds")
+            cycle = cycles.get(acquisition["tick"])
+            if cycle:
+                cycle["activation_observed"] = action["observed"]
+                cycle["activation_requested_seconds"] = acquisition["requested_at_seconds"]
     latencies = [row["elapsed_seconds"] for row in rows if "elapsed_seconds" in row]
     identity_path = directory / "identity.json"
     identity = json.loads(identity_path.read_text()) if identity_path.exists() else {}
@@ -360,6 +379,7 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         identity.get("settings", {}).get("config", {}).get("reactive_down_observations", 2)
     )
     return dict(
+        acquisitions=[row for row in acquisitions if start <= row["requested_at_seconds"] < end],
         reactive_down_observations=down_observations,
         cycles=rows,
         actions=actions,
@@ -587,7 +607,19 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
     )
     rows, boundaries = bounded_read(capture / "observer")
     trace, observations = read_observations(rows, invocation["namespace"])
-    allocation_result = allocation([state for _, state in trace.states], config, start, end)
+    journal_path = capture / "controller/journal.jsonl"
+    activation_records = (
+        [json.loads(line) for line in journal_path.read_text().splitlines()]
+        if journal_path.exists()
+        else []
+    )
+    allocation_result = allocation(
+        [state for _, state in trace.states],
+        config,
+        start,
+        end,
+        activation_records=activation_records,
+    )
     followup_end = end + invocation.get("followup_seconds", 600)
     deadline = invocation.get("deadline_seconds", 120)
     response_result = responses(
@@ -679,6 +711,9 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
                 "worker_cores",
                 "worker_memory_mib",
                 "active_workers",
+                "minimum_workers",
+                "maximum_workers",
+                "acquisition_seconds",
                 "template_namespace",
                 "template_deployment",
                 "period_seconds",

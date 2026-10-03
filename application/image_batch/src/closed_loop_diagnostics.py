@@ -75,10 +75,12 @@ def cycle_diagnostic(
     )
     if forecast_selected and cycle.get("outcome") in ("held", "shadow"):
         candidate = "unchanged"
-    elif (
-        forecast_selected
-        and cycle.get("outcome") == "acknowledged"
-        and cycle.get("action_observed") is True
+    elif forecast_selected and (
+        (cycle.get("outcome") == "acknowledged" and cycle.get("action_observed") is True)
+        or (
+            cycle.get("outcome") == "activation_requested"
+            and cycle.get("activation_observed") is True
+        )
     ):
         candidate = cycle["proposal"]["action"]
     result = dict(
