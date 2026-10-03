@@ -35,11 +35,11 @@
 
 **Interfaces:** Consumes preserved endpoint events, adapter-data metadata/events, stage/collection timing and activation journals from the prior campaign. Produces `diagnosis/sender.json`, `diagnosis/timing.json` and a cause/limits note identifying observed versus hypothesized mechanisms.
 
-- [ ] Read the task brief and record BASE; preserve baseline507-test result and authoritative original/extension states.
-- [ ] Reconstruct sender request lifetimes and16-slot saturation against adapter body/storage/API stages, retaining raw identities and evaluated-window clocks.
-- [ ] Reconstruct cutoff→prepare→native→request→observed timing, compare working/problematic captures and document model assumptions.
-- [ ] Use minimal controlled tests/probes to distinguish competing causes; stop speculative fixes and record remaining uncertainty.
-- [ ] Run pinned tooling on preserved diagnostic scripts, validate counts against raw captures and commit only audience-scoped design amendments necessary for the selected correction.
+- [x] Read the task brief and record BASE; preserve baseline507-test result and authoritative original/extension states.
+- [x] Reconstruct sender request lifetimes and16-slot saturation against adapter body/storage/API stages, retaining raw identities and evaluated-window clocks.
+- [x] Reconstruct cutoff→prepare→native→request→observed timing, compare working/problematic captures and document model assumptions.
+- [x] Use minimal controlled tests/probes to distinguish competing causes; stop speculative fixes and record remaining uncertainty.
+- [x] Run pinned tooling on preserved diagnostic scripts, validate counts against raw captures and commit only audience-scoped design amendments necessary for the selected correction.
 
 ### Task 2: Reliable evaluated-window evidence and focused sender correction
 
@@ -47,10 +47,10 @@
 
 **Interfaces:** Consumes Task1 diagnosis and existing whole-capture sender identity validation. Produces `sender_window_fidelity(events, *, start_offset_seconds, end_offset_seconds) -> dict`, explicit capture/protocol `require_evaluated_sender_fidelity` defaultFalse, per-run `sender_evaluated_window` metadata and required acceptance for new campaign captures. Source corrections must preserve offered schedule/receipt/Job semantics.
 
-- [ ] Write/run RED tests for planned-window boundary inclusion, a timely warm-up hiding late evaluated sends, missing/failed identities and old default compatibility.
-- [ ] Implement exact planned-window counts,250ms/95% fidelity, exported reporting metadata and sealed forwarding; do not retrospectively change old acceptance.
-- [ ] Reproduce any confirmed sender/storage defect with a meaningful regression; implement only the demonstrated fix and verify at unchanged workload semantics.
-- [ ] Run relevant sender/storage/evidence/workflow/report tests, pinned format/lint and full regressions; inspect diff and commit.
+- [x] Write/run RED tests for planned-window boundary inclusion, a timely warm-up hiding late evaluated sends, missing/failed identities and old default compatibility.
+- [x] Implement exact planned-window counts,250ms/95% fidelity, exported reporting metadata and sealed forwarding; do not retrospectively change old acceptance.
+- [x] Reproduce any confirmed sender/storage defect with a meaningful regression; implement only the demonstrated fix and verify at unchanged workload semantics.
+- [x] Run relevant sender/storage/evidence/workflow/report tests, pinned format/lint and full regressions; inspect diff and commit.
 
 ### Task 3: Timing fidelity and physical comparators
 

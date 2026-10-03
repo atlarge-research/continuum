@@ -326,6 +326,11 @@ def matrix_commands(protocol, output):
         raise ValueError("invalid worker bounds")
     arm_initial = protocol.get("arm_active_workers")
     validate_arm_active_workers(arm_initial, bounds)
+    if arm_initial is not None:
+        arm_initial = {
+            arm: arm_initial.get(arm, bounds["active_workers"])
+            for arm in ("fixed", "reactive", "forecast")
+        }
     result, seen = [], set()
     for row in protocol["matrix"]:
         seed, arm = row["seed"], row["arm"]

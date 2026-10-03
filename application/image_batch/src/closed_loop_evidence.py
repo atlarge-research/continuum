@@ -455,10 +455,16 @@ def sender_window_fidelity(events, *, start_offset_seconds, end_offset_seconds):
     groups = {kind: {} for kind in kinds}
     issues = []
     for row in events:
+        if not isinstance(row, dict):
+            issues.append("malformed_sender_event")
+            continue
         kind = row.get("event_type")
         if kind not in groups:
             continue
         details = row.get("details", {})
+        if not isinstance(details, dict):
+            issues.append("malformed_sender_details")
+            continue
         identity = details.get("endpoint_batch_id")
         if not isinstance(identity, str) or not identity:
             issues.append("malformed_sender_identity")
@@ -473,6 +479,14 @@ def sender_window_fidelity(events, *, start_offset_seconds, end_offset_seconds):
                 continue
             if bounds[0] * 1e9 <= offset < bounds[1] * 1e9:
                 selected.append((identity, details))
+    indices = [plan.get("batch_index") for _, plan in selected]
+    valid_indices = [
+        value
+        for value in indices
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    ]
+    if len(valid_indices) != len(indices) or len(set(valid_indices)) != len(valid_indices):
+        issues.append("invalid_or_duplicate_batch_index")
     lags, on_time, successful = [], 0, 0
     for identity, plan in selected:
         started, received, failed = (groups[kind].get(identity, []) for kind in kinds[1:])
@@ -823,7 +837,10 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
         config=config,
         comparison_settings={
             key: (
-                invocation.get("arm_active_workers")
+                {
+                    arm: invocation["arm_active_workers"].get(arm, invocation.get("active_workers"))
+                    for arm in ("fixed", "reactive", "forecast")
+                }
                 if key == "active_workers" and invocation.get("arm_active_workers") is not None
                 else invocation.get(key)
             )

@@ -1,6 +1,7 @@
 """Decision time offsets preserve original pending clocks and truthful allocation cost."""
 
 import copy
+import json
 from pathlib import Path
 import unittest
 
@@ -76,6 +77,26 @@ class DiagnosticTimingTests(unittest.TestCase):
         self.assertEqual(scores["unchanged"]["scenarios"][0]["allocated_core_seconds"], 720)
         self.assertEqual(scores["scale-up"]["scenarios"][0]["allocated_core_seconds"], 900)
         self.assertEqual(scores["scale-up"]["scenarios"][0]["cohort_size"], 1)
+
+    def test_partial_override_materializes_one_common_complete_allocation_declaration(self):
+        """A fixed-only override must retain the shared four-worker initial dynamic pool."""
+        protocol = dict(
+            source_root="/frozen",
+            continuum_config="/cluster.cfg",
+            inventory="/inventory",
+            experiment_config="/settings.json",
+            native_image="native:pinned",
+            run_prefix="partial",
+            matrix=[dict(seed=1, arm=arm) for arm in ("fixed", "reactive", "forecast")],
+            worker_bounds=dict(active_workers=4, minimum_workers=2, maximum_workers=6),
+            arm_active_workers=dict(fixed=5),
+        )
+        for row in matrix_commands(protocol, Path("/new")):
+            command = row["command"]
+            self.assertEqual(
+                json.loads(command[command.index("--arm-active-workers") + 1]),
+                dict(fixed=5, reactive=4, forecast=4),
+            )
 
     def test_fixed5_and_dynamic4_are_sealed_without_changing_common_worker_bounds(self):
         """A fixed comparator can admit on five while both dynamic policies start on four."""

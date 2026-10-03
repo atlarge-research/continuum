@@ -99,6 +99,22 @@ class SenderWindowTests(unittest.TestCase):
             with self.subTest(start=start, end=end), self.assertRaises(ValueError):
                 self.measure([], start, end)
 
+    def test_malformed_details_and_duplicate_indices_cannot_pass_window_audit(self):
+        """Invalid raw details fail explicitly; distinct IDs cannot reuse a batch index."""
+        duplicate_index = batch_events(1, 6) + batch_events(2, 7)
+        for row in duplicate_index[3:]:
+            row["details"]["batch_index"] = 1
+        missing_index = batch_events(1, 6)
+        for row in missing_index:
+            row["details"].pop("batch_index")
+        for events in (
+            duplicate_index,
+            missing_index,
+            batch_events(1, 6) + [dict(event_type="batch.send_started", details=None)],
+        ):
+            with self.subTest(events=events):
+                self.assertFalse(self.measure(events)["fidelity_passed"])
+
     def test_required_fidelity_is_explicit_in_sealed_commands_and_default_compatible(self):
         """Only explicitly opted-in future protocols request stronger acceptance."""
         protocol = dict(
