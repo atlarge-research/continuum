@@ -1,11 +1,11 @@
 """Distributed API timestamps must not precede their producer's actual evidence clock."""
 from datetime import datetime, timezone
 import unittest
+from unittest.mock import patch
 from types import SimpleNamespace
 
 from events import new_event
 from forecast_trace import read_trace
-from unittest.mock import patch
 
 import opendt_observer
 
