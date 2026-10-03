@@ -21,7 +21,9 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
     Responses end at modeled resource release, used explicitly as the practical
     Job-completion proxy. Classifier-only response remains separate in reporting.
     Accepting workers cost the full allocation window; a cordoned worker costs
-    only its modeled drain interval, with no claim of physical power-off.
+    only its modeled drain interval, with no claim of physical power-off. New acquisitions
+    start charging at the declared modeled request offset; existing pending capacity remains
+    charged throughout. Scale-down retains the cutoff-time cordon approximation.
 
     Args:
         rows (list[dict]): Case metadata and successful native/analytical validation.
@@ -107,12 +109,21 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
                 "allocated_workers", [worker["node_name"] for worker in case["workers"]]
             )
         )
+        request_offsets = case.get("acquisition", {}).get("request_after_seconds", {})
+        if any(
+            isinstance(offset, bool)
+            or not isinstance(offset, (int, float))
+            or not math.isfinite(offset)
+            or offset < 0
+            for offset in request_offsets.values()
+        ):
+            raise ValueError("invalid modeled acquisition request offset")
         allocation = sum(
             worker["modeled_cores"]
             * (
                 min(allocation_seconds, drain)
                 if worker["node_name"] == removed
-                else allocation_seconds
+                else max(0, allocation_seconds - request_offsets.get(worker["node_name"], 0))
             )
             for worker in case["workers"]
             if worker["node_name"] in charged

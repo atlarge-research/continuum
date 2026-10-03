@@ -21,6 +21,7 @@ from demo_cleanup import cleanup_native
 from demo_lifetime import PHASE_SECONDS, PHASE_STOP_SECONDS, PhaseFailure, run_phase
 from demo_recovery import recover_capture
 from demo_configuration import (
+    validate_arm_active_workers,
     resolve_deployment,
     validate_experiment,
     validate_live_inventory,
@@ -323,6 +324,8 @@ def matrix_commands(protocol, output):
         <= bounds["maximum_workers"]
     ):
         raise ValueError("invalid worker bounds")
+    arm_initial = protocol.get("arm_active_workers")
+    validate_arm_active_workers(arm_initial, bounds)
     result, seen = [], set()
     for row in protocol["matrix"]:
         seed, arm = row["seed"], row["arm"]
@@ -373,7 +376,14 @@ def matrix_commands(protocol, output):
             command.append("--require-evaluated-sender-fidelity")
         if bounds is not None:
             for name in ("active_workers", "minimum_workers", "maximum_workers"):
-                command.extend(["--" + name.replace("_", "-"), str(bounds[name])])
+                value = (
+                    (arm_initial or {}).get(arm, bounds[name])
+                    if name == "active_workers"
+                    else bounds[name]
+                )
+                command.extend(["--" + name.replace("_", "-"), str(value)])
+        if arm_initial is not None:
+            command.extend(["--arm-active-workers", json.dumps(arm_initial, sort_keys=True)])
         if arm in cadences:
             command.extend(["--cadence-seconds", str(cadences[arm])])
         result.append(dict(seed=seed, arm=arm, output=str(destination), command=command))

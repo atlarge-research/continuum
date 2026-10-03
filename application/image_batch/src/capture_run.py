@@ -18,6 +18,7 @@ import yaml
 from closed_loop_controller import Controller
 from demo_clocks import clock_alignment
 from demo_configuration import (
+    validate_arm_active_workers,
     EXPERIMENT_DEFAULTS,
     resolve_deployment,
     validate_experiment,
@@ -723,6 +724,7 @@ def parse_arguments(argv=None):
     for name, default in EXPERIMENT_DEFAULTS.items():
         parser.add_argument("--" + name.replace("_", "-"), type=type(default), default=default)
     parser.add_argument("--active-workers", type=int)
+    parser.add_argument("--arm-active-workers", type=json.loads)
     parser.add_argument("--admission-mode", choices=("scheduler", "fifo"), default="scheduler")
     parser.add_argument(
         "--control-arm", choices=("none", "fixed", "reactive", "forecast"), default="none"
@@ -750,6 +752,11 @@ def parse_arguments(argv=None):
     if args.maximum_workers is None:
         args.maximum_workers = len(args.workers)
     validate_experiment(vars(args))
+    validate_arm_active_workers(args.arm_active_workers, vars(args))
+    if args.arm_active_workers is not None and args.active_workers != args.arm_active_workers.get(
+        args.control_arm, args.active_workers
+    ):
+        parser.error("initial worker count disagrees with declared per-arm allocation")
     if not 1 <= args.active_workers <= len(args.workers):
         parser.error("active worker count must fit the worker inventory")
     if (

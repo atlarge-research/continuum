@@ -822,7 +822,11 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
         arrival_end_seconds=end,
         config=config,
         comparison_settings={
-            key: invocation.get(key)
+            key: (
+                invocation.get("arm_active_workers")
+                if key == "active_workers" and invocation.get("arm_active_workers") is not None
+                else invocation.get(key)
+            )
             for key in (
                 "deployment_sources",
                 "network_preset",
@@ -834,6 +838,9 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
                 "minimum_workers",
                 "maximum_workers",
                 "acquisition_seconds",
+                "modeled_request_delay_seconds",
+                "modeled_admission_margin_seconds",
+                "require_evaluated_sender_fidelity",
                 "template_namespace",
                 "template_deployment",
                 "period_seconds",

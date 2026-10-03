@@ -913,7 +913,12 @@ def prepare_suite(
 
     backlog_metadata = {item["task"]["id"]: item["metadata"] for item in backlog}
     acquisition = None
-    if worker_config.get("acquisition_seconds", 0) or worker_config.get("pending_acquisitions"):
+    if (
+        worker_config.get("acquisition_seconds", 0)
+        or worker_config.get("pending_acquisitions")
+        or worker_config.get("modeled_request_delay_seconds", 0)
+        or worker_config.get("modeled_admission_margin_seconds", 0)
+    ):
         if not pinned:
             raise ValueError("delayed acquisition requires pinned native initialization")
         identities = [task["id"] for sample in scenarios for task in sample]
@@ -921,6 +926,10 @@ def prepare_suite(
         identities += [row["task"]["id"] for row in releasing]
         acquisition = {
             "acquisition_seconds": worker_config.get("acquisition_seconds", 0),
+            "modeled_request_delay_seconds": worker_config.get("modeled_request_delay_seconds", 0),
+            "modeled_admission_margin_seconds": worker_config.get(
+                "modeled_admission_margin_seconds", 0
+            ),
             "workers": [copy.deepcopy(configured[name]) for name in sorted(configured)],
             "active_workers": active,
             "pending_acquisitions": copy.deepcopy(worker_config.get("pending_acquisitions", [])),

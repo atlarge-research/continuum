@@ -29,6 +29,8 @@ EXPERIMENT_DEFAULTS = {
     "reactive_down_threshold": 0.7,
     "residual_margin_seconds": 3.0,
     "acquisition_seconds": 0.0,
+    "modeled_request_delay_seconds": 0.0,
+    "modeled_admission_margin_seconds": 0.0,
 }
 
 
@@ -211,7 +213,7 @@ def validate_experiment(values):
     if any(type(values[key]) is not int or values[key] < 1 for key in integers):
         raise ValueError("experiment counts and timing must be positive integers")
     for key in EXPERIMENT_DEFAULTS:
-        value = values[key]
+        value = values.get(key, 0) if key.startswith("modeled_") else values[key]
         if (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
@@ -227,6 +229,8 @@ def validate_experiment(values):
         or not 0 < values["reactive_down_threshold"] < values["reactive_up_threshold"]
         or not 0 < values["deadline_fraction"] <= 1
         or values["acquisition_seconds"] < 0
+        or values.get("modeled_request_delay_seconds", 0) < 0
+        or values.get("modeled_admission_margin_seconds", 0) < 0
         or values["scenario_seed"] < 0
         or type(values["scenario_seed"]) is not int
         or any(
@@ -241,3 +245,29 @@ def validate_experiment(values):
         )
     ):
         raise ValueError("invalid experiment timing, rates, policy fractions or warmup")
+
+
+def validate_arm_active_workers(mapping, bounds):
+    """Validate a declared per-arm initial allocation against shared dynamic bounds.
+
+    Args:
+        mapping (dict or None): Explicit fixed/reactive/forecast accepting worker overrides.
+        bounds (dict or None): Shared minimum, initial and maximum worker counts.
+
+    Raises:
+        ValueError: Overrides lack bounds, name an unknown arm or fall outside the bounds.
+    """
+    if mapping is None:
+        return
+    if (
+        not isinstance(mapping, dict)
+        or bounds is None
+        or any(
+            arm not in ("fixed", "reactive", "forecast")
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or not bounds["minimum_workers"] <= count <= bounds["maximum_workers"]
+            for arm, count in mapping.items()
+        )
+    ):
+        raise ValueError("invalid per-arm active worker allocation")

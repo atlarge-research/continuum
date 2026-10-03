@@ -55,7 +55,9 @@ def apply_acquisition(case, settings):
     Args:
         case (dict): Complete pinned case after causal lifecycle occupancy adaptation.
         settings (dict): Full worker records, active workers, delay, pending request clocks
-            and first_synthetic_task_id shared by all candidates and futures.
+            and first_synthetic_task_id shared by all candidates and futures. Optional modeled
+            request delay precedes new requests; admission margin follows new or pending due
+            time. Pending absolute clocks are retained without adding another request delay.
 
     Returns:
         dict: Independent acquisition-aware case, or unchanged zero-delay contract.
@@ -64,6 +66,8 @@ def apply_acquisition(case, settings):
         ValueError: Delay, synthetic identities, worker roles or pending clocks are invalid.
     """
     delay = settings.get("acquisition_seconds", 0)
+    request_delay = settings.get("modeled_request_delay_seconds", 0)
+    admission_margin = settings.get("modeled_admission_margin_seconds", 0)
     pending = settings.get("pending_acquisitions", [])
     if (
         isinstance(delay, bool)
@@ -72,7 +76,15 @@ def apply_acquisition(case, settings):
         or delay < 0
     ):
         raise ValueError("acquisition delay must be finite and nonnegative")
-    if delay == 0 and not pending:
+    for value in (request_delay, admission_margin):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            raise ValueError("modeled timing offsets must be finite and nonnegative")
+    if delay == 0 and not pending and request_delay == 0 and admission_margin == 0:
         return copy.deepcopy(case)
     modeled = copy.deepcopy(case)
     workers = copy.deepcopy(settings["workers"])
@@ -106,7 +118,9 @@ def apply_acquisition(case, settings):
     for name in sorted(names - active - draining):
         request = next((row for row in pending if row["selected_worker"] == name), None)
         seconds = (
-            max(0, request["ready_at_seconds"] - case["cutoff_ms"] / 1000) if request else delay
+            max(0, request["ready_at_seconds"] - case["cutoff_ms"] / 1000) + admission_margin
+            if request
+            else delay + request_delay + admission_margin
         )
         if not math.isfinite(seconds):
             raise ValueError("nonfinite pending acquisition clock")
@@ -115,6 +129,11 @@ def apply_acquisition(case, settings):
     modeled["acquisition"] = {
         "contract": CONTRACT,
         "delay_seconds": delay,
+        "modeled_request_delay_seconds": request_delay,
+        "modeled_admission_margin_seconds": admission_margin,
+        "request_after_seconds": {selected: request_delay}
+        if case["candidate"] == "scale-up"
+        else {},
         "accepting_workers": sorted(accepting),
         "pending_workers": sorted(pending_names),
         "allocated_workers": sorted(
@@ -125,7 +144,11 @@ def apply_acquisition(case, settings):
         ),
         "available_after_ms": availability,
         "synthetic_task_ids": [],
-        "interpretation": "controlled admission delay; synthetic reservations are not Jobs",
+        "interpretation": (
+            "controlled physical acquisition plus model-only request/admission offsets; "
+            "pending due clocks remain original; scale-down still uses cutoff-time cordon; "
+            "synthetic reservations are not Jobs"
+        ),
     }
     next_id = first
     for name, duration in sorted(availability.items()):
