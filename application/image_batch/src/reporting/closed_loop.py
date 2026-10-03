@@ -314,8 +314,8 @@ def _outcomes(pdf, runs, pairs):
         "Core-hours count accepting + draining + requested pending capacity; "
         "dots are interval midpoints, "
         "colored spans are coverage bounds.\n"
-        "Configured powered worker VMs remain available throughout. No physical energy "
-        "saving is inferred.",
+        "Assess deadline compliance before interpreting savings relative to fixed. "
+        "Warm reserves remain powered; no physical-energy saving is inferred.",
     )
 
 
@@ -403,9 +403,9 @@ def _timelines(pdf, runs):
     axes[0, 0].legend(fontsize=8, loc="lower left")
     panel(
         axes[0, 0],
-        "Allocation includes a cordoned worker until it drains",
+        "Charged allocation includes draining and requested pending workers",
         "Minutes after warm-up",
-        "Allocated application cores",
+        "Charged application cores",
     )
     panel(
         axes[0, 1],
@@ -1436,6 +1436,11 @@ def _configuration_page(pdf, runs):
                 ),
                 f'{settings.get("warmup_cycles", "—")} / {settings.get("cycles", "—")}',
                 str(settings.get("followup_seconds", 600)),
+                (
+                    f'{settings.get("active_workers", "—")} / '
+                    f'{settings.get("minimum_workers", "—")} / '
+                    f'{settings.get("maximum_workers", "—")}'
+                ),
             ]
         )
     for offset in range(0, len(rows), 12):
@@ -1454,6 +1459,7 @@ def _configuration_page(pdf, runs):
                 "Service target",
                 "Warm/total cycles",
                 "Follow-up",
+                "Workers\ninitial/min/max",
             ],
             rows[offset : offset + 12],
             "Each run retains its archived policy and exact invocation; legacy settings "
