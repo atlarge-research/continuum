@@ -190,6 +190,8 @@ def guard_action(before, fresh, proposal, config, *, decision_age):
     action, worker = proposal["action"], proposal.get("selected_worker")
     if action == "unchanged":
         return
+    if before.get("pending_workers") or fresh.get("pending_workers"):
+        raise ValueError("pending acquisition prevents another capacity change")
     if action == "scale-up":
         if worker not in fresh["reserve_workers"] or len(fresh["active_workers"]) >= config.get(
             "maximum_workers", 3

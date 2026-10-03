@@ -14,6 +14,7 @@ from closed_loop_guards import (
     reconcile_pending,
     snapshot_view,
 )
+from capacity_acquisition import activation_view, pending_activation, request_activation
 from closed_loop_journal import Journal
 from demo_configuration import EXPERIMENT_DEFAULTS
 from closed_loop_policy import select_action
@@ -178,7 +179,7 @@ class Controller:
                 name: getattr(self.args, name, default)
                 for name, default in EXPERIMENT_DEFAULTS.items()
             },
-            "modeled_reserve_acquisition_seconds": 0,
+            "modeled_reserve_acquisition_seconds": getattr(self.args, "acquisition_seconds", 0),
             "workers": [
                 dict(
                     node_name=name,
@@ -314,6 +315,152 @@ class Controller:
             self.history.update(last_action_at=now)
             self.history.pop("reactive_observation", None)
 
+    def dispatch_capacity(self, before, fresh, proposal, *, cutoff_seconds):
+        """Request delayed capacity or use the established direct admission path.
+
+        Args:
+            before (dict): Causal proposal state.
+            fresh (dict): Fresh pre-dispatch physical state.
+            proposal (dict): Selected capacity action.
+            cutoff_seconds (float): Original decision cutoff in epoch seconds.
+
+        Returns:
+            dict: Durable activation request or acknowledged physical action.
+
+        Raises:
+            ValueError: A pending acquisition or physical guard prevents the action.
+            RuntimeError: The direct API action fails.
+        """
+        if pending_activation(self.journal):
+            raise ValueError("pending acquisition prevents another capacity change")
+        if proposal["action"] == "scale-up" and self.config.get("acquisition_seconds", 0) > 0:
+            request = request_activation(
+                self.journal,
+                before,
+                fresh,
+                proposal,
+                self.config,
+                now_seconds=time.time(),
+                cutoff_seconds=cutoff_seconds,
+            )
+            return {
+                **request,
+                "status": "activation_requested",
+                "last_action_at": request["requested_at_seconds"],
+            }
+        return actuate(
+            self.session,
+            self.journal,
+            before,
+            fresh,
+            proposal,
+            self.config,
+            cutoff_seconds=cutoff_seconds,
+        )
+
+    def service_activation(self):
+        """Progress one durable acquisition independently of policy decision cadence.
+
+        A dispatch marker is fsynced before the API attempt. Restart or a lost
+        reply cannot repeat that attempt. Availability requires a later physical
+        observation; identity/busy-target violations cancel without admission.
+        """
+        request = pending_activation(self.journal)
+        if request is None:
+            return
+        now = time.time()
+        try:
+            view = self.fresh()
+        except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
+            self.journal.append(
+                "activation.observation_error",
+                activation_id=request["activation_id"],
+                error=str(exc),
+            )
+            return
+        name = request["selected_worker"]
+        node = view["nodes"].get(name)
+        reason = None
+        if node is None or node["uid"] != request["node_uid"]:
+            reason = "target_identity_changed"
+        elif node["accepting"]:
+            dispatch = request.get("dispatch")
+            if (
+                dispatch
+                and view["timestamp_seconds"] >= dispatch["dispatched_at_seconds"]
+                and now >= request["ready_at_seconds"]
+            ):
+                self.recover(view)
+                self.journal.append(
+                    "activation.result",
+                    activation_id=request["activation_id"],
+                    selected_worker=name,
+                    status="observed",
+                    observed_at_seconds=view["timestamp_seconds"],
+                    state=view,
+                )
+                return
+            reason = "accepting_without_attributable_activation"
+        elif name not in view["reserve_workers"]:
+            reason = "target_no_longer_empty_reserve"
+        elif len(view["active_workers"]) >= self.config["maximum_workers"]:
+            reason = "capacity_bound_changed"
+        if reason:
+            self.journal.append(
+                "activation.result",
+                activation_id=request["activation_id"],
+                selected_worker=name,
+                status="cancelled",
+                reason=reason,
+                state=view,
+            )
+            return
+        if request.get("dispatch"):
+            # Allow observer convergence; never retry an ambiguous API attempt.
+            if view["timestamp_seconds"] >= request["dispatch"]["dispatched_at_seconds"] + 15:
+                self.recover(view)
+                self.journal.append(
+                    "activation.result",
+                    activation_id=request["activation_id"],
+                    selected_worker=name,
+                    status="cancelled",
+                    reason="availability_not_observed_after_dispatch",
+                    state=view,
+                )
+            return
+        if now < request["ready_at_seconds"]:
+            return
+        self.journal.append(
+            "activation.dispatch",
+            activation_id=request["activation_id"],
+            selected_worker=name,
+            dispatched_at_seconds=now,
+        )
+        try:
+            result = actuate(
+                self.session,
+                self.journal,
+                view,
+                view,
+                {"action": "scale-up", "selected_worker": name},
+                self.config,
+                cutoff_seconds=view["timestamp_seconds"],
+            )
+            self.history.update(last_action_at=result["last_action_at"])
+            self.journal.append(
+                "activation.api_result",
+                activation_id=request["activation_id"],
+                action_id=result.get("action_id"),
+                status="acknowledged",
+            )
+        except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as exc:
+            self.journal.append(
+                "activation.api_result",
+                activation_id=request["activation_id"],
+                status="uncertain_or_failed",
+                error=str(exc),
+            )
+
     def discover_origin(self):
         """Read the sender's preserved schedule without taking a controller action."""
         if self.origin is None:
@@ -331,7 +478,10 @@ class Controller:
 
     def maybe_tick(self):
         """Run at most one due cycle, skipping missed ticks rather than overlapping work."""
+        self.service_activation()
         self.discover_origin()
+        if pending_activation(self.journal):
+            return
         if self.origin is None or time.time() < self.next_tick:
             return
         # Evaluation includes drain follow-up; arrivals themselves remain independent.
@@ -429,7 +579,9 @@ class Controller:
             raise ValueError("forecast not ready: " + json.dumps(status.get("simulation_inputs")))
         state = json.loads((forecast_dir / "state.json").read_text())
         # Initial freshness belongs to collection; computation ages the separately guarded decision.
-        before = snapshot_view(state, self.config, now_seconds=captured_at)
+        before = activation_view(
+            snapshot_view(state, self.config, now_seconds=captured_at), self.journal
+        )
         if self.template is None:
             self.template = selected
             write_json(self.output / "frozen-template.json", selected)
@@ -437,6 +589,7 @@ class Controller:
             **copy.deepcopy(self.config),
             "active_workers": before["active_workers"],
             "draining_workers": before["draining_workers"],
+            "pending_acquisitions": before.get("pending_acquisitions", []),
         }
         write_json(
             directory / "collection-timing.json",
@@ -486,7 +639,7 @@ class Controller:
         proposal = {"action": "unchanged", "selected_worker": None, "reason": "unavailable_state"}
         outcome = "held"
         try:
-            before = self.fresh()
+            before = activation_view(self.fresh(), self.journal)
             self.recover(before)
             cutoff = before["timestamp_seconds"]
             reactive = reactive_action(
@@ -546,7 +699,7 @@ class Controller:
                 proposal = {
                     "action": "unchanged",
                     "selected_worker": None,
-                    "reason": "fixed_full_capacity",
+                    "reason": "fixed_configured_capacity",
                     "state": self.history,
                 }
                 valid = True
@@ -563,15 +716,7 @@ class Controller:
             if proposal["action"] != "unchanged":
                 action_started = time.monotonic()
                 fresh = self.fresh()
-                result = actuate(
-                    self.session,
-                    self.journal,
-                    before,
-                    fresh,
-                    proposal,
-                    self.config,
-                    cutoff_seconds=cutoff,
-                )
+                result = self.dispatch_capacity(before, fresh, proposal, cutoff_seconds=cutoff)
                 self.journal.append(
                     "action.timing",
                     tick=self.tick_number,
@@ -581,8 +726,12 @@ class Controller:
                 self.history.update(last_action_at=result["last_action_at"])
 
                 self.history.pop("reactive_observation", None)
-                outcome = "acknowledged"
-            observed = self.fresh()
+                outcome = (
+                    "activation_requested"
+                    if result.get("status") == "activation_requested"
+                    else "acknowledged"
+                )
+            observed = activation_view(self.fresh(), self.journal)
             confirmed = None
             if outcome == "acknowledged":
                 deadline = time.monotonic() + 3

@@ -298,6 +298,7 @@ class ControllerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             loop = object.__new__(module.Controller)
+            loop.journal = Mock(records=[])
             loop.session = Mock(namespace="test")
             loop.session.namespace = "test"
             loop.args = Mock(period_seconds=120, warmup_cycles=1, native_image="test")
@@ -404,6 +405,7 @@ class ControllerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             loop = object.__new__(module.Controller)
+            loop.journal = Mock(records=[])
             loop.session = Mock(namespace="test")
             loop.session.namespace = "test"
             loop.args = Mock(period_seconds=480, warmup_cycles=2, native_image="test")

@@ -28,6 +28,7 @@ EXPERIMENT_DEFAULTS = {
     "reactive_up_threshold": 0.9,
     "reactive_down_threshold": 0.7,
     "residual_margin_seconds": 3.0,
+    "acquisition_seconds": 0.0,
 }
 
 
@@ -225,6 +226,7 @@ def validate_experiment(values):
         or values["peak_rate"] <= 0
         or not 0 < values["reactive_down_threshold"] < values["reactive_up_threshold"]
         or not 0 < values["deadline_fraction"] <= 1
+        or values["acquisition_seconds"] < 0
         or values["scenario_seed"] < 0
         or type(values["scenario_seed"]) is not int
         or any(
