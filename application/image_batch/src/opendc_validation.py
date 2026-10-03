@@ -11,6 +11,7 @@ import shutil
 
 import numpy as np
 
+from opendc_acquisition import application_tasks
 from opendc_evaluate import (
     _resources,
     load_batch,
@@ -358,6 +359,8 @@ def compare_tasks(
     Forecast future identities are synthetic and are never matched to real Jobs.
     Known-arrival and backlog identities are matched exactly. Contextual arrivals
     outside the target window affect simulation but are excluded from scoring.
+    Acquisition reservations retain native identity validation but never enter
+    application records, response statistics or completion curves.
 
     Args:
         case (dict): Prepared unchanged experiment with original Job metadata.
@@ -387,7 +390,7 @@ def compare_tasks(
     observed = {r["uid"]: r for r in observations}
     backlog_uids = {
         r["metadata"]["identity"].get("kubernetes_job_uid")
-        for r in case["tasks"]
+        for r in application_tasks(case)
         if r["metadata"]["cohort"] == "backlog"
     }
     exhausted_uids = {
@@ -414,7 +417,7 @@ def compare_tasks(
         and (r.get("censored_through_ms") or 0) < end
     ]
     matched = []
-    for item in case["tasks"]:
+    for item in application_tasks(case):
         metadata, task = item["metadata"], item["task"]
         if metadata["cohort"] == "future" and task["submission_time"] >= target_seconds * 1000:
             continue

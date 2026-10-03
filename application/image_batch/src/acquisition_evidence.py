@@ -194,9 +194,12 @@ def charge_acquisitions(base, records, maximum):
         if not point["valid"]:
             continue
         cores, names = _pending_at(rows, point["time"], point.get("allocated_workers", []), end)
-        point["accepting_draining_cores"] = point["lower"]
+        component_known = point["lower"] == point["upper"] and point.get(
+            "membership_complete", True
+        )
+        point["accepting_draining_cores"] = point["lower"] if component_known else None
         point["pending"] = len(names)
-        point["pending_application_cores"] = cores
+        point["pending_application_cores"] = cores if component_known or not cores else None
         point["lower"] += cores
         point["upper"] = min(maximum, point["upper"] + cores)
         point["allocated"] = point["lower"] if point["lower"] == point["upper"] else None

@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from acquisition_evidence import acquisition_history, acquisition_audit
+from acquisition_evidence import acquisition_history, acquisition_audit, charge_acquisitions
 from closed_loop_evidence import allocation, controller_outcomes
 from forecast_trace import iso
 from reporting.closed_loop import acquisition_rows, acquisition_series
@@ -215,6 +215,52 @@ class AcquisitionEvidenceTests(unittest.TestCase):
         self.assertTrue(values[1] != values[1])
         self.assertTrue(values[-1] != values[-1])
         self.assertEqual(acquisition_series(run, "pending_application_cores")[1][0], 0)
+
+    def test_uncertain_physical_component_never_plots_a_lower_bound_as_exact(self):
+        """Frozen historical metrics also retain gaps for uncertain component capacity."""
+        run = {
+            "origin_seconds": 1000,
+            "allocation": {
+                "series": [
+                    {
+                        "time": 1002,
+                        "valid": True,
+                        "lower": 6,
+                        "upper": 9,
+                        "allocated": None,
+                        "membership_complete": False,
+                        "accepting_draining_cores": 6,
+                        "pending_application_cores": 3,
+                    }
+                ]
+            },
+        }
+        for field in ("accepting_draining_cores", "pending_application_cores"):
+            values = acquisition_series(run, field)[1]
+            self.assertTrue(values[0] != values[0])
+
+    def test_new_evidence_retains_component_uncertainty(self):
+        """Uncertain membership does not produce an exact physical or pending component."""
+        base = {
+            "start_seconds": 1000,
+            "end_seconds": 1010,
+            "gaps": ["uncertain"],
+            "allocated_core_seconds_bounds": [60, 90],
+            "series": [
+                {
+                    "time": 1002,
+                    "valid": True,
+                    "lower": 6,
+                    "upper": 9,
+                    "allocated": None,
+                    "membership_complete": False,
+                    "allocated_workers": ["w1", "w2"],
+                }
+            ],
+        }
+        result = charge_acquisitions(base, records(), 9)
+        self.assertIsNone(result["series"][0]["accepting_draining_cores"])
+        self.assertIsNone(result["series"][0]["pending_application_cores"])
 
     def test_zero_delay_history_is_empty_without_invented_activation(self):
         """Historical direct uncordon runs keep their original accounting semantics."""

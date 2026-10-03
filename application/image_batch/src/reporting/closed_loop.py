@@ -477,6 +477,10 @@ def acquisition_series(run, field):
     for point in points:
         point.setdefault("accepting_draining_cores", point.get("allocated"))
         point.setdefault("pending_application_cores", 0)
+        if not point.get("membership_complete", True) or point.get("lower") != point.get("upper"):
+            point["accepting_draining_cores"] = None
+            if point["pending_application_cores"]:
+                point["pending_application_cores"] = None
     return observed_series(points, run["origin_seconds"], field)
 
 
