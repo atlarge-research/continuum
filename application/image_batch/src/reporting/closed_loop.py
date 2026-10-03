@@ -741,13 +741,13 @@ def observed_series(series, origin, field):
 
 
 def action_evidence(run):
-    """Keep decision origin separate from API acknowledgment and observer confirmation.
+    """Separate durable intents, known dispatch cancellations and physical confirmation.
 
     Args:
-        run (dict): Frozen run with per-cycle proposals and recorded action requests.
+        run (dict): Frozen run with per-cycle proposals, action intents and journal results.
 
     Returns:
-        list[dict]: All requests, their decision source and strict confirmation status.
+        list[dict]: Every intent with dispatch classification, event times and confirmation.
     """
     cycles = {cycle["tick"]: cycle for cycle in run["controller"]["cycles"]}
     rows = []
@@ -761,13 +761,20 @@ def action_evidence(run):
             source = "Reactive baseline"
         else:
             source = "Unknown"
+        result = action.get("result", {})
+        dispatched = result.get("status") != "not_dispatched_stale"
         rows.append(
             dict(
                 action=action["action"],
                 source=source,
-                request_seconds=action["recorded_at_ns"] / 1e9,
-                confirmed=action.get("observed") is True
-                and action.get("result", {}).get("status") == "acknowledged",
+                dispatched=dispatched,
+                request_seconds=action["recorded_at_ns"] / 1e9 if dispatched else None,
+                cancellation_seconds=(
+                    result.get("recorded_at_ns", action["recorded_at_ns"]) / 1e9
+                    if not dispatched
+                    else None
+                ),
+                confirmed=action.get("observed") is True and result.get("status") == "acknowledged",
             )
         )
     return rows
@@ -814,8 +821,12 @@ def action_timeline(run):
     for action, evidence in zip(run["controller"].get("actions", []), action_evidence(run)):
         rows.append(
             dict(
-                stage="API requested",
-                seconds=evidence["request_seconds"],
+                stage="API requested" if evidence["dispatched"] else "Cancelled before API",
+                seconds=(
+                    evidence["request_seconds"]
+                    if evidence["dispatched"]
+                    else evidence["cancellation_seconds"]
+                ),
                 action=evidence["action"],
                 source=evidence["source"],
             )
@@ -833,7 +844,7 @@ def action_timeline(run):
 
 
 def _action_summary_rows(actions):
-    """Count every request by source without expanding the overview beyond its panel.
+    """Count API requests by source, excluding known pre-dispatch cancellations.
 
     Args:
         actions (list[dict]): Normalized requests and confirmation flags from action_evidence.
@@ -848,7 +859,9 @@ def _action_summary_rows(actions):
             requests = [
                 action
                 for action in actions
-                if action["source"] == source and action["action"] == kind
+                if action.get("dispatched", True)
+                and action["source"] == source
+                and action["action"] == kind
             ]
             row.append(f'{sum(action["confirmed"] for action in requests)}/{len(requests)}')
         rows.append(row)
@@ -886,6 +899,8 @@ def _action_evidence_page(pdf, run):
         times, values = observed_series(run["allocation"]["series"], origin, field)
         axis.step(times, values, where="post", color="black")
         for index, action in enumerate(actions):
+            if not action["dispatched"]:
+                continue
             axis.axvline(
                 (action["request_seconds"] - origin) / 60,
                 color=COLORS[index % len(COLORS)],
@@ -1375,7 +1390,7 @@ def _configuration_page(pdf, runs):
 
 
 def _lifecycle_page(pdf, run):
-    """Expose measured release and reuse separately from the request and acknowledgement.
+    """Expose dispatch status, release and reuse without treating cancelled intents as requests.
 
     Args:
         pdf (PdfPages): Open report writer.
@@ -1388,8 +1403,14 @@ def _lifecycle_page(pdf, run):
     origin = run["evaluation_start_seconds"]
     rows = []
     for action in actions:
+        status = action.get("result", {}).get("status")
+        source = action.get("decision_source", "unknown")
+        if status == "not_dispatched_stale":
+            source += "\nCancelled before API"
+        elif status != "acknowledged":
+            source += "\nAPI outcome uncertain" if status == "uncertain" else "\nOutcome unresolved"
         values = [
-            action["recorded_at_ns"] / 1e9,
+            None if status == "not_dispatched_stale" else action["recorded_at_ns"] / 1e9,
             action.get("result", {}).get("last_action_at"),
             action.get("observation_seconds"),
             action.get("first_observed_empty_seconds"),
@@ -1398,7 +1419,7 @@ def _lifecycle_page(pdf, run):
         rows.append(
             [
                 f'{action["action"].replace("scale-", "")} {action["selected_worker"]}',
-                action.get("decision_source", "unknown"),
+                source,
                 *[
                     _metric((value - origin) / 60, 2) if value is not None else "—"
                     for value in values

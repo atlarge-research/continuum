@@ -119,6 +119,96 @@ class ClosedLoopReportTests(unittest.TestCase):
             ],
         )
 
+    def test_stale_intent_is_cancelled_without_counting_a_dispatched_request(self):
+        """A durable intent vetoed before dispatch stays distinct in every action view."""
+        module = importlib.import_module("reporting.closed_loop")
+        cancelled = dict(
+            tick=1,
+            action="scale-down",
+            selected_worker="cloud0",
+            recorded_at_ns=12_000_000_000,
+            observed=False,
+            result=dict(status="not_dispatched_stale", recorded_at_ns=14_000_000_000),
+        )
+        uncertain = dict(
+            cancelled,
+            tick=2,
+            recorded_at_ns=22_000_000_000,
+            result=dict(status="uncertain"),
+        )
+        acknowledged = dict(
+            cancelled,
+            tick=3,
+            action="scale-up",
+            recorded_at_ns=32_000_000_000,
+            observation_seconds=34,
+            observed=True,
+            result=dict(status="acknowledged", last_action_at=33),
+        )
+        actions = [cancelled, uncertain, acknowledged]
+        run = dict(
+            seed=7,
+            arm="forecast",
+            evaluation_start_seconds=0,
+            arrival_end_seconds=120,
+            allocation=dict(series=[]),
+            controller=dict(
+                cycles=[
+                    dict(
+                        tick=action["tick"],
+                        forecast_valid=True,
+                        proposal_seconds=10 * action["tick"],
+                        outcome_recorded_seconds=14 if action["tick"] == 1 else None,
+                        outcome="vetoed_or_failed" if action["tick"] == 1 else "acknowledged",
+                        proposal=dict(action=action["action"]),
+                        actions=[action],
+                    )
+                    for action in actions
+                ],
+                actions=actions,
+                lifecycles=dict(
+                    actions=[dict(action, decision_source="forecast") for action in actions],
+                    forecast_down_up_pairs=0,
+                ),
+            ),
+        )
+        self.assertEqual(
+            [(row["stage"], row["seconds"]) for row in module.action_timeline(run)],
+            [
+                ("Proposed", 10),
+                ("Cancelled before API", 14),
+                ("Proposed", 20),
+                ("API requested", 22),
+                ("Proposed", 30),
+                ("API requested", 32),
+                ("Observed", 34),
+            ],
+        )
+        # Inspect the renderer's internal summary without expanding its public API.
+        # pylint: disable=protected-access
+        self.assertEqual(
+            module._action_summary_rows(module.action_evidence(run)),
+            [["Forecast", "0/1", "1/1"]],
+        )
+        # pylint: enable=protected-access
+        with mock.patch("reporting.closed_loop.finish") as saved:
+            module._action_evidence_page(None, run)  # pylint: disable=protected-access
+        figure = saved.call_args.args[1]
+        try:
+            self.assertEqual(
+                [line.get_xdata()[0] for line in figure.axes[0].lines[1:]], [22 / 60, 32 / 60]
+            )
+        finally:
+            plt.close(figure)
+        with mock.patch("reporting.closed_loop._table_page") as saved:
+            module._lifecycle_page(None, run)  # pylint: disable=protected-access
+        rows = saved.call_args.args[4]
+        self.assertIn("Cancelled before API", rows[0][1])
+        self.assertEqual(rows[0][2:], ["—"] * 5)
+        self.assertIn("uncertain", rows[1][1])
+        self.assertEqual(rows[1][2], "0.37")
+        self.assertEqual(rows[2][1], "forecast")
+
     def test_paired_savings_use_bounds_and_matching_plans(self):
         """An incomplete allocation interval cannot be treated as a measured saving."""
         self.assertIsNotNone(importlib.util.find_spec("reporting.closed_loop"))
