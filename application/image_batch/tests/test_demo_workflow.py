@@ -287,7 +287,11 @@ class WorkflowTests(unittest.TestCase):
                 create=True,
             ):
                 sealed = module.seal_protocol(source, root / "protocol")
-                module.verify_protocol(sealed)
+                with patch.object(module, "resolve_deployment", return_value={}), patch.object(
+                    module, "clock_alignment", return_value={}
+                ) as clocks:
+                    module.verify_protocol(sealed)
+                clocks.assert_called_once_with({})
             with patch.object(
                 module.subprocess, "check_output", return_value="sha256:original"
             ), patch.object(

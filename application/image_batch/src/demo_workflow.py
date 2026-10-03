@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 from capture_run import CaptureSession, ENDPOINT_IMAGE
 from closed_loop_audit import audit_capture
 from closed_loop_evidence import SCHEMA as EVIDENCE_SCHEMA, capture_evidence
+from demo_clocks import clock_alignment
 from demo_cleanup import cleanup_native
 from demo_lifetime import PHASE_SECONDS, PHASE_STOP_SECONDS, PhaseFailure, run_phase
 from demo_recovery import recover_capture
@@ -282,6 +283,7 @@ def verify_protocol(protocol_path):
         and deployment_identity(protocol) != protocol["deployment_identity"]
     ):
         raise ValueError("frozen deployment specification or image identity changed")
+    clock_alignment(resolve_deployment(protocol["continuum_config"], protocol["inventory"]))
     return protocol
 
 

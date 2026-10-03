@@ -16,6 +16,7 @@ import time
 import yaml
 
 from closed_loop_controller import Controller
+from demo_clocks import clock_alignment
 from demo_configuration import (
     EXPERIMENT_DEFAULTS,
     resolve_deployment,
@@ -257,6 +258,7 @@ class CaptureSession:
             },
         )
         self.output_created = True
+        write_json(self.output / "clock-preflight.json", clock_alignment(vars(self.args)))
         if self.namespace == self.args.template_namespace:
             raise ValueError("capture namespace must differ from the source deployment")
         jobs = self.get("jobs", "-A")["items"]
