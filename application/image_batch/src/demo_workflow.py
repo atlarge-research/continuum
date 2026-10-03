@@ -300,6 +300,9 @@ def matrix_commands(protocol, output):
     Raises:
         ValueError: An arm, seed or cadence is invalid, or the matrix duplicates a seed/arm pair.
     """
+    required_fidelity = protocol.get("require_evaluated_sender_fidelity", False)
+    if not isinstance(required_fidelity, bool):
+        raise ValueError("evaluated sender fidelity requirement must be boolean")
     cadences = protocol.get("arm_cadence_seconds", {})
     if not isinstance(cadences, dict) or any(
         arm not in ("fixed", "reactive", "forecast")
@@ -366,6 +369,8 @@ def matrix_commands(protocol, output):
             "--template-deployment",
             protocol.get("template_deployment", "image-batch-adapter"),
         ]
+        if required_fidelity:
+            command.append("--require-evaluated-sender-fidelity")
         if bounds is not None:
             for name in ("active_workers", "minimum_workers", "maximum_workers"):
                 command.extend(["--" + name.replace("_", "-"), str(bounds[name])])

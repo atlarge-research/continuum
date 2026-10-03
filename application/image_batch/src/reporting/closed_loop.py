@@ -621,6 +621,9 @@ def render_validation(pdf, reports):
                 f'{run["role"]} {run["seed"]}',
                 run["arm"],
                 "accepted" if run["accepted_capture"] else "REJECTED",
+                f'{100 * run["sender_evaluated_window"]["on_time_fraction"]:.1f}%'
+                if "sender_evaluated_window" in run
+                else "—",
                 str(control["observed_down"]),
                 str(control["observed_up"]),
                 str(control.get("lifecycles", {}).get("forecast_down_up_pairs", "—"))
@@ -645,6 +648,7 @@ def render_validation(pdf, reports):
             "Role / seed",
             "Arm",
             "Capture",
+            "Evaluated\nsends timely",
             "Down",
             "Up",
             "Forecast\npairs",

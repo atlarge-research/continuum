@@ -419,6 +419,116 @@ def controller_outcomes(  # pylint: disable=too-many-locals
     )
 
 
+def sender_window_fidelity(events, *, start_offset_seconds, end_offset_seconds):
+    """Measure dispatch fidelity by exact identities in a planned half-open arrival window.
+
+    Args:
+        events (list[dict]): Preserved endpoint event stream.
+        start_offset_seconds (float): Inclusive planned offset from the sender origin.
+        end_offset_seconds (float): Exclusive planned offset from the sender origin.
+
+    Returns:
+        dict: Counts, measured lag quantiles and explicit consistency failures. The planned
+        count is the denominator; missing receipts or malformed identities prevent acceptance.
+
+    Raises:
+        ValueError: Bounds are not finite nonnegative numbers with an increasing interval.
+    """
+    bounds = (start_offset_seconds, end_offset_seconds)
+    if (
+        any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+            for value in bounds
+        )
+        or bounds[1] <= bounds[0]
+    ):
+        raise ValueError("sender evaluation bounds must be finite, nonnegative and increasing")
+    kinds = (
+        "schedule.planned",
+        "batch.send_started",
+        "batch.receipt_received",
+        "batch.send_failed",
+    )
+    groups = {kind: {} for kind in kinds}
+    issues = []
+    for row in events:
+        kind = row.get("event_type")
+        if kind not in groups:
+            continue
+        details = row.get("details", {})
+        identity = details.get("endpoint_batch_id")
+        if not isinstance(identity, str) or not identity:
+            issues.append("malformed_sender_identity")
+            continue
+        groups[kind].setdefault(identity, []).append(details)
+    selected = []
+    for identity, rows in groups["schedule.planned"].items():
+        for details in rows:
+            offset = details.get("planned_offset_ns")
+            if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                issues.append("malformed_planned_offset")
+                continue
+            if bounds[0] * 1e9 <= offset < bounds[1] * 1e9:
+                selected.append((identity, details))
+    lags, on_time, successful = [], 0, 0
+    for identity, plan in selected:
+        started, received, failed = (groups[kind].get(identity, []) for kind in kinds[1:])
+        if (
+            len(groups[kinds[0]][identity]) != 1
+            or len(started) != 1
+            or len(received) != 1
+            or failed
+        ):
+            issues.append("incomplete_or_duplicate_sender_identity")
+        if len(received) == 1 and not failed:
+            successful += 1
+        if len(started) != 1:
+            continue
+        dispatch = started[0]
+        if any(
+            row.get(key) != plan.get(key)
+            for row in started + received
+            for key in ("batch_index", "planned_offset_ns")
+        ):
+            issues.append("sender_plan_mismatch")
+        actual, reported = dispatch.get("actual_send_offset_ns"), dispatch.get("schedule_lag_ns")
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) for value in (actual, reported)
+        ):
+            issues.append("malformed_dispatch_clock")
+            continue
+        lag = actual - plan["planned_offset_ns"]
+        if lag < 0 or lag != reported:
+            issues.append("inconsistent_dispatch_clock")
+            continue
+        lags.append(lag / 1e9)
+        on_time += lag <= 250_000_000
+    count = len(selected)
+    if not count:
+        issues.append("no_planned_evaluation_arrivals")
+    fraction = on_time / count if count else 0
+    if fraction < 0.95:
+        issues.append("evaluated_sender_fidelity_below_threshold")
+    return dict(
+        start_offset_seconds=bounds[0],
+        end_offset_seconds=bounds[1],
+        tolerance_seconds=0.25,
+        required_fraction=0.95,
+        planned_count=count,
+        successful_count=successful,
+        on_time_count=on_time,
+        on_time_fraction=fraction,
+        schedule_lag_p50_seconds=float(np.percentile(lags, 50)) if lags else None,
+        schedule_lag_p95_seconds=float(np.percentile(lags, 95)) if lags else None,
+        schedule_lag_max_seconds=max(lags) if lags else None,
+        fidelity_passed=not issues,
+        issues=sorted(set(issues)),
+    )
+
+
 def sender_inventory(events, jobs, summary, run_id):
     """Validate preserved dispatch and receipt identities against the physical Job inventory.
 
@@ -643,7 +753,17 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
         for container in pod["status"].get("containerStatuses", [])
     }
     summary = summaries[0] if len(summaries) == 1 else {}
+    evaluated_sender = sender_window_fidelity(
+        events,
+        start_offset_seconds=warmup * invocation["period_seconds"],
+        end_offset_seconds=invocation["cycles"] * invocation["period_seconds"],
+    )
     issues = sender_inventory(events, app_jobs, summary, invocation["namespace"])
+    if (
+        invocation.get("require_evaluated_sender_fidelity", False)
+        and not evaluated_sender["fidelity_passed"]
+    ):
+        issues.append("evaluated_sender_fidelity")
     if not summary.get("fidelity_passed") or summary.get("on_time_fraction", 0) < 0.95:
         issues.append("sender_fidelity")
     if summary.get("attempted_count") != summary.get("planned_count") or summary.get(
@@ -730,6 +850,7 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
         arrival_plan=plan,
         invocation=invocation,
         sender=summary,
+        sender_evaluated_window=evaluated_sender,
         accepted_capture=not issues,
         acceptance_issues=issues,
         restarts=restarts,

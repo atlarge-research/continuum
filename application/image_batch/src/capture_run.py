@@ -714,6 +714,7 @@ def parse_arguments(argv=None):
     parser.add_argument("--inventory", type=Path)
     parser.add_argument("--experiment-config", type=Path)
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--require-evaluated-sender-fidelity", action="store_true")
     parser.add_argument("--template-namespace", default="fns-demo")
     parser.add_argument("--template-deployment", default="image-batch-adapter")
     parser.add_argument("--output", type=Path, required=True)
