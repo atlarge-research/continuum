@@ -135,9 +135,11 @@ OPENDC_RUNTIME=fns-demo PYTHONPATH=application/image_batch/src:. \
   --seed "$WORKLOAD_SEED" --admission-mode fifo --control-arm forecast
 ```
 
-Add `--preview` to print resolved settings without contacting the cluster or creating a capture. Deployment identities, resources, SSH key and replay preset come from the supplied configuration and its `<base_path>/.continuum/inventory_vms`; `--inventory` selects another generated inventory. The live node names and addresses are checked before mutation. `--template-namespace` and `--template-deployment` select the existing application to clone.
+Add `--preview` to print resolved settings without contacting the cluster or creating a capture. Deployment identities, resources, SSH key and replay preset come from the supplied configuration and its `<base_path>/.continuum/inventory_vms`; `--inventory` selects another generated inventory. Live node names, addresses and host/guest clock alignment are checked before mutation. `--template-namespace` and `--template-deployment` select the existing application to clone.
 
 The current selected workload has two eight-minute warm-up cycles and three evaluation cycles, with arrivals ranging from 0.02 to 0.18 Jobs/s. Forecast checks every 90 seconds using three futures over a 180-second horizon and a 60-second decision-age budget; the matched reactive baseline checks every 30 seconds. Load the sealed settings for the selected policy through the handoff; bare CLI defaults retain the earlier ten-minute/four-cycle workload. `--experiment-config` loads a JSON object of experiment settings; explicit CLI flags override it. `--control-arm fixed` runs fixed capacity; standalone reactive reproduction requires `--control-arm reactive --cadence-seconds 30`. The sealed matrix supplies the reactive cadence override automatically. Use `--help` for workload, timing and policy parameters. Outputs include request receipts, final inventories, raw observer streams, frozen forecasts/native results and the controller journal. Failed attempts retain their resources and failure record for diagnosis.
+
+`--active-workers` selects normal initial allocation; fixed retains that allocation, while dynamic policies use `--minimum-workers` and `--maximum-workers`. `--acquisition-seconds` adds a minimum admission delay on powered Ready reserves and defaults to zero. The sealed matrix records these counts in `worker_bounds`; use the selected experiment's protocol and inventory from the [handoff](OPENDT_HANDOFF.md) for multi-host runs.
 
 `python3 -m demo_workflow --help` exposes tracked source freezing, protocol sealing, matrix execution, metric collection and read-only infrastructure snapshots/comparisons. Run from the repository root with the same Python path. Matrix execution verifies sealed source, deployment and image identities, checks the time reserve, and archives then removes its native staging files after successful capture cleanup. `python3 -m demo_cleanup --help` exposes the same archival operation for standalone captures. Historical supporting-study scripts remain provenance; only workflows exercised on a configured deployment establish live portability.
 
@@ -150,7 +152,7 @@ PYTHONPATH=application/image_batch/src python3 -m reporting.assembly \
   --metrics "$METRICS_FILE" --output-dir "$REPORT_DIR"
 ```
 
-Use the study role recorded before execution; held-out comparisons require matching planned workloads and evaluation windows. The PDF reports accepting-plus-draining core-time separately from powered worker availability. A surviving capture can reattach its controller with `python3 -m closed_loop_resume --capture-output "$CAPTURE_DIR"` using the same source path and runtime environment; the owner, journal and observer identity must still match.
+Use the study role recorded before execution; held-out comparisons require matching planned workloads and evaluation windows. The PDF reports accepting, draining and requested pending core-time separately from powered worker availability. A surviving capture can reattach its controller with `python3 -m closed_loop_resume --capture-output "$CAPTURE_DIR"` using the same source path and runtime environment; the owner, journal and observer identity must still match.
 
 ## Manual provisional scenario workflow
 
