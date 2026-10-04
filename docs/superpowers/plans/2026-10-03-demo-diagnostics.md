@@ -82,9 +82,9 @@
 
 **Interfaces:** Consumes cumulative diff40e9b8b..HEAD, new-branch diff, all three studies and reports. Produces independent cumulative-code and scientific/evidence reviews, one author Important/Critical fix pass, full verification and pushed unmerged source with exact original infrastructure restored.
 
-- [ ] Run full relevant image-batch/infrastructure regressions and pinned tooling with actual outputs and explicit accepted warnings/skips.
-- [ ] Dispatch fresh independent cumulative-code review and independent scientific/report/branch-guide review; preserve every verdict and caveat.
-- [ ] Re-grade findings, reproduce Critical/Important issues with RED/GREEN regressions, fix in one author pass and verify full suite; ledger deferred minors and every declined-to-judge ruling.
-- [ ] Archive idle extension/API/streams/native state, save all eight privately to new same-host paths, verify exact identities and shutoff, then resume exact five originals.
-- [ ] Verify new original baseline, clocks, presentation/source/RBAC/frozen stream prefixes, immutable backing hashes and unrelated containers.
-- [ ] Commit/push without merge; verify remote SHA, original/prior checkout preservation, every report/review/decision-guide artifact and the completion audit before marking the goal achieved.
+- [x] Run full relevant image-batch/infrastructure regressions and pinned tooling with actual outputs and explicit accepted warnings/skips.
+- [x] Dispatch fresh independent cumulative-code review and independent scientific/report/branch-guide review; preserve every verdict and caveat.
+- [x] Re-grade findings, reproduce Critical/Important issues with RED/GREEN regressions, fix in one author pass and verify full suite; ledger deferred minors and every declined-to-judge ruling.
+- [x] Archive idle extension/API/streams/native state, save all eight privately to new same-host paths, verify exact identities and shutoff, then resume exact five originals.
+- [x] Verify new original baseline, clocks, presentation/source/RBAC/frozen stream prefixes, immutable backing hashes and unrelated containers.
+- [x] Commit/push without merge; verify remote SHA, original/prior checkout preservation, every report/review/decision-guide artifact and the completion audit before marking the goal achieved.
