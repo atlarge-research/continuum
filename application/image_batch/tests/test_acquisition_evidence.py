@@ -9,6 +9,7 @@ import unittest
 from acquisition_evidence import acquisition_history, acquisition_audit, charge_acquisitions
 from closed_loop_evidence import allocation, controller_outcomes
 from forecast_trace import iso
+from closed_loop_diagnostics import cycle_diagnostic
 from reporting.closed_loop import acquisition_rows, acquisition_series
 import test_closed_loop_guards as guard_fixtures
 
@@ -170,6 +171,90 @@ class AcquisitionEvidenceTests(unittest.TestCase):
         self.assertTrue(result["actions"][0]["observed"])
         self.assertEqual(result["actions"][0]["decision_source"], "forecast")
         self.assertEqual(result["acquisitions"][0]["request_to_observed_seconds"], 6)
+
+    def test_lost_ack_availability_is_not_attributed_forecast_execution(self):
+        """Physical availability closes charging without confirming an uncertain API intent."""
+        rows = records()
+        for row in rows:
+            if row["event"] == "action.result":
+                row.update(status="observed_applied", attribution="uncertain_after_reconciliation")
+            if row["event"] == "activation.api_result":
+                row["status"] = "uncertain_or_failed"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "journal.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+            result = controller_outcomes(root, 1000, 1020, arm="forecast")
+            cycle = root / "cycle-0001"
+            (cycle / "forecast").mkdir(parents=True)
+            (cycle / "forecast/forecast.json").write_text(
+                json.dumps(
+                    {
+                        "status": "ready",
+                        "cutoff": iso(1000000),
+                        "settings": {"horizon_seconds": 10},
+                        "predictions": [],
+                        "scenario_job_counts": [],
+                    }
+                )
+            )
+            diagnostic = cycle_diagnostic(cycle, result["cycles"][0], [], 1020000, 1030000)
+        self.assertEqual(result["observed_up"], 0)
+        self.assertFalse(result["actions"][0]["observed"])
+        self.assertFalse(result["cycles"][0]["activation_observed"])
+        self.assertEqual(result["acquisitions"][0]["status"], "observed")
+        self.assertEqual(result["acquisitions"][0]["request_to_observed_seconds"], 6)
+        self.assertIsNone(diagnostic["actual_candidate"])
+
+    def test_failed_activation_does_not_capture_later_observed_scale_down(self):
+        """A dispatch that fails before intent cannot steal a later unrelated action."""
+        rows = records(observed=None)
+        rows.extend(
+            [
+                {
+                    "event": "activation.dispatch",
+                    "activation_id": "a",
+                    "dispatched_at_seconds": 1006,
+                },
+                {
+                    "event": "activation.api_result",
+                    "activation_id": "a",
+                    "status": "uncertain_or_failed",
+                },
+                {
+                    "event": "activation.result",
+                    "activation_id": "a",
+                    "status": "cancelled",
+                    "recorded_at_ns": 1008000000000,
+                },
+                {"event": "cycle.begin", "tick": 2, "started_at": 1009},
+                {
+                    "event": "action.request",
+                    "action_id": "down-later",
+                    "action": "scale-down",
+                    "selected_worker": "w1",
+                },
+                {"event": "action.result", "action_id": "down-later", "status": "acknowledged"},
+                {
+                    "event": "cycle.observed",
+                    "action_observed": True,
+                    "state": {"timestamp_seconds": 1010},
+                },
+            ]
+        )
+        self.assertNotIn("api_action_id", acquisition_history(rows)[0])
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "journal.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+            result = controller_outcomes(root, 1000, 1020, arm="forecast")
+        self.assertEqual(result["observed_down"], 1)
+        self.assertNotIn("activation_id", result["actions"][0])
+
+    def test_activation_link_requires_scale_up_on_its_original_worker(self):
+        """An unrelated action cannot satisfy a pending dispatch association."""
+        rows = records()
+        rows[5].update(action="scale-down", selected_worker="w1")
+        rows[7].pop("action_id")
+        self.assertNotIn("api_action_id", acquisition_history(rows)[0])
 
     def test_early_or_duplicate_dispatch_is_an_observed_violation(self):
         """The audit checks the same minimum-delay boundary as physical actuation."""

@@ -8,7 +8,8 @@ def acquisition_history(records):
     """Join acquisition requests, dispatch attempts, API intent and observed results.
 
     Args:
-        records (list[dict]): Complete durable controller journal in file order.
+        records (list[dict]): Complete durable controller journal in file order. A dispatch
+            links only a same-worker scale-up intent before its API-result or terminal boundary.
 
     Returns:
         list[dict]: Normalized acquisition records retaining original clocks and source ticks.
@@ -21,6 +22,7 @@ def acquisition_history(records):
         event = record["event"]
         if event == "cycle.begin":
             current_tick = record["tick"]
+            dispatching = None
         elif event == "activation.request":
             identity = record["activation_id"]
             if identity in requests:
@@ -40,10 +42,20 @@ def acquisition_history(records):
             requests[identity]["dispatches"].append(copy.deepcopy(record))
             dispatching = identity
         elif event == "action.request" and dispatching is not None:
-            requests[dispatching]["api_action_id"] = record["action_id"]
+            request = requests[dispatching]
+            if (
+                record.get("action") == "scale-up"
+                and record.get("selected_worker") == request["selected_worker"]
+            ):
+                request["api_action_id"] = record["action_id"]
             dispatching = None
+        elif event == "activation.api_result":
+            if record["activation_id"] == dispatching:
+                dispatching = None
         elif event == "activation.result":
             identity = record["activation_id"]
+            if identity == dispatching:
+                dispatching = None
             if identity not in requests:
                 raise ValueError("acquisition result has no original request")
             request = requests[identity]

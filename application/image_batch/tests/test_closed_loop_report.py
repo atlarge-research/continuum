@@ -217,6 +217,7 @@ class ClosedLoopReportTests(unittest.TestCase):
             role="heldout",
             seed=62,
             arrival_plan_sha256="same",
+            source_hashes={"storage.py": "same-source"},
             accepted_capture=True,
             origin_seconds=0,
             admission="fifo",
@@ -241,6 +242,30 @@ class ClosedLoopReportTests(unittest.TestCase):
         loop["admission"] = "fifo"
         loop["arrival_plan_sha256"] = "different"
         self.assertEqual(module.paired_savings([fixed, loop]), [])
+
+    def test_pairing_rejects_source_only_mismatch_or_unknown_source(self):
+        """Matching workloads and deployment settings cannot conceal different application code."""
+        module = importlib.import_module("reporting.closed_loop")
+        common = dict(
+            role="heldout",
+            seed=62,
+            arrival_plan_sha256="same",
+            accepted_capture=True,
+            origin_seconds=0,
+            admission="fifo",
+            evaluation_start_seconds=1000,
+            arrival_end_seconds=1120,
+            config={"workers": []},
+            source_hashes={"storage.py": "same-source"},
+            allocation={"allocated_core_seconds_bounds": [100, 100]},
+        )
+        fixed, forecast = dict(common, arm="fixed"), dict(common, arm="forecast")
+        self.assertEqual(len(module.paired_savings([fixed, forecast])), 1)
+        forecast["source_hashes"] = {"storage.py": "different-source"}
+        self.assertEqual(module.paired_savings([fixed, forecast]), [])
+        for run in (fixed, forecast):
+            run.pop("source_hashes")
+        self.assertEqual(module.paired_savings([fixed, forecast]), [])
 
     def test_current_report_uses_available_seed_and_configured_timing(self):
         """A fresh evaluation seed must show diagnostics with its own horizon and budget."""
@@ -268,6 +293,7 @@ class ClosedLoopReportTests(unittest.TestCase):
             role="heldout",
             seed=107,
             arrival_plan_sha256="same",
+            source_hashes={"storage.py": "same-source"},
             accepted_capture=True,
             origin_seconds=0,
             admission="fifo",

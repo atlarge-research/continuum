@@ -204,7 +204,9 @@ def controller_outcomes(  # pylint: disable=too-many-locals
 
     Successful streaks require valid forecasts and completed feedback. An
     acknowledged action without observer confirmation breaks the streak; later
-    reconciliation does not retroactively make that cycle successful.
+    reconciliation does not retroactively make that cycle successful. Physical
+    delayed availability closes pending charging, but attributed execution also
+    requires an acknowledged linked API action; lost-ack reconciliation stays uncertain.
 
     Args:
         directory (Path): Controller journal and immutable per-cycle native evidence.
@@ -366,7 +368,10 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         if acquisition:
             action["activation_id"] = acquisition["activation_id"]
             action["acquisition_requested_seconds"] = acquisition["requested_at_seconds"]
-            action["observed"] = acquisition["status"] == "observed"
+            action["observed"] = (
+                acquisition["status"] == "observed"
+                and action.get("result", {}).get("status") == "acknowledged"
+            )
             action["observation_seconds"] = acquisition.get("observed_at_seconds")
             cycle = cycles.get(acquisition["tick"])
             if cycle:

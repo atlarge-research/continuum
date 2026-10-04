@@ -11,7 +11,10 @@ LABELS = ("Fixed capacity", "Reactive", "Forecast loop")
 
 
 def paired_savings(runs):
-    """Pair accepted held-out arms only when their workload and resource windows match.
+    """Pair accepted held-out arms only when source, workload and resource windows match.
+
+    Missing or unequal captured application source hashes make a pair ineligible;
+    saved historical metrics remain unchanged and can still be drawn independently.
 
     Args:
         runs (list[dict]): Frozen physical run evidence, including explicit study roles.
@@ -38,6 +41,8 @@ def paired_savings(runs):
         boundaries = ("evaluation_start_seconds", "arrival_end_seconds")
         window = [run[key] - run["origin_seconds"] for key in boundaries]
         fixed_window = [fixed[key] - fixed["origin_seconds"] for key in boundaries]
+        if not run.get("source_hashes") or run["source_hashes"] != fixed.get("source_hashes"):
+            continue
         if (
             run["arrival_plan_sha256"] != fixed["arrival_plan_sha256"]
             or not np.allclose(window, fixed_window, rtol=0, atol=0.001)
