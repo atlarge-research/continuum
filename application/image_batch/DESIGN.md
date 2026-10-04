@@ -115,7 +115,7 @@ CPU uses a rate over a short counter window, so the first observation after Pod 
 
 Resource observations are timed at their measurement source, separately from collection time, so query delays cannot shift the apparent execution profile.
 
-A completed execution profile must describe a fixed set of accepted observations. Later stale cluster state must not change that profile or add resource evidence after finalization. Sampling and terminal-profile finalization share a collection boundary. When collection overruns its nominal cadence, the sampler skips elapsed ticks and waits for the next future state tick, allowing terminal finalization to acquire that boundary. Missed ticks remain missing evidence; actual measurement and availability times retain their causal meaning.
+A completed execution profile must describe a fixed set of accepted observations. Later stale cluster state must not change that profile or add resource evidence after finalization. Sampling and terminal-profile finalization share a collection boundary. When collection overruns its nominal cadence, the sampler offers terminal finalization a short positive pause before sampling again. It preserves ordinary cadence when collection is on time and avoids both immediate lock reacquisition and an extra full idle tick after an overrun. Missed ticks remain missing evidence; actual measurement and availability times retain their causal meaning.
 
 ### Trace storage and transport boundary
 

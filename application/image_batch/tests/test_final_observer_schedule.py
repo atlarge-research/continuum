@@ -1,4 +1,4 @@
-"""Overrun observer sampling must leave a wait for terminal evidence finalization."""
+"""Overrun sampling must yield for finalization without adding a full idle tick."""
 
 from types import SimpleNamespace
 import unittest
@@ -9,10 +9,17 @@ from test_opendt_observer import FakeBatchApi, FakeCoreApi, FakePrometheus, Reco
 
 
 class ObserverScheduleTests(unittest.TestCase):
-    """Exercise the real scheduler with deterministic slow-collection clocks."""
+    """Exercise actual sampling with deterministic collection and completion clocks."""
 
-    def test_overrun_sampling_waits_until_the_next_future_state_tick(self):
-        """A2.5second collection on a1second cadence must not immediately retake its lock."""
+    def sampling_waits(self, collection_seconds):
+        """Record the wait following one bounded simulated collection.
+
+        Args:
+            collection_seconds (float): Duration of the collection operation.
+
+        Returns:
+            list[float]: Wait durations offered to terminal-profile finalization.
+        """
         sampler = ResourceSampler(
             batch_api=FakeBatchApi([]),
             core_api=FakeCoreApi(),
@@ -30,16 +37,16 @@ class ObserverScheduleTests(unittest.TestCase):
         waits = []
 
         def collect(*, collect_resources):
-            """Advance a real collection past multiple nominal state ticks.
+            """Advance the real collection beyond its simulated start.
 
             Args:
                 collect_resources (bool): Whether resource collection was due.
             """
             self.assertTrue(collect_resources)
-            clock["now"] += 2.5
+            clock["now"] += collection_seconds
 
         def wait(seconds):
-            """Record the scheduler pause and terminate the deterministic loop.
+            """Record the pause and terminate the deterministic scheduler loop.
 
             Args:
                 seconds (float): Time offered to terminal-record finalization.
@@ -54,7 +61,21 @@ class ObserverScheduleTests(unittest.TestCase):
             "opendt_observer.time.monotonic", side_effect=lambda: clock["now"]
         ), patch.object(sampler, "collect_once", side_effect=collect):
             sampler._run()  # pylint: disable=protected-access
-        self.assertEqual(waits, [0.5])
+        return waits
+
+    def test_overrun_yields_without_waiting_for_another_full_grid_tick(self):
+        """Small and large overruns offer a positive bounded finalization window."""
+        for duration in (1.067, 2.5):
+            with self.subTest(collection_seconds=duration):
+                waits = self.sampling_waits(duration)
+                self.assertEqual(len(waits), 1)
+                self.assertAlmostEqual(waits[0], 0.05)
+
+    def test_on_time_collection_keeps_the_normal_state_cadence(self):
+        """A collection finishing before its next tick retains ordinary cadence."""
+        waits = self.sampling_waits(0.4)
+        self.assertEqual(len(waits), 1)
+        self.assertAlmostEqual(waits[0], 0.6)
 
 
 if __name__ == "__main__":

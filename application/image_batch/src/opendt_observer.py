@@ -770,12 +770,12 @@ class ResourceSampler:
         return pod_execution_interval(pods.items, job_uid)
 
     def _run(self) -> None:
-        """Skip elapsed state ticks after collection, allowing terminal finalization.
+        """Yield after overruns while preserving ordinary state collection cadence.
 
-        Resource collection is checked on state ticks. An overdue resource
-        deadline must not create a busy wait before the next state tick.
-        The next tick uses the completion clock, so a slow collection releases
-        its lock before waiting instead of repeatedly reacquiring it.
+        Resource collection is checked on state ticks; its overdue deadline
+        must not cause a busy wait. Slow collection releases its lock and
+        offers terminal finalization a bounded positive yield, without adding
+        a full idle grid tick or executing a burst of missed collections.
         """
         next_state = time.monotonic()
         next_resource = next_state
@@ -788,8 +788,9 @@ class ResourceSampler:
                 except Exception as exc:
                     self.emit_diagnostic("observer.sample_failed", {"error": str(exc)})
                 now = time.monotonic()
-                while next_state <= now:
-                    next_state += self.state_interval_seconds
+                next_state += self.state_interval_seconds
+                if next_state <= now:
+                    next_state = now + min(0.05, self.state_interval_seconds)
                 if collect_resources:
                     while next_resource <= now:
                         next_resource += self.resource_interval_seconds
