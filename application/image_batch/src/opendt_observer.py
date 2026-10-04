@@ -33,6 +33,43 @@ ANNOTATION_PAYLOAD_BYTES = ANNOTATION_PREFIX + "payload-bytes"
 ANNOTATION_IMAGE_COUNT = ANNOTATION_PREFIX + "image-count"
 ANNOTATION_INFERENCE_REPETITIONS = ANNOTATION_PREFIX + "inference-repetitions"
 CPU_RATE_WINDOW = "15s"
+MAXIMUM_API_CLOCK_WAIT_SECONDS = 2.0
+
+
+def await_api_clock(*timestamps: datetime | None) -> None:
+    """Wait for bounded API/execution timestamps before recording evidence availability.
+
+    Independently synchronized guests can differ by milliseconds. Evidence stays
+    on the producer's actual clock; readers retain their strict causal ordering.
+    The two-second limit matches the maximum relative offset of two guests whose
+    individual preflight bounds are one second, and uses a monotonic lifetime.
+
+    Args:
+        timestamps (tuple[datetime or None]): Referenced API or execution boundaries.
+            None entries are ignored; existing timestamps must be timezone-aware.
+
+    Raises:
+        ValueError: A timestamp is naive, clock skew exceeds the bound, or the
+            producer clock fails to reach the boundary within the bounded wait.
+    """
+    values = [value for value in timestamps if value is not None]
+    if not values:
+        return
+    if any(value.tzinfo is None for value in values):
+        raise ValueError("evidence clock boundary must be timezone-aware")
+    boundary = max(value.timestamp() for value in values)
+    ahead = boundary - time.time()
+    if not math.isfinite(ahead) or ahead > MAXIMUM_API_CLOCK_WAIT_SECONDS:
+        raise ValueError("API timestamp exceeds bounded observer clock skew")
+    if ahead <= 0:
+        return
+    deadline = time.monotonic() + MAXIMUM_API_CLOCK_WAIT_SECONDS
+    while ahead > 0:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError("observer clock did not reach API boundary within bounded wait")
+        time.sleep(min(ahead, remaining))
+        ahead = boundary - time.time()
 
 
 class MalformedJobError(ValueError):
@@ -751,7 +788,15 @@ class ResourceSampler:
             self._stop.wait(max(0.0, min(next_state, next_resource) - time.monotonic()))
 
     def observe_job(self, job: Any) -> None:
-        """Record existence separately from successful completion and pressure."""
+        """Record first existence after the API creation boundary fits the producer clock.
+
+        Args:
+            job (Any): Kubernetes Job with its original UID, creation time and run lineage.
+
+        Raises:
+            ValueError: The API clock exceeds the bounded relative skew or fails to advance.
+            OSError: The diagnostic evidence cannot be written.
+        """
         metadata = getattr(job, "metadata", None)
         uid = getattr(metadata, "uid", None)
         created = getattr(metadata, "creation_timestamp", None)
@@ -764,6 +809,7 @@ class ResourceSampler:
         with self._lock:
             if uid in self._observed_uids:
                 return
+            await_api_clock(created)
             self.emit_diagnostic(
                 "job.observed",
                 {
@@ -1020,6 +1066,7 @@ class OpenDTObserver:
         Raises:
             OSError: A workload or diagnostic write fails.
             ApiException: Kubernetes execution-interval lookup fails.
+            ValueError: Referenced clocks exceed the bounded relative skew or fail to advance.
         """
         if hasattr(self.sampler, "observe_job"):
             self.sampler.observe_job(job)
@@ -1044,6 +1091,10 @@ class OpenDTObserver:
             interval = None
             if uid and request_id and hasattr(self.sampler, "execution_interval"):
                 interval = self.sampler.execution_interval(uid, request_id)
+            await_api_clock(
+                getattr(getattr(job, "status", None), "completion_time", None),
+                interval[1] if interval else None,
+            )
             record = build_workload_record(
                 job,
                 task_id=self._next_task_id,

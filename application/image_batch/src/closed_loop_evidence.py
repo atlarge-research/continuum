@@ -2,10 +2,13 @@
 
 import argparse
 from collections import Counter
+
 import hashlib
 import json
 import math
 from pathlib import Path
+
+from acquisition_evidence import acquisition_history, charge_acquisitions
 
 import numpy as np
 
@@ -19,7 +22,7 @@ from opendc_validation import read_observations
 SCHEMA = "opendc-closed-loop-evidence-v1"
 
 
-def allocation(states, config, start, end):
+def allocation(states, config, start, end, *, activation_records=None):
     """Integrate accepting plus draining application cores over a common physical window.
 
     Each observed state holds until the next snapshot only when the gap is at
@@ -33,6 +36,7 @@ def allocation(states, config, start, end):
         config (dict): Explicit worker resources and accepting-worker bounds.
         start (float): Inclusive evaluation boundary in UTC epoch seconds.
         end (float): Exclusive common arrival-window boundary in epoch seconds.
+        activation_records (list[dict] or None): Optional durable acquisition journal.
 
     Returns:
         dict: Complete or explicitly unavailable allocation, coverage and plotted state series.
@@ -64,6 +68,7 @@ def allocation(states, config, start, end):
                     lower=lower,
                     upper=upper,
                     membership_complete=membership,
+                    allocated_workers=view["active_workers"] + view["draining_workers"],
                     accepting=len(view["active_workers"]),
                     draining=len(view["draining_workers"]),
                     powered=view["powered_worker_count"],
@@ -102,7 +107,7 @@ def allocation(states, config, start, end):
         gaps.append(dict(start=cursor, end=end, reason="missing_final_state"))
         upper_cost += (end - cursor) * maximum
     complete = not gaps and math.isclose(covered, end - start, abs_tol=1e-6)
-    return dict(
+    result = dict(
         start_seconds=start,
         end_seconds=end,
         covered_seconds=covered,
@@ -121,6 +126,7 @@ def allocation(states, config, start, end):
             "No physical energy estimate."
         ),
     )
+    return charge_acquisitions(result, activation_records or [], maximum)
 
 
 def responses(observations, start_ms, end_ms, *, deadline_seconds=120, followup_end_ms=None):
@@ -198,7 +204,9 @@ def controller_outcomes(  # pylint: disable=too-many-locals
 
     Successful streaks require valid forecasts and completed feedback. An
     acknowledged action without observer confirmation breaks the streak; later
-    reconciliation does not retroactively make that cycle successful.
+    reconciliation does not retroactively make that cycle successful. Physical
+    delayed availability closes pending charging, but attributed execution also
+    requires an acknowledged linked API action; lost-ack reconciliation stays uncertain.
 
     Args:
         directory (Path): Controller journal and immutable per-cycle native evidence.
@@ -213,6 +221,8 @@ def controller_outcomes(  # pylint: disable=too-many-locals
     """
     path = directory / "journal.jsonl"
     records = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    acquisitions = acquisition_history(records)
+    acquired = {row.get("api_action_id"): row for row in acquisitions if row.get("api_action_id")}
     cycles = {}
     requests = {}
     current = None
@@ -224,6 +234,8 @@ def controller_outcomes(  # pylint: disable=too-many-locals
             continue
         row = cycles[current]
         if record["event"] == "cycle.end":
+            if "recorded_at_ns" in record:
+                row["outcome_recorded_seconds"] = record["recorded_at_ns"] / 1e9
             row.update(
                 {
                     key: value
@@ -234,6 +246,7 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         elif record["event"] == "cycle.proposal":
             row.update(
                 proposal=record["proposal"],
+                proposal_seconds=record["recorded_at_ns"] / 1e9,
                 decision_age_seconds=record["recorded_at_ns"] / 1e9 - record["cutoff_seconds"],
                 shadow=record["shadow"],
             )
@@ -350,8 +363,29 @@ def controller_outcomes(  # pylint: disable=too-many-locals
         for row in rows
         for action in row["actions"]
     ]
+    for action in actions:
+        acquisition = acquired.get(action["action_id"])
+        if acquisition:
+            action["activation_id"] = acquisition["activation_id"]
+            action["acquisition_requested_seconds"] = acquisition["requested_at_seconds"]
+            action["observed"] = (
+                acquisition["status"] == "observed"
+                and action.get("result", {}).get("status") == "acknowledged"
+            )
+            action["observation_seconds"] = acquisition.get("observed_at_seconds")
+            cycle = cycles.get(acquisition["tick"])
+            if cycle:
+                cycle["activation_observed"] = action["observed"]
+                cycle["activation_requested_seconds"] = acquisition["requested_at_seconds"]
     latencies = [row["elapsed_seconds"] for row in rows if "elapsed_seconds" in row]
+    identity_path = directory / "identity.json"
+    identity = json.loads(identity_path.read_text()) if identity_path.exists() else {}
+    down_observations = (
+        identity.get("settings", {}).get("config", {}).get("reactive_down_observations", 2)
+    )
     return dict(
+        acquisitions=[row for row in acquisitions if start <= row["requested_at_seconds"] < end],
+        reactive_down_observations=down_observations,
         cycles=rows,
         actions=actions,
         complete_native_cycles=len(eligible),
@@ -387,6 +421,130 @@ def controller_outcomes(  # pylint: disable=too-many-locals
             (row.get("controller_process_peak_rss_kib", 0) for row in rows), default=0
         )
         or None,
+    )
+
+
+def sender_window_fidelity(events, *, start_offset_seconds, end_offset_seconds):
+    """Measure dispatch fidelity by exact identities in a planned half-open arrival window.
+
+    Args:
+        events (list[dict]): Preserved endpoint event stream.
+        start_offset_seconds (float): Inclusive planned offset from the sender origin.
+        end_offset_seconds (float): Exclusive planned offset from the sender origin.
+
+    Returns:
+        dict: Counts, measured lag quantiles and explicit consistency failures. The planned
+        count is the denominator; missing receipts or malformed identities prevent acceptance.
+
+    Raises:
+        ValueError: Bounds are not finite nonnegative numbers with an increasing interval.
+    """
+    bounds = (start_offset_seconds, end_offset_seconds)
+    if (
+        any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+            for value in bounds
+        )
+        or bounds[1] <= bounds[0]
+    ):
+        raise ValueError("sender evaluation bounds must be finite, nonnegative and increasing")
+    kinds = (
+        "schedule.planned",
+        "batch.send_started",
+        "batch.receipt_received",
+        "batch.send_failed",
+    )
+    groups = {kind: {} for kind in kinds}
+    issues = []
+    for row in events:
+        if not isinstance(row, dict):
+            issues.append("malformed_sender_event")
+            continue
+        kind = row.get("event_type")
+        if kind not in groups:
+            continue
+        details = row.get("details", {})
+        if not isinstance(details, dict):
+            issues.append("malformed_sender_details")
+            continue
+        identity = details.get("endpoint_batch_id")
+        if not isinstance(identity, str) or not identity:
+            issues.append("malformed_sender_identity")
+            continue
+        groups[kind].setdefault(identity, []).append(details)
+    selected = []
+    for identity, rows in groups["schedule.planned"].items():
+        for details in rows:
+            offset = details.get("planned_offset_ns")
+            if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                issues.append("malformed_planned_offset")
+                continue
+            if bounds[0] * 1e9 <= offset < bounds[1] * 1e9:
+                selected.append((identity, details))
+    indices = [plan.get("batch_index") for _, plan in selected]
+    valid_indices = [
+        value
+        for value in indices
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    ]
+    if len(valid_indices) != len(indices) or len(set(valid_indices)) != len(valid_indices):
+        issues.append("invalid_or_duplicate_batch_index")
+    lags, on_time, successful = [], 0, 0
+    for identity, plan in selected:
+        started, received, failed = (groups[kind].get(identity, []) for kind in kinds[1:])
+        if (
+            len(groups[kinds[0]][identity]) != 1
+            or len(started) != 1
+            or len(received) != 1
+            or failed
+        ):
+            issues.append("incomplete_or_duplicate_sender_identity")
+        if len(received) == 1 and not failed:
+            successful += 1
+        if len(started) != 1:
+            continue
+        dispatch = started[0]
+        if any(
+            row.get(key) != plan.get(key)
+            for row in started + received
+            for key in ("batch_index", "planned_offset_ns")
+        ):
+            issues.append("sender_plan_mismatch")
+        actual, reported = dispatch.get("actual_send_offset_ns"), dispatch.get("schedule_lag_ns")
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) for value in (actual, reported)
+        ):
+            issues.append("malformed_dispatch_clock")
+            continue
+        lag = actual - plan["planned_offset_ns"]
+        if lag < 0 or lag != reported:
+            issues.append("inconsistent_dispatch_clock")
+            continue
+        lags.append(lag / 1e9)
+        on_time += lag <= 250_000_000
+    count = len(selected)
+    if not count:
+        issues.append("no_planned_evaluation_arrivals")
+    fraction = on_time / count if count else 0
+    if fraction < 0.95:
+        issues.append("evaluated_sender_fidelity_below_threshold")
+    return dict(
+        start_offset_seconds=bounds[0],
+        end_offset_seconds=bounds[1],
+        tolerance_seconds=0.25,
+        required_fraction=0.95,
+        planned_count=count,
+        successful_count=successful,
+        on_time_count=on_time,
+        on_time_fraction=fraction,
+        schedule_lag_p50_seconds=float(np.percentile(lags, 50)) if lags else None,
+        schedule_lag_p95_seconds=float(np.percentile(lags, 95)) if lags else None,
+        schedule_lag_max_seconds=max(lags) if lags else None,
+        fidelity_passed=not issues,
+        issues=sorted(set(issues)),
     )
 
 
@@ -578,7 +736,19 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
     )
     rows, boundaries = bounded_read(capture / "observer")
     trace, observations = read_observations(rows, invocation["namespace"])
-    allocation_result = allocation([state for _, state in trace.states], config, start, end)
+    journal_path = capture / "controller/journal.jsonl"
+    activation_records = (
+        [json.loads(line) for line in journal_path.read_text().splitlines()]
+        if journal_path.exists()
+        else []
+    )
+    allocation_result = allocation(
+        [state for _, state in trace.states],
+        config,
+        start,
+        end,
+        activation_records=activation_records,
+    )
     followup_end = end + invocation.get("followup_seconds", 600)
     deadline = invocation.get("deadline_seconds", 120)
     response_result = responses(
@@ -602,7 +772,17 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
         for container in pod["status"].get("containerStatuses", [])
     }
     summary = summaries[0] if len(summaries) == 1 else {}
+    evaluated_sender = sender_window_fidelity(
+        events,
+        start_offset_seconds=warmup * invocation["period_seconds"],
+        end_offset_seconds=invocation["cycles"] * invocation["period_seconds"],
+    )
     issues = sender_inventory(events, app_jobs, summary, invocation["namespace"])
+    if (
+        invocation.get("require_evaluated_sender_fidelity", False)
+        and not evaluated_sender["fidelity_passed"]
+    ):
+        issues.append("evaluated_sender_fidelity")
     if not summary.get("fidelity_passed") or summary.get("on_time_fraction", 0) < 0.95:
         issues.append("sender_fidelity")
     if summary.get("attempted_count") != summary.get("planned_count") or summary.get(
@@ -661,7 +841,14 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
         arrival_end_seconds=end,
         config=config,
         comparison_settings={
-            key: invocation.get(key)
+            key: (
+                {
+                    arm: invocation["arm_active_workers"].get(arm, invocation.get("active_workers"))
+                    for arm in ("fixed", "reactive", "forecast")
+                }
+                if key == "active_workers" and invocation.get("arm_active_workers") is not None
+                else invocation.get(key)
+            )
             for key in (
                 "deployment_sources",
                 "network_preset",
@@ -670,6 +857,12 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
                 "worker_cores",
                 "worker_memory_mib",
                 "active_workers",
+                "minimum_workers",
+                "maximum_workers",
+                "acquisition_seconds",
+                "modeled_request_delay_seconds",
+                "modeled_admission_margin_seconds",
+                "require_evaluated_sender_fidelity",
                 "template_namespace",
                 "template_deployment",
                 "period_seconds",
@@ -686,6 +879,7 @@ def capture_evidence(capture, role):  # pylint: disable=too-many-locals
         arrival_plan=plan,
         invocation=invocation,
         sender=summary,
+        sender_evaluated_window=evaluated_sender,
         accepted_capture=not issues,
         acceptance_issues=issues,
         restarts=restarts,

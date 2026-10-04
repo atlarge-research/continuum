@@ -26,6 +26,7 @@ import numpy as np
 import pyarrow.parquet as pq
 from scipy.ndimage import gaussian_filter1d
 
+from opendc_acquisition import application_tasks
 from opendc_inputs import file_hashes, write_json
 from opendc_pinning import PINNED_MODE, cordoned_worker
 from opendc_energy import datacenter_series
@@ -244,7 +245,10 @@ def analyze_case(
     Response and completion metrics use classifier finish. Explicit occupancy
     models retain resource release separately, including an already observed
     classifier finish for release-only work; energy coverage extends through the
-    final resource release. Controller Job-completion proxies must use the
+    final native resource release, including synthetic acquisition reservations.
+    Infrastructure tasks retain complete native identity and timing validation
+    but are excluded from application lifecycles, counts and response curves.
+    Controller Job-completion proxies must use the
     separate resource-release response rather than classifier response.
 
     Args:
@@ -286,8 +290,22 @@ def analyze_case(
     if set(by_id) != expected_ids:
         raise ValueError("completion identities differ from simulated case tasks")
 
-    normalized = []
+    native_last_release = 0.0
     for item in case["tasks"]:
+        task_id = item["task"]["id"]
+        submission = float(item["task"].get("submission_time"))
+        finish = float(by_id[task_id].get("finish_time"))
+        if (
+            not math.isfinite(submission)
+            or not math.isfinite(finish)
+            or submission < 0
+            or finish < submission
+        ):
+            raise ValueError(f"task {task_id} has invalid lifecycle timing")
+        native_last_release = max(native_last_release, finish / 1000)
+
+    normalized = []
+    for item in application_tasks(case):
         task_id = item["task"]["id"]
         cohort = item["metadata"].get("cohort")
         if cohort not in ("backlog", "future"):
@@ -359,7 +377,7 @@ def analyze_case(
     last_release = max((task["resource_release_seconds"] for task in normalized), default=0.0)
     if not analytical_empty:
         for name, host_series in series.items():
-            if host_series["native_last_timestamp_ms"] + 1e-9 < last_release * 1000:
+            if host_series["native_last_timestamp_ms"] + 1e-9 < native_last_release * 1000:
                 raise ValueError(
                     f"host {name} native energy ends before latest included completion"
                 )

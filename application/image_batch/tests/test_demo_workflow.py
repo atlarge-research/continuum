@@ -73,6 +73,66 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             module.matrix_commands(protocol, Path("/new/evidence"))
 
+    def test_sealed_worker_bounds_start_all_arms_at_normal_allocation(self):
+        """The sealed matrix must preserve initial four workers and dynamic two-to-six bounds."""
+        module = self.module()
+        protocol = dict(
+            source_root="/frozen",
+            continuum_config="/cluster.cfg",
+            inventory="/inventory",
+            experiment_config="/settings.json",
+            native_image="native:pinned",
+            run_prefix="bounds",
+            matrix=[dict(seed=1, arm=arm) for arm in ("fixed", "reactive", "forecast")],
+            worker_bounds={"active_workers": 4, "minimum_workers": 2, "maximum_workers": 6},
+        )
+        for row in module.matrix_commands(protocol, Path("/new/evidence")):
+            for flag, value in (
+                ("--active-workers", "4"),
+                ("--minimum-workers", "2"),
+                ("--maximum-workers", "6"),
+            ):
+                self.assertEqual(row["command"][row["command"].index(flag) + 1], value)
+        for invalid in (
+            {"active_workers": True, "minimum_workers": 2, "maximum_workers": 6},
+            {"active_workers": 1, "minimum_workers": 2, "maximum_workers": 6},
+            {"active_workers": 4, "minimum_workers": 2},
+            {"active_workers": 4, "minimum_workers": 2, "maximum_workers": 6, "unknown": 1},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "worker bounds"):
+                protocol["worker_bounds"] = invalid
+                module.matrix_commands(protocol, Path("/new/evidence"))
+
+    def test_sealed_arm_cadences_are_explicit_and_strictly_validated(self):
+        """Reactive can check more often while sharing the frozen workload and deployment."""
+        module = self.module()
+        protocol = dict(
+            source_root="/frozen",
+            continuum_config="/cluster.cfg",
+            inventory="/inventory",
+            experiment_config="/settings.json",
+            native_image="native:pinned",
+            run_prefix="cadence",
+            matrix=[dict(seed=1, arm=arm) for arm in ("fixed", "reactive", "forecast")],
+            arm_cadence_seconds={"reactive": 30},
+        )
+        rows = module.matrix_commands(protocol, Path("/new/evidence"))
+        self.assertNotIn("--cadence-seconds", rows[0]["command"])
+        self.assertNotIn("--cadence-seconds", rows[2]["command"])
+        command = rows[1]["command"]
+        self.assertEqual(command[command.index("--cadence-seconds") + 1], "30")
+        for invalid in (
+            {"unknown": 30},
+            {"reactive": 0},
+            {"reactive": True},
+            {"reactive": 1.5},
+            {"reactive": "30"},
+        ):
+            with self.subTest(invalid=invalid):
+                protocol["arm_cadence_seconds"] = invalid
+                with self.assertRaisesRegex(ValueError, "cadence"):
+                    module.matrix_commands(protocol, Path("/new/evidence"))
+
     def test_matrix_timeout_records_recovery_and_never_launches_next_capture(self):
         """All phases are bounded; a capture timeout stops even after sender recovery."""
         module = self.module()
@@ -227,7 +287,11 @@ class WorkflowTests(unittest.TestCase):
                 create=True,
             ):
                 sealed = module.seal_protocol(source, root / "protocol")
-                module.verify_protocol(sealed)
+                with patch.object(module, "resolve_deployment", return_value={}), patch.object(
+                    module, "clock_alignment", return_value={}
+                ) as clocks:
+                    module.verify_protocol(sealed)
+                clocks.assert_called_once_with({})
             with patch.object(
                 module.subprocess, "check_output", return_value="sha256:original"
             ), patch.object(

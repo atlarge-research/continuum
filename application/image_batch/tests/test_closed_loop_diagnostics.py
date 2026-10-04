@@ -62,3 +62,63 @@ class LoopDiagnosticTests(unittest.TestCase):
             result = module.cycle_diagnostic(root, cycle, observed, 200000, 800000)
             self.assertIsNone(result["actual_candidate"])
             self.assertEqual(result["predicted_response_p95_seconds"], [])
+            cycle.update(
+                outcome="acknowledged",
+                action_observed=True,
+                forecast_valid=False,
+                proposal=dict(action="scale-down", fallback=True),
+            )
+            result = module.cycle_diagnostic(root, cycle, observed, 200000, 800000)
+            self.assertIsNone(result["actual_candidate"])
+            self.assertEqual(result["predicted_response_p95_seconds"], [])
+
+    def test_cancelled_proposal_retains_all_counterfactual_candidates(self):
+        """Cancellation cannot erase alternatives or turn a prediction into physical validation."""
+        module = importlib.import_module("closed_loop_diagnostics")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            forecast = dict(
+                status="ready",
+                cutoff=iso(100000),
+                settings=dict(horizon_seconds=60, scenarios=3),
+                predictions=[dict(mean_count=2)],
+                scenario_job_counts=[2, 2, 2],
+            )
+            scores = [
+                dict(
+                    candidate=name,
+                    selected_worker="worker-a",
+                    scenarios=[
+                        dict(
+                            complete=True,
+                            cohort_size=2,
+                            responses_seconds=[10, late],
+                            allocated_core_seconds=cost,
+                        )
+                        for _ in range(3)
+                    ],
+                )
+                for name, late, cost in (("unchanged", 100, 120), ("scale-down", 120, 90))
+            ]
+            for name, data in (("forecast/forecast.json", forecast), ("scores.json", scores)):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(data))
+            cycle = dict(
+                tick=2,
+                outcome="vetoed_or_failed",
+                decision_age_seconds=2,
+                proposal=dict(action="scale-down"),
+                forecast_valid=True,
+            )
+            result = module.cycle_diagnostic(root, cycle, [], 200000, 800000)
+            self.assertIsNone(result["actual_candidate"])
+            alternatives = result["candidate_predictions"]
+            self.assertEqual(
+                [row["candidate"] for row in alternatives], ["unchanged", "scale-down"]
+            )
+            self.assertTrue(all(row["valid"] for row in alternatives))
+            self.assertEqual(alternatives[0]["worst_late_fraction"], 0)
+            self.assertEqual(alternatives[1]["worst_late_fraction"], 0.5)
+            self.assertEqual(alternatives[1]["allocated_core_seconds"], 90)
+            self.assertAlmostEqual(alternatives[1]["response_p95_seconds"][0], 116.5)

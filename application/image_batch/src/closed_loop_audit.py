@@ -5,6 +5,7 @@ from collections import Counter, defaultdict
 import json
 from pathlib import Path
 
+from acquisition_evidence import acquisition_audit
 from forecast_trace import milliseconds
 from opendc_inputs import write_json
 
@@ -79,7 +80,9 @@ def audit_journal(rows):
         )
         for identity, row in opened.items()
     )
+    activation = acquisition_audit(rows)
     return dict(
+        acquisition=activation,
         request_count=sum(requests.values()),
         duplicate_action_ids=duplicate,
         overlapping_request_ids=overlaps,
@@ -90,7 +93,14 @@ def audit_journal(rows):
         mismatched_proposal_action_ids=mismatched,
         missing_proposal_action_ids=missing_proposal,
         mutation_intervals=intervals,
-        violations=bool(duplicate or overlaps or orphaned or sequence_errors or mismatched),
+        violations=bool(
+            duplicate
+            or overlaps
+            or orphaned
+            or sequence_errors
+            or mismatched
+            or activation["violations"]
+        ),
     )
 
 

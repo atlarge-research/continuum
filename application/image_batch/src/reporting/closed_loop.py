@@ -11,7 +11,10 @@ LABELS = ("Fixed capacity", "Reactive", "Forecast loop")
 
 
 def paired_savings(runs):
-    """Pair accepted held-out arms only when their workload and resource windows match.
+    """Pair accepted held-out arms only when source, workload and resource windows match.
+
+    Missing or unequal captured application source hashes make a pair ineligible;
+    saved historical metrics remain unchanged and can still be drawn independently.
 
     Args:
         runs (list[dict]): Frozen physical run evidence, including explicit study roles.
@@ -38,6 +41,8 @@ def paired_savings(runs):
         boundaries = ("evaluation_start_seconds", "arrival_end_seconds")
         window = [run[key] - run["origin_seconds"] for key in boundaries]
         fixed_window = [fixed[key] - fixed["origin_seconds"] for key in boundaries]
+        if not run.get("source_hashes") or run["source_hashes"] != fixed.get("source_hashes"):
+            continue
         if (
             run["arrival_plan_sha256"] != fixed["arrival_plan_sha256"]
             or not np.allclose(window, fixed_window, rtol=0, atol=0.001)
@@ -56,6 +61,100 @@ def paired_savings(runs):
             )
         )
     return pairs
+
+
+def response_cdf(runs):
+    """Average seed-level completion CDFs using all submitted Jobs as denominators.
+
+    Failed and censored outcomes contribute no finite completion; a curve may
+    therefore never reach 95 percent. The crossing is an empirical all-Job
+    percentile, distinct from interpolated completed-only response quantiles.
+
+    Args:
+        runs (list[dict]): Independent seed runs for one policy, including response cohorts.
+
+    Returns:
+        dict: Shared times, equal-seed mean, descriptive range and attainable p95 crossing.
+
+    Raises:
+        ValueError: A response is invalid or completions exceed the submitted cohort.
+    """
+    cohorts = [run["responses"] for run in runs if run["responses"]["jobs"] > 0]
+    completed = [np.sort(cohort["completed_responses_seconds"]) for cohort in cohorts]
+    for cohort, values in zip(cohorts, completed):
+        if len(values) > cohort["jobs"] or np.any(~np.isfinite(values)) or np.any(values < 0):
+            raise ValueError("invalid all-Job response CDF cohort")
+    if not cohorts:
+        return dict(
+            seconds=[],
+            mean_percent=[],
+            lower_percent=[],
+            upper_percent=[],
+            all_job_p95_seconds=None,
+            scored_seeds=0,
+        )
+    times = np.unique(np.concatenate(([0.0], *completed)))
+    values = np.array(
+        [
+            100 * np.searchsorted(completions, times, side="right") / cohort["jobs"]
+            for cohort, completions in zip(cohorts, completed)
+        ]
+    )
+    mean = np.mean(values, axis=0)
+    crossing = np.flatnonzero(mean >= 95 - 1e-9)
+    return dict(
+        seconds=times.tolist(),
+        mean_percent=mean.tolist(),
+        lower_percent=np.min(values, axis=0).tolist(),
+        upper_percent=np.max(values, axis=0).tolist(),
+        all_job_p95_seconds=float(times[crossing[0]]) if len(crossing) else None,
+        scored_seeds=len(cohorts),
+    )
+
+
+def arrival_bins(run, *, width_seconds=30):
+    """Count actual Job creation times in disjoint bins and evaluated workload cycles.
+
+    Historical payloads may expose actual times only in the saved response
+    cohort. Planned endpoint offsets and overlapping forecast windows are never
+    substituted for actual arrivals.
+
+    Args:
+        run (dict): Saved run with evaluation bounds and actual Job creation times.
+        width_seconds (int): Positive nonoverlapping bin duration.
+
+    Returns:
+        dict: Relative bin edges/counts and per-evaluated-cycle totals, or unavailable evidence.
+
+    Raises:
+        ValueError: The bin duration is invalid.
+    """
+    if width_seconds <= 0:
+        raise ValueError("arrival bin duration must be positive")
+    if "cohort" in run.get("responses", {}):
+        times = [row["creation_ms"] / 1000 for row in run["responses"]["cohort"]]
+    else:
+        return dict(available=False, edges_seconds=[], counts=[], cycle_totals=[])
+    start, end = run["evaluation_start_seconds"], run["arrival_end_seconds"]
+    period = run.get("invocation", {}).get("period_seconds")
+    relative = np.array([at - start for at in times if start <= at < end])
+    edges = np.append(np.arange(0, end - start, width_seconds), end - start)
+    counts = np.histogram(relative, bins=edges)[0]
+    cycles = (
+        []
+        if not period
+        else [
+            int(np.sum((relative >= at) & (relative < at + period)))
+            for at in np.arange(0, end - start, period)
+        ]
+    )
+    return dict(
+        available=True,
+        edges_seconds=edges.tolist(),
+        counts=counts.tolist(),
+        cycle_totals=cycles,
+        width_seconds=width_seconds,
+    )
 
 
 def _independent_points(axis, values):
@@ -100,25 +199,43 @@ def _outcomes(pdf, runs, pairs):
     )
     figure, axes = page(title, takeaway)
     groups = [[run for run in runs if run["arm"] == arm] for arm in ARMS]
-    _independent_points(
-        axes[0, 0],
-        [
-            [
-                100 * r["responses"]["deadline_fraction"]
-                for r in group
-                if r["responses"]["deadline_fraction"] is not None
-            ]
-            for group in groups
-        ],
+    display_end = 1.05 * max(
+        [120] + [value for run in runs for value in run["responses"]["completed_responses_seconds"]]
     )
-    for fraction in {r.get("invocation", {}).get("deadline_fraction", 0.95) for r in runs}:
-        axes[0, 0].axhline(100 * fraction, color="black", linestyle="--", linewidth=1)
+    for index, group in enumerate(groups):
+        cdf = response_cdf(group)
+        if not cdf["scored_seeds"]:
+            continue
+        crossing = cdf["all_job_p95_seconds"]
+        label = LABELS[index] + (
+            f"; p95 {crossing:.1f}s" if crossing is not None else "; p95 not reached"
+        )
+        times = cdf["seconds"] + [display_end]
+        mean = cdf["mean_percent"] + [cdf["mean_percent"][-1]]
+        lower = cdf["lower_percent"] + [cdf["lower_percent"][-1]]
+        upper = cdf["upper_percent"] + [cdf["upper_percent"][-1]]
+        axes[0, 0].step(times, mean, where="post", color=COLORS[index], label=label)
+        axes[0, 0].fill_between(
+            times,
+            lower,
+            upper,
+            step="post",
+            color=COLORS[index],
+            alpha=0.12,
+        )
+        if crossing is not None:
+            axes[0, 0].scatter(crossing, 95, color=COLORS[index], s=24, zorder=5)
+    axes[0, 0].axhline(95, color="black", linestyle="--", linewidth=1)
+    axes[0, 0].axvline(120, color="black", linestyle="--", linewidth=1)
     axes[0, 0].set_ylim(0, 103)
+    axes[0, 0].set_xlim(0, display_end)
+    if runs:
+        axes[0, 0].legend(fontsize=7, loc="lower right")
     panel(
         axes[0, 0],
-        "Failures and unfinished Jobs remain in the denominator",
-        "",
-        "Jobs within configured deadline (%)",
+        "All-Job completion CDF; equal weight per seed",
+        "Original-creation response (s)",
+        "Submitted Jobs completed (%)",
     )
     _independent_points(
         axes[0, 1],
@@ -140,22 +257,40 @@ def _outcomes(pdf, runs, pairs):
         "",
         "Completed Job response p95 (s)",
     )
-    for index, arm in enumerate(ARMS):
-        for pair in [item for item in pairs if item["arm"] == arm]:
-            lower, upper = [100 * v for v in pair["saving_bounds"]]
-            axes[1, 0].plot([index, index], [lower, upper], color=COLORS[index], linewidth=4)
-            axes[1, 0].scatter(index, lower, color=COLORS[index], s=25)
     _independent_points(
         axes[1, 0],
-        [[0] * len(groups[0])]
-        + [[100 * p["saving_bounds"][0] for p in pairs if p["arm"] == arm] for arm in ARMS[1:]],
+        [
+            [np.mean(r["allocation"]["allocated_core_seconds_bounds"]) / 3600 for r in group]
+            for group in groups
+        ],
     )
-    axes[1, 0].axhline(10, color="black", linestyle="--", linewidth=1)
+    for index, group in enumerate(groups):
+        for run in group:
+            lower, upper = run["allocation"]["allocated_core_seconds_bounds"]
+            axes[1, 0].plot(
+                [index, index], [lower / 3600, upper / 3600], color=COLORS[index], linewidth=3
+            )
+        savings = [item["saving_bounds"] for item in pairs if item["arm"] == ARMS[index]]
+        if savings:
+            bounds = np.median(savings, axis=0) * 100
+            axes[1, 0].text(
+                index,
+                0.94,
+                f"Paired saving\n{bounds[0]:.1f}–{bounds[1]:.1f}%",
+                transform=axes[1, 0].get_xaxis_transform(),
+                ha="center",
+                va="top",
+                fontsize=8,
+            )
+    highest = max(
+        [1] + [run["allocation"]["allocated_core_seconds_bounds"][1] / 3600 for run in runs]
+    )
+    axes[1, 0].set_ylim(0, 1.3 * highest)
     panel(
         axes[1, 0],
-        "Paired savings retain uncertainty from observation gaps",
+        "Allocation bounds; median paired savings annotated",
         "",
-        "Allocated core-time saving vs fixed (%)",
+        "Allocated application core-hours",
     )
     counts = [sum(r["responses"]["completed"] for r in group) for group in groups]
     incomplete = [
@@ -177,12 +312,15 @@ def _outcomes(pdf, runs, pairs):
     finish(
         pdf,
         figure,
-        "Dots: independent workload runs. Black bars: median and descriptive min–max, "
+        "CDF: equal-seed mean and min–max, retaining failed/censored Jobs; "
+        "dots mark its 95% crossing.\n"
+        "Other dots: independent workload runs. Black bars: median and descriptive min–max, "
         "not confidence intervals.\n"
-        "Savings use accepting + draining application core-time; bounded intervals "
-        "never identify a cheaper partial total.\n"
-        "Configured powered worker VMs remain available throughout. No physical energy "
-        "saving is inferred.",
+        "Core-hours count accepting + draining + requested pending capacity; "
+        "dots are interval midpoints, "
+        "colored spans are coverage bounds.\n"
+        "Assess deadline compliance before interpreting savings relative to fixed. "
+        "Warm reserves remain powered; no physical-energy saving is inferred.",
     )
 
 
@@ -258,6 +396,7 @@ def _timelines(pdf, runs):
             )
     for deadline in {r.get("invocation", {}).get("deadline_seconds", 120) for r in runs}:
         axes[1, 0].axvline(deadline, color="black", linestyle="--", linewidth=1)
+        axes[1, 0].axhline(0.95, color="black", linestyle="--", linewidth=1)
     for budget in {
         r.get("invocation", {}).get("decision_age_seconds", 30)
         for r in runs
@@ -269,9 +408,9 @@ def _timelines(pdf, runs):
     axes[0, 0].legend(fontsize=8, loc="lower left")
     panel(
         axes[0, 0],
-        "Allocation includes a cordoned worker until it drains",
+        "Charged allocation includes draining and requested pending workers",
         "Minutes after warm-up",
-        "Allocated application cores",
+        "Charged application cores",
     )
     panel(
         axes[0, 1],
@@ -302,6 +441,124 @@ def _timelines(pdf, runs):
     )
 
 
+def acquisition_rows(run):
+    """Retain request, minimum availability and observed clocks for report tables.
+
+    Args:
+        run (dict): Frozen run evidence with controller acquisition history.
+
+    Returns:
+        list[dict]: Relative clocks and measured request-to-observation latency.
+    """
+    origin = run["origin_seconds"]
+    return [
+        dict(
+            worker=row["selected_worker"],
+            status=row["status"],
+            requested=row["requested_at_seconds"] - origin,
+            due=row["ready_at_seconds"] - origin,
+            observed=(
+                row["observed_at_seconds"] - origin
+                if row.get("observed_at_seconds") is not None
+                else None
+            ),
+            latency=row.get("request_to_observed_seconds"),
+        )
+        for row in run["controller"].get("acquisitions", [])
+    ]
+
+
+def acquisition_series(run, field):
+    """Read acquisition components without inventing capacity across missing observations.
+
+    Args:
+        run (dict): Frozen allocation evidence and workload clock.
+        field (str): Charged, physical or pending application-core component.
+
+    Returns:
+        tuple[list[float], list[float]]: Relative minutes and values with explicit NaN gaps.
+    """
+    points = [dict(point) for point in run["allocation"]["series"]]
+    for point in points:
+        point.setdefault("accepting_draining_cores", point.get("allocated"))
+        point.setdefault("pending_application_cores", 0)
+        if not point.get("membership_complete", True) or point.get("lower") != point.get("upper"):
+            point["accepting_draining_cores"] = None
+            if point["pending_application_cores"]:
+                point["pending_application_cores"] = None
+    return observed_series(points, run["origin_seconds"], field)
+
+
+def _acquisition_page(pdf, run):
+    """Display charged, available and pending capacity with physical activation clocks.
+
+    Args:
+        pdf (PdfPages): Open combined report writer.
+        run (dict): One frozen delayed-acquisition run, retaining its study role.
+    """
+    figure, axes = page(
+        f'Capacity acquisition: {run["role"]} {run["seed"]} {run["arm"]}',
+        "Requested capacity is charged immediately; only observed accepting capacity runs Jobs.",
+        rows=2,
+        columns=1,
+    )
+    axis = axes[0, 0]
+    for field, label, color in (
+        ("allocated", "Charged cores", COLORS[0]),
+        ("accepting_draining_cores", "Accepting + draining cores", COLORS[1]),
+        ("pending_application_cores", "Requested pending cores", COLORS[2]),
+    ):
+        times, values = acquisition_series(run, field)
+        axis.step(times, values, where="post", label=label, color=color)
+    panel(
+        axis,
+        "Requested versus available capacity",
+        "Minutes from workload start",
+        "Application cores",
+    )
+    axis.legend(fontsize=8)
+    rows = acquisition_rows(run)
+    table_axis = axes[1, 0]
+    table_axis.axis("off")
+    if rows:
+        table = table_axis.table(
+            cellText=[
+                [
+                    r["worker"],
+                    r["status"],
+                    _metric(r["requested"]),
+                    _metric(r["due"]),
+                    _metric(r["observed"]),
+                    _metric(r["latency"]),
+                ]
+                for r in rows
+            ],
+            colLabels=[
+                "Worker",
+                "Status",
+                "Request (s)",
+                "Earliest (s)",
+                "Observed (s)",
+                "Latency (s)",
+            ],
+            cellLoc="center",
+            loc="center",
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(8)
+        table.scale(1, 1.45)
+    else:
+        table_axis.text(0.5, 0.5, "No capacity acquisitions in the evaluation window", ha="center")
+    finish(
+        pdf,
+        figure,
+        "Controlled admission delay on powered Ready reserves. Cost starts at request; "
+        "API acknowledgement is not observed availability.\n"
+        "Accepting + draining capacity includes workers finishing assigned Jobs; reserve "
+        "power and physical boot/join latency are not measured.",
+    )
+
+
 def render_pages(pdf, reports):
     """Render physical outcomes before validation while retaining pilot/held-out separation.
 
@@ -316,16 +573,21 @@ def render_pages(pdf, reports):
     heldout = [run for run in runs if run["role"] == "heldout" and run["accepted_capture"]]
     pairs = paired_savings(runs)
     _outcomes(pdf, heldout, pairs)
+    _timelines(pdf, heldout)
+    for run in heldout:
+        if run.get("invocation", {}).get("acquisition_seconds", 0):
+            _acquisition_page(pdf, run)
     action_runs = [run for run in heldout if run["controller"].get("actions")]
     for run in action_runs:
         _action_evidence_page(pdf, run)
         _lifecycle_page(pdf, run)
-    _timelines(pdf, heldout)
     diagnostic_runs = sorted(
         (run for run in heldout if run["arm"] == "forecast"), key=lambda run: run["seed"]
     )
     for run in diagnostic_runs:
+        _activity_page(pdf, run)
         _forecast_observation_page(pdf, run)
+        _candidate_pages(pdf, run)
     return dict(
         heldout_runs=len(heldout),
         pilot_runs=sum(r["role"] == "pilot" for r in runs),
@@ -364,6 +626,9 @@ def render_validation(pdf, reports):
                 f'{run["role"]} {run["seed"]}',
                 run["arm"],
                 "accepted" if run["accepted_capture"] else "REJECTED",
+                f'{100 * run["sender_evaluated_window"]["on_time_fraction"]:.1f}%'
+                if "sender_evaluated_window" in run
+                else "—",
                 str(control["observed_down"]),
                 str(control["observed_up"]),
                 str(control.get("lifecycles", {}).get("forecast_down_up_pairs", "—"))
@@ -388,6 +653,7 @@ def render_validation(pdf, reports):
             "Role / seed",
             "Arm",
             "Capture",
+            "Evaluated\nsends timely",
             "Down",
             "Up",
             "Forecast\npairs",
@@ -478,6 +744,9 @@ def render_run_details(pdf, reports):
     runs = [run for report in reports for run in report["runs"]]
     physical, overhead = [], []
     for run in runs:
+        if run["role"] == "pilot" and run.get("invocation", {}).get("acquisition_seconds", 0):
+            _acquisition_page(pdf, run)
+    for run in runs:
         response, control = run["responses"], run["controller"]
         identity = f'{run["role"]} {run["seed"]} {run["arm"]}'
         if not run["accepted_capture"]:
@@ -550,7 +819,7 @@ def render_run_details(pdf, reports):
             ],
             physical[offset : offset + 14],
             "Responses start at original Job creation. Quantiles describe completed Jobs only.\n"
-            "Core-hours include accepting and draining workers; bounds preserve "
+            "Core-hours include accepting, draining and requested pending workers; bounds preserve "
             "missing observations.\n"
             "Configured follow-up ends after the arrival window; completions beyond "
             "that boundary remain censored. See configuration settings.",
@@ -606,13 +875,13 @@ def observed_series(series, origin, field):
 
 
 def action_evidence(run):
-    """Keep decision origin separate from API acknowledgment and observer confirmation.
+    """Separate durable intents, known dispatch cancellations and physical confirmation.
 
     Args:
-        run (dict): Frozen run with per-cycle proposals and recorded action requests.
+        run (dict): Frozen run with per-cycle proposals, action intents and journal results.
 
     Returns:
-        list[dict]: All requests, their decision source and strict confirmation status.
+        list[dict]: Every intent with dispatch classification, event times and confirmation.
     """
     cycles = {cycle["tick"]: cycle for cycle in run["controller"]["cycles"]}
     rows = []
@@ -626,20 +895,90 @@ def action_evidence(run):
             source = "Reactive baseline"
         else:
             source = "Unknown"
+        result = action.get("result", {})
+        dispatched = result.get("status") != "not_dispatched_stale"
         rows.append(
             dict(
                 action=action["action"],
                 source=source,
-                request_seconds=action["recorded_at_ns"] / 1e9,
-                confirmed=action.get("observed") is True
-                and action.get("result", {}).get("status") == "acknowledged",
+                dispatched=dispatched,
+                request_seconds=action["recorded_at_ns"] / 1e9 if dispatched else None,
+                cancellation_seconds=(
+                    result.get("recorded_at_ns", action["recorded_at_ns"]) / 1e9
+                    if not dispatched
+                    else None
+                ),
+                confirmed=action.get("observed") is True and result.get("status") == "acknowledged",
             )
         )
     return rows
 
 
+def action_timeline(run):
+    """Keep proposals, guard cancellations, API requests and strict observations separate.
+
+    Args:
+        run (dict): Saved controller cycles and requests with actual event timestamps.
+
+    Returns:
+        list[dict]: Chronologically ordered stage, action, decision source and epoch seconds.
+    """
+    rows = []
+    for cycle in run["controller"]["cycles"]:
+        proposal = cycle.get("proposal", {})
+        action = proposal.get("action")
+        if action not in ("scale-down", "scale-up"):
+            continue
+        source = "Reactive fallback" if proposal.get("fallback") else LABELS[ARMS.index(run["arm"])]
+        if cycle.get("proposal_seconds") is not None:
+            rows.append(
+                dict(
+                    stage="Proposed",
+                    seconds=cycle["proposal_seconds"],
+                    action=action,
+                    source=source,
+                )
+            )
+        if (
+            cycle.get("outcome") == "vetoed_or_failed"
+            and not cycle.get("actions")
+            and cycle.get("outcome_recorded_seconds") is not None
+        ):
+            rows.append(
+                dict(
+                    stage="Cancelled before API",
+                    seconds=cycle["outcome_recorded_seconds"],
+                    action=action,
+                    source=source,
+                )
+            )
+    for action, evidence in zip(run["controller"].get("actions", []), action_evidence(run)):
+        rows.append(
+            dict(
+                stage="API requested" if evidence["dispatched"] else "Cancelled before API",
+                seconds=(
+                    evidence["request_seconds"]
+                    if evidence["dispatched"]
+                    else evidence["cancellation_seconds"]
+                ),
+                action=evidence["action"],
+                source=evidence["source"],
+            )
+        )
+        if evidence["confirmed"] and action.get("observation_seconds") is not None:
+            rows.append(
+                dict(
+                    stage="Observed",
+                    seconds=action["observation_seconds"],
+                    action=evidence["action"],
+                    source=evidence["source"],
+                )
+            )
+    return sorted(rows, key=lambda row: row["seconds"])
+
+
 def _action_summary_rows(actions):
-    """Count every request by source without expanding the overview beyond its panel.
+    """Count API requests by source, excluding known pre-dispatch cancellations.
 
     Args:
         actions (list[dict]): Normalized requests and confirmation flags from action_evidence.
@@ -654,7 +993,9 @@ def _action_summary_rows(actions):
             requests = [
                 action
                 for action in actions
-                if action["source"] == source and action["action"] == kind
+                if action.get("dispatched", True)
+                and action["source"] == source
+                and action["action"] == kind
             ]
             row.append(f'{sum(action["confirmed"] for action in requests)}/{len(requests)}')
         rows.append(row)
@@ -679,7 +1020,7 @@ def _action_evidence_page(pdf, run):
         (
             axes[0, 0],
             "allocated",
-            "Capacity counts accepting and draining workers",
+            "Capacity counts accepting, draining and requested pending workers",
             "Application cores",
         ),
         (
@@ -692,6 +1033,8 @@ def _action_evidence_page(pdf, run):
         times, values = observed_series(run["allocation"]["series"], origin, field)
         axis.step(times, values, where="post", color="black")
         for index, action in enumerate(actions):
+            if not action["dispatched"]:
+                continue
             axis.axvline(
                 (action["request_seconds"] - origin) / 60,
                 color=COLORS[index % len(COLORS)],
@@ -771,6 +1114,179 @@ def _action_evidence_page(pdf, run):
     )
 
 
+def _activity_page(pdf, run):
+    """Align actual disjoint arrivals, forecasts, queues and stages on one evaluation clock.
+
+    Args:
+        pdf (PdfPages): Open report writer.
+        run (dict): Saved physical run with actual response cohort and controller evidence.
+    """
+    bins = arrival_bins(run)
+    if not bins["available"]:
+        return
+    origin = run["evaluation_start_seconds"]
+    duration = (run["arrival_end_seconds"] - origin) / 60
+    figure, axes = page(
+        f'Arrivals and control: {run["role"]} {run["arm"]}, seed {run["seed"]}',
+        "Actual Job creations use disjoint bins; "
+        "forecast windows overlap and are labeled separately.",
+    )
+    edges = np.array(bins["edges_seconds"]) / 60
+    axes[0, 0].bar(edges[:-1], bins["counts"], width=np.diff(edges), align="edge", color=COLORS[0])
+    period = run.get("invocation", {}).get("period_seconds")
+    if period:
+        for index, count in enumerate(bins["cycle_totals"]):
+            start = index * period / 60
+            axes[0, 0].axvline(start, color="gray", linestyle=":", linewidth=0.7)
+            axes[0, 0].text(
+                start + period / 120,
+                0.95,
+                f"Cycle {index+1}: {count}",
+                transform=axes[0, 0].get_xaxis_transform(),
+                ha="center",
+                va="top",
+                fontsize=8,
+            )
+    rows = [row for row in run.get("forecast_diagnostics", []) if row["complete_arrival_window"]]
+    if rows:
+        times = [(row["cutoff_ms"] / 1000 - origin) / 60 for row in rows]
+        axes[0, 1].plot(
+            times,
+            [row["predicted_mean_future_jobs"] for row in rows],
+            color=COLORS[2],
+            label="Forecast mean",
+        )
+        axes[0, 1].plot(
+            times,
+            [row["observed_future_jobs"] for row in rows],
+            color="black",
+            marker=".",
+            label="Actual in same window",
+        )
+        axes[0, 1].fill_between(
+            times,
+            [min(row["sampled_future_job_counts"]) for row in rows],
+            [max(row["sampled_future_job_counts"]) for row in rows],
+            color=COLORS[2],
+            alpha=0.15,
+        )
+        axes[0, 1].legend(fontsize=7)
+    times, values = observed_series(run["allocation"]["series"], origin, "queue")
+    axes[1, 0].step(times, values, where="post", color="black")
+    stages = ("Proposed", "Cancelled before API", "API requested", "Observed")
+    events = action_timeline(run)
+    for event in events:
+        axes[1, 1].scatter(
+            (event["seconds"] - origin) / 60,
+            stages.index(event["stage"]),
+            marker="v" if event["action"] == "scale-down" else "^",
+            color=COLORS[1] if event["source"] == "Reactive fallback" else COLORS[2],
+            s=38,
+        )
+    axes[1, 1].set_yticks(range(len(stages)), stages, fontsize=8)
+    axes[1, 1].set_ylim(-0.5, 3.5)
+    for axis in axes.flat:
+        axis.set_xlim(0, duration)
+    for axis in (axes[0, 0], axes[0, 1], axes[1, 0]):
+        axis.set_ylim(bottom=0)
+    axes[0, 0].set_ylim(0, 1.3 * max([1] + bins["counts"]))
+    panel(
+        axes[0, 0],
+        f'Actual arrivals; {bins["width_seconds"]:g}s bins',
+        "Minutes after warm-up",
+        "Jobs created per bin",
+    )
+    horizon = run.get("invocation", {}).get("horizon_seconds", "configured")
+    panel(
+        axes[0, 1],
+        f"Overlapping next-{horizon}s forecast windows",
+        "Minutes after warm-up",
+        "Future Jobs in each window",
+    )
+    panel(
+        axes[1, 0],
+        "Observed unassigned queue; gaps remain blank",
+        "Minutes after warm-up",
+        "Queued Jobs",
+    )
+    panel(
+        axes[1, 1],
+        "Down triangles release; up triangles acquire",
+        "Minutes after warm-up",
+        "Control stage",
+    )
+    finish(
+        pdf,
+        figure,
+        "Cycle totals count actual API Job creation times in the saved evaluation cohort. "
+        "No planned arrival schedule is substituted.\n"
+        "Green markers: policy proposals/requests/observations; orange: reactive fallback. "
+        "Cancelled means rejected before an API request.\n"
+        "Observed requires acknowledgment and observer confirmation. Unknown requests and "
+        "missing event times cannot become observed actions.",
+    )
+
+
+def _candidate_pages(pdf, run):
+    """Show every alternative at the first proposed down/up ticks, including guard vetoes.
+
+    Args:
+        pdf (PdfPages): Open report writer.
+        run (dict): Frozen forecast run containing per-cycle candidate predictions.
+    """
+    cycles = {row["tick"]: row for row in run["controller"].get("cycles", [])}
+    selected = set()
+    for diagnostic in run.get("forecast_diagnostics", []):
+        cycle = cycles.get(diagnostic["tick"], {})
+        action = cycle.get("proposal", {}).get("action", "hold")
+        category = (action, cycle.get("outcome") == "vetoed_or_failed")
+        if cycle.get("proposal", {}).get("fallback") is True:
+            continue
+        alternatives = diagnostic.get("candidate_predictions", [])
+        if category in selected or not alternatives:
+            continue
+        selected.add(category)
+        rows = []
+        for candidate in alternatives:
+            values = candidate.get("response_p95_seconds", [])
+            p95 = f"{min(values):.1f}–{max(values):.1f}" if values else "—"
+            rows.append(
+                [
+                    candidate["candidate"],
+                    candidate.get("selected_worker") or "—",
+                    "yes" if candidate["valid"] else candidate.get("reason", "invalid"),
+                    p95,
+                    _metric(100 * candidate["worst_late_fraction"], 1)
+                    if candidate["valid"]
+                    else "—",
+                    _metric(candidate["allocated_core_seconds"] / 3600, 3)
+                    if candidate["valid"]
+                    else "—",
+                ]
+            )
+        _table_page(
+            pdf,
+            f'Candidate predictions: {run["role"]} seed {run["seed"]}, tick {diagnostic["tick"]}',
+            f'Proposal: {action}; outcome: {cycle.get("outcome", "unknown")}; '
+            f'observer confirmed: {cycle.get("action_observed") is True}.',
+            [
+                "Candidate",
+                "Target",
+                "Valid",
+                "Future p95 range (s)",
+                "Worst late (%)",
+                "Mean core-hours",
+            ],
+            rows,
+            "Chronological examples: first tick per proposed action and cancellation status; "
+            "all alternative predictions remain in saved metrics.\n"
+            "Response predictions add measured decision age. Ranges span sampled futures; "
+            "the cost includes the configured allocation window.\n"
+            "These are counterfactual predictions. Only the acknowledged, observed initial "
+            "action can be compared with physical outcomes; later control still affects them.",
+        )
+
+
 def _forecast_observation_page(pdf, run):
     """Place a supplied run's predictions directly beside its physical outcomes.
 
@@ -827,7 +1343,7 @@ def _forecast_observation_page(pdf, run):
     )
     series = run["allocation"]["series"]
     for field, color, label in (
-        ("allocated", COLORS[0], "Accepting + draining cores"),
+        ("allocated", COLORS[0], "Charged application cores"),
         ("accepting", COLORS[2], "Accepting workers"),
     ):
         state_times, state_values = observed_series(series, origin, field)
@@ -933,6 +1449,11 @@ def _configuration_page(pdf, runs):
                 ),
                 f'{settings.get("warmup_cycles", "—")} / {settings.get("cycles", "—")}',
                 str(settings.get("followup_seconds", 600)),
+                (
+                    f'{settings.get("active_workers", "—")} / '
+                    f'{settings.get("minimum_workers", "—")} / '
+                    f'{settings.get("maximum_workers", "—")}'
+                ),
             ]
         )
     for offset in range(0, len(rows), 12):
@@ -951,6 +1472,7 @@ def _configuration_page(pdf, runs):
                 "Service target",
                 "Warm/total cycles",
                 "Follow-up",
+                "Workers\ninitial/min/max",
             ],
             rows[offset : offset + 12],
             "Each run retains its archived policy and exact invocation; legacy settings "
@@ -974,6 +1496,8 @@ def _configuration_page(pdf, runs):
                 str(settings.get("residual_margin_seconds", 0)),
                 str(settings.get("allocation_seconds", 120)),
                 str(settings.get("native_timeout_seconds", 20)),
+                str(settings.get("acquisition_seconds", 0)),
+                str(run["controller"].get("reactive_down_observations", 2)),
             ]
         )
     for offset in range(0, len(choices), 12):
@@ -988,23 +1512,27 @@ def _configuration_page(pdf, runs):
                 "Residual margin (s)",
                 "Allocation window (s)",
                 "Native timeout (s)",
+                "Acquisition (s)",
+                "Down observations",
             ],
             choices[offset : offset + 12],
             "Four images and 128 inference repetitions retain the calibrated workload; "
             "resource sampling remains five seconds.\n"
             "Reactive demand counts requested CPU of unfinished assigned/queued Jobs; "
             "up compares with accepting capacity.\n"
-            "Down compares with capacity after removal and requires a worker empty at "
-            "two consecutive scheduled checks.\n"
+            "Down uses remaining capacity. Archived identity specifies the observation count; "
+            "legacy runs use two checks.\n"
+            "One-check runs require a fresh complete qualifying snapshot, including fallback; "
+            "all physical guards apply.\n"
             "Current overruns use the median residual of longer completed profiles, or a "
             "five-second fallback, plus the declared margin.\n"
-            "Ready reserve acquisition is immediate in the model; measured decision, API "
-            "and observation delay remains explicit.",
+            "Configured acquisition delay gates reserve admission; request-to-observation "
+            "latency is measured separately from decision latency.",
         )
 
 
 def _lifecycle_page(pdf, run):
-    """Expose measured release and reuse separately from the request and acknowledgement.
+    """Expose dispatch status, release and reuse without treating cancelled intents as requests.
 
     Args:
         pdf (PdfPages): Open report writer.
@@ -1017,8 +1545,14 @@ def _lifecycle_page(pdf, run):
     origin = run["evaluation_start_seconds"]
     rows = []
     for action in actions:
+        status = action.get("result", {}).get("status")
+        source = action.get("decision_source", "unknown")
+        if status == "not_dispatched_stale":
+            source += "\nCancelled before API"
+        elif status != "acknowledged":
+            source += "\nAPI outcome uncertain" if status == "uncertain" else "\nOutcome unresolved"
         values = [
-            action["recorded_at_ns"] / 1e9,
+            None if status == "not_dispatched_stale" else action["recorded_at_ns"] / 1e9,
             action.get("result", {}).get("last_action_at"),
             action.get("observation_seconds"),
             action.get("first_observed_empty_seconds"),
@@ -1027,7 +1561,7 @@ def _lifecycle_page(pdf, run):
         rows.append(
             [
                 f'{action["action"].replace("scale-", "")} {action["selected_worker"]}',
-                action.get("decision_source", "unknown"),
+                source,
                 *[
                     _metric((value - origin) / 60, 2) if value is not None else "—"
                     for value in values

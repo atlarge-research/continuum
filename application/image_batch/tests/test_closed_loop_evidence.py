@@ -23,6 +23,18 @@ class EvidenceTests(unittest.TestCase):
         self.assertIsNotNone(importlib.util.find_spec("closed_loop_evidence"))
         return importlib.import_module("closed_loop_evidence")
 
+    def test_reactive_observation_rule_comes_from_archived_controller_identity(self):
+        """Offline redraw preserves historical two-check runs and identifies the new rule."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = self.module().controller_outcomes(root, 0, 100)
+            self.assertEqual(result["reactive_down_observations"], 2)
+            (root / "identity.json").write_text(
+                json.dumps(dict(settings=dict(config=dict(reactive_down_observations=1))))
+            )
+            result = self.module().controller_outcomes(root, 0, 100)
+            self.assertEqual(result["reactive_down_observations"], 1)
+
     def test_draining_costs_until_release_and_reserves_stay_powered(self):
         """Cordon at3s and completion at5s yield45core-seconds, not39 or90."""
         fixture = guard_fixtures.GuardTests()

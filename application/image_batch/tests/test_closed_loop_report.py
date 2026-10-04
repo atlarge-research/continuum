@@ -16,6 +16,199 @@ from reporting.assembly import write_report
 class ClosedLoopReportTests(unittest.TestCase):
     """Hand-computed paired savings reject unrelated plans and unknown cheap totals."""
 
+    def test_response_cdf_weights_seeds_equally_and_retains_missing_outcomes(self):
+        """Large cohorts cannot dominate, and failed/censored Jobs cannot raise the CDF."""
+        module = importlib.import_module("reporting.closed_loop")
+        result = module.response_cdf(
+            [
+                {"seed": 1, "responses": {"jobs": 10, "completed_responses_seconds": [60] * 9}},
+                {"seed": 2, "responses": {"jobs": 2, "completed_responses_seconds": [120]}},
+            ]
+        )
+        self.assertEqual(result["seconds"], [0.0, 60.0, 120.0])
+        self.assertEqual(result["mean_percent"], [0.0, 45.0, 70.0])
+        self.assertEqual(result["lower_percent"], [0.0, 0.0, 50.0])
+        self.assertEqual(result["upper_percent"], [0.0, 90.0, 90.0])
+        self.assertIsNone(result["all_job_p95_seconds"])
+
+    def test_response_cdf_reports_a_reachable_95_percent_intersection(self):
+        """The percentile crossing belongs to the all-Job curve, not completed-only times."""
+        module = importlib.import_module("reporting.closed_loop")
+        result = module.response_cdf(
+            [
+                {"seed": 1, "responses": {"jobs": 20, "completed_responses_seconds": [50] * 19}},
+            ]
+        )
+        self.assertEqual(result["all_job_p95_seconds"], 50)
+        self.assertEqual(result["mean_percent"][-1], 95)
+
+    def test_actual_arrival_bins_are_nonoverlapping_with_cycle_totals(self):
+        """Boundary arrivals enter exactly one bin and the common arrival end is excluded."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = {
+            "evaluation_start_seconds": 1000,
+            "arrival_end_seconds": 1120,
+            "invocation": {"period_seconds": 60},
+            "responses": {
+                "cohort": [
+                    {"creation_ms": at * 1000}
+                    for at in (999, 1000, 1029.9, 1030, 1059.9, 1060, 1119.9, 1120)
+                ]
+            },
+        }
+        result = module.arrival_bins(run)
+        self.assertEqual(result["counts"], [2, 2, 1, 1])
+        self.assertEqual(result["cycle_totals"], [4, 2])
+        self.assertEqual(result["edges_seconds"], [0, 30, 60, 90, 120])
+
+    def test_action_timeline_separates_cancellation_request_and_observation(self):
+        """Cancelled proposals have no API request; uncertain requests are not observed actions."""
+        module = importlib.import_module("reporting.closed_loop")
+        run = dict(
+            arm="forecast",
+            controller=dict(
+                cycles=[
+                    dict(
+                        tick=1,
+                        forecast_valid=True,
+                        proposal_seconds=10,
+                        outcome_recorded_seconds=12,
+                        outcome="vetoed_or_failed",
+                        proposal=dict(action="scale-down"),
+                        actions=[],
+                    ),
+                    dict(
+                        tick=2,
+                        forecast_valid=True,
+                        proposal_seconds=20,
+                        outcome="acknowledged",
+                        proposal=dict(action="scale-up"),
+                        actions=[dict(action="scale-up")],
+                    ),
+                ],
+                actions=[
+                    dict(
+                        tick=2,
+                        action="scale-up",
+                        recorded_at_ns=22_000_000_000,
+                        observation_seconds=25,
+                        observed=True,
+                        result=dict(status="acknowledged"),
+                    ),
+                    dict(
+                        tick=3,
+                        action="scale-down",
+                        recorded_at_ns=30_000_000_000,
+                        observation_seconds=32,
+                        observed=True,
+                        result=dict(status="uncertain"),
+                    ),
+                ],
+            ),
+        )
+        rows = module.action_timeline(run)
+        self.assertEqual(
+            [(row["stage"], row["seconds"]) for row in rows],
+            [
+                ("Proposed", 10),
+                ("Cancelled before API", 12),
+                ("Proposed", 20),
+                ("API requested", 22),
+                ("Observed", 25),
+                ("API requested", 30),
+            ],
+        )
+
+    def test_stale_intent_is_cancelled_without_counting_a_dispatched_request(self):
+        """A durable intent vetoed before dispatch stays distinct in every action view."""
+        module = importlib.import_module("reporting.closed_loop")
+        cancelled = dict(
+            tick=1,
+            action="scale-down",
+            selected_worker="cloud0",
+            recorded_at_ns=12_000_000_000,
+            observed=False,
+            result=dict(status="not_dispatched_stale", recorded_at_ns=14_000_000_000),
+        )
+        uncertain = dict(
+            cancelled,
+            tick=2,
+            recorded_at_ns=22_000_000_000,
+            result=dict(status="uncertain"),
+        )
+        acknowledged = dict(
+            cancelled,
+            tick=3,
+            action="scale-up",
+            recorded_at_ns=32_000_000_000,
+            observation_seconds=34,
+            observed=True,
+            result=dict(status="acknowledged", last_action_at=33),
+        )
+        actions = [cancelled, uncertain, acknowledged]
+        run = dict(
+            seed=7,
+            arm="forecast",
+            evaluation_start_seconds=0,
+            arrival_end_seconds=120,
+            allocation=dict(series=[]),
+            controller=dict(
+                cycles=[
+                    dict(
+                        tick=action["tick"],
+                        forecast_valid=True,
+                        proposal_seconds=10 * action["tick"],
+                        outcome_recorded_seconds=14 if action["tick"] == 1 else None,
+                        outcome="vetoed_or_failed" if action["tick"] == 1 else "acknowledged",
+                        proposal=dict(action=action["action"]),
+                        actions=[action],
+                    )
+                    for action in actions
+                ],
+                actions=actions,
+                lifecycles=dict(
+                    actions=[dict(action, decision_source="forecast") for action in actions],
+                    forecast_down_up_pairs=0,
+                ),
+            ),
+        )
+        self.assertEqual(
+            [(row["stage"], row["seconds"]) for row in module.action_timeline(run)],
+            [
+                ("Proposed", 10),
+                ("Cancelled before API", 14),
+                ("Proposed", 20),
+                ("API requested", 22),
+                ("Proposed", 30),
+                ("API requested", 32),
+                ("Observed", 34),
+            ],
+        )
+        # Inspect the renderer's internal summary without expanding its public API.
+        # pylint: disable=protected-access
+        self.assertEqual(
+            module._action_summary_rows(module.action_evidence(run)),
+            [["Forecast", "0/1", "1/1"]],
+        )
+        # pylint: enable=protected-access
+        with mock.patch("reporting.closed_loop.finish") as saved:
+            module._action_evidence_page(None, run)  # pylint: disable=protected-access
+        figure = saved.call_args.args[1]
+        try:
+            self.assertEqual(
+                [line.get_xdata()[0] for line in figure.axes[0].lines[1:]], [22 / 60, 32 / 60]
+            )
+        finally:
+            plt.close(figure)
+        with mock.patch("reporting.closed_loop._table_page") as saved:
+            module._lifecycle_page(None, run)  # pylint: disable=protected-access
+        rows = saved.call_args.args[4]
+        self.assertIn("Cancelled before API", rows[0][1])
+        self.assertEqual(rows[0][2:], ["—"] * 5)
+        self.assertIn("uncertain", rows[1][1])
+        self.assertEqual(rows[1][2], "0.37")
+        self.assertEqual(rows[2][1], "forecast")
+
     def test_paired_savings_use_bounds_and_matching_plans(self):
         """An incomplete allocation interval cannot be treated as a measured saving."""
         self.assertIsNotNone(importlib.util.find_spec("reporting.closed_loop"))
@@ -24,6 +217,7 @@ class ClosedLoopReportTests(unittest.TestCase):
             role="heldout",
             seed=62,
             arrival_plan_sha256="same",
+            source_hashes={"storage.py": "same-source"},
             accepted_capture=True,
             origin_seconds=0,
             admission="fifo",
@@ -48,6 +242,30 @@ class ClosedLoopReportTests(unittest.TestCase):
         loop["admission"] = "fifo"
         loop["arrival_plan_sha256"] = "different"
         self.assertEqual(module.paired_savings([fixed, loop]), [])
+
+    def test_pairing_rejects_source_only_mismatch_or_unknown_source(self):
+        """Matching workloads and deployment settings cannot conceal different application code."""
+        module = importlib.import_module("reporting.closed_loop")
+        common = dict(
+            role="heldout",
+            seed=62,
+            arrival_plan_sha256="same",
+            accepted_capture=True,
+            origin_seconds=0,
+            admission="fifo",
+            evaluation_start_seconds=1000,
+            arrival_end_seconds=1120,
+            config={"workers": []},
+            source_hashes={"storage.py": "same-source"},
+            allocation={"allocated_core_seconds_bounds": [100, 100]},
+        )
+        fixed, forecast = dict(common, arm="fixed"), dict(common, arm="forecast")
+        self.assertEqual(len(module.paired_savings([fixed, forecast])), 1)
+        forecast["source_hashes"] = {"storage.py": "different-source"}
+        self.assertEqual(module.paired_savings([fixed, forecast]), [])
+        for run in (fixed, forecast):
+            run.pop("source_hashes")
+        self.assertEqual(module.paired_savings([fixed, forecast]), [])
 
     def test_current_report_uses_available_seed_and_configured_timing(self):
         """A fresh evaluation seed must show diagnostics with its own horizon and budget."""
@@ -75,6 +293,7 @@ class ClosedLoopReportTests(unittest.TestCase):
             role="heldout",
             seed=107,
             arrival_plan_sha256="same",
+            source_hashes={"storage.py": "same-source"},
             accepted_capture=True,
             origin_seconds=0,
             admission="fifo",

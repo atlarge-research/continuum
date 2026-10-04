@@ -16,10 +16,12 @@ import xml.etree.ElementTree as ET
 from capture_run import CaptureSession, ENDPOINT_IMAGE
 from closed_loop_audit import audit_capture
 from closed_loop_evidence import SCHEMA as EVIDENCE_SCHEMA, capture_evidence
+from demo_clocks import clock_alignment
 from demo_cleanup import cleanup_native
 from demo_lifetime import PHASE_SECONDS, PHASE_STOP_SECONDS, PhaseFailure, run_phase
 from demo_recovery import recover_capture
 from demo_configuration import (
+    validate_arm_active_workers,
     resolve_deployment,
     validate_experiment,
     validate_live_inventory,
@@ -282,6 +284,7 @@ def verify_protocol(protocol_path):
         and deployment_identity(protocol) != protocol["deployment_identity"]
     ):
         raise ValueError("frozen deployment specification or image identity changed")
+    clock_alignment(resolve_deployment(protocol["continuum_config"], protocol["inventory"]))
     return protocol
 
 
@@ -296,8 +299,38 @@ def matrix_commands(protocol, output):
         list[dict]: Seed/arm identities, output paths and complete argv lists.
 
     Raises:
-        ValueError: An arm is unsupported or the matrix duplicates a seed/arm pair.
+        ValueError: An arm, seed or cadence is invalid, or the matrix duplicates a seed/arm pair.
     """
+    required_fidelity = protocol.get("require_evaluated_sender_fidelity", False)
+    if not isinstance(required_fidelity, bool):
+        raise ValueError("evaluated sender fidelity requirement must be boolean")
+    cadences = protocol.get("arm_cadence_seconds", {})
+    if not isinstance(cadences, dict) or any(
+        arm not in ("fixed", "reactive", "forecast")
+        or isinstance(seconds, bool)
+        or not isinstance(seconds, int)
+        or seconds <= 0
+        for arm, seconds in cadences.items()
+    ):
+        raise ValueError("invalid arm cadence")
+    bounds = protocol.get("worker_bounds")
+    if bounds is not None and (
+        not isinstance(bounds, dict)
+        or set(bounds) != {"active_workers", "minimum_workers", "maximum_workers"}
+        or any(isinstance(value, bool) or not isinstance(value, int) for value in bounds.values())
+        or not 1
+        <= bounds["minimum_workers"]
+        <= bounds["active_workers"]
+        <= bounds["maximum_workers"]
+    ):
+        raise ValueError("invalid worker bounds")
+    arm_initial = protocol.get("arm_active_workers")
+    validate_arm_active_workers(arm_initial, bounds)
+    if arm_initial is not None:
+        arm_initial = {
+            arm: arm_initial.get(arm, bounds["active_workers"])
+            for arm in ("fixed", "reactive", "forecast")
+        }
     result, seen = [], set()
     for row in protocol["matrix"]:
         seed, arm = row["seed"], row["arm"]
@@ -344,6 +377,20 @@ def matrix_commands(protocol, output):
             "--template-deployment",
             protocol.get("template_deployment", "image-batch-adapter"),
         ]
+        if required_fidelity:
+            command.append("--require-evaluated-sender-fidelity")
+        if bounds is not None:
+            for name in ("active_workers", "minimum_workers", "maximum_workers"):
+                value = (
+                    (arm_initial or {}).get(arm, bounds[name])
+                    if name == "active_workers"
+                    else bounds[name]
+                )
+                command.extend(["--" + name.replace("_", "-"), str(value)])
+        if arm_initial is not None:
+            command.extend(["--arm-active-workers", json.dumps(arm_initial, sort_keys=True)])
+        if arm in cadences:
+            command.extend(["--cadence-seconds", str(cadences[arm])])
         result.append(dict(seed=seed, arm=arm, output=str(destination), command=command))
     return result
 

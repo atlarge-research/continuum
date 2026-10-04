@@ -16,7 +16,9 @@ import time
 import yaml
 
 from closed_loop_controller import Controller
+from demo_clocks import clock_alignment
 from demo_configuration import (
+    validate_arm_active_workers,
     EXPERIMENT_DEFAULTS,
     resolve_deployment,
     validate_experiment,
@@ -63,6 +65,9 @@ def prepare_output(output, invocation):
 def capture_manifests(original, namespace, source, *, admission_workers=None):
     """Clone the calibrated deployment into an isolated capture namespace.
 
+    Rebuild managed source mounts and FIFO admission for the new namespace and
+    worker pool, including when the template is a refreshed presentation deployment.
+
     Args:
         original (dict): Retrieved live deployment, never modified.
         namespace (str): New experiment namespace beginning with fns-.
@@ -107,12 +112,21 @@ def capture_manifests(original, namespace, source, *, admission_workers=None):
     template = deployment["spec"]["template"]
     template.setdefault("metadata", {}).pop("annotations", None)
     spec = template["spec"]
-    spec["containers"] = [item for item in spec["containers"] if item["name"] != "forecast"]
-    spec.setdefault("volumes", []).append(
-        {"name": "capture-source", "configMap": {"name": "capture-source"}}
-    )
+    managed_sources = {"capture-source", "presentation-source"}
+    spec["containers"] = [
+        item for item in spec["containers"] if item["name"] not in {"forecast", "fifo-admission"}
+    ]
+    spec["volumes"] = [
+        item for item in spec.get("volumes", []) if item["name"] not in managed_sources
+    ]
+    spec["volumes"].append({"name": "capture-source", "configMap": {"name": "capture-source"}})
     for container in spec["containers"]:
-        container.setdefault("volumeMounts", []).append(
+        container["volumeMounts"] = [
+            item
+            for item in container.get("volumeMounts", [])
+            if item["name"] not in managed_sources
+        ]
+        container["volumeMounts"].append(
             {"name": "capture-source", "mountPath": "/review", "readOnly": True}
         )
         env = {item["name"]: item for item in container.get("env", [])}
@@ -245,6 +259,7 @@ class CaptureSession:
             },
         )
         self.output_created = True
+        write_json(self.output / "clock-preflight.json", clock_alignment(vars(self.args)))
         if self.namespace == self.args.template_namespace:
             raise ValueError("capture namespace must differ from the source deployment")
         jobs = self.get("jobs", "-A")["items"]
@@ -475,7 +490,11 @@ class CaptureSession:
 
     def collect(self):
         """Preserve complete terminal inventories, logs, observer evidence and results."""
-        for resource, filename in [("jobs", "jobs.json"), ("pods", "pods-final.json")]:
+        for resource, filename in [
+            ("jobs", "jobs.json"),
+            ("pods", "pods-final.json"),
+            ("events", "events.json"),
+        ]:
             write_json(self.output / filename, self.get(resource, "-n", self.namespace))
         write_json(self.output / "nodes-final.json", self.get("nodes"))
         pods = json.loads((self.output / "pods-final.json").read_text(encoding="utf-8"))
@@ -696,6 +715,7 @@ def parse_arguments(argv=None):
     parser.add_argument("--inventory", type=Path)
     parser.add_argument("--experiment-config", type=Path)
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--require-evaluated-sender-fidelity", action="store_true")
     parser.add_argument("--template-namespace", default="fns-demo")
     parser.add_argument("--template-deployment", default="image-batch-adapter")
     parser.add_argument("--output", type=Path, required=True)
@@ -704,6 +724,7 @@ def parse_arguments(argv=None):
     for name, default in EXPERIMENT_DEFAULTS.items():
         parser.add_argument("--" + name.replace("_", "-"), type=type(default), default=default)
     parser.add_argument("--active-workers", type=int)
+    parser.add_argument("--arm-active-workers", type=json.loads)
     parser.add_argument("--admission-mode", choices=("scheduler", "fifo"), default="scheduler")
     parser.add_argument(
         "--control-arm", choices=("none", "fixed", "reactive", "forecast"), default="none"
@@ -731,6 +752,11 @@ def parse_arguments(argv=None):
     if args.maximum_workers is None:
         args.maximum_workers = len(args.workers)
     validate_experiment(vars(args))
+    validate_arm_active_workers(args.arm_active_workers, vars(args))
+    if args.arm_active_workers is not None and args.active_workers != args.arm_active_workers.get(
+        args.control_arm, args.active_workers
+    ):
+        parser.error("initial worker count disagrees with declared per-arm allocation")
     if not 1 <= args.active_workers <= len(args.workers):
         parser.error("active worker count must fit the worker inventory")
     if (

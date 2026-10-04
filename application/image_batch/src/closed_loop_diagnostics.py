@@ -4,7 +4,40 @@ import json
 
 import numpy as np
 
+from closed_loop_policy import summarize_candidate
 from forecast_trace import milliseconds
+
+
+def candidate_predictions(scores, age, *, scenarios, deadline_seconds):
+    """Retain every native alternative, including predictions behind cancelled proposals.
+
+    Args:
+        scores (list[dict]): Frozen action alternatives sharing the same sampled futures.
+        age (float or None): Recorded cutoff-to-decision age added to response predictions.
+        scenarios (int): Required complete future count.
+        deadline_seconds (float): Original-creation response target.
+
+    Returns:
+        list[dict]: Validated policy metrics and per-future completed response p95 values.
+    """
+    if age is None or not np.isfinite(age) or age < 0:
+        return []
+    result = []
+    for candidate in scores:
+        summary = summarize_candidate(
+            candidate, age, scenarios=scenarios, deadline_seconds=deadline_seconds
+        )
+        summary["response_p95_seconds"] = (
+            [
+                float(np.percentile([value + age for value in row["responses_seconds"]], 95))
+                for row in candidate["scenarios"]
+                if row["responses_seconds"]
+            ]
+            if summary["valid"]
+            else []
+        )
+        result.append(summary)
+    return result
 
 
 def cycle_diagnostic(
@@ -36,9 +69,19 @@ def cycle_diagnostic(
     end = cutoff + forecast["settings"]["horizon_seconds"] * 1000
     future = [row for row in observations if cutoff <= row["creation_ms"] < end]
     candidate = None
-    if cycle.get("outcome") in ("held", "shadow"):
+    forecast_selected = (
+        cycle.get("forecast_valid") is True
+        and cycle.get("proposal", {}).get("fallback") is not True
+    )
+    if forecast_selected and cycle.get("outcome") in ("held", "shadow"):
         candidate = "unchanged"
-    elif cycle.get("outcome") == "acknowledged" and cycle.get("action_observed") is True:
+    elif forecast_selected and (
+        (cycle.get("outcome") == "acknowledged" and cycle.get("action_observed") is True)
+        or (
+            cycle.get("outcome") == "activation_requested"
+            and cycle.get("activation_observed") is True
+        )
+    ):
         candidate = cycle["proposal"]["action"]
     result = dict(
         tick=cycle["tick"],
@@ -52,6 +95,7 @@ def cycle_diagnostic(
         observed_future_jobs=len(future),
         actual_candidate=candidate,
         predicted_response_p95_seconds=[],
+        candidate_predictions=[],
         observed_cohort_response_p95_seconds=None,
         interpretation=(
             "Later controller actions may change these physical outcomes; "
@@ -60,12 +104,20 @@ def cycle_diagnostic(
     )
     scores_path = directory / "scores.json"
     case_path = directory / "suite/experiments/unchanged/0000/case.json"
-    if candidate is None or not scores_path.exists() or not case_path.exists():
+    if not scores_path.exists():
         return result
     scores = json.loads(scores_path.read_text())
+    age = cycle.get("decision_age_seconds")
+    result["candidate_predictions"] = candidate_predictions(
+        scores,
+        age,
+        scenarios=forecast["settings"].get("scenarios", 3),
+        deadline_seconds=deadline_seconds,
+    )
+    if candidate is None or not case_path.exists():
+        return result
     selected = next((row for row in scores if row["candidate"] == candidate), {})
     scenarios = selected.get("scenarios", [])
-    age = cycle.get("decision_age_seconds")
     if not scenarios or not all(row["complete"] for row in scenarios) or age is None:
         return result
     result["predicted_response_p95_seconds"] = [

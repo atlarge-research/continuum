@@ -12,12 +12,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from forecast_trace import canonical, parquet_tasks
+from opendc_acquisition import CONTRACT as ACQUISITION_CONTRACT, native_cordons
 from opendc_occupancy import estimated_exhausted_ids
 from opendc_pinning import (
     FNS_CONTRACT,
     PINNED_MODE,
     initial_assignments,
-    cordoned_worker,
     native_order,
     initialization_metadata,
 )
@@ -459,8 +459,7 @@ def _verify_provisional(directory, manifest):
             assignments.get(task_id) for task_id in original["id"].to_pylist()
         ]:
             raise ValueError("adapted initial host assignments differ from observed placement")
-        removed = cordoned_worker(case)
-        expected_cordon = [removed] if removed else []
+        expected_cordon = native_cordons(case)
         config = json.loads((directory / "experiment.json").read_text())
         if config.get("cordonHosts") != [expected_cordon]:
             raise ValueError("native cordon configuration differs from case")
@@ -534,6 +533,32 @@ def _verify_case_lineage(case):
                     or not 0 <= task["submission_time"] < horizon
                 ):
                     raise ValueError("future lineage or arrival window is inconsistent")
+            elif cohort == "infrastructure":
+                # A single fail-closed guard checks the complete synthetic lineage contract.
+                # pylint: disable=too-many-boolean-expressions
+                acquisition = case.get("acquisition", {})
+                name = metadata.get("preserved_assignment")
+                if (
+                    group != "tasks"
+                    or not pinned
+                    or task is None
+                    or acquisition.get("contract") != ACQUISITION_CONTRACT
+                    or metadata.get("synthetic") is not True
+                    or metadata.get("infrastructure_contract") != ACQUISITION_CONTRACT
+                    or metadata.get("phase") != "acquisition"
+                    or name not in acquisition.get("available_after_ms", {})
+                    or metadata.get("node_name") != name
+                    or identity.get("synthetic_worker") != name
+                    or task_id not in acquisition.get("synthetic_task_ids", [])
+                    or original != cutoff
+                    or task["submission_time"] != 0
+                    or task["duration"] != acquisition["available_after_ms"][name]
+                    or task["cpu_count"] != 1
+                    or task["mem_capacity"] != 1
+                    or any(fragment["cpu_usage"] != 0 for fragment in task["fragments"])
+                ):
+                    raise ValueError("invalid synthetic capacity-acquisition lineage")
+                # pylint: enable=too-many-boolean-expressions
             elif cohort == "backlog":
                 phase = metadata.get("phase")
                 node = metadata.get("node_name")
