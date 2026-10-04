@@ -1,5 +1,7 @@
 # Final OpenDC Demo Implementation Plan
 
+**Execution stopped; positive outcome unmet.** The latest current-source fixed-five capture failed service (189/278 within 120 seconds, 68.0%). The primary launch window was missed: capture finished 18:02 UTC but the next launch decision at 20:59 UTC was after the 20:02:59 UTC latest start. Forecast qualification and six held-out captures were not executed. New launches are prohibited under this campaign's complete-budget gate. Preserve evidence and finish restoration/delivery; a new campaign needs new authorization and an explicit budget. The [outcome and exact evidence](/mnt/sdb/matthijs/fns-evidence/opendc-final-20261004T124609Z/FINDINGS.md) are authoritative. The steps and schedule below preserve the approved protocol, not a current launch instruction.
+
 > **For agentic workers:** Use `superpowers:executing-plans` for native inline execution, with targeted independent runtime and evidence reviewers. The user approved execution on October 4, 2026, with service first and allocation saving second. Lower within-deadline latency alone does not justify higher allocation.
 
 **Goal:** Preserve the 95%/120-second service requirement, then demonstrate at least 5% conservative application-allocation savings against adequate static capacity and a useful service/allocation tradeoff against a reasonable reactive policy, with an explanatory operational-analysis example.
@@ -110,7 +112,7 @@
 
 ## Whole-workflow budget and deadlines
 
-The current runner reserves `period_seconds * cycles + 1550` seconds per complete run workflow at follow-up 180. This includes capture setup/collection, verification, archive, metrics, possible recovery and process-group termination. Each matrix reserves another 130 seconds for initial verification. Reserve that initial verification separately for each development capture so adequacy can be checked before selecting the next capture; the primary matrix shares one initial verification. Healthy-run estimates below use the preserved diagnostics status logs, not weakened supervision bounds.
+The approved runner reserves `period_seconds * cycles + 1550` seconds per complete run workflow at follow-up 180. This includes capture setup/collection, verification, archive, metrics, possible recovery and process-group termination. Each matrix reserves another 130 seconds for initial verification. Reserve that initial verification separately for each development capture so adequacy can be checked before selecting the next capture; the primary matrix shares one initial verification. Healthy-run estimates below use the preserved diagnostics status logs, not weakened supervision bounds.
 
 | Reserved phase | Maximum |
 | --- | ---: |
@@ -126,15 +128,15 @@ The current runner reserves `period_seconds * cycles + 1550` seconds per complet
 | Remaining contingency | 46m50s |
 | **Total** | **18h** |
 
-The extra development capture is a reserve, not permission to expand the search. Restore immediately when safety/search stop conditions arise; unused reserves can absorb authorized delays only. Run heavy analysis after measured captures, not beside them. Supervise stage deadlines so a setup overrun cannot consume the protected closure reserve.
+The final pre-launch budget proof reserved two matching-source development captures, six primary captures, 20 minutes for remaining feedback/selection and the unchanged 2h30m reporting/restoration reserve. Runtime review and source sealing were completed before this repaired pair; their work is not reserved again afterwards. Optional extra development execution was unavailable under that proof. The extra development capture is a reserve, not permission to expand the search. Restore immediately when safety/search stop conditions arise; unused reserves can absorb authorized delays only. Run heavy analysis after measured captures, not beside them. Supervise stage deadlines so a setup overrun cannot consume the protected closure reserve.
 
 Actual execution start: **October 4, 2026, 14:46:09 Europe/Amsterdam (CEST)**:
 
 | Milestone | Target or protected deadline |
 | --- | --- |
-| First fixed/forecast development comparison when fixed five is adequate | Expected approximately **18:46**; reserved through **19:36:09** |
-| Optional extra capture complete, including fixed-six adequacy if required | Reserved through **20:46:09** |
-| Development feedback, final selection/source seal | Aim to finish today, before primary launch |
+| First fixed/forecast development comparison when fixed five is adequate | Final pre-launch estimate: approximately **20:50**; reserved development bound closed **21:42:59**, followed by 20 minutes feedback/selection; comparison was not completed |
+| Optional extra capture complete, including fixed-six adequacy if required | Unavailable in the current remaining bound after confirmed observer defects and matching-source recapture |
+| Development feedback, final selection/source seal | 20 minutes remaining after pair qualification; runtime/source review and sealing completed before the repaired pair |
 | Primary start | Aim **21:00–22:00**; latest **22:02:59** |
 | Final primary data, archival and per-run metrics complete | Expected approximately **03:00–04:00 October 5** if started 21:00–22:00; protected through **06:16:09 October 5** |
 | Latest restoration start | **07:16:09 October 5** |
