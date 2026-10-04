@@ -977,8 +977,8 @@ class OpenDTObserverTests(unittest.TestCase):
                 return SimpleNamespace(items=[], metadata=SimpleNamespace(resource_version="10"))
             requests.append(kwargs)
             if len(requests) > 2:
-                raise ApiException(status=410, reason="history no longer available")
-            version = str(10 + len(requests))
+                raise ApiException(status=503, reason="API unavailable")
+            version = str(10 * len(requests) + 1)
             event = {
                 "type": "MODIFIED",
                 "object": {
@@ -987,8 +987,18 @@ class OpenDTObserverTests(unittest.TestCase):
                     "metadata": {"name": "job-" + version, "resourceVersion": version},
                 },
             }
+            bookmark = {
+                "type": "BOOKMARK",
+                "object": {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "metadata": {"resourceVersion": str(int(version) + 1)},
+                },
+            }
             return SimpleNamespace(
-                stream=lambda **unused: iter([(json.dumps(event) + "\n").encode()]),
+                stream=lambda **unused: iter(
+                    [(json.dumps(item) + "\n").encode() for item in (event, bookmark)]
+                ),
                 close=lambda: None,
                 release_conn=lambda: None,
             )
@@ -1009,9 +1019,73 @@ class OpenDTObserverTests(unittest.TestCase):
             with self.assertRaises(ApiException):
                 observer.run()
         self.assertEqual(
-            [call.args[0].metadata.name for call in handle.call_args_list], ["job-11", "job-12"]
+            [call.args[0].metadata.name for call in handle.call_args_list], ["job-11", "job-21"]
         )
-        self.assertEqual([request["resource_version"] for request in requests], ["10", "11", "12"])
+        self.assertEqual([request["resource_version"] for request in requests], ["10", "12", "22"])
+        self.assertTrue(sampler.started)
+        self.assertTrue(sampler.stopped)
+
+    def test_expired_watch_relists_retained_jobs_without_duplicate_emission(self):
+        """A 410 rebuilds current membership while retaining emitted task identities."""
+        first = demo_job(uid="already-emitted")
+        recovered = demo_job(uid="completed-during-disconnect")
+        lists = [
+            SimpleNamespace(items=[first], metadata=SimpleNamespace(resource_version="10")),
+            SimpleNamespace(
+                items=[first, recovered], metadata=SimpleNamespace(resource_version="20")
+            ),
+        ]
+        requests = []
+        diagnostics = RecordingWriter()
+        workloads = RecordingWriter()
+        sampler = FakeSampler()
+
+        class ExpiringWatch:  # pylint: disable=too-few-public-methods
+            """Provide an expired generator followed by a fatal API error."""
+
+            def stream(self, _function, **kwargs):
+                """Expose one expired stream, then a distinct fatal error.
+
+                Args:
+                    _function (callable): Kubernetes list endpoint.
+                    kwargs (dict): Explicit watch parameters.
+
+                Raises:
+                    ApiException: Expired history or unrecoverable API failure.
+                """
+                requests.append(kwargs)
+                yield {
+                    "type": "BOOKMARK",
+                    "object": SimpleNamespace(metadata=SimpleNamespace(resource_version="18")),
+                }
+                if len(requests) == 1:
+                    raise ApiException(status=410, reason="history expired")
+                raise ApiException(status=403, reason="forbidden")
+
+        with patch.object(FakeBatchApi, "list_namespaced_job", side_effect=lists) as listing:
+            observer = OpenDTObserver(
+                batch_api=FakeBatchApi([]),
+                watch_factory=ExpiringWatch,
+                sampler=sampler,
+                workload_writer=workloads,
+                diagnostic_writer=diagnostics,
+                namespace="fns-demo",
+                label_selector="continuum.atlarge.nl/workload=image-batch",
+                run_id="run-test",
+                cpu_frequency_mhz=2400,
+            )
+            with self.assertRaises(ApiException) as raised:
+                observer.run()
+        self.assertEqual(raised.exception.status, 403)
+        self.assertEqual(listing.call_count, 2)
+        self.assertEqual([row["resource_version"] for row in requests], ["10", "20"])
+        self.assertTrue(all(row["allow_watch_bookmarks"] for row in requests))
+        self.assertEqual([row["task"]["id"] for row in workloads.records], [1, 2])
+        self.assertEqual(
+            {row["source"]["kubernetes_job_uid"] for row in workloads.records},
+            {"already-emitted", "completed-during-disconnect"},
+        )
+        self.assertEqual(sum(row["event_type"] == "watch.resync" for row in diagnostics.records), 1)
         self.assertTrue(sampler.started)
         self.assertTrue(sampler.stopped)
 
