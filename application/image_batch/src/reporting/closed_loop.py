@@ -1280,7 +1280,8 @@ def _candidate_pages(pdf, run):
             rows,
             "Chronological examples: first tick per proposed action and cancellation status; "
             "all alternative predictions remain in saved metrics.\n"
-            "Response predictions add measured decision age. Ranges span sampled futures; "
+            "Response predictions follow the saved timing contract; legacy cases add decision age. "
+            "Ranges span sampled futures; "
             "the cost includes the configured allocation window.\n"
             "These are counterfactual predictions. Only the acknowledged, observed initial "
             "action can be compared with physical outcomes; later control still affects them.",
@@ -1319,7 +1320,7 @@ def _forecast_observation_page(pdf, run):
         times,
         [np.median(values) if values else np.nan for values in predicted],
         color=COLORS[0],
-        label="Predicted + decision age",
+        label="Predicted response",
     )
     axes[0, 1].fill_between(
         times,
@@ -1415,7 +1416,7 @@ def _forecast_observation_page(pdf, run):
         pdf,
         figure,
         "Shading spans sampled futures, not a confidence interval. Response "
-        "predictions add measured decision age.\n"
+        "predictions follow their saved timing contract.\n"
         "Observed response quantiles cover completed cohort Jobs; failed/censored "
         "counts remain in the per-run evidence.\n"
         "Later control can change completion times. This is a loop diagnostic, not "

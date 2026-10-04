@@ -31,6 +31,7 @@ def derive_case(oracle, primary):
         "initial_cordoned_worker",
         "occupancy_model",
         "model_exhausted_jobs",
+        "response_time_contract",
     )
     if any(
         (
@@ -144,7 +145,7 @@ def rank_candidates(scores, decision_age, scenarios):
 
     Args:
         scores (list[dict]): Complete native candidate measurements.
-        decision_age (float): Same original cycle latency margin for every diagnostic variant.
+        decision_age (float): Original cycle age interpreted by each score timing contract.
         scenarios (int): Required futures per candidate, one for known arrivals.
 
     Returns:

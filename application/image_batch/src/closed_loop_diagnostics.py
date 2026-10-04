@@ -4,7 +4,7 @@ import json
 
 import numpy as np
 
-from closed_loop_policy import summarize_candidate
+from closed_loop_policy import response_values, summarize_candidate
 from forecast_trace import milliseconds
 
 
@@ -13,7 +13,7 @@ def candidate_predictions(scores, age, *, scenarios, deadline_seconds):
 
     Args:
         scores (list[dict]): Frozen action alternatives sharing the same sampled futures.
-        age (float or None): Recorded cutoff-to-decision age added to response predictions.
+        age (float or None): Recorded age checked against the score timing contract.
         scenarios (int): Required complete future count.
         deadline_seconds (float): Original-creation response target.
 
@@ -29,7 +29,7 @@ def candidate_predictions(scores, age, *, scenarios, deadline_seconds):
         )
         summary["response_p95_seconds"] = (
             [
-                float(np.percentile([value + age for value in row["responses_seconds"]], 95))
+                float(np.percentile(response_values(candidate, row["responses_seconds"], age), 95))
                 for row in candidate["scenarios"]
                 if row["responses_seconds"]
             ]
@@ -121,7 +121,7 @@ def cycle_diagnostic(
     if not scenarios or not all(row["complete"] for row in scenarios) or age is None:
         return result
     result["predicted_response_p95_seconds"] = [
-        float(np.percentile([value + age for value in row["responses_seconds"]], 95))
+        float(np.percentile(response_values(selected, row["responses_seconds"], age), 95))
         for row in scenarios
         if row["responses_seconds"]
     ]

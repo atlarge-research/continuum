@@ -5,6 +5,7 @@ import math
 
 
 CONTRACT = "capacity-acquisition-v1"
+RESPONSE_TIME_CONTRACT = "original_creation_with_modeled_action_offsets_v1"
 
 
 def application_tasks(case):
@@ -125,6 +126,8 @@ def apply_acquisition(case, settings):
         if not math.isfinite(seconds):
             raise ValueError("nonfinite pending acquisition clock")
         availability[name] = math.ceil(seconds * 1000)
+    if request_delay > 0:
+        modeled["response_time_contract"] = RESPONSE_TIME_CONTRACT
     modeled["workers"] = workers
     modeled["acquisition"] = {
         "contract": CONTRACT,
