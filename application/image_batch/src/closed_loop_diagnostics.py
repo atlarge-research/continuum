@@ -107,7 +107,7 @@ def cycle_diagnostic(
     if not scores_path.exists():
         return result
     scores = json.loads(scores_path.read_text())
-    age = cycle.get("decision_age_seconds")
+    age = cycle.get("scoring_age_seconds", cycle.get("decision_age_seconds"))
     result["candidate_predictions"] = candidate_predictions(
         scores,
         age,
@@ -120,11 +120,14 @@ def cycle_diagnostic(
     scenarios = selected.get("scenarios", [])
     if not scenarios or not all(row["complete"] for row in scenarios) or age is None:
         return result
-    result["predicted_response_p95_seconds"] = [
-        float(np.percentile(response_values(selected, row["responses_seconds"], age), 95))
-        for row in scenarios
-        if row["responses_seconds"]
-    ]
+    try:
+        result["predicted_response_p95_seconds"] = [
+            float(np.percentile(response_values(selected, row["responses_seconds"], age), 95))
+            for row in scenarios
+            if row["responses_seconds"]
+        ]
+    except ValueError as exc:
+        result["prediction_timing_error"] = str(exc)
     case = json.loads(case_path.read_text())
     backlog = {
         task["metadata"]["kubernetes_job_uid"]

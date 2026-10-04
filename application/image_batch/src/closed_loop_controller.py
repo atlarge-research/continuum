@@ -223,6 +223,13 @@ class Controller:
         self.history = self.journal.history()
         self.history.pop("reactive_observation", None)
         self.tick_number = last_tick(self.journal, self.output)
+        if self.config.get("reactive_target_fraction", 0) > 0 and not self.history.get(
+            "reactive_recommendations"
+        ):
+            self.history["reactive_recommendations"] = [
+                {"at_seconds": time.time(), "desired_workers": self.args.active_workers}
+            ]
+            self.record_recommendation()
         self.next_tick = None
         self.origin = None
         self.template = None
@@ -645,6 +652,7 @@ class Controller:
         started = time.time()
         self.journal.append("cycle.begin", tick=self.tick_number, started_at=started)
         valid = False
+        scoring_age = None
         proposal = {"action": "unchanged", "selected_worker": None, "reason": "unavailable_state"}
         outcome = "held"
         try:
@@ -664,6 +672,7 @@ class Controller:
                 try:
                     before, scores, cutoff = self.predict(directory)
                     age = time.time() - cutoff
+                    scoring_age = age
                     proposal = select_action(
                         scores,
                         self.history,
@@ -723,6 +732,7 @@ class Controller:
                 cutoff_seconds=cutoff,
                 shadow=False,
                 forecast_valid=valid,
+                scoring_age_seconds=scoring_age,
             )
             if proposal["action"] != "unchanged":
                 action_started = time.monotonic()
