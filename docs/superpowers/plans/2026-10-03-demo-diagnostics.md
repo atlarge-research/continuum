@@ -58,12 +58,12 @@
 
 **Interfaces:** Consumes diagnosis timing distributions and existing acquisition_seconds/pending due clocks. Produces explicit validated temporal model metadata if a correction is supported, preserving physical minimum60 and original pending due clocks. Produces sealed `arm_active_workers` mapping for fixed5 versus dynamic4, constrained within common worker bounds, and truthful per-run protocol/configuration exports.
 
-- [ ] Record a precise temporal design amendment from Task1 before implementation; if no correction is supportable, retain diagnostics and explicitly report the model limit.
-- [ ] For an implemented temporal correction, write/run RED tests for new reserve timing, existing pending absolute due clocks, zero-delay/backward compatibility and synthetic exclusion; run a real bounded native probe.
-- [ ] Write/run RED command tests for fixed5/dynamic4 and invalid per-arm bounds, then implement strict sealed forwarding without changing reactive thresholds/cadence.
-- [ ] Snapshot/archive current originals and host ownership, pause exact originals, restore newest eight same-host RAM saves, verify readiness/resources/images/template/network and clocks.
-- [ ] Run bounded development61001/61002, select first suitable settings independently of forecast benefit, freeze exact tested source/deployment and seal the new rotated matrix.
-- [ ] Run complete six-capture bounds for62001/62002 fixed5/reactive/forecast, or prospectively ledger a smaller matrix if necessary; preserve every failure and stop on operational/restoration defects.
+- [x] Record a precise temporal design amendment from Task1 before implementation; if no correction is supportable, retain diagnostics and explicitly report the model limit.
+- [x] For an implemented temporal correction, write/run RED tests for new reserve timing, existing pending absolute due clocks, zero-delay/backward compatibility and synthetic exclusion; run a real bounded native probe.
+- [x] Write/run RED command tests for fixed5/dynamic4 and invalid per-arm bounds, then implement strict sealed forwarding without changing reactive thresholds/cadence.
+- [x] Snapshot/archive current originals and host ownership, pause exact originals, restore newest eight same-host RAM saves, verify readiness/resources/images/template/network and clocks.
+- [x] Run bounded development61001/61002, select first suitable settings independently of forecast benefit, freeze exact tested source/deployment and seal the new rotated matrix.
+- [x] Run complete six-capture bounds for62001/62002 fixed5/reactive/forecast, or prospectively ledger a smaller matrix if necessary; preserve every failure and stop on operational/restoration defects.
 
 ### Task 4: Results and cross-branch decision report
 
@@ -71,10 +71,10 @@
 
 **Interfaces:** Consumes frozen new captures and Git ancestry from40e9b8b through ready/acquisition/new tips. Produces comparative PDF/self-contained metrics/offline redraw plus Markdown/PDF branch decision guide with exact commit groups, dependencies, claim evidence, unresolved limitations and integration options.
 
-- [ ] Verify raw pairing, actual fixed5/dynamic4 allocation, evaluated sender fidelity, complete Job denominators and charged-capacity bounds before claims.
-- [ ] Render all new outcomes, separate development/rejection roles, inspect every page and verify offline numerical reproduction.
-- [ ] Construct branch decision guide from actual Git diffs/logs and authoritative campaign evidence; distinguish functional readiness from attractive results and explain what should be integrated or deferred.
-- [ ] Update current handoff without duplicating experiment logs in README/DESIGN; preserve all evidence and current operations in durable checkpoints.
+- [x] Verify raw pairing, actual fixed5/dynamic4 allocation, evaluated sender fidelity, complete Job denominators and charged-capacity bounds before claims.
+- [x] Render all new outcomes, separate development/rejection roles, inspect every page and verify offline numerical reproduction.
+- [x] Construct branch decision guide from actual Git diffs/logs and authoritative campaign evidence; distinguish functional readiness from attractive results and explain what should be integrated or deferred.
+- [x] Update current handoff without duplicating experiment logs in README/DESIGN; preserve all evidence and current operations in durable checkpoints.
 
 ### Task 5: Serious reviews, restoration and delivery
 
