@@ -151,6 +151,10 @@ def snapshot_view(snapshot, config, *, now_seconds):
         "reserve_workers": reserves,
         "empty_workers": sorted(name for name in accepting if not used[name][0]),
         "requested_cpu_demand": demand,
+        "reactive_target_fraction": config.get("reactive_target_fraction", 0),
+        "reactive_downscale_stabilization_seconds": config.get(
+            "reactive_downscale_stabilization_seconds", 0
+        ),
         "reactive_up_threshold": config.get("reactive_up_threshold", 0.9),
         "reactive_down_threshold": config.get("reactive_down_threshold", 0.7),
         "application_slots": sum(nodes[name]["application_cores"] for name in accepting),
@@ -215,10 +219,11 @@ def guard_action(before, fresh, proposal, config, *, decision_age):
 def reactive_action(view, history, *, now_seconds, fallback, tick_id):
     """Compare unfinished CPU demand with current or reduced accepting capacity.
 
-    One fresh complete observation is sufficient, including a fallback refresh.
-    Down compares demand with capacity after removing a currently empty worker.
-    Physical guards and intent reconciliation independently prevent unsafe or
-    duplicate dispatch; earlier observation history does not delay eligibility.
+    With a configured capacity target, scale-up uses current unfinished demand
+    immediately; scale-down retains the highest desired worker count over the
+    stabilization window, including its exact lower boundary. The initial
+    accepting count seeds that window. Legacy disabled settings keep the earlier
+    threshold policy. Physical guards independently prevent unsafe dispatch.
 
     Args:
         view (dict): Fresh validated physical demand and allocation inventory.
@@ -231,7 +236,7 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
         dict: Proposal, reason and next history; no physical action is performed.
 
     Raises:
-        ValueError: The clock or scheduled check identity is invalid.
+        ValueError: The clock, check identity, capacity or recommendation history is invalid.
     """
     if (
         not math.isfinite(now_seconds)
@@ -242,6 +247,8 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
         raise ValueError("invalid reactive clock or scheduled check identity")
     state = copy.deepcopy(history)
     state.pop("reactive_observation", None)
+    if view.get("reactive_target_fraction", 0) > 0:
+        return stabilized_reactive(view, state, now_seconds=now_seconds, fallback=fallback)
     demand, capacity = view["requested_cpu_demand"], view["application_slots"]
     eligible = {
         name
@@ -277,6 +284,91 @@ def reactive_action(view, history, *, now_seconds, fallback, tick_id):
             "action": "scale-down",
             "selected_worker": min(eligible),
             "reason": "reactive_empty_worker_with_capacity",
+        }
+    return result
+
+
+def stabilized_reactive(view, state, *, now_seconds, fallback):
+    """Apply an eager CPU target and trailing maximum before proposing removal.
+
+    Args:
+        view (dict): Validated homogeneous inventory and enabled policy settings.
+        state (dict): Private copy of controller history, updated with recommendations.
+        now_seconds (float): Current recommendation availability time in UTC seconds.
+        fallback (bool): Whether this is the shared forecast fallback policy.
+
+    Returns:
+        dict: One-worker proposal, raw/stabilized targets and durable next history.
+
+    Raises:
+        ValueError: Capacity, settings, timestamps or recorded worker counts are invalid.
+    """
+    target = view["reactive_target_fraction"]
+    window = view.get("reactive_downscale_stabilization_seconds", 0)
+    capacities = {node["application_cores"] for node in view["nodes"].values()}
+    if len(capacities) != 1 or not 0 < target <= 1 or not window > 0:
+        raise ValueError("invalid homogeneous reactive capacity or stabilization settings")
+    cores = next(iter(capacities))
+    demand = view["requested_cpu_demand"]
+    current = len(view["active_workers"])
+    desired = min(
+        view["maximum_workers"], max(view["minimum_workers"], math.ceil(demand / (target * cores)))
+    )
+    recommendations = state.get("reactive_recommendations", [])
+    previous_at = float("-inf")
+    # Exact integer counts reject bool; keep history validation at one boundary.
+    # pylint: disable=too-many-boolean-expressions,unidiomatic-typecheck
+    for row in recommendations:
+        at, count = row["at_seconds"], row["desired_workers"]
+        if (
+            isinstance(at, bool)
+            or not isinstance(at, (int, float))
+            or not math.isfinite(at)
+            or not previous_at <= at <= now_seconds
+            or type(count) is not int
+            or not view["minimum_workers"] <= count <= view["maximum_workers"]
+        ):
+            raise ValueError("invalid reactive recommendation history or backward clock")
+        previous_at = at
+    if not recommendations:
+        recommendations = [{"at_seconds": now_seconds, "desired_workers": current}]
+    recommendations = [row for row in recommendations if row["at_seconds"] >= now_seconds - window]
+    recommendations.append({"at_seconds": now_seconds, "desired_workers": desired})
+    state["reactive_recommendations"] = recommendations
+    stabilized = max(row["desired_workers"] for row in recommendations)
+    result = {
+        "action": "unchanged",
+        "selected_worker": None,
+        "reason": "reactive_hold",
+        "state": state,
+        "fallback": fallback,
+        "requested_cpu_demand": demand,
+        "accepting_application_cores": view["application_slots"],
+        "desired_workers": desired,
+        "stabilized_desired_workers": stabilized,
+    }
+    if desired > current and view["reserve_workers"]:
+        return {
+            **result,
+            "action": "scale-up",
+            "selected_worker": view["reserve_workers"][0],
+            "reason": "reactive_cpu_target",
+        }
+    eligible = [
+        name
+        for name in view["empty_workers"]
+        if not view["draining_workers"]
+        and stabilized < current
+        and current > view["minimum_workers"]
+        and demand
+        <= target * (view["application_slots"] - view["nodes"][name]["application_cores"])
+    ]
+    if eligible:
+        return {
+            **result,
+            "action": "scale-down",
+            "selected_worker": min(eligible),
+            "reason": "reactive_stabilized_empty_worker",
         }
     return result
 

@@ -627,6 +627,15 @@ class Controller:
         write_json(directory / "scores.json", scores)
         return before, scores, milliseconds(status["cutoff"]) / 1000
 
+    def record_recommendation(self):
+        """Persist the valid demand window before dependent native or action work."""
+        if "reactive_recommendations" in self.history:
+            self.journal.append(
+                "reactive.recommendation",
+                tick=self.tick_number,
+                recommendations=self.history["reactive_recommendations"],
+            )
+
     def cycle(self):
         """Observe, evaluate, select, guard, actuate and record one nonoverlapping cycle."""
         usage_before = resource.getrusage(resource.RUSAGE_SELF)
@@ -650,6 +659,7 @@ class Controller:
                 tick_id=self.tick_number,
             )
             self.history = reactive["state"]
+            self.record_recommendation()
             if self.args.control_arm == "forecast":
                 try:
                     before, scores, cutoff = self.predict(directory)
@@ -704,6 +714,7 @@ class Controller:
                 }
                 valid = True
             self.history = proposal["state"]
+            self.record_recommendation()
             self.journal.append(
                 "cycle.proposal",
                 tick=self.tick_number,
