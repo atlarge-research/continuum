@@ -770,6 +770,13 @@ class ResourceSampler:
         return pod_execution_interval(pods.items, job_uid)
 
     def _run(self) -> None:
+        """Skip elapsed state ticks after collection, allowing terminal finalization.
+
+        Resource collection is checked on state ticks. An overdue resource
+        deadline must not create a busy wait before the next state tick.
+        The next tick uses the completion clock, so a slow collection releases
+        its lock before waiting instead of repeatedly reacquiring it.
+        """
         next_state = time.monotonic()
         next_resource = next_state
         while not self._stop.is_set():
@@ -780,12 +787,13 @@ class ResourceSampler:
                     self.collect_once(collect_resources=collect_resources)
                 except Exception as exc:
                     self.emit_diagnostic("observer.sample_failed", {"error": str(exc)})
+                now = time.monotonic()
                 while next_state <= now:
                     next_state += self.state_interval_seconds
                 if collect_resources:
                     while next_resource <= now:
                         next_resource += self.resource_interval_seconds
-            self._stop.wait(max(0.0, min(next_state, next_resource) - time.monotonic()))
+            self._stop.wait(max(0.0, next_state - time.monotonic()))
 
     def observe_job(self, job: Any) -> None:
         """Record first existence after the API creation boundary fits the producer clock.
