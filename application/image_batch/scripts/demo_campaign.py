@@ -158,7 +158,7 @@ def execute_capture(root, request, attempt, environment):
         sys.executable,
         "-m",
         "demo_workflow",
-        "run-matrix",
+        "matrix",
         "--protocol",
         str(protocol),
         "--output",

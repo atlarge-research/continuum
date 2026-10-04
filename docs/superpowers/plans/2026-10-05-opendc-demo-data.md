@@ -12,7 +12,7 @@
 
 New T=2026-10-04T22:24:08Z(October5 00:24:08CEST). Hard end2026-10-05T08:24:08Z(10:24:08CEST). Captures/analysis close2026-10-05T05:44:08Z(07:44:08CEST). Latest restoration start06:24:08Z(08:24:08CEST). These survive every resumption.
 
-No historical evidence mutation, code rollback, blind interrupted-run restart, outcome-driven reactive weakening, source-mismatched pairing or overlapping pool lifetimes. The original demo and separate HTML branch remain preserved. Every attempt counts against a maximum of five. Service uses original API creation and all evaluated Jobs; sender requires95% within250ms; charged allocation includes accepting/draining/pending workers and observation bounds. Powered reserves remain on; no energy/billing claim. Selected development evidence is not held-out evidence.
+No historical evidence mutation, code rollback, blind interrupted-run restart, outcome-driven reactive weakening, source-mismatched pairing or overlapping pool lifetimes. The original demo and separate HTML branch remain preserved. Every physical capture attempt counts against a maximum of five. A CLI rejection before matrix entry is preserved as preflight failure; it does not generate a sixth workload or reset the campaign clock. Service uses original API creation and all evaluated Jobs; sender requires95% within250ms; charged allocation includes accepting/draining/pending workers and observation bounds. Powered reserves remain on; no energy/billing claim. Selected development evidence is not held-out evidence.
 
 ## Task1: Diagnose and initialize safely
 
@@ -22,7 +22,7 @@ No historical evidence mutation, code rollback, blind interrupted-run restart, o
 
 ## Task2: Durable supervisor and presealed inputs
 
-Files: application/image_batch/scripts/demo_campaign.py and tests/test_demo_campaign.py. Existing demo_workflow run-matrix and demo_lifetime run_phase remain authoritative. Interfaces: next_requests(records) selects declared(candidate,arm,seed)tuples; require_launch(now,closure,remaining,used) checks full remaining bounds; drive_campaign(root,capture,now) persists state before action and each result before next launch. Inflight checkpoint requires actual reconciliation, not duplication.
+Files: application/image_batch/scripts/demo_campaign.py and tests/test_demo_campaign.py. Existing demo_workflow matrix and demo_lifetime run_phase remain authoritative. Interfaces: next_requests(records) selects declared(candidate,arm,seed)tuples; require_launch(now,closure,remaining,used) checks full remaining bounds; drive_campaign(root,capture,now) persists state before action and each result before next launch. Inflight checkpoint requires actual reconciliation, not duplication.
 
 - [ ] Preseal all potentially used singleton protocols with identical source/images/relative windows, per-arm initial declarations and evaluated sender gate.
 - [ ] Preserve tested normal selection, failed-static/forecast alternative, reactive comparison before confirmation, cheaper-reactive branch, five-attempt stop, complete-budget expiry and durable restart ownership.

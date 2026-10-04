@@ -2,11 +2,15 @@
 import unittest
 import tempfile
 import json
+import os
+import subprocess
+from unittest.mock import patch
 from pathlib import Path
 from application.image_batch.scripts.demo_campaign import (
     next_requests,
     require_launch,
     drive_campaign,
+    execute_capture,
 )
 
 
@@ -107,6 +111,53 @@ class CampaignTests(unittest.TestCase):
         """Negative remaining counts cannot bypass protected deadlines."""
         with self.assertRaises(ValueError):
             require_launch(1000, 99999, -1, 0)
+
+
+class CaptureCommandTests(unittest.TestCase):
+    """Exercise the supervisor command against the real, side-effect-free CLI parser."""
+
+    def test_capture_command_is_accepted_by_workflow_cli(self):
+        """An invalid matrix subcommand fails before any physical campaign can launch."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "operations").mkdir()
+            worktree = Path(__file__).resolve().parents[3]
+            (root / "checkpoint.json").write_text(json.dumps(dict(worktree=str(worktree))))
+            environment = {
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    [str(worktree / "application/image_batch/src"), str(worktree)]
+                ),
+                "MPLCONFIGDIR": str(root / "mpl-cache"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+            }
+
+            def validate_command(command, _log, **options):
+                """Run CLI help in place of the slow external physical workflow.
+
+                Args:
+                    command (list): Actual command emitted by the supervisor.
+                    _log (Path): Unused physical log destination.
+                    options (dict): Real command environment and working directory.
+
+                Raises:
+                    EOFError: CLI validation completed; do not continue physical analysis.
+                """
+                parsed = subprocess.run(
+                    command[:4] + ["--help"],
+                    cwd=options["cwd"],
+                    env=options["environment"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=30,
+                )
+                self.assertEqual(parsed.returncode, 0, parsed.stderr)
+                raise EOFError("CLI validated without launching a workload")
+
+            with patch("application.image_batch.scripts.demo_campaign.run_phase", validate_command):
+                with self.assertRaises(EOFError):
+                    execute_capture(root, ("A", "fixed", 72001), 1, environment)
 
 
 class DurableCampaignTests(unittest.TestCase):
