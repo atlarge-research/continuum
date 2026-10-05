@@ -29,7 +29,14 @@ test("worker cards retain only the last complete published update during short c
   }
 });
 test("fresh worker updates resume immediately and reverse seeking reproduces retained state", () => {
-  const at = 1423038;
+  const at = data.gaps
+    .filter((g) => g.start >= data.run.start)
+    .map((g) => Math.max(g.start, g.available ?? g.start))
+    .find((cursor) => !viewAt(data, cursor).fresh)!;
+  assert.ok(
+    Number.isFinite(at),
+    "final capture includes an operating observation gap",
+  );
   const held = displayAt(at);
   assert.equal(held.retained, true);
   const next = data.snapshots.find((s) => s.complete && s.at > at)!;

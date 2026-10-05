@@ -1,17 +1,22 @@
 import { parseArgs } from "node:util";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { convertCapture } from "./normalize.ts";
 const { values } = parseArgs({
   options: {
-    evidence: { type: "string", default: "evidence/preliminary" },
-    status: { type: "string", default: "preliminary" },
+    evidence: { type: "string", default: "evidence/accepted-final" },
+    status: { type: "string", default: "accepted-final" },
     acceptance: { type: "string" },
     output: { type: "string", default: "data/replay.json" },
   },
 });
-const data = convertCapture(values.evidence!, values.status, values.acceptance);
+const acceptance =
+  values.acceptance ??
+  (values.status === "accepted-final"
+    ? join(values.evidence!, "acceptance.json")
+    : undefined);
+const data = convertCapture(values.evidence!, values.status, acceptance);
 const text = JSON.stringify(data) + "\n";
 mkdirSync(dirname(values.output!), { recursive: true });
 writeFileSync(values.output!, text);

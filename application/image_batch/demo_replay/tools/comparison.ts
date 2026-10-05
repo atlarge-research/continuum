@@ -1,5 +1,26 @@
 /** Extract compact completed-run summaries from the acquired report, without executing a policy. */
 import type { PolicyComparison } from "../src/types.ts";
+/** Ignore sealed artifact locations while preserving all deployment content identities. */
+function deploymentContent(deployment: any) {
+  if (!deployment) return deployment;
+  const {
+    config: _configPath,
+    inventory: _inventoryPath,
+    ...identities
+  } = deployment;
+  return identities;
+}
+/** Canonicalize mapping order without changing scientific values or list order. */
+function canonical(value: any): any {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonical(value[key])]),
+    );
+  return value;
+}
 export function comparisonFromReport(
   report: any,
   captureId: string,
@@ -8,7 +29,9 @@ export function comparisonFromReport(
   acceptedCaptureIds?: string[],
 ): PolicyComparison {
   const all =
-    report.closed_loop_reports?.flatMap((r: any) => r.runs ?? []) ?? [];
+    report.runs ??
+    report.closed_loop_reports?.flatMap((r: any) => r.runs ?? []) ??
+    [];
   if (!all.some((r: any) => r.run_id === captureId))
     throw new Error("Comparison report does not contain replay capture");
   const seeds = [...new Set<number>(all.map((r: any) => r.seed))].sort(
@@ -26,25 +49,50 @@ export function comparisonFromReport(
     const group = arms.map((a) => a[0]);
     const reference = group[0];
     const signature = (r: any) =>
-      JSON.stringify({
-        plan: r.arrival_plan_sha256,
-        settings: r.comparison_settings,
-        config: r.config,
-        window: r.arrival_end_seconds - r.evaluation_start_seconds,
-        deadline: r.invocation.deadline_seconds,
-        target: r.invocation.deadline_fraction,
-        cohort: r.responses.jobs,
-      });
+      JSON.stringify(
+        canonical({
+          plan: r.arrival_plan_sha256,
+          source: r.source_hashes,
+          images: {
+            endpoint: r.invocation.endpoint_image,
+            native: r.invocation.native_image,
+          },
+          deployment: deploymentContent(r.invocation.deployment_sources),
+          settings: {
+            ...r.comparison_settings,
+            deployment_sources: deploymentContent(
+              r.comparison_settings.deployment_sources,
+            ),
+          },
+          config: r.config,
+          window: r.arrival_end_seconds - r.evaluation_start_seconds,
+          deadline: r.invocation.deadline_seconds,
+          target: r.invocation.deadline_fraction,
+          cohort: r.responses.jobs,
+        }),
+      );
     if (group.some((r) => signature(r) !== signature(reference)))
       throw new Error(
         "Comparison workload or accounting settings are not matched",
       );
     for (const r of group) {
+      if (
+        status === "accepted-final" &&
+        (!Object.keys(r.source_hashes ?? {}).length ||
+          !r.invocation.endpoint_image ||
+          !r.invocation.native_image ||
+          !r.comparison_settings.deployment_sources?.config_sha256 ||
+          !r.comparison_settings.deployment_sources?.inventory_sha256)
+      )
+        throw new Error(
+          "Final comparison requires matched source, image and deployment identities",
+        );
       const b = r.allocation?.allocated_core_seconds_bounds;
       if (
-        !r.accepted_capture ||
-        r.acceptance_issues?.length ||
-        !r.sender_evaluated_window?.fidelity_passed
+        r.accepted_capture !== true ||
+        !Array.isArray(r.acceptance_issues) ||
+        r.acceptance_issues.length ||
+        r.sender_evaluated_window?.fidelity_passed !== true
       )
         throw new Error("Comparison contains an unaccepted capture");
       if (
@@ -61,9 +109,26 @@ export function comparisonFromReport(
         count <= 0 ||
         !Number.isInteger(timely) ||
         timely < 0 ||
-        timely > count
+        timely > count ||
+        !Number.isInteger(r.responses.completed) ||
+        r.responses.completed < timely ||
+        r.responses.completed > count
       )
         throw new Error("Invalid comparison service denominator");
+      const p95 = r.responses.completed_response_p95_seconds;
+      if (r.responses.completed > 0 && (!Number.isFinite(p95) || p95 < 0))
+        throw new Error("Invalid completed-response p95 duration");
+      const cohort = r.responses.cohort;
+      if (
+        cohort !== undefined &&
+        (!Array.isArray(cohort) ||
+          cohort.length !== count ||
+          cohort.some((job: any) => typeof job.uid !== "string" || !job.uid) ||
+          new Set(cohort.map((job: any) => job.uid)).size !== count)
+      )
+        throw new Error(
+          "Comparison response cohort does not preserve the service denominator and unique Jobs",
+        );
       runs.push({
         captureId: r.run_id,
         seed,
@@ -84,6 +149,7 @@ export function comparisonFromReport(
         acquisitionSeconds: r.comparison_settings.acquisition_seconds,
         cadenceSeconds: r.controller.cadence_seconds,
         network: r.comparison_settings.network_preset,
+        reactiveTargetFraction: r.invocation.reactive_target_fraction ?? null,
         reactiveUpThreshold: r.invocation.reactive_up_threshold ?? null,
         reactiveDownThreshold: r.invocation.reactive_down_threshold ?? null,
         reactiveStabilizationSeconds:

@@ -1,5 +1,6 @@
 /** Actual disk/offline browser acceptance for all views, timing and viewport behavior. */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -12,11 +13,41 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { viewAt } from "../src/replay.ts";
+import { decisionText } from "../src/decision.ts";
 import { deadlineStatus, workerDisplayAt } from "../src/presentation.ts";
-import type { Dataset } from "../src/types.ts";
+import type { Dataset, PolicyResult } from "../src/types.ts";
 process.env.PLAYWRIGHT_BROWSERS_PATH = resolve("evidence/browser");
 const { chromium } = await import("@playwright/test");
-const data: Dataset = JSON.parse(readFileSync("data/replay.json", "utf8"));
+const dataBytes = readFileSync("data/replay.json");
+const data: Dataset = JSON.parse(dataBytes.toString("utf8"));
+const sha256 = (bytes: Buffer) =>
+  createHash("sha256").update(bytes).digest("hex");
+const operatingCycles = data.cycles.filter(
+  (cycle) =>
+    cycle.available >= data.run.start && cycle.available <= data.run.end,
+);
+const readyCycles = operatingCycles.filter(
+  (cycle) => cycle.forecastStatus === "ready" && cycle.bins.length > 0,
+);
+assert.ok(
+  readyCycles.length >= 2,
+  "Captured replay has successive ready publications",
+);
+const firstReady = readyCycles[0],
+  secondReady = readyCycles[1],
+  focusCycle = readyCycles[Math.floor(readyCycles.length / 2)];
+const measuredAt = data.snapshots.find(
+  (snapshot) =>
+    snapshot.at >= data.run.start &&
+    snapshot.at <= data.run.end &&
+    workerDisplayAt(data, snapshot.at).view.workers.some(
+      (worker) => worker.cpu !== null && worker.memory !== null,
+    ),
+)?.at;
+assert.ok(
+  measuredAt !== undefined,
+  "Captured operating replay contains application samples",
+);
 const browser = await chromium.launch({
   headless: true,
   args: ["--no-sandbox"],
@@ -28,6 +59,13 @@ const result: any = {
   offline: true,
   browser: browser.version(),
   capture: data.run.id,
+  sourceHost: data.provenance.sourceHost,
+  sourceRoot: data.provenance.sourceRoot,
+  sourceBytes: data.provenance.sourceBytes,
+  acquisitionManifestSha256: data.provenance.manifestSha256,
+  runtimeSourceHashes: data.provenance.sourceHashes,
+  dataSha256: sha256(dataBytes),
+  comparisonSourceSha256: data.comparison?.sourceSha256 ?? null,
   checks,
   errors,
   requests,
@@ -47,6 +85,8 @@ try {
   page.on("request", (r) => {
     if (!/^(file:|data:|about:)/.test(r.url())) requests.push(r.url());
   });
+  const htmlBytes = readFileSync(`dist/${name}`);
+  result.htmlSha256 = sha256(htmlBytes);
   copyFileSync(`dist/${name}`, resolve(relocated, name));
   await page.goto(pathToFileURL(resolve(relocated, name)).href);
   await page.waitForSelector(".worker");
@@ -89,16 +129,11 @@ try {
       }),
     );
   const initial = await overview();
-  assert.equal(await page.locator(".worker").count(), 6);
-  assert.deepEqual(await page.locator("#bookmarks button").allTextContents(), [
-    "Start",
-    "Scale-down decision",
-    "Demand rises",
-    "Scale-up decision",
-    "Scale-up confirmed",
-    "Update skipped",
-    "End",
-  ]);
+  assert.equal(await page.locator(".worker").count(), data.run.workers.length);
+  assert.deepEqual(
+    await page.locator("#bookmarks button").allTextContents(),
+    data.bookmarks.map((bookmark) => bookmark.label),
+  );
   assert.equal(
     await page.locator("#network-context,.transport-bottom").count(),
     0,
@@ -175,8 +210,11 @@ try {
         c.available,
         c.available + 1000,
       ]),
-      1403500,
-      1423038,
+      measuredAt,
+      data.run.end,
+      ...data.gaps.map((gap) =>
+        Math.max(gap.start, gap.available ?? gap.start),
+      ),
     ]),
   ].filter((t) => t >= data.run.start && t <= data.run.end);
   for (const viewport of [
@@ -323,6 +361,16 @@ try {
       assert.match(
         await page.locator("#service-status").innerText(),
         new RegExp(`${service.onTime}/${service.confirmed} confirmed`),
+      );
+      const decision = decisionText(data, expected);
+      assert.ok(
+        (await page.locator("#decision strong").innerText()).includes(
+          decision.title,
+        ),
+      );
+      assert.equal(
+        await page.locator("#decision p").innerText(),
+        decision.detail,
       );
       assert.deepEqual(
         await layout(),
@@ -512,7 +560,7 @@ try {
         "Overview fits monitor without scrolling",
       );
     }
-    await seek(data.cycles[5].available);
+    await seek(focusCycle.available);
     await page.screenshot({
       path: `${outputDir}/overview-${viewport.width}.png`,
     });
@@ -521,36 +569,55 @@ try {
     `numeric agreement, grouped CPU/RAM request bands and invariant element positions across ${times.length} states at four sizes`,
   );
   await page.setViewportSize({ width: 1920, height: 1080 });
-  let retainedGaps = 0;
-  for (const gap of data.gaps.filter((g) => g.start >= data.run.start)) {
+  let retainedGaps = 0,
+    unavailableGaps = 0,
+    historicalActionsDuringGaps = 0;
+  for (const gap of data.gaps) {
     const at = Math.max(gap.start, gap.available ?? gap.start);
-    if (viewAt(data, at).fresh) continue;
+    if (at < data.run.start || at > data.run.end || viewAt(data, at).fresh)
+      continue;
+    const display = workerDisplayAt(data, at);
     await seek(at);
     const held = await page.locator("#workers").innerHTML();
     assert.equal(
       await page.locator('.worker[data-retained="true"]').count(),
-      6,
+      display.retained ? data.run.workers.length : 0,
     );
-    assert.equal(await page.locator(".worker.unknown").count(), 0);
+    if (display.retained)
+      assert.equal(await page.locator(".worker.unknown").count(), 0);
+    const expectedDecision = decisionText(data, viewAt(data, at));
+    assert.equal(
+      await page.locator("#decision p").innerText(),
+      expectedDecision.detail,
+    );
+    if (expectedDecision.title.includes("previously observed"))
+      historicalActionsDuringGaps++;
     await seek(data.run.end);
     await seek(at);
     assert.equal(await page.locator("#workers").innerHTML(), held);
-    retainedGaps++;
+    if (display.retained) retainedGaps++;
+    else unavailableGaps++;
   }
   checks.push(
-    `all ${retainedGaps} operating collection gaps retain already-published worker updates and reproduce exactly after reverse seeking`,
+    `${retainedGaps} captured collection gaps retain published worker updates; ${unavailableGaps} expose unavailable updates; ${historicalActionsDuringGaps} preserve historical action confirmation; exact reverse seeking`,
   );
   await seek(data.run.start);
   const before = await page.locator("#forecast-chart .actual-bar").count();
-  await seek(data.run.start + 45000);
+  const growingHistoryAt = Math.min(
+    secondReady.available - 1,
+    data.run.start + firstReady.horizonMs / 4,
+    data.run.end,
+  );
+  assert.ok(growingHistoryAt > data.run.start);
+  await seek(growingHistoryAt);
   assert.ok(
     (await page.locator("#forecast-chart .actual-bar").count()) > before,
   );
-  await seek(data.cycles[1].available);
+  await seek(secondReady.available);
   assert.ok(
     (await page
       .locator(
-        `#forecast-chart .forecast-line.historical[data-cycle="${data.cycles[0].tick}"]`,
+        `#forecast-chart .forecast-line.historical[data-cycle="${firstReady.tick}"]`,
       )
       .count()) > 0,
     "A previously issued forecast remains visible after the next publication",
@@ -558,19 +625,19 @@ try {
   assert.ok(
     (await page
       .locator(
-        `#forecast-chart .forecast-line.current[data-cycle="${data.cycles[1].tick}"]`,
+        `#forecast-chart .forecast-line.current[data-cycle="${secondReady.tick}"]`,
       )
       .count()) > 0,
   );
   const issuedHistory = await overview();
   await seek(data.run.end);
-  await seek(data.cycles[1].available);
+  await seek(secondReady.available);
   assert.deepEqual(await overview(), issuedHistory);
-  await seek(data.cycles[1].available - 1);
+  await seek(secondReady.available - 1);
   assert.equal(
     await page
       .locator(
-        `#forecast-chart .forecast-line[data-cycle="${data.cycles[1].tick}"]`,
+        `#forecast-chart .forecast-line[data-cycle="${secondReady.tick}"]`,
       )
       .count(),
     0,
@@ -579,38 +646,43 @@ try {
   checks.push(
     `prior issued forecast segments persist with exact reverse seeking and publication ordering`,
   );
-  await seek(data.cycles[5].available - 1);
+  await seek(focusCycle.available - 1);
   assert.equal(
     await page.locator("#alternatives").getAttribute("data-cycle"),
-    "5",
+    String(viewAt(data, focusCycle.available - 1).cycle?.tick ?? ""),
   );
-  await seek(data.cycles[5].available);
+  await seek(focusCycle.available);
   assert.equal(
     await page.locator("#alternatives").getAttribute("data-cycle"),
-    "6",
+    String(focusCycle.tick),
   );
   await tab("analysis");
-  await page
-    .locator("#forecast-select")
-    .selectOption(String(data.cycles[0].tick));
-  await seek(data.cycles[6].available);
+  await page.locator("#forecast-select").selectOption(String(firstReady.tick));
+  await seek(readyCycles.at(-1)!.available);
   assert.equal(
     await page.locator("#forecast-select").inputValue(),
-    String(data.cycles[0].tick),
+    String(firstReady.tick),
   );
   await page.locator("#forecast-select").selectOption("latest");
-  await seek(data.cycles[5].available);
-  await page.locator("#forecast-select").selectOption("6");
-  await seek(data.cycles[0].available);
+  await seek(focusCycle.available);
+  await page.locator("#forecast-select").selectOption(String(focusCycle.tick));
+  await seek(firstReady.available);
   assert.equal(await page.locator("#forecast-select").inputValue(), "latest");
-  await seek(data.cycles[5].available);
-  await page.locator("#scenario-select").selectOption({ value: "2" });
+  await seek(focusCycle.available);
+  const scenario = focusCycle.futures.length - 1;
+  assert.ok(
+    scenario >= 0,
+    "Selected captured publication contains sampled futures",
+  );
+  await page
+    .locator("#scenario-select")
+    .selectOption({ value: String(scenario) });
   await page
     .getByText("Simulation assumptions & input", { exact: true })
     .click();
   assert.match(
     await page.locator("#analysis-simulation-notes").innerText(),
-    /sample 3/,
+    new RegExp(`sample ${scenario + 1}`),
   );
   await page.locator("#scenario-select").selectOption({ value: "0" });
   await page
@@ -628,14 +700,44 @@ try {
     );
   const analysisInitial = await analysisState();
   await seek(data.run.end);
-  await seek(data.cycles[5].available);
+  await seek(focusCycle.available);
   assert.deepEqual(await analysisState(), analysisInitial);
   await page.screenshot({ path: `${outputDir}/analysis-1920.png` });
   checks.push(
     `growing observed history, publication boundary, pinned forecast and causal rewind, reverse Analysis seek, sampled simulation scenarios`,
   );
   await tab("comparison");
-  for (const seed of [...new Set(data.comparison!.runs.map((r) => r.seed))]) {
+  assert.ok(data.comparison, "Matched policy comparison is present");
+  assert.equal(data.comparison.status, "accepted-final");
+  assert.equal(
+    data.comparison.runs.length,
+    3,
+    "Accepted comparison contains one matched trio",
+  );
+  const seeds = [...new Set(data.comparison.runs.map((run) => run.seed))];
+  assert.equal(
+    seeds.length,
+    1,
+    "Accepted comparison contains one workload seed",
+  );
+  assert.deepEqual(data.comparison.runs.map((run) => run.policy).sort(), [
+    "fixed",
+    "forecast",
+    "reactive",
+  ]);
+  assert.equal(
+    new Set(data.comparison.runs.map((run) => run.planSha256)).size,
+    1,
+  );
+  assert.deepEqual(
+    await page
+      .locator("#comparison-seed option")
+      .evaluateAll((options) =>
+        options.map((option) => (option as HTMLOptionElement).value),
+      ),
+    seeds.map(String),
+  );
+  for (const seed of seeds) {
     await page.locator("#comparison-seed").selectOption(String(seed));
     for (const r of data.comparison!.runs.filter((r) => r.seed === seed)) {
       const service = page.locator(
@@ -646,6 +748,29 @@ try {
         String(r.timelyJobs),
       );
       assert.equal(await service.getAttribute("data-jobs"), String(r.jobs));
+      assert.equal(r.jobs, data.provenance.report.evaluatedJobs);
+      assert.equal(
+        r.timelyJobs,
+        r.jobs,
+        "Every accepted evaluation Job meets the deadline",
+      );
+      assert.equal(r.completedJobs, r.jobs);
+      const latency = page.locator(
+        `.latency-summary [data-policy="${r.policy}"]`,
+      );
+      assert.equal(
+        await latency.getAttribute("data-p95"),
+        String(r.p95CompletedSeconds),
+      );
+      assert.equal(
+        await latency.getAttribute("data-completed"),
+        String(r.completedJobs),
+      );
+      assert.ok(
+        (await latency.innerText()).includes(
+          `${r.p95CompletedSeconds!.toFixed(1)}s`,
+        ),
+      );
       const allocation = page.locator(
         `.result-row[data-policy="${r.policy}"][data-lower]`,
       );
@@ -666,17 +791,56 @@ try {
         `${(r.allocationBounds[0] / 60).toFixed(1)}–${(r.allocationBounds[1] / 60).toFixed(1)}`,
       );
     }
-    assert.match(
-      await page.locator("#comparison-conclusion").innerText(),
-      /do not establish allocation savings/,
+    const rows: PolicyResult[] = data.comparison.runs.filter(
+      (run) => run.seed === seed,
     );
+    const fixed = rows.find((run) => run.policy === "fixed")!,
+      reactive = rows.find((run) => run.policy === "reactive")!,
+      forecast = rows.find((run) => run.policy === "forecast")!;
+    const savings = [
+      1 - reactive.allocationBounds[1] / fixed.allocationBounds[0],
+      1 - forecast.allocationBounds[1] / fixed.allocationBounds[0],
+      1 - forecast.allocationBounds[1] / reactive.allocationBounds[0],
+    ];
+    const conclusion = await page.locator("#comparison-conclusion").innerText();
+    for (const saving of savings) {
+      assert.ok(
+        saving > 0,
+        "Accepted allocation bounds establish conservative savings",
+      );
+      assert.ok(conclusion.includes(`${(saving * 100).toFixed(1)}%`));
+    }
+    assert.ok(forecast.p95CompletedSeconds! > reactive.p95CompletedSeconds!);
+    assert.match(conclusion, /reactive.*faster|reactive.*lower.*p95/i);
+    assert.match(
+      conclusion,
+      /selected.*development|development.*illustration/i,
+    );
+    assert.ok(!conclusion.includes("do not establish allocation savings"));
   }
-  await page.locator("#comparison-seed").selectOption("62002");
+  await page.locator("#comparison-seed").selectOption(String(seeds[0]));
+  const comparisonState = () =>
+    page.evaluate(() =>
+      [
+        "comparison-results",
+        "comparison-conclusion",
+        "comparison-settings",
+        "clock",
+      ].map((id) => document.getElementById(id)!.innerHTML),
+    );
+  const comparisonInitial = await comparisonState();
+  await seek(data.run.end);
+  await seek(focusCycle.available);
+  assert.deepEqual(await comparisonState(), comparisonInitial);
+  const finalService = deadlineStatus(data, data.run.end);
+  assert.equal(finalService.onTime, data.provenance.report.timelyJobs);
+  assert.equal(finalService.confirmed, data.provenance.report.evaluatedJobs);
+  assert.equal(finalService.pending, 0);
   await page.screenshot({
     path: `${outputDir}/comparison-1920.png`,
   });
   checks.push(
-    `all six policy results, bounds, workload selection and honest preliminary conclusion`,
+    `all ${data.comparison.runs.length} accepted policy results for seed ${seeds[0]}, deadline cohorts, p95, conservative savings, resource/latency tradeoff and reverse Comparison seek`,
   );
   for (const zoom of [1.25, 1.5]) {
     await page.setViewportSize({
@@ -709,100 +873,88 @@ try {
     0,
     "Returning to Overview restores its top",
   );
-  await seek(1403500);
-  const confirmed = await page.locator("#decision p").innerText();
-  await seek(1423038);
-  assert.match(
-    await page.locator("#decision strong").innerText(),
-    /previously observed/,
+  const skippedCycles = operatingCycles.filter(
+    (cycle) => cycle.forecastStatus !== "ready" || !cycle.bins.length,
   );
-  const gap = await page.locator("#decision p").innerText();
-  assert.equal(gap.match(/\d\d:\d\d/)![0], confirmed.match(/\d\d:\d\d/)![0]);
-  const fallback = data.cycles.find((c) => !c.valid && !c.bins.length)!;
-  const previousForecast = data.cycles
-    .filter(
-      (c) =>
-        c.available < fallback.available &&
-        c.forecastStatus === "ready" &&
-        c.bins.length,
-    )
-    .at(-1)!;
-  await seek(fallback.available);
-  assert.equal(
-    await page.locator("#alternatives").getAttribute("data-cycle"),
-    String(fallback.tick),
-  );
-  assert.equal(
-    await page.locator("#twin-input").getAttribute("data-forecast-cycle"),
-    String(previousForecast.tick),
-  );
-  assert.equal(
-    await page.locator("#twin-input").getAttribute("data-issued-at"),
-    String(previousForecast.available),
-  );
-  assert.equal(
-    await page.locator("#forecast-chart").getAttribute("data-forecast-cycle"),
-    String(previousForecast.tick),
-  );
-  assert.ok(
-    (await page
-      .locator(
-        "#forecast-chart .forecast-line.current,#forecast-chart .scenario-range",
-      )
-      .count()) >= 2,
-  );
-  assert.equal(
-    await page
-      .getByText("No ready forecast in this cycle", { exact: true })
-      .count(),
-    0,
-  );
-  assert.match(
-    await page.locator("#alternatives").innerText(),
-    /Simulation update skipped/,
-  );
-  assert.match(
-    await page.locator("#forecast-status").innerText(),
-    /Update skipped/,
-  );
-  assert.match(
-    await page.locator("#decision strong").innerText(),
-    /Keep current worker admission|Keep current capacity|Do nothing/,
-  );
-  const fallbackState = await overview();
-  await seek(data.run.end);
-  await seek(fallback.available);
-  assert.deepEqual(await overview(), fallbackState);
-  await seek(fallback.available - 1);
-  assert.equal(
-    await page.locator("#alternatives").getAttribute("data-cycle"),
-    String(previousForecast.tick),
-  );
-  assert.ok(
-    !(await page.locator("#alternatives").innerText()).includes(
-      "Simulation update skipped",
+  for (const fallback of skippedCycles) {
+    const previousForecast = readyCycles
+      .filter((cycle) => cycle.available < fallback.available)
+      .at(-1);
+    assert.ok(
+      previousForecast,
+      "Skipped captured update has an earlier ready forecast",
+    );
+    await seek(fallback.available);
+    assert.equal(
+      await page.locator("#alternatives").getAttribute("data-cycle"),
+      String(fallback.tick),
+    );
+    assert.equal(
+      await page.locator("#twin-input").getAttribute("data-forecast-cycle"),
+      String(previousForecast.tick),
+    );
+    assert.equal(
+      await page.locator("#twin-input").getAttribute("data-issued-at"),
+      String(previousForecast.available),
+    );
+    assert.equal(
+      await page.locator("#forecast-chart").getAttribute("data-forecast-cycle"),
+      String(previousForecast.tick),
+    );
+    assert.equal(
+      await page
+        .getByText("No ready forecast in this cycle", { exact: true })
+        .count(),
+      0,
+    );
+    assert.match(
+      await page.locator("#alternatives").innerText(),
+      /Simulation update skipped/,
+    );
+    const fallbackState = await overview();
+    await seek(data.run.end);
+    await seek(fallback.available);
+    assert.deepEqual(await overview(), fallbackState);
+    await seek(fallback.available - 1);
+    assert.equal(
+      await page.locator("#alternatives").getAttribute("data-cycle"),
+      String(viewAt(data, fallback.available - 1).cycle?.tick ?? ""),
+    );
+  }
+  if (!skippedCycles.length) {
+    assert.equal(readyCycles.length, operatingCycles.length);
+    assert.ok(operatingCycles.every((cycle) => cycle.valid));
+    assert.equal(
+      data.bookmarks.filter((bookmark) => bookmark.kind === "fallback").length,
+      0,
+    );
+    checks.push(
+      `all ${readyCycles.length} captured operating forecasts are ready; no fallback recorded`,
+    );
+  } else
+    checks.push(
+      `${skippedCycles.length} captured skipped updates retain previous ready publications and rewind exactly`,
+    );
+  const maximum = operatingCycles.find((cycle) =>
+    cycle.candidates.some(
+      (candidate) =>
+        candidate.name === "scale-up" &&
+        candidate.unavailableReason === "maximum_worker_count",
     ),
   );
-  assert.ok(
-    !(await page.locator("#forecast-status").innerText()).includes(
-      "Update skipped",
-    ),
-  );
-  await seek(
-    data.cycles.find((c) =>
-      c.candidates.some(
-        (candidate) => candidate.name === "scale-up" && !candidate.valid,
-      ),
-    )!.available,
-  );
-  assert.match(
-    await page.locator('#alternatives [data-candidate="scale-up"]').innerText(),
-    /At maximum capacity/,
-  );
-  checks.push(
-    `skipped cycle preserves its recorded fallback while retaining the earlier ready forecast and source-specific capacity reasons`,
-  );
-  await seek(data.cycles[5].available);
+  if (maximum) {
+    await seek(maximum.available);
+    assert.match(
+      await page
+        .locator('#alternatives [data-candidate="scale-up"]')
+        .innerText(),
+      /At maximum capacity/,
+    );
+    checks.push(
+      "captured maximum-capacity candidate explains its source-specific limit",
+    );
+  }
+  await seek(focusCycle.available);
   assert.equal(
     await page.locator("#actual-chart svg .gridline").count(),
     8,
@@ -817,6 +969,7 @@ try {
   );
   assert.equal(await page.locator("#actual-chart .time-axis").count(), 2);
   assert.equal(await page.locator("#actual-chart .time-axis text").count(), 10);
+  await seek(measuredAt);
   const markers = await page.locator(".usage-marker").evaluateAll((els) =>
     els.map((e) => ({
       color: getComputedStyle(e).backgroundColor,
@@ -887,16 +1040,12 @@ try {
     true,
   );
   await page.locator("#close-evidence").click();
-  await page
-    .locator("#bookmarks button")
-    .filter({ hasText: "Scale-up decision" })
-    .click();
-  assert.equal(
-    await page.locator("#seek").inputValue(),
-    String(data.cycles[5].available),
-  );
+  for (const [index, bookmark] of data.bookmarks.entries()) {
+    await page.locator("#bookmarks button").nth(index).click();
+    assert.equal(await page.locator("#seek").inputValue(), String(bookmark.at));
+  }
   checks.push(
-    `zoom equivalents, reachable transport, gap/fallback semantics, unscaled 18px chart labels and bookmarks`,
+    `zoom equivalents, reachable transport, captured gap/forecast semantics, unscaled 18px chart labels and every dataset bookmark`,
   );
   await context.close();
   assert.deepEqual(errors, []);

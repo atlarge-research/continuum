@@ -1,6 +1,11 @@
 /** Presentation selectors remain pure: display state never changes recorded evidence. */
 import { coveredInterval, viewAt } from "./replay.ts";
-import type { Cycle, Dataset } from "./types.ts";
+import type {
+  Cycle,
+  Dataset,
+  PolicyComparison,
+  PolicyResult,
+} from "./types.ts";
 import type { WorkerView } from "./replay.ts";
 
 /** Hold a coherent, already-published worker update through brief collection gaps only.
@@ -32,7 +37,7 @@ export function workerDisplayAt(data: Dataset, cursor: number) {
         : null,
   };
 }
-/** Confirmed service results for observed evaluation arrivals; pending is never counted as failure. */
+/** Confirmed API creation-to-terminal-Job results; unpublished outcomes remain pending. */
 export function deadlineStatus(data: Dataset, cursor: number) {
   let onTime = 0,
     missed = 0,
@@ -52,11 +57,10 @@ export function deadlineStatus(data: Dataset, cursor: number) {
     if (
       terminal &&
       job.outcome === "Complete" &&
-      job.serviceFinished != null &&
-      job.serviceAvailable != null &&
-      job.serviceAvailable <= cursor
+      job.completed !== null &&
+      job.completed <= cursor
     ) {
-      if (job.serviceFinished - job.creation <= data.run.deadlineSeconds * 1000)
+      if (job.completed - job.creation <= data.run.deadlineSeconds * 1000)
         onTime++;
       else missed++;
     } else pending++;
@@ -69,6 +73,56 @@ export function deadlineStatus(data: Dataset, cursor: number) {
     confirmed,
     percent: confirmed ? (onTime / confirmed) * 100 : null,
   };
+}
+/** Summarize matched whole-cohort results and only savings established by the bounds. */
+export function comparisonConclusion(
+  comparison: PolicyComparison,
+  seed: number,
+): string {
+  const rows = comparison.runs.filter((r) => r.seed === seed);
+  const fixed = rows.find((r) => r.policy === "fixed"),
+    reactive = rows.find((r) => r.policy === "reactive"),
+    forecast = rows.find((r) => r.policy === "forecast");
+  if (!fixed || !reactive || !forecast)
+    return "Matched policy comparison is unavailable for this workload.";
+  const pass = (r: PolicyResult) => r.timelyJobs / r.jobs >= r.targetFraction;
+  const parts = rows.every(pass)
+    ? ["All three policies meet the whole-cohort service target."]
+    : [
+        `Service target: static ${pass(fixed) ? "met" : "missed"}; reactive ${pass(reactive) ? "met" : "missed"}; digital twin ${pass(forecast) ? "met" : "missed"}.`,
+      ];
+  for (const [lower, higher, label, baseline] of [
+    [reactive, fixed, "Reactive", "static"],
+    [forecast, fixed, "The twin", "static"],
+    [forecast, reactive, "The twin", "reactive"],
+  ] as const) {
+    const saving = 1 - lower.allocationBounds[1] / higher.allocationBounds[0];
+    if (saving > 0)
+      parts.push(
+        `${label} uses approximately ${(saving * 100).toFixed(1)}% less allocated application capacity than ${baseline} within the recorded bounds.`,
+      );
+    else if (lower.allocationBounds[0] > higher.allocationBounds[1])
+      parts.push(
+        `${label} uses more allocated application capacity than ${baseline} within the recorded bounds.`,
+      );
+    else
+      parts.push(
+        `Allocation bounds do not establish a saving for ${label.toLowerCase()} over ${baseline}.`,
+      );
+  }
+  if (
+    reactive.p95CompletedSeconds !== null &&
+    forecast.p95CompletedSeconds !== null &&
+    reactive.p95CompletedSeconds < forecast.p95CompletedSeconds
+  )
+    parts.push(
+      `Reactive has a faster completed-Job p95: ${reactive.p95CompletedSeconds.toFixed(1)}s versus the twin's ${forecast.p95CompletedSeconds.toFixed(1)}s.`,
+    );
+  if (comparison.status === "accepted-final")
+    parts.push(
+      "Selected development illustration; held-out validation and the minimum adequate static capacity are not established.",
+    );
+  return parts.join(" ");
 }
 /** Percentages describe the available application samples, never the entire host. */
 export function resourceUsage(worker: WorkerView) {

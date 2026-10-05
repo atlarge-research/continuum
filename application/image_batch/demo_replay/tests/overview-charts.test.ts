@@ -6,11 +6,28 @@ import { viewAt } from "../src/replay.ts";
 import { actualChart, forecastChart } from "../src/charts.ts";
 const data: Dataset = JSON.parse(readFileSync("data/replay.json", "utf8"));
 const size = { width: 900, height: 240 };
-test("arrival counts survive membership gaps without being painted as unavailable", () => {
-  const at = 1423038;
-  assert.equal(viewAt(data, at).fresh, false);
+test("arrival counts survive a synthetic membership gap without being painted as unavailable", () => {
+  const capture = structuredClone(data);
+  const source = capture.snapshots.find(
+    (s) => s.complete && s.at >= (capture.run.start + capture.run.end) / 2,
+  )!;
+  const at = source.at + 1;
+  capture.snapshots.push({
+    ...structuredClone(source),
+    at,
+    started: at,
+    complete: false,
+  });
+  capture.snapshots.sort((a, b) => a.at - b.at);
+  capture.gaps.push({
+    start: at,
+    end: at + 1000,
+    available: at,
+    reason: "synthetic membership gap",
+  });
+  assert.equal(viewAt(capture, at).fresh, false);
   for (const chart of [actualChart, forecastChart]) {
-    const html = chart(data, viewAt(data, at), size);
+    const html = chart(capture, viewAt(capture, at), size);
     const bars = [
       ...html.matchAll(
         /<rect class="(?:arrival-bar|actual-bar) ([^"]+)" data-count="(\d+)" data-bin-start="(\d+)" data-bin-end="(\d+)"[^>]*>/g,
@@ -21,7 +38,7 @@ test("arrival counts survive membership gaps without being painted as unavailabl
       assert.match(classes, /recorded|open/);
       assert.equal(
         Number(count),
-        data.jobs.filter(
+        capture.jobs.filter(
           (j) =>
             j.available <= at &&
             j.creation >= Number(left) &&
@@ -35,25 +52,52 @@ test("arrival counts survive membership gaps without being painted as unavailabl
       /coverage incomplete|covered observations|partial coverage/,
     );
   }
-  assert.match(actualChart(data, viewAt(data, at), size), /class="gap"/);
+  assert.match(actualChart(capture, viewAt(capture, at), size), /class="gap"/);
   assert.doesNotMatch(
-    forecastChart(data, viewAt(data, at), size),
+    forecastChart(capture, viewAt(capture, at), size),
     /class="gap"/,
   );
 });
-test("forecast chart preserves issued history and retains forecast 8 during skipped cycle 9", () => {
-  const afterSecond = data.cycles[1].available + 1000;
+test("forecast chart preserves real issue history and retains a forecast through a synthetic skipped update", () => {
+  const ready = data.cycles.filter(
+    (c) => c.forecastStatus === "ready" && c.bins.length,
+  );
+  const [first, second] = ready;
+  const afterSecond = second.available + 1000;
   const history = forecastChart(data, viewAt(data, afterSecond), size);
-  assert.match(history, /class="forecast-line historical" data-cycle="1"/);
-  assert.match(history, /class="forecast-line current" data-cycle="2"/);
-  const fallback = data.cycles[8].available;
-  const html = forecastChart(data, viewAt(data, fallback), size);
-  assert.equal(viewAt(data, fallback).cycle!.tick, 9);
-  assert.match(html, /class="forecast-line current" data-cycle="8"/);
-  assert.match(html, /class="scenario-range current" data-cycle="8"/);
+  assert.match(
+    history,
+    new RegExp(`class="forecast-line historical" data-cycle="${first.tick}"`),
+  );
+  assert.match(
+    history,
+    new RegExp(`class="forecast-line current" data-cycle="${second.tick}"`),
+  );
+  const capture = structuredClone(data);
+  const skipped = {
+    ...structuredClone(second),
+    tick: second.tick + 1,
+    available: second.available + 1000,
+    forecastStatus: "not_ready",
+    forecastReasons: ["state_stale"],
+    valid: false,
+    bins: [],
+  };
+  capture.cycles = [first, second, skipped];
+  const fallback = skipped.available;
+  const html = forecastChart(capture, viewAt(capture, fallback), size);
+  assert.equal(viewAt(capture, fallback).cycle!.tick, skipped.tick);
+  assert.match(
+    html,
+    new RegExp(`class="forecast-line current" data-cycle="${second.tick}"`),
+  );
+  assert.match(
+    html,
+    new RegExp(`class="scenario-range current" data-cycle="${second.tick}"`),
+  );
   assert.doesNotMatch(html, /No ready forecast/);
   for (const [, published] of html.matchAll(/data-available="(\d+)"/g))
     assert.ok(Number(published) <= fallback);
-  forecastChart(data, viewAt(data, data.run.end), size);
-  assert.equal(forecastChart(data, viewAt(data, fallback), size), html);
+  forecastChart(capture, viewAt(capture, data.run.end), size);
+  assert.equal(forecastChart(capture, viewAt(capture, fallback), size), html);
 });

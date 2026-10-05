@@ -12,10 +12,11 @@ export interface Job {
   requestId: string | null;
   creation: number;
   available: number;
+  /** Terminal Kubernetes Job completion time used by the service deadline. */
   completed: number | null;
   terminalAvailable: number | null;
   outcome: string | null;
-  /** Application execution finish, separate from Kubernetes Job completion. */
+  /** Classifier execution finish, separate from terminal service completion. */
   serviceFinished?: number | null;
   serviceAvailable?: number | null;
   evaluated?: boolean;
@@ -141,6 +142,7 @@ export interface PolicyResult {
   acquisitionSeconds: number;
   cadenceSeconds: number;
   network: string;
+  reactiveTargetFraction?: number | null;
   reactiveUpThreshold: number | null;
   reactiveDownThreshold: number | null;
   reactiveStabilizationSeconds: number | null;

@@ -5,31 +5,66 @@ import type { Dataset } from "../src/types.ts";
 import { viewAt } from "../src/replay.ts";
 import { decisionText } from "../src/decision.ts";
 const data: Dataset = JSON.parse(readFileSync("data/replay.json", "utf8"));
-test("preserves first physical confirmation across later gaps and reverse seeking", () => {
-  const confirmed = decisionText(data, viewAt(data, 1403500));
-  const gap = decisionText(data, viewAt(data, 1423038));
+test("preserves final physical confirmation across a synthetic observation gap and reverse seeking", () => {
+  const cycle = data.cycles.find((c) => c.action === "scale-down")!;
+  const request = data.capacityEvents.find(
+    (e) => e.tick === cycle.tick && e.event === "action.request",
+  )!;
+  const confirmation = data.snapshots.find(
+    (s) =>
+      s.at >= request.at && s.complete && !s.workers[cycle.worker!].accepting,
+  )!;
+  const capture = structuredClone(data);
+  const at = confirmation.at + 1;
+  // The confirmation is real; only this later unavailable observation is synthetic.
+  capture.snapshots.push({
+    ...structuredClone(confirmation),
+    at,
+    started: at,
+    complete: false,
+  });
+  capture.snapshots.sort((a, b) => a.at - b.at);
+  capture.gaps.push({
+    start: at,
+    end: at + 1000,
+    available: at,
+    reason: "synthetic membership gap",
+  });
+  const confirmed = decisionText(capture, viewAt(capture, confirmation.at));
+  const gap = decisionText(capture, viewAt(capture, at));
   assert.equal(confirmed.stage, "Physical response");
   assert.equal(gap.stage, "Physical response");
   const first = confirmed.detail.match(/\d\d:\d\d/)![0];
-  // Independently read raw first confirmation: 1791076233972290048 ns.
-  assert.equal(first, "08:34");
+  // Independently read final raw confirmation: 1791197314498321920 ns.
+  assert.equal(first, "00:01");
   assert.equal(gap.detail.match(/\d\d:\d\d/)![0], first);
   assert.match(gap.detail, /unavailable|gap/i);
-  const cycle = data.cycles[5];
   assert.notEqual(
-    decisionText(data, viewAt(data, cycle.available)).stage,
+    decisionText(capture, viewAt(capture, cycle.available)).stage,
     "Physical response",
   );
-  assert.deepEqual(decisionText(data, viewAt(data, 1403500)), confirmed);
+  decisionText(capture, viewAt(capture, data.run.end));
+  assert.deepEqual(
+    decisionText(capture, viewAt(capture, confirmation.at)),
+    confirmed,
+  );
 });
-test("fallback identifies its recorded action and retains lifecycle for physical fallback actions", () => {
-  const at = data.bookmarks.find((b) => b.kind === "fallback")!.at;
-  const view = viewAt(data, at);
-  const status = decisionText(data, view);
+test("synthetic fallback identifies its action and retains physical action lifecycle", () => {
+  const changed = structuredClone(data);
+  const cycle = structuredClone(changed.cycles[0]);
+  cycle.valid = false;
+  cycle.forecastStatus = "not_ready";
+  cycle.forecastReasons = ["state_stale"];
+  cycle.bins = [];
+  cycle.action = "unchanged";
+  cycle.worker = null;
+  changed.cycles = [cycle];
+  changed.capacityEvents = [];
+  const at = cycle.available;
+  const view = viewAt(changed, at);
+  const status = decisionText(changed, view);
   assert.match(status.title, /Keep.*admission/i);
   assert.match(status.detail, /fallback/i);
-  const changed = structuredClone(data);
-  const cycle = changed.cycles.find((c) => !c.valid)!;
   cycle.action = "scale-up";
   cycle.worker = 2;
   changed.capacityEvents.push({

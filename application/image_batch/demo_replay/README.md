@@ -1,6 +1,6 @@
 # Continuum offline demonstration
 
-Explore a real six-worker service and its closed-loop digital twin through **Overview**, **Analysis** and **Policy comparison**. The included evidence is preliminary: it demonstrates physical execution and recorded decisions, with an honest comparison of static, reactive and forecast-based control.
+Explore a real six-worker service and its closed-loop digital twin through **Overview**, **Analysis** and **Policy comparison**. The included accepted B/72001 capture demonstrates physical execution and recorded decisions, with a matched comparison of static, reactive and forecast-based control. It is a selected development illustration, not held-out validation.
 
 ## Present on a laptop
 
@@ -21,7 +21,7 @@ npm test
 npm run build
 ```
 
-The build produces the standalone blue replay HTML, approximately 3.7 MiB, under ignored `dist/`. Generated delivery files are not committed. The committed normalized dataset makes a fresh checkout buildable without private source captures; raw-source audit tests skip when their evidence is absent.
+The build produces the standalone blue replay HTML, approximately 4 MiB, under ignored `dist/`. Generated delivery files are not committed. The committed normalized dataset makes a fresh checkout buildable without private source captures; raw-source audit tests skip when their evidence is absent.
 
 Install the isolated verification browser once, then check direct offline opening:
 

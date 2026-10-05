@@ -67,10 +67,10 @@ test("resource bands group fractional requests by phase and distinguish headroom
 
 test(
   "all normalized memory requests agree with observed assigned Jobs",
-  { skip: !existsSync("evidence/preliminary/observer/cluster-state.jsonl") },
+  { skip: !existsSync("evidence/accepted-final/observer/cluster-state.jsonl") },
   () => {
     const states = readFileSync(
-      "evidence/preliminary/observer/cluster-state.jsonl",
+      "evidence/accepted-final/observer/cluster-state.jsonl",
       "utf8",
     )
       .trim()

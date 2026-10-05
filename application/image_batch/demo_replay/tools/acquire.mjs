@@ -4,22 +4,35 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 
-const [root, report] = process.argv.slice(2);
-if (
-  !root ||
-  !report ||
-  !root.startsWith(
-    "/mnt/sdb/matthijs/fns-evidence/opendc-diagnostics-20261003T213920Z/",
-  ) ||
-  !report.startsWith(
-    "/mnt/sdb/matthijs/fns-evidence/opendc-diagnostics-20261003T213920Z/",
-  )
-) {
+const [root, report, output] = process.argv.slice(2);
+const diagnosticRoot =
+  "/mnt/sdb/matthijs/fns-evidence/opendc-diagnostics-20261003T213920Z";
+const finalRoot =
+  "/mnt/sdb/matthijs/fns-evidence/opendc-final-trio-20261005T092500Z";
+const completedSources = [
+  {
+    root:
+      diagnosticRoot +
+      "/evaluation/matrix-primary-reused-transport/experiments/fns-diag-primary-s62002-forecast",
+    report: diagnosticRoot + "/reports/primary/metrics.json",
+    destination: "evidence/preliminary",
+  },
+  {
+    root:
+      finalRoot +
+      "/captures/attempt-02/experiments/fns-final-trio-b-forecast-s72001-s72001-forecast",
+    report: finalRoot + "/demo-data/cases/b-s72001.json",
+    destination: "evidence/accepted-final",
+  },
+];
+const source = completedSources.find(
+  (s) => s.root === root && s.report === report,
+);
+if (!source)
   throw new Error(
-    "This acquisition command is restricted to the explicitly authorized completed diagnostics archive.",
+    "Acquisition requires an explicitly authorized completed capture and its exact supporting report.",
   );
-}
-const destination = resolve("evidence/preliminary");
+const destination = resolve(output ?? source.destination);
 if (existsSync(destination))
   throw new Error(
     "Use a fresh acquisition destination; existing evidence is preserved.",
@@ -142,6 +155,57 @@ if (
   sha(reportData) !== reportBefore
 )
   throw new Error("Report changed during acquisition");
+const extraFiles = [];
+if (source.root.startsWith(finalRoot + "/")) {
+  for (const [sourcePath, path] of [
+    ["demo-data/index.json", "accepted/index.json"],
+    [
+      "analysis/independent-monitor-audit.json",
+      "accepted/independent-monitor-audit.json",
+    ],
+    [
+      "analysis/completion-verification.json",
+      "accepted/completion-verification.json",
+    ],
+  ]) {
+    const absolutePath = finalRoot + "/" + sourcePath;
+    const expectedBytes = Number(
+      remote("stat -c %s -- " + shellQuote(absolutePath))
+        .toString()
+        .trim(),
+    );
+    if (
+      !Number.isSafeInteger(expectedBytes) ||
+      expectedBytes < 0 ||
+      total +
+        extraFiles.reduce((sum, file) => sum + file.bytes.length, 0) +
+        expectedBytes >
+        cap
+    )
+      throw new Error("Final audits exceed source cap");
+    const hashBefore = remote("sha256sum -- " + shellQuote(absolutePath))
+      .toString()
+      .split(/\s+/)[0];
+    const bytes = remote("cat -- " + shellQuote(absolutePath));
+    const hashAfter = remote("sha256sum -- " + shellQuote(absolutePath))
+      .toString()
+      .split(/\s+/)[0];
+    if (
+      bytes.length !== expectedBytes ||
+      hashBefore !== hashAfter ||
+      sha(bytes) !== hashBefore
+    )
+      throw new Error("Final audit changed during acquisition");
+    extraFiles.push({
+      path,
+      sourcePath: absolutePath,
+      bytes,
+      sha256: hashBefore,
+    });
+  }
+}
+if (total + extraFiles.reduce((sum, file) => sum + file.bytes.length, 0) > cap)
+  throw new Error("Final audits exceed source cap");
 mkdirSync(destination, { recursive: true });
 writeFileSync(join(destination, "capture-subset.tar"), archive);
 execFileSync(
@@ -163,6 +227,17 @@ for (const file of files) {
   file.sha256 = hash;
 }
 writeFileSync(join(destination, "supporting-metrics.json"), reportData);
+for (const file of extraFiles) {
+  mkdirSync(join(destination, "accepted"), { recursive: true });
+  writeFileSync(join(destination, file.path), file.bytes);
+  files.push({
+    path: file.path,
+    sourcePath: file.sourcePath,
+    bytes: file.bytes.length,
+    sha256: file.sha256,
+  });
+}
+files.sort((a, b) => a.path.localeCompare(b.path));
 const manifest = {
   schemaVersion: 1,
   acquiredAt: new Date().toISOString(),
@@ -172,7 +247,8 @@ const manifest = {
   reportBytes,
   reportSha256: reportBefore,
   transferCapBytes: cap,
-  totalSourceBytes: total,
+  totalSourceBytes:
+    total + extraFiles.reduce((sum, file) => sum + file.bytes.length, 0),
   tarBytes: archive.length,
   archiveSha256: sha(archive),
   remoteReadTimeoutSeconds: 120,

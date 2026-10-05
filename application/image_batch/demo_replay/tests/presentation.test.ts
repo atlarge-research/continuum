@@ -14,7 +14,7 @@ const privateEvidence = existsSync(
   "evidence/preliminary/supporting-metrics.json",
 );
 const capture: Dataset = JSON.parse(readFileSync("data/replay.json", "utf8"));
-test("service outcomes use application finish and wait for both success and published finish evidence", () => {
+test("service outcomes use terminal Job completion and wait for published success", () => {
   const data = structuredClone(capture);
   data.run.evaluationStart = 0;
   data.run.arrivalEnd = 10000;
@@ -87,11 +87,11 @@ test("service outcomes use application finish and wait for both success and publ
     percent: null,
   });
   assert.deepEqual(deadlineStatus(data, 4500), {
-    onTime: 1,
-    missed: 1,
+    onTime: 0,
+    missed: 2,
     pending: 1,
     confirmed: 2,
-    percent: 50,
+    percent: 0,
   });
   assert.deepEqual(deadlineStatus(data, 4000), {
     onTime: 0,
@@ -100,6 +100,41 @@ test("service outcomes use application finish and wait for both success and publ
     confirmed: 0,
     percent: null,
   });
+});
+test("terminal service does not depend on classifier finish publication", () => {
+  const data = structuredClone(capture);
+  data.run.evaluationStart = 0;
+  data.run.arrivalEnd = 10000;
+  data.run.deadlineSeconds = 2;
+  data.jobs = [
+    {
+      uid: "timely",
+      requestId: null,
+      creation: 1000,
+      available: 1100,
+      completed: 3000,
+      terminalAvailable: 3500,
+      outcome: "Complete",
+      serviceFinished: 2900,
+      serviceAvailable: 9000,
+      evaluated: true,
+    },
+  ];
+  assert.equal(deadlineStatus(data, 3499).pending, 1);
+  assert.deepEqual(deadlineStatus(data, 3500), {
+    onTime: 1,
+    missed: 0,
+    pending: 0,
+    confirmed: 1,
+    percent: 100,
+  });
+  data.jobs[0].outcome = "Failed";
+  assert.equal(deadlineStatus(data, 3500).missed, 1);
+  data.jobs[0].outcome = "Complete";
+  data.jobs[0].completed = null;
+  assert.equal(deadlineStatus(data, 3500).pending, 1);
+  data.jobs[0].completed = 4000;
+  assert.equal(deadlineStatus(data, 3500).pending, 1);
 });
 test("worker percentages preserve partial samples and values above capacity", () => {
   const worker = viewAt(capture, capture.run.start).workers[0];
@@ -117,7 +152,7 @@ test("worker percentages preserve partial samples and values above capacity", ()
 });
 test("forecast selection never reveals future publications and excludes warm-up", () => {
   const first = capture.cycles.find((c) => c.available >= capture.run.start)!;
-  const future = capture.cycles[5];
+  const future = capture.cycles.find((c) => c.available > first.available)!;
   assert.equal(
     selectedForecast(capture, first.available, future.tick)?.tick,
     first.tick,
@@ -151,7 +186,7 @@ test("forecast range sums each scenario within display bins rather than adding p
   ]);
 });
 test(
-  "comparison extracts all matched report runs and retains uncertainty, settings and preliminary status",
+  "legacy preliminary comparison retains all matched runs, uncertainty and recorded settings",
   { skip: !privateEvidence },
   () => {
     const report = JSON.parse(
@@ -159,7 +194,7 @@ test(
     );
     const comparison = comparisonFromReport(
       report,
-      capture.run.id,
+      "fns-diag-primary-s62002-forecast",
       "preliminary",
       "report-hash",
     );
@@ -182,11 +217,23 @@ test(
     const altered = structuredClone(report);
     altered.closed_loop_reports[0].runs[0].arrival_plan_sha256 = "different";
     assert.throws(
-      () => comparisonFromReport(altered, capture.run.id, "preliminary", "h"),
+      () =>
+        comparisonFromReport(
+          altered,
+          "fns-diag-primary-s62002-forecast",
+          "preliminary",
+          "h",
+        ),
       /matched|workload/i,
     );
     assert.throws(
-      () => comparisonFromReport(report, capture.run.id, "accepted-final", "h"),
+      () =>
+        comparisonFromReport(
+          report,
+          "fns-diag-primary-s62002-forecast",
+          "accepted-final",
+          "h",
+        ),
       /accept/i,
     );
   },
@@ -194,7 +241,7 @@ test(
 
 import { convertCapture } from "../tools/normalize.ts";
 test(
-  "application completion and deadline counts agree with the report cohort",
+  "legacy preliminary classifier finish stays separate from terminal service counts",
   { skip: !privateEvidence },
   () => {
     const data = convertCapture("evidence/preliminary");
@@ -208,6 +255,7 @@ test(
       const j = data.jobs.find((j) => j.uid === c.uid)!;
       assert.equal(j.evaluated, true);
       assert.equal(j.serviceFinished! + data.run.originMs, c.finish_ms);
+      assert.equal(j.completed! + data.run.originMs, c.job_finish_ms);
       assert.ok(
         j.serviceAvailable !== null &&
           j.serviceAvailable! >= j.serviceFinished!,

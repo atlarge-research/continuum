@@ -25,8 +25,11 @@ import type {
 
 const sha = (value: Buffer | string) =>
   createHash("sha256").update(value).digest("hex");
-const OBSERVER_HASH =
-  "0226ba9b335eb06b27357bd713dcb07e93a8b0e57c095489c49c061c22bdc967";
+// Both archived versions preserve the serialized collection/write publication proof.
+const OBSERVER_HASHES = new Set([
+  "0226ba9b335eb06b27357bd713dcb07e93a8b0e57c095489c49c061c22bdc967",
+  "ec29267e0f2d5c74b3fcb99388088a910aedac0b1d38ee2636ac297eea1eb9f4",
+]);
 const WRITER_HASH =
   "f18d2600d442e55318430178fc6b09b3b3ca1ff20ecf4d78a49e3f9e64611e89";
 function safeRelative(path: string): string {
@@ -143,6 +146,84 @@ export function convertCapture(
   }
   if (status === "accepted-final" && runReport.accepted_capture !== true)
     throw new Error("Acceptance receipt contradicts capture validation");
+  if (status === "accepted-final") {
+    for (const path of [
+      "accepted/index.json",
+      "accepted/independent-monitor-audit.json",
+      "accepted/completion-verification.json",
+    ]) {
+      if (!acquisition.files.some((f: any) => f.path === path))
+        throw new Error("Final audit lacks immutable acquisition proof");
+    }
+    const index = json("accepted/index.json");
+    const audit = json("accepted/independent-monitor-audit.json");
+    const completion = json("accepted/completion-verification.json");
+    const selected = index.cases?.find(
+      (c: any) => c.id === index.selected_case,
+    );
+    if (
+      index.demo_ready !== true ||
+      selected?.demo_ready !== true ||
+      selected.complete_trio !== true ||
+      selected.heldout_validated !== false ||
+      audit.raw_api_response_cohorts_verified !== true ||
+      audit.matched_source_workload_inputs_and_images !== true ||
+      audit.submission_fidelity_verified !== true ||
+      audit.target_passed !== true ||
+      completion.campaign_process_exit_code !== 0 ||
+      completion.export_checks?.archive_matches_export_byte_for_byte !== true ||
+      completion.export_checks?.independent_offline_reexport_byte_identical !==
+        true
+    ) {
+      throw new Error(
+        "Final evidence requires the accepted illustrative export and independent completion/metric audits",
+      );
+    }
+    if (
+      reportedRuns.length !== selected.arms?.length ||
+      reportedRuns.some(
+        (r: any) => r.seed !== selected.seed || !selected.arms.includes(r.arm),
+      ) ||
+      !acquisition.reportPath.endsWith("/demo-data/" + selected.metrics)
+    ) {
+      throw new Error(
+        "Final accepted case does not identify the supplied policy report",
+      );
+    }
+    for (const run of reportedRuns) {
+      const audited = audit.rows?.find((r: any) => r.arm === run.arm);
+      const bounds = run.allocation.allocated_core_seconds_bounds.map(
+        (v: number) => v / 3600,
+      );
+      if (
+        !audited ||
+        audited.jobs !== run.responses.jobs ||
+        audited.deadline_met !== run.responses.deadline_met ||
+        audited.p95_seconds !== run.responses.completed_response_p95_seconds ||
+        JSON.stringify(audited.allocated_core_hours_bounds) !==
+          JSON.stringify(bounds)
+      ) {
+        throw new Error(
+          "Final report disagrees with independent response/allocation audit",
+        );
+      }
+    }
+    receipt = {
+      ...receipt,
+      partition: index.execution_state.partition,
+      selectionBasis: index.selection_basis,
+      sourceCommit: index.execution_state.source_commit,
+      heldoutValidated: false,
+      metricAuditSha256: sha(
+        readFileSync(join(root, "accepted/independent-monitor-audit.json")),
+      ),
+      exportIndexSha256: sha(readFileSync(join(root, "accepted/index.json"))),
+      completionAuditSha256: sha(
+        readFileSync(join(root, "accepted/completion-verification.json")),
+      ),
+      bundleSha256: completion.bundle_sha256,
+    };
+  }
   const capacityCase = acquisition.files
     .map((file: any) => file.path)
     .find((path: string) =>
@@ -297,7 +378,19 @@ export function convertCapture(
     if (completed !== null && completed > available)
       throw new Error("Terminal evidence precedes physical completion");
     job.completed = completed;
-    if (job.terminalAvailable === null || available < job.terminalAvailable) {
+    // Membership can expose terminal status before the workload writer publishes its
+    // completion timestamp. Gate timed outcomes conservatively on both facts.
+    if (completed !== null) {
+      job.terminalAvailable = Math.max(
+        job.terminalAvailable ?? available,
+        available,
+      );
+      job.outcome = source.terminal_status;
+    }
+    if (
+      completed === null &&
+      (job.terminalAvailable === null || available < job.terminalAvailable)
+    ) {
       job.terminalAvailable = available;
       job.outcome = source.terminal_status;
     }
@@ -513,10 +606,10 @@ export function convertCapture(
   gaps.sort((a, b) => a.start - b.start);
   const clock = json("clock-preflight.json");
   const producerProof =
-    sourceHashes["opendt_observer.py"] === OBSERVER_HASH &&
+    OBSERVER_HASHES.has(sourceHashes["opendt_observer.py"]) &&
     sourceHashes["events.py"] === WRITER_HASH &&
     sha(readFileSync(join(root, "source/opendt_observer.py"))) ===
-      OBSERVER_HASH &&
+      sourceHashes["opendt_observer.py"] &&
     sha(readFileSync(join(root, "source/events.py"))) === WRITER_HASH &&
     runReport.restarts?.["opendt-observer"] === 0 &&
     clock.guests?.every((g: any) =>
@@ -554,7 +647,9 @@ export function convertCapture(
       );
       if (availability.available === null) {
         const bound = prefixBounds.find(
-          (b) => lineEnd <= b.completeBytes && b.at >= observation,
+          (b) =>
+            lineEnd <= b.completeBytes &&
+            b.at >= Math.max(capture, observation),
         );
         if (bound)
           availability = {
@@ -624,7 +719,7 @@ export function convertCapture(
   );
   const bookmarks = [{ at: start, label: "Start", kind: "start" }];
   const secondRise = cycles.find(
-    (c) => c.tick > 2 && c.action === "scale-up" && c.valid,
+    (c) => c.available >= start && c.action === "scale-up" && c.valid,
   );
   if (secondRise)
     bookmarks.push(
@@ -657,7 +752,7 @@ export function convertCapture(
   }
   const released = cycles.find(
     (c) =>
-      c.tick > 2 &&
+      c.available > start &&
       c.action === "scale-down" &&
       capacityEvents.some(
         (e) =>
@@ -672,7 +767,7 @@ export function convertCapture(
       label: "Scale-down decision",
       kind: "decision",
     });
-  const fallback = cycles.find((c) => !c.valid);
+  const fallback = cycles.find((c) => c.available >= start && !c.valid);
   if (fallback)
     bookmarks.push({
       at: fallback.available,

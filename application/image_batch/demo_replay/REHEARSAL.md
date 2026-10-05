@@ -6,10 +6,10 @@
 2. **Overview — 20 seconds.** “Worker bands show CPU and RAM requests, grouped by job phase; blue markers show measured application use. Powered reserves can accept work when admission changes. The service indicator separates confirmed deadline outcomes from pending work.”
 3. **Demand and decision — 30 seconds.** Choose **Demand rises**, briefly play, then choose **Scale-up decision**. “The twin forecasts arrivals and compares simulated service and capacity allocation. These are the historical alternatives and recorded choice.”
 4. **Physical response — 25 seconds.** Choose **Scale-up confirmed**. “The worker was powered already. Admission was requested, delayed, then observed. Every playback panel shares this time.”
-5. **Policy comparison — 35 seconds.** “Static keeps capacity fixed. Reactive responds to measured demand. The twin forecasts and evaluates options. These preliminary measurements show the service/allocation tradeoff: both static and twin meet the target, but the twin currently uses more allocation. Accepted final evidence has not yet been imported.”
+5. **Policy comparison — 35 seconds.** “Static keeps capacity fixed. Reactive responds to measured demand. The twin forecasts and evaluates options. All three policies meet the target. Both dynamic policies use less application allocation than static, and the twin uses less than reactive. Reactive has faster response p95 than the twin. These are selected development results; allocation is not energy or total powered-worker cost.”
 6. **Optional Analysis — 20 seconds.** Open Analysis, select an issued forecast and briefly play to show actual observations accumulating; **Latest** restores following publications. Expand explanations only for a technical question. Return to Overview.
 
-Use bookmarks to keep the conversation short. The entire operating trace is 13:38 recorded time, around 51 seconds at 16×. Comparison results describe completed runs and do not change with the playback cursor. Both policy seeds are available; do not present the tested reactive rule as every industry's autoscaler.
+Use bookmarks to keep the conversation short. Use the displayed duration; at 16× the operating trace takes about one minute. Comparison results describe completed runs and do not change with the playback cursor. The accepted comparison contains one matched workload; do not present the tested reactive rule as every industry's autoscaler.
 
 ## Controls and display
 
