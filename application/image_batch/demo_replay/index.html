@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Closed-loop digital twin — Execution &amp; prediction replay</title>
+    <style>
+      __STYLE__
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <header class="masthead">
+        <div class="brand">
+          <img class="vu-logo" src="__VU_LOGO__" alt="VU Amsterdam" />
+          <div>
+            <h1>Closed-loop digital twin</h1>
+            <p>6G Service Ecosystem</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="replay-label">Execution &amp; prediction replay</span
+          ><button id="evidence-button" class="quiet">Evidence</button
+          ><button id="fullscreen" class="quiet" title="Enter full screen">
+            Full screen</button
+          ><img
+            class="fns-logo"
+            src="__FNS_LOGO__"
+            alt="Future Network Services"
+          />
+        </div>
+      </header>
+      <nav class="tabs" aria-label="Replay views">
+        <button
+          id="tab-overview"
+          role="tab"
+          aria-selected="true"
+          aria-controls="overview"
+        >
+          Overview</button
+        ><button
+          id="tab-analysis"
+          role="tab"
+          aria-selected="false"
+          aria-controls="analysis"
+        >
+          Analysis</button
+        ><button
+          id="tab-comparison"
+          role="tab"
+          aria-selected="false"
+          aria-controls="comparison"
+        >
+          Policy comparison</button
+        ><span id="view-note"></span>
+      </nav>
+      <div class="view-area">
+        <div
+          id="overview"
+          class="workspace"
+          role="tabpanel"
+          aria-labelledby="tab-overview"
+        >
+          <section class="panel devops">
+            <div class="panel-heading">
+              <h2>Physical system</h2>
+            </div>
+            <div id="physical-summary" class="metrics"></div>
+            <div id="service-status" class="service-status"></div>
+            <div class="slot-legend">
+              <span>Requested resources</span
+              ><span><i class="headroom"></i>Outside app budget</span
+              ><span><i class="startup"></i>Starting</span
+              ><span><i class="release"></i>Finishing</span
+              ><span><i class="processing"></i>Processing</span
+              ><span><i class="measured-key"></i>Measured use</span>
+            </div>
+            <div id="workers" class="worker-grid"></div>
+            <div class="plot-heading">
+              <h3>Arrivals &amp; queue</h3>
+              <div class="history-keys">
+                <span class="filling-key">Filling</span
+                ><span class="gap-key">Queue gap</span>
+              </div>
+              <span id="observation-age"></span>
+            </div>
+            <div id="actual-chart" class="chart"></div>
+          </section>
+          <section class="panel twin">
+            <div class="panel-heading">
+              <h2>Digital Twin</h2>
+            </div>
+            <div id="twin-input" class="input-strip">
+              <div id="forecast-input" class="input-numbers"></div>
+              <div class="forecast-details">
+                <span id="forecast-time"></span
+                ><span id="forecast-status"></span>
+              </div>
+            </div>
+            <div class="plot-heading">
+              <h3>Observed arrivals and future demand</h3>
+            </div>
+            <div id="forecast-chart" class="chart"></div>
+            <div class="forecast-legend">
+              <span
+                class="actual"
+                title="Arrivals recorded by the replay cursor"
+                >Observed</span
+              ><span
+                class="filling-key"
+                title="Current interval still accumulating arrivals"
+                >Filling</span
+              ><span class="expected">Expected</span
+              ><span
+                class="range-key"
+                title="Minimum to maximum of captured sampled futures"
+                >Forecast range</span
+              >
+            </div>
+            <div class="plot-heading">
+              <h3>Simulated alternatives</h3>
+              <span id="prediction-window"></span>
+            </div>
+            <div id="alternatives" class="alternatives"></div>
+            <div id="decision" class="decision"></div>
+          </section>
+        </div>
+        <div
+          id="analysis"
+          class="workspace detail-workspace"
+          role="tabpanel"
+          aria-labelledby="tab-analysis"
+          hidden
+        >
+          <section class="panel analysis-forecast">
+            <div class="panel-heading">
+              <h2>Forecasting</h2>
+              <label class="forecast-selector"
+                >Issued forecast
+                <select
+                  id="forecast-select"
+                  aria-label="Select published forecast"
+                >
+                  <option value="latest">Latest</option>
+                </select></label
+              >
+            </div>
+            <div id="analysis-forecast-input" class="input-strip"></div>
+            <div id="analysis-forecast-chart" class="chart detail-chart"></div>
+            <div class="forecast-legend">
+              <span class="actual">▮ Observed</span
+              ><span class="expected">– – Expected</span
+              ><span class="range-key">Sampled range</span
+              ><span>Lines: individual futures</span>
+            </div>
+            <div id="forecast-quality" class="quality"></div>
+            <p class="analysis-notes">
+              Inspect a published forecast as its actual observations arrive.
+              Expected counts and sampled futures remain distinct.
+            </p>
+            <details class="analysis-explanation">
+              <summary>Forecast interpretation</summary>
+              <div id="analysis-forecast-notes" class="analysis-notes"></div>
+            </details>
+            <details class="analysis-explanation">
+              <summary>Application resource measurements</summary>
+              <div id="resource-detail"></div>
+            </details>
+          </section>
+          <section class="panel analysis-simulation">
+            <div class="panel-heading">
+              <h2>Simulation &amp; response</h2>
+              <span id="analysis-cycle"></span>
+            </div>
+            <div id="analysis-alternatives"></div>
+            <div id="analysis-decision" class="decision"></div>
+            <div class="plot-heading">
+              <h3>Predicted and observed reservations</h3>
+              <label
+                >Sample
+                <select
+                  id="scenario-select"
+                  aria-label="Sampled simulation scenario"
+                ></select
+              ></label>
+            </div>
+            <div id="predicted-processing"></div>
+            <details class="analysis-explanation">
+              <summary>Simulation assumptions &amp; input</summary>
+              <div id="analysis-simulation-notes" class="analysis-notes"></div>
+            </details>
+            <details class="analysis-explanation">
+              <summary>Service performance &amp; deadline accounting</summary>
+              <div id="analysis-service" class="analysis-notes"></div>
+            </details>
+          </section>
+        </div>
+        <div
+          id="comparison"
+          class="panel comparison-panel"
+          role="tabpanel"
+          aria-labelledby="tab-comparison"
+          hidden
+        >
+          <div class="panel-heading">
+            <div>
+              <h2>Policy comparison</h2>
+              <p>
+                How capacity decisions are made, and what the measurements show.
+              </p>
+            </div>
+            <label
+              >Workload seed
+              <select
+                id="comparison-seed"
+                aria-label="Comparison workload seed"
+              ></select
+            ></label>
+          </div>
+          <div class="policy-cards">
+            <article>
+              <h3>Static</h3>
+              <p>Keep configured capacity.</p>
+              <dl>
+                <dt>Strength</dt>
+                <dd>Simple, predictable operation.</dd>
+                <dt>Control</dt>
+                <dd>Fixed admission; capacity stays unchanged.</dd>
+                <dt>Tradeoff</dt>
+                <dd>Provisioning must cover the workload.</dd>
+              </dl>
+            </article>
+            <article>
+              <h3>Reactive</h3>
+              <p>Respond to current demand.</p>
+              <dl>
+                <dt>Strength</dt>
+                <dd>Adapts automatically using observed state.</dd>
+                <dt>Control</dt>
+                <dd>Demand rules trigger admission changes.</dd>
+                <dt>Tradeoff</dt>
+                <dd>Response follows demand and acquisition delay.</dd>
+              </dl>
+            </article>
+            <article class="twin-policy">
+              <h3>Forecast digital twin</h3>
+              <p>Evaluate future capacity choices.</p>
+              <dl>
+                <dt>Strength</dt>
+                <dd>Forecasts and simulated alternatives inform control.</dd>
+                <dt>Control</dt>
+                <dd>
+                  Compare predicted service and allocation, then verify
+                  response.
+                </dd>
+                <dt>Tradeoff</dt>
+                <dd>
+                  Depends on forecast quality, modeling and decision time.
+                </dd>
+              </dl>
+            </article>
+          </div>
+          <div class="comparison-results-heading">
+            <h3>Completed-run results</h3>
+            <span id="comparison-status"
+              >Preliminary evidence · independent of replay time</span
+            >
+          </div>
+          <div id="comparison-results"></div>
+          <div id="comparison-conclusion" class="comparison-conclusion"></div>
+          <details class="comparison-details">
+            <summary>Comparison settings &amp; interpretation</summary>
+            <div id="comparison-settings"></div>
+            <p>
+              Monitoring can support every policy. The twin adds prediction and
+              evaluation of alternatives. The reactive arm is our
+              worker-admission policy; it is not Kubernetes HPA and does not
+              represent every reactive implementation. Capacity allocation is
+              not measured energy or a financial saving. Powered reserves remain
+              powered.
+            </p>
+          </details>
+        </div>
+      </div>
+      <footer class="transport">
+        <div class="transport-top">
+          <div class="play-controls">
+            <button id="play" class="primary" aria-label="Play replay">
+              ▶ Play</button
+            ><button id="restart" class="quiet">↺ Restart</button
+            ><select id="speed" aria-label="Time acceleration">
+              <option value="1">1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+              <option value="8">8×</option>
+              <option value="16" selected>16×</option>
+              <option value="32">32×</option></select
+            ><span id="accelerated">Accelerated time</span>
+          </div>
+          <span id="keyboard-shortcuts">Space: play/pause · ←/→: 30 s</span>
+          <div class="clock">
+            <strong id="clock">00:00</strong><span id="duration"></span>
+          </div>
+        </div>
+        <input
+          id="seek"
+          type="range"
+          aria-label="Seek recorded time"
+          step="1"
+        />
+        <div id="bookmarks" class="bookmarks"></div>
+      </footer>
+    </main>
+    <dialog id="evidence-dialog">
+      <button id="close-evidence" class="quiet close">Close ×</button>
+      <h2>Evidence &amp; interpretation</h2>
+      <div id="evidence-content"></div>
+    </dialog>
+    <script id="replay-data" type="application/json">
+      __DATA__
+    </script>
+    <script>
+      __SCRIPT__;
+    </script>
+  </body>
+</html>
