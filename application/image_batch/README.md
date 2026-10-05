@@ -152,6 +152,8 @@ PYTHONPATH=application/image_batch/src python3 -m reporting.assembly \
   --metrics "$METRICS_FILE" --output-dir "$REPORT_DIR"
 ```
 
+For an approved illustrative campaign, `python3 application/image_batch/scripts/demo_export.py --checkpoint "$CAMPAIGN_CHECKPOINT" --output "$DEMO_BUNDLE"` exports a fresh offline bundle with `index.json`, whole-case metrics, plotting JSON and summary CSV. Select the complete scenario named by the index for the HTML demo; its `demo_ready` flag is separate from held-out validation. See the [handoff](OPENDT_HANDOFF.md#where-to-resume) for the checkpoint and selection evidence.
+
 Use the study role recorded before execution; held-out comparisons require matching planned workloads and evaluation windows. The PDF reports accepting, draining and requested pending core-time separately from powered worker availability. A surviving capture can reattach its controller with `python3 -m closed_loop_resume --capture-output "$CAPTURE_DIR"` using the same source path and runtime environment; the owner, journal and observer identity must still match.
 
 ## Manual provisional scenario workflow

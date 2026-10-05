@@ -25,6 +25,8 @@ EXPERIMENT_DEFAULTS = {
     "deadline_fraction": 0.95,
     "allocation_seconds": 180.0,
     "followup_seconds": 600,
+    "reactive_target_fraction": 0.0,
+    "reactive_downscale_stabilization_seconds": 0.0,
     "reactive_up_threshold": 0.9,
     "reactive_down_threshold": 0.7,
     "residual_margin_seconds": 3.0,
@@ -212,14 +214,18 @@ def validate_experiment(values):
     )
     if any(type(values[key]) is not int or values[key] < 1 for key in integers):
         raise ValueError("experiment counts and timing must be positive integers")
-    for key in EXPERIMENT_DEFAULTS:
-        value = values.get(key, 0) if key.startswith("modeled_") else values[key]
+    for key, default in EXPERIMENT_DEFAULTS.items():
+        value = values.get(key, default)
         if (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not math.isfinite(value)
         ):
             raise ValueError(f"nonfinite or nonnumeric experiment setting: {key}")
+    target = values.get("reactive_target_fraction", 0)
+    window = values.get("reactive_downscale_stabilization_seconds", 0)
+    if not ((target == 0 and window == 0) or (0 < target <= 1 and window > 0)):
+        raise ValueError("reactive target and stabilization must be enabled together")
     if (
         values["warmup_cycles"] >= values["cycles"]
         or values["period_seconds"] % 5

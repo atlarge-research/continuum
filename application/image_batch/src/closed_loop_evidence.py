@@ -250,6 +250,8 @@ def controller_outcomes(  # pylint: disable=too-many-locals
                 decision_age_seconds=record["recorded_at_ns"] / 1e9 - record["cutoff_seconds"],
                 shadow=record["shadow"],
             )
+            if record.get("scoring_age_seconds") is not None:
+                row["scoring_age_seconds"] = record["scoring_age_seconds"]
         elif record["event"] == "observation.retry":
             row.setdefault("observation_retries", []).append(record)
         elif record["event"] == "fallback.invoked":

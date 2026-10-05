@@ -101,6 +101,8 @@ class Journal:
         for record in self.records:
             if record["event"] == "cycle.end":
                 history = copy.deepcopy(record["history"])
+            elif record["event"] == "reactive.recommendation":
+                history["reactive_recommendations"] = copy.deepcopy(record["recommendations"])
             elif record["event"] == "action.result" and record.get("last_action_at") is not None:
                 history["last_action_at"] = record["last_action_at"]
         return history

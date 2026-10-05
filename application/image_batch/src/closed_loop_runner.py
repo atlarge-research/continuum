@@ -10,7 +10,7 @@ from opendc_evaluate import load_batch
 from opendc_inputs import write_json
 from opendc_kubernetes import extract_artifacts, job_manifest, ssh, verify_collection_source
 from opendc_native_batch import plan_suite
-from opendc_acquisition import application_tasks
+from opendc_acquisition import RESPONSE_TIME_CONTRACT, application_tasks
 from opendc_pinning import cordoned_worker
 from opendc_occupancy import estimated_exhausted_ids
 
@@ -45,10 +45,23 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
         or allocation_seconds <= 0
     ):
         raise ValueError("invalid scenario count or allocation window")
-    grouped, cohorts, boundaries = {}, {}, set()
+    grouped, cohorts, boundaries, timing_contracts = {}, {}, set(), set()
     for row in rows:
         case, validation = row["case"], row["validation"]
         action, scenario = case["candidate"], case["scenario"]
+        contract = case.get("response_time_contract")
+        allowance = case.get("acquisition", {}).get("modeled_request_delay_seconds", 0)
+        # Keep the timing provenance validation as one fail-closed boundary.
+        # pylint: disable=too-many-boolean-expressions
+        if contract is not None and (
+            contract != RESPONSE_TIME_CONTRACT
+            or isinstance(allowance, bool)
+            or not isinstance(allowance, (int, float))
+            or not math.isfinite(allowance)
+            or allowance <= 0
+        ):
+            raise ValueError("invalid response timing contract")
+        timing_contracts.add((contract, allowance if contract is not None else 0))
         if (
             action not in ("unchanged", "scale-up", "scale-down")
             or type(scenario) is not int
@@ -132,6 +145,8 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
             action,
             {"candidate": action, "selected_worker": case.get("selected_worker"), "scenarios": []},
         )
+        if contract is not None:
+            score.update(response_time_contract=contract, modeled_request_delay_seconds=allowance)
         if score["selected_worker"] != case.get("selected_worker") or any(
             item["scenario"] == scenario for item in score["scenarios"]
         ):
@@ -146,6 +161,8 @@ def score_cases(rows, *, scenarios=3, allocation_seconds=120):
                 "allocation_window_seconds": allocation_seconds,
             }
         )
+    if len(timing_contracts) != 1:
+        raise ValueError("native matrix has inconsistent response timing contracts")
     if (
         len(boundaries) != 1
         or "unchanged" not in grouped

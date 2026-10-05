@@ -223,6 +223,13 @@ class Controller:
         self.history = self.journal.history()
         self.history.pop("reactive_observation", None)
         self.tick_number = last_tick(self.journal, self.output)
+        if self.config.get("reactive_target_fraction", 0) > 0 and not self.history.get(
+            "reactive_recommendations"
+        ):
+            self.history["reactive_recommendations"] = [
+                {"at_seconds": time.time(), "desired_workers": self.args.active_workers}
+            ]
+            self.record_recommendation()
         self.next_tick = None
         self.origin = None
         self.template = None
@@ -627,6 +634,15 @@ class Controller:
         write_json(directory / "scores.json", scores)
         return before, scores, milliseconds(status["cutoff"]) / 1000
 
+    def record_recommendation(self):
+        """Persist the valid demand window before dependent native or action work."""
+        if "reactive_recommendations" in self.history:
+            self.journal.append(
+                "reactive.recommendation",
+                tick=self.tick_number,
+                recommendations=self.history["reactive_recommendations"],
+            )
+
     def cycle(self):
         """Observe, evaluate, select, guard, actuate and record one nonoverlapping cycle."""
         usage_before = resource.getrusage(resource.RUSAGE_SELF)
@@ -636,6 +652,7 @@ class Controller:
         started = time.time()
         self.journal.append("cycle.begin", tick=self.tick_number, started_at=started)
         valid = False
+        scoring_age = None
         proposal = {"action": "unchanged", "selected_worker": None, "reason": "unavailable_state"}
         outcome = "held"
         try:
@@ -650,10 +667,12 @@ class Controller:
                 tick_id=self.tick_number,
             )
             self.history = reactive["state"]
+            self.record_recommendation()
             if self.args.control_arm == "forecast":
                 try:
                     before, scores, cutoff = self.predict(directory)
                     age = time.time() - cutoff
+                    scoring_age = age
                     proposal = select_action(
                         scores,
                         self.history,
@@ -704,6 +723,7 @@ class Controller:
                 }
                 valid = True
             self.history = proposal["state"]
+            self.record_recommendation()
             self.journal.append(
                 "cycle.proposal",
                 tick=self.tick_number,
@@ -712,6 +732,7 @@ class Controller:
                 cutoff_seconds=cutoff,
                 shadow=False,
                 forecast_valid=valid,
+                scoring_age_seconds=scoring_age,
             )
             if proposal["action"] != "unchanged":
                 action_started = time.monotonic()

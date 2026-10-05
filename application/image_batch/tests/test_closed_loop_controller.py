@@ -149,6 +149,8 @@ class ControllerTests(unittest.TestCase):
             ), patch.object(module.time, "monotonic", side_effect=[0, 0, 0, 4]):
                 loop.cycle()
             ended = loop.journal.records[-1]
+            proposal = next(row for row in loop.journal.records if row["event"] == "cycle.proposal")
+            self.assertEqual(proposal.get("scoring_age_seconds"), 1)
             self.assertEqual(ended["outcome"], "acknowledged")
             loop.journal.close()
 

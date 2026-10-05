@@ -770,6 +770,13 @@ class ResourceSampler:
         return pod_execution_interval(pods.items, job_uid)
 
     def _run(self) -> None:
+        """Yield after overruns while preserving ordinary state collection cadence.
+
+        Resource collection is checked on state ticks; its overdue deadline
+        must not cause a busy wait. Slow collection releases its lock and
+        offers terminal finalization a bounded positive yield, without adding
+        a full idle grid tick or executing a burst of missed collections.
+        """
         next_state = time.monotonic()
         next_resource = next_state
         while not self._stop.is_set():
@@ -780,12 +787,14 @@ class ResourceSampler:
                     self.collect_once(collect_resources=collect_resources)
                 except Exception as exc:
                     self.emit_diagnostic("observer.sample_failed", {"error": str(exc)})
-                while next_state <= now:
-                    next_state += self.state_interval_seconds
+                now = time.monotonic()
+                next_state += self.state_interval_seconds
+                if next_state <= now:
+                    next_state = now + min(0.05, self.state_interval_seconds)
                 if collect_resources:
                     while next_resource <= now:
                         next_resource += self.resource_interval_seconds
-            self._stop.wait(max(0.0, min(next_state, next_resource) - time.monotonic()))
+            self._stop.wait(max(0.0, next_state - time.monotonic()))
 
     def observe_job(self, job: Any) -> None:
         """Record first existence after the API creation boundary fits the producer clock.
@@ -1131,37 +1140,71 @@ class OpenDTObserver:
         return True
 
     def run(self) -> None:
-        """Follow Job changes across normal server watch closures without relisting.
+        """Follow Job changes, relisting retained Jobs when watch history expires.
 
-        The Kubernetes client resumes closed streams from its last resource
-        version when no explicit timeout is supplied. Even timeout_seconds=0
-        disables that behavior. Keep sampler state and emitted identities across
-        reconnects; an unrecoverable API error remains fatal rather than hiding
-        an observation gap behind a new list of current Jobs.
+        Normal server closures resume from the client's last resource version.
+        HTTP 410 requires a fresh list and watch; the sampler and append-only
+        terminal identities stay alive so retained completions are recovered
+        once. Capture Jobs have 24-hour retention and terminal cohort audits
+        still reject missing evidence. Bookmarks keep idle watches current.
+        Other API failures and an exhausted watch remain fatal.
 
         Raises:
             RuntimeError: The watch terminates instead of resuming.
-            client.rest.ApiException: Kubernetes cannot continue the resource history.
+            client.rest.ApiException: An API failure other than expired watch history occurs.
         """
         self.sampler.start()
         try:
-            initial = self.batch_api.list_namespaced_job(
-                namespace=self.namespace, label_selector=self.label_selector
-            )
-            for job in initial.items:
-                self.handle_job(job)
-            resource_version = getattr(initial.metadata, "resource_version", None)
-            watcher = self.watch_factory()
-            for event in watcher.stream(
-                self.batch_api.list_namespaced_job,
-                namespace=self.namespace,
-                label_selector=self.label_selector,
-                resource_version=resource_version,
-            ):
-                job = event.get("object")
-                if job is not None:
+            while True:
+                initial = self.batch_api.list_namespaced_job(
+                    namespace=self.namespace, label_selector=self.label_selector
+                )
+                for job in initial.items:
                     self.handle_job(job)
-            raise RuntimeError("Kubernetes Job watch ended unexpectedly")
+                resource_version = getattr(initial.metadata, "resource_version", None)
+                watcher = self.watch_factory()
+                try:
+                    stream = iter(
+                        watcher.stream(
+                            self.batch_api.list_namespaced_job,
+                            namespace=self.namespace,
+                            label_selector=self.label_selector,
+                            resource_version=resource_version,
+                            allow_watch_bookmarks=True,
+                        )
+                    )
+                except client.rest.ApiException as exc:
+                    if exc.status != 410:
+                        raise
+                    self.emit_diagnostic(
+                        "watch.resync", {"expired_resource_version": resource_version}
+                    )
+                    continue
+                while True:
+                    try:
+                        event = next(stream)
+                    except StopIteration as exc:
+                        raise RuntimeError("Kubernetes Job watch ended unexpectedly") from exc
+                    except client.rest.ApiException as exc:
+                        if exc.status != 410:
+                            raise
+                        self.emit_diagnostic(
+                            "watch.resync", {"expired_resource_version": resource_version}
+                        )
+                        break
+                    if event.get("type") == "BOOKMARK":
+                        # This SDK leaves bookmark versions out of its reconnect position.
+                        bookmark_version = (
+                            (event.get("raw_object") or {})
+                            .get("metadata", {})
+                            .get("resourceVersion")
+                        )
+                        if bookmark_version:
+                            watcher.resource_version = bookmark_version
+                        continue
+                    job = event.get("object")
+                    if job is not None:
+                        self.handle_job(job)
         finally:
             self.sampler.stop()
 

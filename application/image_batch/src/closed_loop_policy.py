@@ -6,6 +6,8 @@ import copy
 import math
 from statistics import mean
 
+from opendc_acquisition import RESPONSE_TIME_CONTRACT
+
 
 def _finite_nonnegative(value):
     """Check numeric measurements without accepting booleans or nonfinite values.
@@ -24,8 +26,42 @@ def _finite_nonnegative(value):
     )
 
 
+def response_values(candidate, responses, decision_age):
+    """Use original-creation responses when modeled offsets cover computation.
+
+    Unmarked historical and zero-offset scores retain their legacy age margin.
+    New delayed cases include original backlog waiting and reserve availability
+    in native completion clocks. Reject computation beyond their declared request
+    allowance instead of silently assuming that additional delay is modeled.
+
+    Args:
+        candidate (dict): Score provenance and modeled request allowance.
+        responses (list[float]): Validated original-creation response seconds.
+        decision_age (float): Actual cutoff-to-decision elapsed seconds.
+
+    Returns:
+        list[float]: Response values under the explicit scoring-clock contract.
+
+    Raises:
+        ValueError: Provenance is unknown or modeled computation time is exceeded.
+    """
+    contract = candidate.get("response_time_contract")
+    if contract is None:
+        return [value + decision_age for value in responses]
+    allowance = candidate.get("modeled_request_delay_seconds")
+    if (
+        contract != RESPONSE_TIME_CONTRACT
+        or not _finite_nonnegative(allowance)
+        or allowance <= 0
+        or not _finite_nonnegative(decision_age)
+        or decision_age > allowance
+    ):
+        raise ValueError("response timing contract is unknown or computation is uncovered")
+    return list(responses)
+
+
 def summarize_candidate(candidate, decision_age, *, scenarios=3, deadline_seconds=120):
-    """Score complete scenario cohorts with an explicit decision-latency margin.
+    """Score complete original-creation cohorts under their explicit timing contract.
 
     Args:
         candidate (dict): Action, target worker and per-scenario response/allocation data.
@@ -66,7 +102,10 @@ def summarize_candidate(candidate, decision_age, *, scenarios=3, deadline_second
             or not _finite_nonnegative(cost)
         ):
             return {**result, "reason": "incomplete_or_invalid_cohort"}
-        adjusted = [value + decision_age for value in responses]
+        try:
+            adjusted = response_values(candidate, responses, decision_age)
+        except ValueError:
+            return {**result, "reason": "invalid_response_time_contract"}
         fractions.append(
             sum(value > deadline_seconds for value in adjusted) / count if count else 0
         )
