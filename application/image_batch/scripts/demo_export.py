@@ -139,6 +139,64 @@ def plotting_data(run):
     )
 
 
+def physical_attempts(state, output):
+    """Export every physical attempt with portable failure and reconciliation evidence.
+
+    Args:
+        state (dict): Durable accepted, failed and possibly inflight capture accounting.
+        output (Path): Fresh bundle directory receiving compact failure evidence copies.
+
+    Returns:
+        list[dict]: Ordered physical inventory with explicit status and acceptance.
+
+    Raises:
+        ValueError: Durable attempt identities or count disagree with completed records.
+        OSError: Referenced failed-attempt evidence cannot be copied; export fails closed.
+    """
+    count = state.get("attempts", len(state["records"]))
+    failed = state.get("failed_attempts", [])
+    entries = {row["attempt"]: dict(row, status="failed", accepted_capture=False) for row in failed}
+    if len(entries) != len(failed) or any(number < 1 or number > count for number in entries):
+        raise ValueError("failed physical attempt identities are inconsistent")
+    active = state.get("active_request")
+    if active and count not in entries:
+        candidate, arm, seed = active
+        entries[count] = dict(
+            attempt=count,
+            candidate=candidate,
+            arm=arm,
+            seed=seed,
+            status="failed" if state.get("error") else "in_progress",
+            accepted_capture=False,
+            error=state.get("error"),
+        )
+    complete_numbers = [number for number in range(1, count + 1) if number not in entries]
+    if len(complete_numbers) != len(state["records"]):
+        raise ValueError("physical attempt count differs from durable completed/failed inventory")
+    for number, record in zip(complete_numbers, state["records"]):
+        entries[number] = dict(
+            record,
+            attempt=number,
+            status="complete",
+            accepted_capture=record.get("summary", {}).get("accepted_capture", True),
+        )
+    for number, row in entries.items():
+        if row["status"] == "complete":
+            continue
+        row["failure_evidence"] = {}
+        for label in ("failure", "reconciliation"):
+            if not row.get(label):
+                continue
+            data = Path(row[label]).read_bytes()
+            json.loads(data)
+            relative = f"failure-evidence/attempt-{number:02d}-{label}.json"
+            destination = output / relative
+            destination.parent.mkdir(exist_ok=True)
+            destination.write_bytes(data)
+            row["failure_evidence"][label] = relative
+    return [entries[number] for number in range(1, count + 1)]
+
+
 def export_bundle(checkpoint, output):
     """Write all cases and select a complete scenario in a fresh portable directory.
 
@@ -207,7 +265,8 @@ def export_bundle(checkpoint, output):
             "remain on. Deadline uses original API Job creation and terminal Job completion."
         ),
         cases=[case for case, _ in prepared],
-        attempts=state["records"],
+        attempts=physical_attempts(state, output),
+        physical_attempt_count=state.get("attempts", len(state["records"])),
         execution_state=state,
         preflight_failures=[json.loads(Path(failure).read_text(encoding="utf-8"))]
         if failure

@@ -2,6 +2,8 @@
 import json
 import tempfile
 import unittest
+import shutil
+import hashlib
 from pathlib import Path
 
 from application.image_batch.scripts.demo_export import response_plot, case_metadata, export_bundle
@@ -152,6 +154,64 @@ class PortableDemoTests(unittest.TestCase):
             self.assertEqual(
                 len(json.loads((output / "cases/a-s72001.json").read_text())["runs"]), 2
             )
+
+    def test_failed_physical_attempt_remains_inspectable_offline(self):
+        """Unavailable original paths must not hide failed attempts or diagnostics."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            analysis = evidence / "analysis"
+            analysis.mkdir()
+            (analysis / "metrics.json").write_text(json.dumps(payload(arms=("fixed", "forecast"))))
+            failure = evidence / "failure.json"
+            failure.write_text(json.dumps(dict(error="HTTP503 and reset", may_continue=False)))
+            reconciliation = evidence / "reconciliation.json"
+            reconciliation.write_text(json.dumps(dict(accepted_capture=False, physical_attempt=3)))
+            records = [
+                dict(candidate="A", arm=arm, seed=72001, analysis=str(analysis))
+                for arm in ("fixed", "forecast")
+            ]
+            checkpoint = evidence / "checkpoint.json"
+            checkpoint.write_text(
+                json.dumps(
+                    dict(
+                        records=records,
+                        attempts=3,
+                        status="restored",
+                        failed_attempts=[
+                            dict(
+                                attempt=3,
+                                candidate="B",
+                                arm="fixed",
+                                seed=72001,
+                                accepted_capture=False,
+                                failure=str(failure),
+                                reconciliation=str(reconciliation),
+                            )
+                        ],
+                    )
+                )
+            )
+            output = root / "bundle"
+            export_bundle(checkpoint, output)
+            shutil.rmtree(evidence)
+            index = json.loads((output / "index.json").read_text())
+            self.assertEqual(len(index["attempts"]), 3)
+            self.assertEqual([row["attempt"] for row in index["attempts"]], [1, 2, 3])
+            failed = index["attempts"][2]
+            self.assertEqual(failed["status"], "failed")
+            self.assertFalse(failed["accepted_capture"])
+            relative = failed["failure_evidence"]["failure"]
+            self.assertFalse(Path(relative).is_absolute())
+            self.assertEqual(
+                json.loads((output / relative).read_text())["error"], "HTTP503 and reset"
+            )
+            hashes = json.loads((output / "sha256.json").read_text())
+            self.assertEqual(
+                hashes[relative], hashlib.sha256((output / relative).read_bytes()).hexdigest()
+            )
+            self.assertIsNone(index["selected_case"])
 
 
 if __name__ == "__main__":

@@ -1,16 +1,19 @@
 """Tests for campaign transitions and launch budget safety."""
 import unittest
+import fcntl
 import tempfile
 import json
 import os
 import subprocess
 from unittest.mock import patch
 from pathlib import Path
+from demo_lifetime import PhaseFailure
 from application.image_batch.scripts.demo_campaign import (
     next_requests,
     require_launch,
     drive_campaign,
     execute_capture,
+    main,
 )
 
 
@@ -233,6 +236,133 @@ class DurableCampaignTests(unittest.TestCase):
             saved = json.loads((root / "checkpoint.json").read_text())
             self.assertEqual(saved["status"], "capture_failed")
             self.assertEqual(saved["records"], [])
+
+
+class SupervisorOwnershipTests(unittest.TestCase):
+    """Reject unowned restarts before any physical restoration side effect."""
+
+    def run_main(self, root):
+        """Invoke the real CLI against a controlled campaign directory.
+
+        Args:
+            root (Path): Temporary evidence root with a complete checkpoint.
+        """
+        with patch("sys.argv", ["demo_campaign", "--campaign-dir", str(root)]):
+            main()
+
+    def state(self, root, **extra):
+        """Write a new checkpoint without external infrastructure dependencies.
+
+        Args:
+            root (Path): Temporary campaign root.
+            extra (dict): Ownership or failure fields for this test.
+        """
+        (root / "operations").mkdir()
+        (root / "checkpoint.json").write_text(
+            json.dumps(
+                dict(worktree=str(root), records=[], attempts=0, closure_at_seconds=1e20, **extra)
+            )
+        )
+
+    def test_unreconciled_cli_does_not_restore_or_write_checkpoint(self):
+        """An inflight restart must leave the actual owner's state untouched."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.state(root, active_request=["A", "fixed", 72001])
+            original = (root / "checkpoint.json").read_bytes()
+
+            def restoration(_root, _environment):
+                """Record a prohibited or owned physical closure side effect.
+
+                Args:
+                    _root (Path): Campaign directory supplied by the real CLI.
+                    _environment (dict): Operational environment supplied by the real CLI.
+                """
+                (root / "physical-restoration").touch()
+
+            with patch(
+                "application.image_batch.scripts.demo_campaign.restore_original", restoration
+            ):
+                with self.assertRaises(ValueError):
+                    self.run_main(root)
+            self.assertFalse((root / "physical-restoration").exists())
+            self.assertEqual((root / "checkpoint.json").read_bytes(), original)
+
+    def test_existing_owner_rejects_cli_before_lifecycle(self):
+        """A competing supervisor is rejected even between captures."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.state(root)
+            with (root / "operations/supervisor.lock").open("a") as owner:
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+                def mutation(*_args, **_kwargs):
+                    """Record a prohibited lifecycle side effect under competing ownership.
+
+                    Args:
+                        _args (tuple): CLI lifecycle arguments.
+                        _kwargs (dict): CLI lifecycle options.
+                    """
+                    (root / "physical-side-effect").touch()
+
+                with patch(
+                    "application.image_batch.scripts.demo_campaign.drive_campaign", mutation
+                ), patch(
+                    "application.image_batch.scripts.demo_campaign.restore_original", mutation
+                ):
+                    with self.assertRaises(ValueError):
+                        self.run_main(root)
+            self.assertFalse((root / "physical-side-effect").exists())
+
+    def test_ownership_is_held_through_restoration(self):
+        """Closure cannot overlap a second supervisor after capture completion."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.state(root)
+
+            def restoration(_root, _environment):
+                """Record a prohibited or owned physical closure side effect.
+
+                Args:
+                    _root (Path): Campaign directory supplied by the real CLI.
+                    _environment (dict): Operational environment supplied by the real CLI.
+                """
+                with (root / "operations/supervisor.lock").open("a") as contender:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                (root / "closed-under-ownership").touch()
+
+            with patch(
+                "application.image_batch.scripts.demo_campaign.drive_campaign", return_value=[]
+            ), patch("application.image_batch.scripts.demo_campaign.restore_original", restoration):
+                self.run_main(root)
+            self.assertTrue((root / "closed-under-ownership").exists())
+
+    def test_uncertain_group_does_not_initiate_restoration(self):
+        """Failure preserves resources when physical process termination is unverified."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.state(root)
+
+            def restoration(_root, _environment):
+                """Record a prohibited or owned physical closure side effect.
+
+                Args:
+                    _root (Path): Campaign directory supplied by the real CLI.
+                    _environment (dict): Operational environment supplied by the real CLI.
+                """
+                (root / "physical-restoration").touch()
+
+            with patch(
+                "application.image_batch.scripts.demo_campaign.execute_capture",
+                side_effect=PhaseFailure("unverified termination", group_stopped=False),
+            ), patch("application.image_batch.scripts.demo_campaign.restore_original", restoration):
+                with self.assertRaises(PhaseFailure):
+                    self.run_main(root)
+            self.assertFalse((root / "physical-restoration").exists())
+            saved = json.loads((root / "checkpoint.json").read_text())
+            self.assertEqual(saved["status"], "capture_failed")
+            self.assertEqual(saved["active_request"], ["A", "fixed", 72001])
 
 
 if __name__ == "__main__":

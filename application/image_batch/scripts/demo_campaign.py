@@ -1,13 +1,14 @@
 """Durable bounded orchestration for selected illustrative demo captures."""
 
 import argparse
+import fcntl
 import json
 import os
 import time
 import sys
 from pathlib import Path
 
-from demo_lifetime import run_phase
+from demo_lifetime import PhaseFailure, run_phase
 
 CAPTURE_BOUND_SECONDS = 4200
 MAX_CAPTURES = 5
@@ -278,38 +279,62 @@ def restore_original(root, environment):
     print(json.dumps({"event": "restoration_verified"}), flush=True)
 
 
+def run_owned_campaign(root):
+    """Hold exclusive campaign ownership through capture and verified physical closure.
+
+    Args:
+        root (Path): Existing campaign directory with checkpoint and operation evidence.
+
+    Raises:
+        ValueError: Another supervisor owns the lifecycle or interrupted state is unresolved.
+        RuntimeError: Capture or restoration fails; uncertain groups prevent restoration.
+    """
+    with (root / "operations/supervisor.lock").open("a", encoding="utf-8") as ownership:
+        try:
+            fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError("another supervisor owns this campaign lifecycle") from exc
+        state = json.loads((root / "checkpoint.json").read_text(encoding="utf-8"))
+        if state.get("active_request") or state.get("error") or state.get("failed_attempts"):
+            raise ValueError("reconcile ownership and invalid campaign scope before restarting")
+        environment = {
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "OMP_NUM_THREADS": "1",
+            "OPENBLAS_NUM_THREADS": "1",
+            "MPLCONFIGDIR": str(root / "mpl-cache"),
+            "PYTHONPATH": os.pathsep.join(
+                [
+                    str(root / "operations/scripts"),
+                    str(Path(state["worktree"]) / "application/image_batch/src"),
+                    state["worktree"],
+                ]
+            ),
+        }
+        safe_to_restore = True
+        try:
+            drive_campaign(
+                root, lambda request, attempt: execute_capture(root, request, attempt, environment)
+            )
+        except PhaseFailure as exc:
+            safe_to_restore = exc.group_stopped
+            raise
+        finally:
+            if safe_to_restore:
+                restore_original(root, environment)
+
+
 def main():
-    """Run the approved bounded campaign and always attempt exact-owned restoration.
+    """Run the CLI only after exclusive and reconciled lifecycle ownership is established.
 
     Raises:
         RuntimeError: Physical capture or preservation fails; evidence remains available.
-        ValueError: Checkpoint ownership or complete remaining budget is invalid.
+        ValueError: Ownership, stopped campaign scope or complete remaining budget is invalid.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--campaign-dir", type=Path, required=True)
     args = parser.parse_args()
-    root = args.campaign_dir.resolve()
-    state = json.loads((root / "checkpoint.json").read_text(encoding="utf-8"))
-    environment = {
-        **os.environ,
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "OMP_NUM_THREADS": "1",
-        "OPENBLAS_NUM_THREADS": "1",
-        "MPLCONFIGDIR": str(root / "mpl-cache"),
-        "PYTHONPATH": os.pathsep.join(
-            [
-                str(root / "operations/scripts"),
-                str(Path(state["worktree"]) / "application/image_batch/src"),
-                state["worktree"],
-            ]
-        ),
-    }
-    try:
-        drive_campaign(
-            root, lambda request, attempt: execute_capture(root, request, attempt, environment)
-        )
-    finally:
-        restore_original(root, environment)
+    run_owned_campaign(args.campaign_dir.resolve())
 
 
 if __name__ == "__main__":
