@@ -911,28 +911,27 @@ try {
       ),
     ["decide-capacity", "apply"],
   );
+  assert.equal(
+    await page
+      .locator('#policy-diagrams [data-step="physical-outcome"]')
+      .count(),
+    0,
+  );
   for (const policy of ["reactive", "forecast"]) {
     const flow = page.locator(`.policy-flow.${policy}`);
     assert.equal(
-      await flow.locator('[data-step="physical-outcome"]').count(),
-      1,
-    );
-    assert.equal(
-      await flow
-        .locator('path[data-from="apply"][data-to="physical-outcome"]')
-        .count(),
-      1,
-    );
-    assert.equal(
       await flow
         .locator(
-          'path[data-from="physical-outcome"][data-to="observe"][data-feedback="true"]',
+          'path[data-from="apply"][data-to="observe"][data-feedback="true"]',
         )
         .count(),
       1,
     );
+    assert.deepEqual(
+      await flow.locator(".flow-feedback-label").allTextContents(),
+      ["Measured feedback"],
+    );
   }
-  assert.equal(await page.locator(".flow-feedback-label").count(), 0);
   const comparisonCursor = await page.locator("#seek").inputValue();
   await page.locator("#comparison-settings-button").click();
   assert.ok(await page.locator("#comparison-dialog").isVisible());

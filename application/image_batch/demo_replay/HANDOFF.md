@@ -2,9 +2,11 @@
 
 ## Current state
 
-The approved replay and latest FNS runtime share checkpoint `ee023e7` on `codex/demo-replay` and `codex/fns-2026-10-08`. Accepted-data adaptation lives on `codex/demo-replay-final-data` in the existing managed replay worktree. Changes on this branch are confined to this deliverable; no experiment, simulator, deployment or infrastructure is run or modified.
+Accepted-data adaptation and visual iteration live on `codex/demo-replay-final-data` in the existing managed replay worktree, following the shared replay/FNS checkpoint `ee023e7`. The retired `codex/demo-replay` branch has been removed. Keep changes confined to this deliverable and integrate back into `codex/fns-2026-10-08` only when the presenter requests it.
 
 The packaged dataset is the accepted B/72001 forecast capture, with its matched static/reactive/forecast comparison. See the [authoritative experiment handoff](../OPENDT_HANDOFF.md) for acceptance, interpretation and evidence. All ten captured forecast cycles are ready; this run has no recorded forecast fallback. The earlier preliminary evidence is retained privately for regression audits, not mixed into the current comparison. Start with [README.md](README.md).
+
+The presenter has approved Overview, Evidence and Policy comparison. Analysis is the remaining visual review: it currently requires scrolling in laptop-sized windows, and its forecast chart and error metric use different time bins. Review its layout and explanations before the final rehearsal.
 
 The presenter confirmed that an earlier HTML opens on a MacBook Pro in Chrome. The accepted-data delivery needs its own laptop rehearsal and the venue monitor check in [REHEARSAL.md](REHEARSAL.md). Node6 browser verification cannot establish those external acceptance gates.
 

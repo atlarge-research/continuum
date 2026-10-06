@@ -111,8 +111,8 @@ function reactiveDiagram(): string {
   return panel(
     "reactive",
     "Reactive heuristic",
-    "Observe current physical conditions, evaluate reactive rules, and apply a capacity action. The physical outcome feeds the next observation, closing the feedback loop. This is a conceptual explanation, not captured metrics.",
-    "observe rules apply physical-outcome observe",
+    "Observe current physical conditions, evaluate reactive rules, and apply a capacity action. Measured feedback from physical execution informs the next observation, closing the control loop. This is a conceptual explanation, not captured metrics.",
+    "observe rules apply observe",
     [
       edge({
         policy: "reactive",
@@ -132,17 +132,10 @@ function reactiveDiagram(): string {
       edge({
         policy: "reactive",
         from: "apply",
-        to: "physical-outcome",
-        path: "M349,40 V96 H308",
-        description: "Applying the action affects the physical outcome.",
-      }),
-      edge({
-        policy: "reactive",
-        from: "physical-outcome",
         to: "observe",
-        path: "M127,96 H56 V40",
+        path: "M349,40 V96 H56 V40",
         description:
-          "The observed physical outcome feeds the next reactive decision.",
+          "Measured feedback from physical execution informs the next reactive observation.",
         feedback: true,
       }),
       node({
@@ -175,16 +168,7 @@ function reactiveDiagram(): string {
         height: 32,
         description: "Apply the rule-selected capacity action.",
       }),
-      node({
-        step: "physical-outcome",
-        order: 3,
-        lines: ["Physical outcome"],
-        x: 127,
-        y: 80,
-        width: 181,
-        height: 32,
-        description: "Physical execution after applying the capacity action.",
-      }),
+      `<text class="flow-label flow-feedback-label control" data-from="apply" data-to="observe" x="200" y="84" text-anchor="middle" font-size="18" fill="var(--physical)">Measured feedback</text>`,
     ].join(""),
   );
 }
@@ -236,8 +220,8 @@ function forecastDiagram(): string {
   return panel(
     "forecast",
     "Digital twin",
-    "Observe physical conditions, forecast future demand, and simulate scale up, hold, and scale down alternatives. The alternatives reconverge at Choose. Apply the selected action to physical execution. The physical outcome feeds the next observation, closing the feedback loop. Purple represents forecasting and simulation; teal represents physical observation and control. This is a conceptual explanation, not captured metrics.",
-    "observe forecast simulate choose apply physical-outcome observe",
+    "Observe physical conditions, forecast future demand, and simulate scale up, hold, and scale down alternatives. The alternatives reconverge at Choose. Apply the selected action to physical execution. Measured feedback from physical execution informs the next observation, closing the control loop. Purple represents forecasting and simulation; teal represents physical observation and control. This is a conceptual explanation, not captured metrics.",
+    "observe forecast simulate choose apply observe",
     [
       edge({
         policy: "forecast",
@@ -269,17 +253,10 @@ function forecastDiagram(): string {
       edge({
         policy: "forecast",
         from: "apply",
-        to: "physical-outcome",
-        path: "M133,107 H120 V87 H108",
-        description: "Applying the chosen action affects the physical outcome.",
-      }),
-      edge({
-        policy: "forecast",
-        from: "physical-outcome",
         to: "observe",
-        path: "M8,87 H4 V24 H8",
+        path: "M133,107 H4 V24 H8",
         description:
-          "The observed physical outcome feeds the next digital twin decision.",
+          "Measured feedback from physical execution informs the next digital twin observation.",
         feedback: true,
       }),
       node({
@@ -336,16 +313,7 @@ function forecastDiagram(): string {
         height: 24,
         description: "Apply the chosen action to physical execution.",
       }),
-      node({
-        step: "physical-outcome",
-        order: 5,
-        lines: ["Physical", "outcome"],
-        x: 8,
-        y: 65,
-        width: 100,
-        height: 44,
-        description: "Physical execution after applying the capacity action.",
-      }),
+      `<text class="flow-label flow-feedback-label control" data-from="apply" data-to="observe" x="8" y="74" font-size="18" fill="var(--physical)"><tspan x="8" y="74">Measured</tspan> <tspan x="8" y="95">feedback</tspan></text>`,
     ].join(""),
   );
 }
