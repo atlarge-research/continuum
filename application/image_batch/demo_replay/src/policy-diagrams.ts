@@ -41,7 +41,7 @@ function node(spec: Node): string {
   const identity = spec.candidate
     ? `data-candidate="${spec.candidate}"`
     : `data-step="${spec.step}" data-order="${spec.order}"`;
-  return `<g class="flow-node ${kind}${spec.candidate ? " flow-candidate" : ""}" ${identity} role="img" aria-label="${escapeHtml(spec.description)}"><title>${escapeHtml(spec.description)}</title><rect x="${spec.x}" y="${spec.y}" width="${spec.width}" height="${spec.height}" rx="5" fill="${kind === "model" ? "var(--soft-twin)" : "#e9f4f4"}" stroke="${color(kind)}" stroke-width="1.5"/><text class="flow-label" x="${center}" y="${baseline}" text-anchor="middle" font-size="18" fill="${color(kind)}">${spec.lines.map((line, index) => `<tspan x="${center}" y="${baseline + index * 20}">${escapeHtml(line)}</tspan>`).join("")}</text></g>`;
+  return `<g class="flow-node ${kind}${spec.candidate ? " flow-candidate" : ""}" ${identity} role="img" aria-label="${escapeHtml(spec.description)}"><title>${escapeHtml(spec.description)}</title><rect x="${spec.x}" y="${spec.y}" width="${spec.width}" height="${spec.height}" rx="5" fill="${kind === "model" ? "var(--soft-twin)" : "#e9f4f4"}" stroke="${color(kind)}" stroke-width="1.5"/><text class="flow-label" x="${center}" y="${baseline}" text-anchor="middle" font-size="18" fill="${color(kind)}">${spec.lines.map((line, index) => `<tspan x="${center}" y="${baseline + index * 20}">${escapeHtml(line)}</tspan>`).join(" ")}</text></g>`;
 }
 
 /** Render a directed connection; feedback is explicit rather than implied by proximity. */
@@ -67,69 +67,40 @@ function panel(
   return `<section class="policy-flow ${policy}" data-policy="${policy}" data-conceptual="true" aria-label="${label}: conceptual decision process"><svg class="policy-flow-svg" width="400" height="120" viewBox="0 0 400 120" data-policy="${policy}" data-sequence="${sequence}" role="img" aria-labelledby="policy-${policy}-title policy-${policy}-description"><title id="policy-${policy}-title">${label}: conceptual decision process</title><desc id="policy-${policy}-description">${escapeHtml(description)}</desc><defs>${markers}</defs>${body}</svg></section>`;
 }
 
-/** Render fixed capacity control and a separate monitoring path without automatic feedback. */
+/** Render the fixed capacity decision and its application. */
 function fixedDiagram(): string {
   return panel(
     "fixed",
     "Static",
-    "Set capacity, then apply it. Monitoring can report the observed outcome separately; there is no automatic feedback from monitoring to the capacity setting. This is a conceptual explanation, not captured metrics.",
-    "set-capacity apply",
+    "Decide a fixed processing capacity, then apply it. This is a conceptual explanation, not captured metrics.",
+    "decide-capacity apply",
     [
       edge({
         policy: "fixed",
-        from: "set-capacity",
+        from: "decide-capacity",
         to: "apply",
-        path: "M150,24 H238",
-        description: "The configured capacity is applied.",
-      }),
-      edge({
-        policy: "fixed",
-        from: "monitor",
-        to: "observed-outcome",
-        path: "M114,88 H194",
-        description:
-          "Monitoring reports the observed outcome without changing capacity automatically.",
+        path: "M202,60 H270",
+        description: "The decided fixed capacity is applied.",
       }),
       node({
-        step: "set-capacity",
+        step: "decide-capacity",
         order: 0,
-        lines: ["Set capacity"],
-        x: 8,
-        y: 8,
-        width: 142,
+        lines: ["Decide capacity"],
+        x: 28,
+        y: 44,
+        width: 174,
         height: 32,
-        description: "Set a fixed processing capacity.",
+        description: "Decide a fixed processing capacity.",
       }),
       node({
         step: "apply",
         order: 1,
         lines: ["Apply"],
-        x: 238,
-        y: 8,
-        width: 96,
+        x: 270,
+        y: 44,
+        width: 102,
         height: 32,
-        description: "Apply the fixed capacity setting.",
-      }),
-      node({
-        step: "monitor",
-        order: 2,
-        lines: ["Monitor"],
-        x: 8,
-        y: 72,
-        width: 106,
-        height: 32,
-        description:
-          "Monitor workload and physical execution independently of automatic capacity control.",
-      }),
-      node({
-        step: "observed-outcome",
-        order: 3,
-        lines: ["Observed outcome"],
-        x: 194,
-        y: 72,
-        width: 198,
-        height: 32,
-        description: "Report the observed physical outcome.",
+        description: "Apply the decided fixed capacity.",
       }),
     ].join(""),
   );
@@ -141,7 +112,7 @@ function reactiveDiagram(): string {
     "reactive",
     "Reactive heuristic",
     "Observe current physical conditions, evaluate reactive rules, and apply a capacity action. The physical outcome feeds the next observation, closing the feedback loop. This is a conceptual explanation, not captured metrics.",
-    "observe rules apply observe",
+    "observe rules apply physical-outcome observe",
     [
       edge({
         policy: "reactive",
@@ -221,9 +192,9 @@ function reactiveDiagram(): string {
 /** Render model-based alternatives, their convergence, and physical feedback. */
 function forecastDiagram(): string {
   const candidates = [
-    { name: "scale-up", label: "Scale up", x: 88, width: 88 },
-    { name: "hold", label: "Hold", x: 200, width: 54 },
-    { name: "scale-down", label: "Scale down", x: 286, width: 110 },
+    { name: "scale-up", label: "Scale up", x: 114, width: 88 },
+    { name: "hold", label: "Hold", x: 214, width: 54 },
+    { name: "scale-down", label: "Scale down", x: 282, width: 110 },
   ];
   const branches = candidates
     .map((candidate) => {
@@ -265,8 +236,8 @@ function forecastDiagram(): string {
   return panel(
     "forecast",
     "Digital twin",
-    "Observe physical conditions, forecast future demand, and simulate scale up, hold, and scale down alternatives. The alternatives reconverge at Choose. Apply the selected action, then observe the physical outcome for the next decision. Purple represents forecasting and simulation; teal represents physical observation and control. This is a conceptual explanation, not captured metrics.",
-    "observe forecast simulate choose apply observe",
+    "Observe physical conditions, forecast future demand, and simulate scale up, hold, and scale down alternatives. The alternatives reconverge at Choose. Apply the selected action to physical execution. The physical outcome feeds the next observation, closing the feedback loop. Purple represents forecasting and simulation; teal represents physical observation and control. This is a conceptual explanation, not captured metrics.",
+    "observe forecast simulate choose apply physical-outcome observe",
     [
       edge({
         policy: "forecast",
@@ -298,10 +269,17 @@ function forecastDiagram(): string {
       edge({
         policy: "forecast",
         from: "apply",
+        to: "physical-outcome",
+        path: "M133,107 H120 V87 H108",
+        description: "Applying the chosen action affects the physical outcome.",
+      }),
+      edge({
+        policy: "forecast",
+        from: "physical-outcome",
         to: "observe",
-        path: "M133,107 H4 V24 H8",
+        path: "M8,87 H4 V24 H8",
         description:
-          "The applied action changes physical execution; physical feedback feeds the next observation.",
+          "The observed physical outcome feeds the next digital twin decision.",
         feedback: true,
       }),
       node({
@@ -358,7 +336,16 @@ function forecastDiagram(): string {
         height: 24,
         description: "Apply the chosen action to physical execution.",
       }),
-      `<text class="flow-label flow-feedback-label control" x="8" y="74" font-size="18" fill="var(--physical)"><tspan x="8" y="74">Physical</tspan><tspan x="8" y="95">feedback</tspan></text>`,
+      node({
+        step: "physical-outcome",
+        order: 5,
+        lines: ["Physical", "outcome"],
+        x: 8,
+        y: 65,
+        width: 100,
+        height: 44,
+        description: "Physical execution after applying the capacity action.",
+      }),
     ].join(""),
   );
 }
