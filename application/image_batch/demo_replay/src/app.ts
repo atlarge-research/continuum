@@ -232,7 +232,7 @@ function renderComparison(): void {
   if (!comparison?.runs.length) {
     element("comparison-results").innerHTML =
       '<div class="empty-chart">Matched comparison evidence is unavailable for this dataset.</div>';
-    element("comparison-conclusion").textContent =
+    element("comparison-interpretation").textContent =
       "Policy capabilities remain visible; no measured comparison is asserted.";
     return;
   }
@@ -252,7 +252,20 @@ function renderComparison(): void {
       : policy === "reactive"
         ? "Heuristic"
         : "Digital twin";
-  const maxAllocation = Math.max(...rows.map((r) => r.allocationBounds[1]));
+  const maxAllocation = Math.max(
+    3000,
+    Math.ceil(Math.max(...rows.map((r) => r.allocationBounds[1])) / 3000) *
+      3000,
+  );
+  const maxResponseSeconds =
+    Math.ceil(
+      Math.max(
+        fixed.deadlineSeconds,
+        ...rows.map((r) => r.p95CompletedSeconds ?? 0),
+      ) / 30,
+    ) * 30;
+  const axis = (max: number, suffix = "") =>
+    `<div class="result-axis" aria-hidden="true"><span>0${suffix}</span><span>${precise(max / 2, 0)}${suffix}</span><span>${precise(max, 0)}${suffix}</span></div>`;
   const service = rows
     .map(
       (r) =>
@@ -265,23 +278,19 @@ function renderComparison(): void {
         `<div class="result-row ${r.policy}" data-policy="${r.policy}" data-lower="${r.allocationBounds[0]}" data-upper="${r.allocationBounds[1]}"><span>${label(r.policy)}</span><div class="result-track"><i class="bar" style="width:${(r.allocationBounds[0] / maxAllocation) * 100}%"></i><i class="bounds" style="left:${(r.allocationBounds[0] / maxAllocation) * 100}%;width:${((r.allocationBounds[1] - r.allocationBounds[0]) / maxAllocation) * 100}%" title="Observation-coverage bounds, not a confidence interval"></i></div><span class="result-value">${(r.allocationBounds[0] / 60).toFixed(1)}–${(r.allocationBounds[1] / 60).toFixed(1)}</span></div>`,
     )
     .join("");
+  const response = rows
+    .map((r) => {
+      const bar =
+        r.p95CompletedSeconds === null
+          ? ""
+          : `<i class="bar" style="width:${(r.p95CompletedSeconds / maxResponseSeconds) * 100}%"></i>`;
+      return `<div class="result-row ${r.policy}" data-policy="${r.policy}" data-p95="${r.p95CompletedSeconds ?? "unknown"}" data-completed="${r.completedJobs}"><span>${label(r.policy)}</span><div class="result-track">${bar}</div><span class="result-value" title="95th percentile of API Job creation to terminal completion; ${r.completedJobs} completed evaluation Jobs only">${r.p95CompletedSeconds === null ? "—" : `${precise(r.p95CompletedSeconds, 1)}s`}</span></div>`;
+    })
+    .join("");
   element("comparison-status").textContent =
     `${comparison.status === "accepted-final" ? "Accepted final" : "Preliminary"} evidence · independent of replay time`;
   element("comparison-results").innerHTML =
-    `<div class="result-charts"><section class="result-chart"><h3>Jobs meeting the deadline</h3><p class="chart-subtitle">≤${fixed.deadlineSeconds}s · marker: ${fixed.targetFraction * 100}% target</p>${service}</section><section class="result-chart"><h3>Allocated application capacity</h3><p class="chart-subtitle">Core-minutes · bounds retain missing observations</p>${allocation}</section></div><div class="latency-summary"><strong>Completed-Job response p95</strong>${rows.map((r) => `<span data-policy="${r.policy}" data-p95="${r.p95CompletedSeconds ?? "unknown"}" data-completed="${r.completedJobs}">${label(r.policy)}: ${precise(r.p95CompletedSeconds, 1)}s (${r.completedJobs} completed)</span>`).join("")}</div>`;
-  const saving =
-    1 - forecast.allocationBounds[1] / reactive.allocationBounds[0];
-  const serviceSummary = rows.every(
-    (r) => r.timelyJobs / r.jobs >= r.targetFraction,
-  )
-    ? "All three policies meet the deadline target."
-    : "Not every policy meets the deadline target.";
-  const allocationSummary =
-    saving > 0
-      ? `The digital twin allocates approximately ${(saving * 100).toFixed(1)}% less application capacity than the heuristic.`
-      : "The recorded bounds do not establish lower allocation for the digital twin than the heuristic.";
-  element("comparison-conclusion").innerHTML =
-    `<strong>${e(serviceSummary)}</strong> ${e(allocationSummary)}<span class="comparison-scope">Selected workload · reserve VMs remain powered</span>`;
+    `<div class="result-charts"><section class="result-chart" data-metric="service" data-scale-max="100"><h3>Jobs meeting deadline</h3><p class="chart-subtitle">≤${fixed.deadlineSeconds}s · ${fixed.targetFraction * 100}% target</p>${service}${axis(100, "%")}</section><section class="result-chart" data-metric="allocation" data-scale-max="${maxAllocation}"><h3>Application allocation</h3><p class="chart-subtitle">Core-minutes · recorded bounds</p>${allocation}${axis(maxAllocation / 60)}</section><section class="result-chart" data-metric="response" data-scale-max="${maxResponseSeconds}"><h3>Response time</h3><p class="chart-subtitle" title="The time within which approximately 95% of completed evaluation Jobs finished">Completed jobs · p95 (s)</p>${response}${axis(maxResponseSeconds)}</section></div>`;
   element("comparison-interpretation").textContent = comparisonConclusion(
     comparison,
     comparisonSeed,

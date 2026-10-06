@@ -756,7 +756,7 @@ try {
       );
       assert.equal(r.completedJobs, r.jobs);
       const latency = page.locator(
-        `.latency-summary [data-policy="${r.policy}"]`,
+        `.result-row[data-policy="${r.policy}"][data-p95]`,
       );
       assert.equal(
         await latency.getAttribute("data-p95"),
@@ -805,12 +805,6 @@ try {
     const conclusion = await page
       .locator("#comparison-interpretation")
       .innerText();
-    assert.ok(
-      (await page.locator("#comparison-conclusion").innerText()).includes(
-        `${(savings[2] * 100).toFixed(1)}%`,
-      ),
-      "Visible comparison summary agrees with the recorded allocation bounds",
-    );
     for (const saving of savings) {
       assert.ok(
         saving > 0,
@@ -831,7 +825,6 @@ try {
     page.evaluate(() =>
       [
         "comparison-results",
-        "comparison-conclusion",
         "comparison-settings",
         "comparison-interpretation",
         "clock",
@@ -841,6 +834,15 @@ try {
     "Static",
     "Heuristic",
     "Digital twin",
+  ]);
+  assert.equal(
+    await page.locator("#comparison-conclusion,.latency-summary").count(),
+    0,
+  );
+  assert.deepEqual(await page.locator(".result-chart h3").allTextContents(), [
+    "Jobs meeting deadline",
+    "Application allocation",
+    "Response time",
   ]);
   const comparisonCursor = await page.locator("#seek").inputValue();
   await page.locator("#comparison-settings-button").click();
@@ -866,6 +868,10 @@ try {
       return {
         overflow: area.scrollHeight - area.clientHeight,
         heights: cards.map((card) => card.getBoundingClientRect().height),
+        charts: [...document.querySelectorAll(".result-chart")].map((chart) => {
+          const box = chart.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height };
+        }),
         lines: [...document.querySelectorAll(".policy-cards dd")].map(
           (cell) => {
             const range = document.createRange();
@@ -883,6 +889,21 @@ try {
       Math.max(...geometry.heights) - Math.min(...geometry.heights) <= 1,
     );
     assert.ok(geometry.lines.every((lines) => lines === 1));
+    assert.equal(geometry.charts.length, 3);
+    assert.ok(
+      geometry.charts.every(
+        (chart) => Math.abs(chart.y - geometry.charts[0].y) <= 1,
+      ),
+    );
+    assert.ok(
+      geometry.charts[0].x < geometry.charts[1].x &&
+        geometry.charts[1].x < geometry.charts[2].x,
+    );
+    assert.ok(
+      Math.max(...geometry.charts.map((chart) => chart.width)) -
+        Math.min(...geometry.charts.map((chart) => chart.width)) <=
+        1,
+    );
   }
   await page.setViewportSize({ width: 1920, height: 1080 });
   checks.push(
