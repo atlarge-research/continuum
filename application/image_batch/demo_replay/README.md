@@ -23,6 +23,8 @@ npm run build
 
 The build produces the standalone blue replay HTML, approximately 4 MiB, under ignored `dist/`. Generated delivery files are not committed. The committed normalized dataset makes a fresh checkout buildable without private source captures; raw-source audit tests skip when their evidence is absent.
 
+To acquire another completed capture, use `node tools/acquire.mjs --help` for the configurable source options and follow the [evidence handoff](HANDOFF.md). Acquisition and conversion are optional when building the included replay.
+
 Install the isolated verification browser once, then check direct offline opening:
 
 ```sh

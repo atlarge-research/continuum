@@ -85,7 +85,6 @@ const fixture = (): Dataset => ({
   bookmarks: [],
   provenance: {
     sourceHost: "test",
-    sourceRoot: "test",
     acquiredAt: "test",
     sourceBytes: 0,
     manifestSha256: "test",

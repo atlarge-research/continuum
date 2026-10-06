@@ -184,7 +184,6 @@ export interface Dataset {
   bookmarks: Bookmark[];
   provenance: {
     sourceHost: string;
-    sourceRoot: string;
     acquiredAt: string;
     sourceBytes: number;
     manifestSha256: string;

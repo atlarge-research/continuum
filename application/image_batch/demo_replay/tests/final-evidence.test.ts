@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { convertCapture } from "../tools/normalize.ts";
 import { deadlineStatus } from "../src/presentation.ts";
 import { viewAt } from "../src/replay.ts";
+import { createHash } from "node:crypto";
 const root = "evidence/accepted-final";
 const available = existsSync(root + "/acceptance.json");
 const json = (path: string) =>
@@ -239,6 +240,30 @@ test(
           deadlineStatus({ ...data, jobs: [job] }, publication - 1).onTime,
           0,
         );
+    }
+  },
+);
+
+test(
+  "public replay provenance keeps capture identities and proofs without private machine paths",
+  { skip: !available },
+  () => {
+    const acquisition = json("acquisition.json");
+    const receipt = json("acceptance.json");
+    const digest = (path: string) =>
+      createHash("sha256")
+        .update(readFileSync(root + "/" + path))
+        .digest("hex");
+    const bundled = JSON.parse(readFileSync("data/replay.json", "utf8"));
+    for (const data of [convert(), bundled]) {
+      const provenance = JSON.stringify(data.provenance);
+      assert.ok(!provenance.includes(acquisition.sourceRoot));
+      assert.ok(!provenance.includes(receipt.evidenceLocation));
+      assert.equal(data.run.id, receipt.captureId);
+      assert.equal(data.provenance.sourceHost, acquisition.sourceHost);
+      assert.equal(data.provenance.manifestSha256, digest("acquisition.json"));
+      assert.equal(data.provenance.receipt.captureId, receipt.captureId);
+      assert.equal(data.provenance.receipt.sha256, digest("acceptance.json"));
     }
   },
 );

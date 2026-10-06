@@ -60,7 +60,6 @@ const result: any = {
   browser: browser.version(),
   capture: data.run.id,
   sourceHost: data.provenance.sourceHost,
-  sourceRoot: data.provenance.sourceRoot,
   sourceBytes: data.provenance.sourceBytes,
   acquisitionManifestSha256: data.provenance.manifestSha256,
   runtimeSourceHashes: data.provenance.sourceHashes,

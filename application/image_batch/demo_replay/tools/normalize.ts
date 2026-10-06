@@ -776,6 +776,8 @@ export function convertCapture(
     });
   bookmarks.push({ at: end, label: "End", kind: "end" });
   bookmarks.sort((a, b) => a.at - b.at);
+  // Physical locations stay in the private acquisition manifest and acceptance receipt.
+  if (receipt) delete receipt.evidenceLocation;
   const dataset: Dataset = {
     schemaVersion: 1,
     comparison: comparisonFromReport(
@@ -814,7 +816,6 @@ export function convertCapture(
     bookmarks,
     provenance: {
       sourceHost: acquisition.sourceHost,
-      sourceRoot: acquisition.sourceRoot,
       acquiredAt: acquisition.acquiredAt,
       sourceBytes: acquisition.totalSourceBytes,
       manifestSha256: sha(readFileSync(join(root, "acquisition.json"))),
