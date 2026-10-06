@@ -250,7 +250,7 @@ function renderComparison(): void {
     policy === "fixed"
       ? "Static"
       : policy === "reactive"
-        ? "Reactive"
+        ? "Heuristic"
         : "Digital twin";
   const maxAllocation = Math.max(...rows.map((r) => r.allocationBounds[1]));
   const service = rows
@@ -269,12 +269,25 @@ function renderComparison(): void {
     `${comparison.status === "accepted-final" ? "Accepted final" : "Preliminary"} evidence · independent of replay time`;
   element("comparison-results").innerHTML =
     `<div class="result-charts"><section class="result-chart"><h3>Jobs meeting the deadline</h3><p class="chart-subtitle">≤${fixed.deadlineSeconds}s · marker: ${fixed.targetFraction * 100}% target</p>${service}</section><section class="result-chart"><h3>Allocated application capacity</h3><p class="chart-subtitle">Core-minutes · bounds retain missing observations</p>${allocation}</section></div><div class="latency-summary"><strong>Completed-Job response p95</strong>${rows.map((r) => `<span data-policy="${r.policy}" data-p95="${r.p95CompletedSeconds ?? "unknown"}" data-completed="${r.completedJobs}">${label(r.policy)}: ${precise(r.p95CompletedSeconds, 1)}s (${r.completedJobs} completed)</span>`).join("")}</div>`;
-  element("comparison-conclusion").textContent = comparisonConclusion(
+  const saving =
+    1 - forecast.allocationBounds[1] / reactive.allocationBounds[0];
+  const serviceSummary = rows.every(
+    (r) => r.timelyJobs / r.jobs >= r.targetFraction,
+  )
+    ? "All three policies meet the deadline target."
+    : "Not every policy meets the deadline target.";
+  const allocationSummary =
+    saving > 0
+      ? `The digital twin allocates approximately ${(saving * 100).toFixed(1)}% less application capacity than the heuristic.`
+      : "The recorded bounds do not establish lower allocation for the digital twin than the heuristic.";
+  element("comparison-conclusion").innerHTML =
+    `<strong>${e(serviceSummary)}</strong> ${e(allocationSummary)}<span class="comparison-scope">Selected workload · reserve VMs remain powered</span>`;
+  element("comparison-interpretation").textContent = comparisonConclusion(
     comparison,
     comparisonSeed,
   );
   element("comparison-settings").innerHTML =
-    `<ul><li>Same planned workload within seed ${comparisonSeed}; ${fixed.jobs} evaluation Jobs. Common ${fixed.evaluationSeconds}s allocation window; ${fixed.followupSeconds}s completion follow-up.</li><li>Initial workers: static ${fixed.initialWorkers}; reactive ${reactive.initialWorkers}; twin ${forecast.initialWorkers}. All use the same ${fixed.workerCount}-worker physical pool; reserves stay powered.</li><li>Acquisition: delayed admission, minimum ${fixed.acquisitionSeconds}s. Recorded cadences: reactive ${reactive.cadenceSeconds}s; twin ${forecast.cadenceSeconds}s.</li><li>Recorded reactive capacity target: ${precise(reactive.reactiveTargetFraction == null ? null : reactive.reactiveTargetFraction * 100, 0)}%. Thresholds: up ${precise(reactive.reactiveUpThreshold === null ? null : reactive.reactiveUpThreshold * 100, 0)}%; down ${precise(reactive.reactiveDownThreshold === null ? null : reactive.reactiveDownThreshold * 100, 0)}%. ${reactive.reactiveStabilizationSeconds === null ? "Do not substitute settings from a later campaign." : `Downscale stabilization ${reactive.reactiveStabilizationSeconds}s.`}</li><li>Service is original API Job creation to terminal Job completion; the denominator includes failed and unfinished evaluation Jobs. Response p95 describes completed Jobs only. Allocation includes accepting, draining and pending acquired capacity.</li><li>Capture network: ${e(fixed.network)}. ${comparison.status === "accepted-final" ? `The ${fixed.initialWorkers}-worker static baseline is adequate; its minimum adequate size is not established. ` : ""}Results apply to these captured workloads; no forecast-only ablation isolates simulation's incremental benefit.</li></ul><p>Source report SHA-256: <code>${e(comparison.sourceSha256)}</code></p>`;
+    `<ul><li>Same planned workload within seed ${comparisonSeed}; ${fixed.jobs} evaluation Jobs. Common ${fixed.evaluationSeconds}s allocation window; ${fixed.followupSeconds}s completion follow-up.</li><li>Initial workers accepting jobs: static ${fixed.initialWorkers}; heuristic ${reactive.initialWorkers}; digital twin ${forecast.initialWorkers}. All use the same ${fixed.workerCount}-worker physical pool; reserves stay powered.</li><li>Acquisition: delayed admission, minimum ${fixed.acquisitionSeconds}s. Decision intervals: heuristic ${reactive.cadenceSeconds}s; digital twin ${forecast.cadenceSeconds}s.</li><li>Recorded heuristic capacity target: ${precise(reactive.reactiveTargetFraction == null ? null : reactive.reactiveTargetFraction * 100, 0)}%. Thresholds: up ${precise(reactive.reactiveUpThreshold === null ? null : reactive.reactiveUpThreshold * 100, 0)}%; down ${precise(reactive.reactiveDownThreshold === null ? null : reactive.reactiveDownThreshold * 100, 0)}%. ${reactive.reactiveStabilizationSeconds === null ? "Do not substitute settings from a later campaign." : `Downscale stabilization ${reactive.reactiveStabilizationSeconds}s.`}</li><li>Service is original API Job creation to terminal Job completion; the denominator includes failed and unfinished evaluation Jobs. Response p95 describes completed Jobs only. Allocation includes accepting, draining and pending acquired capacity.</li><li>Capture network: ${e(fixed.network)}. ${comparison.status === "accepted-final" ? `The ${fixed.initialWorkers}-worker static baseline is adequate; its minimum adequate size is not established. ` : ""}Results apply to these captured workloads; no forecast-only ablation isolates simulation's incremental benefit.</li></ul><p>Source report SHA-256: <code>${e(comparison.sourceSha256)}</code></p>`;
 }
 function render(): void {
   const cursor = Math.floor(playback.cursor),
@@ -441,7 +454,8 @@ document.addEventListener("keydown", (event) => {
     ["INPUT", "SELECT", "BUTTON"].includes(
       (event.target as HTMLElement)?.tagName,
     ) ||
-    element("evidence-dialog").hasAttribute("open")
+    element("evidence-dialog").hasAttribute("open") ||
+    element("comparison-dialog").hasAttribute("open")
   )
     return;
   if (event.code === "Space") {
@@ -469,6 +483,13 @@ element("fullscreen").addEventListener("click", async () => {
     element("fullscreen").textContent = "Use browser full screen";
   }
 });
+const comparisonDialog = element("comparison-dialog") as HTMLDialogElement;
+element("comparison-settings-button").addEventListener("click", () =>
+  comparisonDialog.showModal(),
+);
+element("close-comparison-settings").addEventListener("click", () =>
+  comparisonDialog.close(),
+);
 const dialog = element("evidence-dialog") as HTMLDialogElement;
 element("evidence-button").addEventListener("click", () => dialog.showModal());
 element("close-evidence").addEventListener("click", () => dialog.close());

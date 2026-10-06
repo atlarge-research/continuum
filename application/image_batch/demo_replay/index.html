@@ -209,58 +209,61 @@
           <div class="panel-heading">
             <div>
               <h2>Policy comparison</h2>
-              <p>
-                How capacity decisions are made, and what the measurements show.
-              </p>
+              <p>Three policies, one workload.</p>
             </div>
-            <label
-              >Workload seed
-              <select
-                id="comparison-seed"
-                aria-label="Comparison workload seed"
-              ></select
-            ></label>
+            <div class="comparison-controls">
+              <label
+                >Workload
+                <select
+                  id="comparison-seed"
+                  aria-label="Comparison workload seed"
+                ></select>
+              </label>
+              <button
+                id="comparison-settings-button"
+                class="quiet"
+                aria-haspopup="dialog"
+                aria-controls="comparison-dialog"
+              >
+                Settings &amp; interpretation
+              </button>
+            </div>
           </div>
           <div class="policy-cards">
             <article>
               <h3>Static</h3>
-              <p>Keep configured capacity.</p>
+              <p>Keep capacity fixed.</p>
               <dl>
                 <dt>Strength</dt>
-                <dd>Simple, predictable operation.</dd>
+                <dd>Simple and predictable.</dd>
                 <dt>Control</dt>
-                <dd>Fixed admission; capacity stays unchanged.</dd>
+                <dd>Fixed processing capacity.</dd>
                 <dt>Tradeoff</dt>
-                <dd>Provisioning must cover the workload.</dd>
+                <dd>Must cover peak demand.</dd>
               </dl>
             </article>
             <article>
-              <h3>Reactive</h3>
-              <p>Respond to current demand.</p>
+              <h3>Heuristic</h3>
+              <p>React to current demand.</p>
               <dl>
                 <dt>Strength</dt>
-                <dd>Adapts automatically using observed state.</dd>
+                <dd>Adapts to observed demand.</dd>
                 <dt>Control</dt>
-                <dd>Demand rules trigger admission changes.</dd>
+                <dd>Reactive threshold rules.</dd>
                 <dt>Tradeoff</dt>
-                <dd>Response follows demand and acquisition delay.</dd>
+                <dd>Acts after demand changes.</dd>
               </dl>
             </article>
             <article class="twin-policy">
-              <h3>Forecast digital twin</h3>
-              <p>Evaluate future capacity choices.</p>
+              <h3>Digital twin</h3>
+              <p>Evaluate future choices.</p>
               <dl>
                 <dt>Strength</dt>
-                <dd>Forecasts and simulated alternatives inform control.</dd>
+                <dd>Anticipates future demand.</dd>
                 <dt>Control</dt>
-                <dd>
-                  Compare predicted service and allocation, then verify
-                  response.
-                </dd>
+                <dd>Simulate, choose, apply.</dd>
                 <dt>Tradeoff</dt>
-                <dd>
-                  Depends on forecast quality, modeling and decision time.
-                </dd>
+                <dd>Depends on model quality.</dd>
               </dl>
             </article>
           </div>
@@ -272,18 +275,6 @@
           </div>
           <div id="comparison-results"></div>
           <div id="comparison-conclusion" class="comparison-conclusion"></div>
-          <details class="comparison-details">
-            <summary>Comparison settings &amp; interpretation</summary>
-            <div id="comparison-settings"></div>
-            <p>
-              Monitoring can support every policy. The twin adds prediction and
-              evaluation of alternatives. The reactive arm is our
-              worker-admission policy; it is not Kubernetes HPA and does not
-              represent every reactive implementation. Capacity allocation is
-              not measured energy or a financial saving. Powered reserves remain
-              powered.
-            </p>
-          </details>
         </div>
       </div>
       <footer class="transport">
@@ -319,6 +310,31 @@
       <button id="close-evidence" class="quiet close">Close ×</button>
       <h2>Evidence &amp; interpretation</h2>
       <div id="evidence-content"></div>
+    </dialog>
+    <dialog id="comparison-dialog" aria-labelledby="comparison-dialog-title">
+      <button id="close-comparison-settings" class="quiet close">
+        Close ×
+      </button>
+      <h2 id="comparison-dialog-title">
+        Comparison settings &amp; interpretation
+      </h2>
+      <div class="comparison-details">
+        <h3>Results and tradeoffs</h3>
+        <p id="comparison-interpretation"></p>
+        <h3>Recorded settings</h3>
+        <div id="comparison-settings"></div>
+        <p>
+          All three policies can use monitoring. The heuristic policy reacts to
+          observed demand using threshold rules; the digital twin also forecasts
+          demand and simulates alternatives before choosing an action. The
+          recorded heuristic is a worker-capacity policy, not Kubernetes HPA or
+          a benchmark of every reactive autoscaler.
+        </p>
+        <p>
+          Capacity allocation is not measured energy use or a financial saving.
+          Reserve VMs remain powered on.
+        </p>
+      </div>
     </dialog>
     <script id="replay-data" type="application/json">
       __DATA__

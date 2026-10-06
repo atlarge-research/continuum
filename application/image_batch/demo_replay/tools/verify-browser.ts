@@ -802,7 +802,15 @@ try {
       1 - forecast.allocationBounds[1] / fixed.allocationBounds[0],
       1 - forecast.allocationBounds[1] / reactive.allocationBounds[0],
     ];
-    const conclusion = await page.locator("#comparison-conclusion").innerText();
+    const conclusion = await page
+      .locator("#comparison-interpretation")
+      .innerText();
+    assert.ok(
+      (await page.locator("#comparison-conclusion").innerText()).includes(
+        `${(savings[2] * 100).toFixed(1)}%`,
+      ),
+      "Visible comparison summary agrees with the recorded allocation bounds",
+    );
     for (const saving of savings) {
       assert.ok(
         saving > 0,
@@ -811,7 +819,7 @@ try {
       assert.ok(conclusion.includes(`${(saving * 100).toFixed(1)}%`));
     }
     assert.ok(forecast.p95CompletedSeconds! > reactive.p95CompletedSeconds!);
-    assert.match(conclusion, /reactive.*faster|reactive.*lower.*p95/i);
+    assert.match(conclusion, /heuristic.*faster|heuristic.*lower.*p95/i);
     assert.match(
       conclusion,
       /selected.*development|development.*illustration/i,
@@ -825,9 +833,61 @@ try {
         "comparison-results",
         "comparison-conclusion",
         "comparison-settings",
+        "comparison-interpretation",
         "clock",
       ].map((id) => document.getElementById(id)!.innerHTML),
     );
+  assert.deepEqual(await page.locator(".policy-cards h3").allTextContents(), [
+    "Static",
+    "Heuristic",
+    "Digital twin",
+  ]);
+  const comparisonCursor = await page.locator("#seek").inputValue();
+  await page.locator("#comparison-settings-button").click();
+  assert.ok(await page.locator("#comparison-dialog").isVisible());
+  assert.ok(await page.locator("#comparison-settings").isVisible());
+  await page.locator("#comparison-dialog").focus();
+  await page.keyboard.press("Home");
+  assert.equal(await page.locator("#seek").inputValue(), comparisonCursor);
+  await page.keyboard.press("Escape");
+  assert.ok(!(await page.locator("#comparison-dialog").isVisible()));
+  await page.locator("#comparison-settings-button").click();
+  await page.locator("#close-comparison-settings").click();
+  assert.ok(!(await page.locator("#comparison-dialog").isVisible()));
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const geometry = await page.evaluate(() => {
+      const area = document.querySelector(".view-area")!;
+      const cards = [...document.querySelectorAll(".policy-cards article")];
+      return {
+        overflow: area.scrollHeight - area.clientHeight,
+        heights: cards.map((card) => card.getBoundingClientRect().height),
+        lines: [...document.querySelectorAll(".policy-cards dd")].map(
+          (cell) => {
+            const range = document.createRange();
+            range.selectNodeContents(cell);
+            return range.getClientRects().length;
+          },
+        ),
+      };
+    });
+    assert.ok(
+      geometry.overflow <= 1,
+      `Comparison fits ${viewport.width}×${viewport.height}: ${geometry.overflow}`,
+    );
+    assert.ok(
+      Math.max(...geometry.heights) - Math.min(...geometry.heights) <= 1,
+    );
+    assert.ok(geometry.lines.every((lines) => lines === 1));
+  }
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  checks.push(
+    "comparison fits monitor and laptop viewports; equal cards, one-line rows, settings dialog and keyboard isolation",
+  );
   const comparisonInitial = await comparisonState();
   await seek(data.run.end);
   await seek(focusCycle.available);
