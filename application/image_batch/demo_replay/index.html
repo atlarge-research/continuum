@@ -209,7 +209,7 @@
           <div class="panel-heading">
             <div>
               <h2>Policy comparison</h2>
-              <p>Three policies, one workload.</p>
+              <p>Policy logic · measured results.</p>
             </div>
             <div class="comparison-controls">
               <label
@@ -276,6 +276,11 @@
               </dl>
             </article>
           </div>
+          <div
+            id="policy-diagrams"
+            role="group"
+            aria-label="Conceptual policy decision processes"
+          ></div>
           <div class="comparison-results-heading">
             <h3>Completed-run results</h3>
           </div>
@@ -335,21 +340,10 @@
         Comparison settings &amp; interpretation
       </h2>
       <div class="comparison-details">
-        <h3>Results and tradeoffs</h3>
-        <p id="comparison-interpretation"></p>
-        <h3>Recorded settings</h3>
+        <h3>What the recorded results show</h3>
+        <div id="comparison-interpretation"></div>
+        <h3>How the comparison was run</h3>
         <div id="comparison-settings"></div>
-        <p>
-          All three policies can use monitoring. The reactive heuristic policy
-          reacts to observed demand using threshold rules; the digital twin also
-          forecasts demand and simulates alternatives before choosing an action.
-          The recorded reactive heuristic is a worker-capacity policy, not
-          Kubernetes HPA or a benchmark of every reactive autoscaler.
-        </p>
-        <p>
-          Capacity allocation is not measured energy use or a financial saving.
-          Reserve VMs remain powered on.
-        </p>
       </div>
     </dialog>
     <script id="replay-data" type="application/json">

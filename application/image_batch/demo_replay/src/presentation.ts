@@ -86,43 +86,78 @@ export function comparisonConclusion(
   if (!fixed || !reactive || !forecast)
     return "Matched policy comparison is unavailable for this workload.";
   const pass = (r: PolicyResult) => r.timelyJobs / r.jobs >= r.targetFraction;
-  const parts = rows.every(pass)
-    ? ["All three policies meet the whole-cohort service target."]
-    : [
-        `Service target: static ${pass(fixed) ? "met" : "missed"}; reactive heuristic ${pass(reactive) ? "met" : "missed"}; digital twin ${pass(forecast) ? "met" : "missed"}.`,
-      ];
-  for (const [lower, higher, label, baseline] of [
-    [reactive, fixed, "Reactive heuristic", "static"],
-    [forecast, fixed, "The twin", "static"],
-    [forecast, reactive, "The twin", "reactive heuristic"],
-  ] as const) {
-    const saving = 1 - lower.allocationBounds[1] / higher.allocationBounds[0];
-    if (saving > 0)
-      parts.push(
-        `${label} uses approximately ${(saving * 100).toFixed(1)}% less allocated application capacity than ${baseline} within the recorded bounds.`,
-      );
-    else if (lower.allocationBounds[0] > higher.allocationBounds[1])
-      parts.push(
-        `${label} uses more allocated application capacity than ${baseline} within the recorded bounds.`,
-      );
-    else
-      parts.push(
-        `Allocation bounds do not establish a saving for ${label.toLowerCase()} over ${baseline}.`,
-      );
-  }
-  if (
-    reactive.p95CompletedSeconds !== null &&
-    forecast.p95CompletedSeconds !== null &&
-    reactive.p95CompletedSeconds < forecast.p95CompletedSeconds
-  )
-    parts.push(
-      `Reactive heuristic has a faster completed-Job p95: ${reactive.p95CompletedSeconds.toFixed(1)}s versus the twin's ${forecast.p95CompletedSeconds.toFixed(1)}s.`,
+  const allPass = rows.every(pass);
+  const service = allPass
+    ? `All three policies met the ${fixed.targetFraction * 100}% service target for jobs finishing within the ${fixed.deadlineSeconds}-second deadline.${rows.every((r) => r.timelyJobs === r.jobs) ? " Every evaluation job finished on time." : ""}`
+    : `Against the ${fixed.targetFraction * 100}% target for jobs finishing within ${fixed.deadlineSeconds} seconds, static ${pass(fixed) ? "met" : "missed"} the target, the reactive heuristic ${pass(reactive) ? "met" : "missed"} it, and the digital twin ${pass(forecast) ? "met" : "missed"} it.`;
+  const reduction = (lower: PolicyResult, higher: PolicyResult) =>
+    1 - lower.allocationBounds[1] / higher.allocationBounds[0];
+  const heuristicSaving = reduction(reactive, fixed),
+    twinSaving = reduction(forecast, fixed),
+    twinVersusHeuristic = reduction(forecast, reactive);
+  const allocation: string[] = [];
+  if (heuristicSaving > 0 && twinSaving > 0) {
+    allocation.push(
+      `Compared with static control, the reactive heuristic allocated about ${(heuristicSaving * 100).toFixed(1)}% less application capacity, and the twin about ${(twinSaving * 100).toFixed(1)}% less.`,
     );
+  } else {
+    for (const [run, label] of [
+      [reactive, "The reactive heuristic"],
+      [forecast, "The twin"],
+    ] as const) {
+      const saving = reduction(run, fixed);
+      allocation.push(
+        saving > 0
+          ? `${label} allocated about ${(saving * 100).toFixed(1)}% less application capacity than static control.`
+          : run.allocationBounds[0] > fixed.allocationBounds[1]
+            ? `${label} allocated more application capacity than static control.`
+            : `The recorded bounds do not establish an allocation reduction for ${label.toLowerCase()} compared with static control.`,
+      );
+    }
+  }
+  allocation.push(
+    twinVersusHeuristic > 0
+      ? `The twin also allocated about ${(twinVersusHeuristic * 100).toFixed(1)}% less than the reactive heuristic.`
+      : forecast.allocationBounds[0] > reactive.allocationBounds[1]
+        ? "The twin allocated more application capacity than the reactive heuristic."
+        : "The twin and reactive heuristic have overlapping allocation bounds, so no reduction between them is established.",
+  );
+  allocation.push(
+    "Allocation comparisons use the conservative ends of the recorded bounds, allowing for gaps in monitoring.",
+  );
+  const parts = [service, allocation.join(" ")];
+  const latencies = [
+    [fixed, "static"],
+    [reactive, "the reactive heuristic"],
+    [forecast, "the twin"],
+  ] as const;
+  const available = latencies
+    .filter(([run]) => run.p95CompletedSeconds !== null)
+    .map(
+      ([run, label]) =>
+        `${run.p95CompletedSeconds!.toFixed(1)}s under ${label}`,
+    );
+  if (available.length) {
+    const values =
+      available.length === 1
+        ? available[0]
+        : available.slice(0, -1).join(", ") + " and " + available.at(-1);
+    const tradeoff =
+      twinVersusHeuristic > 0 &&
+      reactive.p95CompletedSeconds !== null &&
+      forecast.p95CompletedSeconds !== null &&
+      reactive.p95CompletedSeconds < forecast.p95CompletedSeconds
+        ? "The twin's lower allocation came with slower responses. "
+        : "";
+    parts.push(
+      `${tradeoff}Completed jobs had a response-time p95 of ${values}. This is the time within which about 95% of completed jobs finished.`,
+    );
+  }
   if (comparison.status === "accepted-final")
     parts.push(
-      "Selected development illustration; held-out validation and the minimum adequate static capacity are not established.",
+      "This is a selected development workload. Performance on unseen workloads and the smallest static capacity that would meet the target have not been established. The comparison evaluates the complete twin controller and does not isolate the separate contributions of forecasting and simulation.",
     );
-  return parts.join(" ");
+  return parts.join("\n\n");
 }
 /** Percentages describe the available application samples, never the entire host. */
 export function resourceUsage(worker: WorkerView) {

@@ -242,17 +242,17 @@ test(
     const conclusion = comparisonConclusion(result, 72001);
     assert.match(
       conclusion,
-      /Reactive heuristic uses approximately 12.4% less allocated application capacity than static/,
+      /reactive heuristic allocated about 12.4% less application capacity/,
+    );
+    assert.match(conclusion, /twin about 27.7% less/);
+    assert.match(
+      conclusion,
+      /twin also allocated about 17.1% less than the reactive heuristic/,
     );
     assert.match(
       conclusion,
-      /The twin uses approximately 27.7% less allocated application capacity than static/,
+      /81.0s under the reactive heuristic.*90.7s under the twin/,
     );
-    assert.match(
-      conclusion,
-      /The twin uses approximately 17.1% less allocated application capacity than reactive heuristic/,
-    );
-    assert.match(conclusion, /81.0s versus the twin's 90.7s/);
   },
 );
 
@@ -265,40 +265,45 @@ test("comparison conclusion retains service, conservative savings and the latenc
     accepted,
   );
   const text = comparisonConclusion(result, 72001);
-  assert.match(text, /All three policies meet the whole-cohort service target/);
+  assert.match(text, /All three policies met the 95% service target/);
   assert.match(
     text,
-    /Reactive heuristic uses approximately 18.0% less allocated application capacity than static/,
+    /reactive heuristic allocated about 18.0% less application capacity/,
+  );
+  assert.match(text, /twin about 38.0% less/);
+  assert.match(
+    text,
+    /twin also allocated about 22.5% less than the reactive heuristic/,
   );
   assert.match(
     text,
-    /The twin uses approximately 38.0% less allocated application capacity than static/,
+    /81.0s under the reactive heuristic.*91.0s under the twin/,
   );
+  assert.match(text, /selected development workload/);
   assert.match(
     text,
-    /The twin uses approximately 22.5% less allocated application capacity than reactive heuristic/,
+    /unseen workloads.*smallest static capacity.*not been established/,
   );
-  assert.match(
-    text,
-    /Reactive heuristic has a faster completed-Job p95: 81.0s versus the twin's 91.0s/,
-  );
-  assert.match(text, /Selected development illustration/);
-  assert.match(text, /held-out validation.*not established/);
   const reactive = result.runs.find((r) => r.policy === "reactive")!;
   reactive.timelyJobs = 200;
   const forecast = result.runs.find((r) => r.policy === "forecast")!;
   forecast.allocationBounds = [810, 830];
   const changed = comparisonConclusion(result, 72001);
   assert.match(changed, /reactive heuristic missed/);
-  assert.doesNotMatch(changed, /All three policies meet/);
+  assert.doesNotMatch(changed, /All three policies met/);
   assert.match(
     changed,
-    /Allocation bounds do not establish a saving for the twin over reactive heuristic/,
+    /overlapping allocation bounds.*no reduction between them is established/,
   );
+  assert.doesNotMatch(changed, /twin also allocated about/);
+  forecast.p95CompletedSeconds = null;
+  const missingLatency = comparisonConclusion(result, 72001);
+  assert.doesNotMatch(missingLatency, /91.0s under the twin/);
   assert.doesNotMatch(
-    changed,
-    /less allocated application capacity than reactive heuristic/,
+    missingLatency,
+    /lower allocation came with slower responses/,
   );
+  assert.match(missingLatency, /81.0s under the reactive heuristic/);
 });
 
 test("completed response p95 must be a finite nonnegative duration", () => {

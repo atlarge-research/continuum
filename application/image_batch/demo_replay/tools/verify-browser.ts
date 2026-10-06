@@ -831,7 +831,7 @@ try {
       assert.ok(conclusion.includes(`${(saving * 100).toFixed(1)}%`));
     }
     assert.ok(forecast.p95CompletedSeconds! > reactive.p95CompletedSeconds!);
-    assert.match(conclusion, /heuristic.*faster|heuristic.*lower.*p95/i);
+    assert.match(conclusion, /lower allocation came with slower responses/);
     assert.match(
       conclusion,
       /selected.*development|development.*illustration/i,
@@ -845,6 +845,7 @@ try {
         "comparison-results",
         "comparison-settings",
         "comparison-interpretation",
+        "policy-diagrams",
         "comparison-takeaway",
         "clock",
       ].map((id) => document.getElementById(id)!.innerHTML),
@@ -867,10 +868,54 @@ try {
   ]);
   assert.ok(!(await page.locator(".transport").isVisible()));
   assert.ok(await page.locator("#comparison-takeaway").isVisible());
+  assert.deepEqual(
+    await page
+      .locator("#policy-diagrams .policy-flow")
+      .evaluateAll((panels) =>
+        panels.map((panel) => (panel as HTMLElement).dataset.policy),
+      ),
+    ["fixed", "reactive", "forecast"],
+  );
+  assert.equal(
+    await page
+      .locator("#policy-diagrams [data-policy=forecast] .flow-candidate")
+      .count(),
+    3,
+  );
+  assert.equal(
+    await page
+      .locator(
+        "#policy-diagrams [data-policy=forecast] path[data-selected=true]",
+      )
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .locator(
+        "#policy-diagrams [data-policy=reactive] path[data-feedback=true]",
+      )
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .locator(
+        "#policy-diagrams [data-policy=forecast] path[data-feedback=true]",
+      )
+      .count(),
+    1,
+  );
   const comparisonCursor = await page.locator("#seek").inputValue();
   await page.locator("#comparison-settings-button").click();
   assert.ok(await page.locator("#comparison-dialog").isVisible());
   assert.ok(await page.locator("#comparison-settings").isVisible());
+  assert.equal(await page.locator("#comparison-interpretation > p").count(), 4);
+  const technical = page.locator("#comparison-settings details");
+  assert.equal(await technical.getAttribute("open"), null);
+  await technical.locator("summary").click();
+  assert.ok((await technical.getAttribute("open")) !== null);
+  await technical.locator("summary").click();
   await page.locator("#comparison-dialog").focus();
   await page.keyboard.press("Home");
   assert.equal(await page.locator("#seek").inputValue(), comparisonCursor);
@@ -897,6 +942,26 @@ try {
           .getBoundingClientRect().bottom,
         areaBottom: area.getBoundingClientRect().bottom,
         heights: cards.map((card) => card.getBoundingClientRect().height),
+        cardBottom: Math.max(
+          ...cards.map((card) => card.getBoundingClientRect().bottom),
+        ),
+        flows: [...document.querySelectorAll(".policy-flow")].map((flow) => {
+          const box = flow.getBoundingClientRect();
+          return { y: box.y, bottom: box.bottom, width: box.width };
+        }),
+        chartTop: document
+          .getElementById("comparison-results")!
+          .getBoundingClientRect().top,
+        diagramLabels: [...document.querySelectorAll(".policy-flow text")].map(
+          (text) => {
+            const svg = text as SVGTextElement;
+            const matrix = svg.getScreenCTM()!;
+            return (
+              parseFloat(getComputedStyle(svg).fontSize) *
+              Math.hypot(matrix.a, matrix.b)
+            );
+          },
+        ),
         charts: [...document.querySelectorAll(".result-chart")].map((chart) => {
           const box = chart.getBoundingClientRect();
           return { x: box.x, y: box.y, width: box.width, height: box.height };
@@ -920,6 +985,19 @@ try {
       Math.max(...geometry.heights) - Math.min(...geometry.heights) <= 1,
     );
     assert.ok(geometry.lines.every((lines) => lines === 1));
+    assert.equal(geometry.flows.length, 3);
+    assert.ok(
+      geometry.flows.every(
+        (flow) =>
+          flow.y >= geometry.cardBottom && flow.bottom <= geometry.chartTop,
+      ),
+    );
+    assert.ok(
+      geometry.flows.every(
+        (flow) => Math.abs(flow.y - geometry.flows[0].y) <= 1,
+      ),
+    );
+    assert.ok(geometry.diagramLabels.every((font) => font >= 18 - 0.01));
     assert.equal(geometry.charts.length, 3);
     assert.ok(
       geometry.charts.every(
@@ -938,7 +1016,7 @@ try {
   }
   await page.setViewportSize({ width: 1920, height: 1080 });
   checks.push(
-    "comparison fits monitor and laptop viewports; hidden transport, clearer equal policy cards, three graphs, visible takeaway, settings dialog and keyboard isolation",
+    "comparison fits monitor and laptop viewports; hidden transport, clearer equal policy cards, three conceptual decision diagrams, three graphs, visible takeaway, grouped interpretation, settings dialog and keyboard isolation",
   );
   const comparisonInitial = await comparisonState();
   await seek(data.run.end);

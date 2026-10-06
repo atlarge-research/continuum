@@ -1,5 +1,6 @@
 import { latestReadyForecast } from "./forecast-history.ts";
 import { decisionText } from "./decision.ts";
+import { policyDiagrams } from "./policy-diagrams.ts";
 import type { Dataset, Cycle } from "./types.ts";
 import { viewAt, forecastActuals } from "./replay.ts";
 import type { ReplayView } from "./replay.ts";
@@ -34,6 +35,7 @@ let comparisonSeed =
   data.comparison?.runs[0]?.seed ??
   0;
 const element = (id: string) => document.getElementById(id)!;
+element("policy-diagrams").innerHTML = policyDiagrams();
 const seek = element("seek") as HTMLInputElement;
 seek.min = String(data.run.start);
 seek.max = String(data.run.end);
@@ -289,12 +291,32 @@ function renderComparison(): void {
     .join("");
   element("comparison-results").innerHTML =
     `<div class="result-charts"><section class="result-chart" data-metric="service" data-scale-max="100"><h3>Jobs meeting deadline</h3><p class="chart-subtitle">≤${fixed.deadlineSeconds}s · ${fixed.targetFraction * 100}% target</p>${service}${axis(100, "%")}</section><section class="result-chart" data-metric="allocation" data-scale-max="${maxAllocation}"><h3>Application allocation</h3><p class="chart-subtitle">Core-minutes · recorded bounds</p>${allocation}${axis(maxAllocation / 60)}</section><section class="result-chart" data-metric="response" data-scale-max="${maxResponseSeconds}"><h3>Response time</h3><p class="chart-subtitle" title="The time within which approximately 95% of completed evaluation Jobs finished">Completed jobs · p95 (s)</p>${response}${axis(maxResponseSeconds)}</section></div>`;
-  element("comparison-interpretation").textContent = comparisonConclusion(
+  element("comparison-interpretation").innerHTML = comparisonConclusion(
     comparison,
     comparisonSeed,
-  );
+  )
+    .split("\n\n")
+    .map((paragraph) => `<p>${e(paragraph)}</p>`)
+    .join("");
+  const reactiveSettings =
+    (reactive.reactiveTargetFraction ?? 0) > 0
+      ? `The reactive heuristic aims to keep requested CPU demand at or below ${precise(reactive.reactiveTargetFraction! * 100, 0)}% of the application capacity on workers accepting jobs. Its downscale stabilization window is ${reactive.reactiveStabilizationSeconds === null ? "unrecorded" : reactive.reactiveStabilizationSeconds + " seconds"}.`
+      : `The recorded reactive thresholds are ${precise(reactive.reactiveUpThreshold === null ? null : reactive.reactiveUpThreshold * 100, 0)}% for scaling up and ${precise(reactive.reactiveDownThreshold === null ? null : reactive.reactiveDownThreshold * 100, 0)}% for scaling down.`;
+  const adaptiveStart =
+    reactive.initialWorkers === forecast.initialWorkers
+      ? `the reactive heuristic and twin both started with ${reactive.initialWorkers}`
+      : `the reactive heuristic and twin started with ${reactive.initialWorkers} and ${forecast.initialWorkers}, respectively`;
   element("comparison-settings").innerHTML =
-    `<ul><li>Same planned workload within seed ${comparisonSeed}; ${fixed.jobs} evaluation Jobs. Common ${fixed.evaluationSeconds}s allocation window; ${fixed.followupSeconds}s completion follow-up.</li><li>Initial workers accepting jobs: static ${fixed.initialWorkers}; reactive heuristic ${reactive.initialWorkers}; digital twin ${forecast.initialWorkers}. All use the same ${fixed.workerCount}-worker physical pool; reserves stay powered.</li><li>Acquisition: delayed admission, minimum ${fixed.acquisitionSeconds}s. Decision intervals: reactive heuristic ${reactive.cadenceSeconds}s; digital twin ${forecast.cadenceSeconds}s.</li><li>Recorded reactive heuristic capacity target: ${precise(reactive.reactiveTargetFraction == null ? null : reactive.reactiveTargetFraction * 100, 0)}%. Thresholds: up ${precise(reactive.reactiveUpThreshold === null ? null : reactive.reactiveUpThreshold * 100, 0)}%; down ${precise(reactive.reactiveDownThreshold === null ? null : reactive.reactiveDownThreshold * 100, 0)}%. ${reactive.reactiveStabilizationSeconds === null ? "Do not substitute settings from a later campaign." : `Downscale stabilization ${reactive.reactiveStabilizationSeconds}s.`}</li><li>Service is original API Job creation to terminal Job completion; the denominator includes failed and unfinished evaluation Jobs. Response p95 describes completed Jobs only. Allocation includes accepting, draining and pending acquired capacity.</li><li>Capture network: ${e(fixed.network)}. ${comparison.status === "accepted-final" ? `The ${fixed.initialWorkers}-worker static baseline is adequate; its minimum adequate size is not established. ` : ""}Results apply to these captured workloads; no forecast-only ablation isolates simulation's incremental benefit.</li></ul><p>Source report SHA-256: <code>${e(comparison.sourceSha256)}</code></p>`;
+    `<p>Each policy received the same planned workload of ${fixed.jobs} evaluation jobs. Application capacity was compared over the same ${fixed.evaluationSeconds}-second window, with another ${fixed.followupSeconds} seconds allowed for jobs to finish.</p>
+    <p>Static started with ${fixed.initialWorkers} workers accepting jobs; ${adaptiveStart}. All used the same pool of ${fixed.workerCount} powered VMs. Activating a reserve introduced an admission delay of at least ${fixed.acquisitionSeconds} seconds.</p>
+    <h3>Reading the graphs</h3>
+    <p>The deadline graph counts every evaluation job, including failed and unfinished jobs. Response time runs from original Kubernetes Job creation to final completion; its p95 includes completed jobs only.</p>
+    <p>Application allocation counts CPU capacity committed to workers accepting jobs, finishing existing jobs after stopping new admissions, or awaiting requested activation. The displayed ranges allow for gaps in monitoring. Reserve VMs stay powered, so lower application allocation does not establish lower energy use or cost.</p>
+    <details><summary>Controller settings and source</summary>
+    <p>The reactive heuristic checked demand every ${reactive.cadenceSeconds} seconds; the twin made decisions every ${forecast.cadenceSeconds} seconds. ${e(reactiveSettings)}</p>
+    <p>The heuristic shown here adjusts worker admission using observed resource demand. Other autoscalers, including Kubernetes HPA, may use different rules and measurements.</p>
+    <p>Workload seed: ${comparisonSeed}. Recorded network profile: <code>${e(fixed.network)}</code>. Allocation ranges describe observation coverage, not statistical confidence intervals.</p>
+    <p>Source report SHA-256: <code>${e(comparison.sourceSha256)}</code></p></details>`;
 }
 function render(): void {
   const cursor = Math.floor(playback.cursor),
