@@ -851,11 +851,13 @@ try {
     );
   assert.deepEqual(await page.locator(".policy-cards h3").allTextContents(), [
     "Static",
-    "Heuristic",
+    "Reactive heuristic",
     "Digital twin",
   ]);
   assert.equal(
-    await page.locator("#comparison-conclusion,.latency-summary").count(),
+    await page
+      .locator("#comparison-conclusion,.latency-summary,#comparison-status")
+      .count(),
     0,
   );
   assert.deepEqual(await page.locator(".result-chart h3").allTextContents(), [

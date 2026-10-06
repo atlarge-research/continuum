@@ -849,10 +849,6 @@ small {
   gap: 10px;
   align-items: center;
 }
-.comparison-results-heading span {
-  font-size: 18px;
-  color: var(--amber);
-}
 .result-charts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

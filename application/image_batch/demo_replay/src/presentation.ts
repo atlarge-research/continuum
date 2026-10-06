@@ -89,12 +89,12 @@ export function comparisonConclusion(
   const parts = rows.every(pass)
     ? ["All three policies meet the whole-cohort service target."]
     : [
-        `Service target: static ${pass(fixed) ? "met" : "missed"}; heuristic ${pass(reactive) ? "met" : "missed"}; digital twin ${pass(forecast) ? "met" : "missed"}.`,
+        `Service target: static ${pass(fixed) ? "met" : "missed"}; reactive heuristic ${pass(reactive) ? "met" : "missed"}; digital twin ${pass(forecast) ? "met" : "missed"}.`,
       ];
   for (const [lower, higher, label, baseline] of [
-    [reactive, fixed, "Heuristic", "static"],
+    [reactive, fixed, "Reactive heuristic", "static"],
     [forecast, fixed, "The twin", "static"],
-    [forecast, reactive, "The twin", "heuristic"],
+    [forecast, reactive, "The twin", "reactive heuristic"],
   ] as const) {
     const saving = 1 - lower.allocationBounds[1] / higher.allocationBounds[0];
     if (saving > 0)
@@ -116,7 +116,7 @@ export function comparisonConclusion(
     reactive.p95CompletedSeconds < forecast.p95CompletedSeconds
   )
     parts.push(
-      `Heuristic has a faster completed-Job p95: ${reactive.p95CompletedSeconds.toFixed(1)}s versus the twin's ${forecast.p95CompletedSeconds.toFixed(1)}s.`,
+      `Reactive heuristic has a faster completed-Job p95: ${reactive.p95CompletedSeconds.toFixed(1)}s versus the twin's ${forecast.p95CompletedSeconds.toFixed(1)}s.`,
     );
   if (comparison.status === "accepted-final")
     parts.push(

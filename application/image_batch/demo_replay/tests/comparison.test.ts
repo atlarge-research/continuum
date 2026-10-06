@@ -242,7 +242,7 @@ test(
     const conclusion = comparisonConclusion(result, 72001);
     assert.match(
       conclusion,
-      /Heuristic uses approximately 12.4% less allocated application capacity than static/,
+      /Reactive heuristic uses approximately 12.4% less allocated application capacity than static/,
     );
     assert.match(
       conclusion,
@@ -250,7 +250,7 @@ test(
     );
     assert.match(
       conclusion,
-      /The twin uses approximately 17.1% less allocated application capacity than heuristic/,
+      /The twin uses approximately 17.1% less allocated application capacity than reactive heuristic/,
     );
     assert.match(conclusion, /81.0s versus the twin's 90.7s/);
   },
@@ -268,7 +268,7 @@ test("comparison conclusion retains service, conservative savings and the latenc
   assert.match(text, /All three policies meet the whole-cohort service target/);
   assert.match(
     text,
-    /Heuristic uses approximately 18.0% less allocated application capacity than static/,
+    /Reactive heuristic uses approximately 18.0% less allocated application capacity than static/,
   );
   assert.match(
     text,
@@ -276,11 +276,11 @@ test("comparison conclusion retains service, conservative savings and the latenc
   );
   assert.match(
     text,
-    /The twin uses approximately 22.5% less allocated application capacity than heuristic/,
+    /The twin uses approximately 22.5% less allocated application capacity than reactive heuristic/,
   );
   assert.match(
     text,
-    /Heuristic has a faster completed-Job p95: 81.0s versus the twin's 91.0s/,
+    /Reactive heuristic has a faster completed-Job p95: 81.0s versus the twin's 91.0s/,
   );
   assert.match(text, /Selected development illustration/);
   assert.match(text, /held-out validation.*not established/);
@@ -289,15 +289,15 @@ test("comparison conclusion retains service, conservative savings and the latenc
   const forecast = result.runs.find((r) => r.policy === "forecast")!;
   forecast.allocationBounds = [810, 830];
   const changed = comparisonConclusion(result, 72001);
-  assert.match(changed, /heuristic missed/);
+  assert.match(changed, /reactive heuristic missed/);
   assert.doesNotMatch(changed, /All three policies meet/);
   assert.match(
     changed,
-    /Allocation bounds do not establish a saving for the twin over heuristic/,
+    /Allocation bounds do not establish a saving for the twin over reactive heuristic/,
   );
   assert.doesNotMatch(
     changed,
-    /less allocated application capacity than heuristic/,
+    /less allocated application capacity than reactive heuristic/,
   );
 });
 

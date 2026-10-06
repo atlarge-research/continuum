@@ -242,11 +242,11 @@
                 <dt>Control</dt>
                 <dd>Fixed processing capacity.</dd>
                 <dt>Tradeoff</dt>
-                <dd>Must cover peak demand.</dd>
+                <dd>Overprovision for peak demand.</dd>
               </dl>
             </article>
             <article>
-              <h3>Heuristic</h3>
+              <h3>Reactive heuristic</h3>
               <p>
                 Use observed demand and threshold rules to adjust capacity.
                 Scale up or down after the load changes.
@@ -272,15 +272,12 @@
                 <dt>Control</dt>
                 <dd>Simulate, choose, apply.</dd>
                 <dt>Tradeoff</dt>
-                <dd>Depends on model quality.</dd>
+                <dd>Needs accurate, timely results.</dd>
               </dl>
             </article>
           </div>
           <div class="comparison-results-heading">
             <h3>Completed-run results</h3>
-            <span id="comparison-status"
-              >Preliminary evidence · independent of replay time</span
-            >
           </div>
           <div id="comparison-results"></div>
           <article
@@ -343,11 +340,11 @@
         <h3>Recorded settings</h3>
         <div id="comparison-settings"></div>
         <p>
-          All three policies can use monitoring. The heuristic policy reacts to
-          observed demand using threshold rules; the digital twin also forecasts
-          demand and simulates alternatives before choosing an action. The
-          recorded heuristic is a worker-capacity policy, not Kubernetes HPA or
-          a benchmark of every reactive autoscaler.
+          All three policies can use monitoring. The reactive heuristic policy
+          reacts to observed demand using threshold rules; the digital twin also
+          forecasts demand and simulates alternatives before choosing an action.
+          The recorded reactive heuristic is a worker-capacity policy, not
+          Kubernetes HPA or a benchmark of every reactive autoscaler.
         </p>
         <p>
           Capacity allocation is not measured energy use or a financial saving.
