@@ -234,18 +234,60 @@ export function forecastBuckets(cycle: Cycle, displayBinMs = 15000) {
   return result;
 }
 
-/** Fixed-origin observed bins stay stable when forecasts refresh; unknown coverage is explicit. */
+/** Compare forecasts and published arrivals over the same complete display intervals. */
+export function forecastEvaluation(
+  data: Dataset,
+  cycle: Cycle | null,
+  cursor: number,
+) {
+  const binMs = cycle?.binMs
+    ? Math.ceil(15000 / cycle.binMs) * cycle.binMs
+    : 15000;
+  if (!cycle || cycle.available > cursor)
+    return { binMs, bins: [], meanAbsoluteError: null };
+  const arrivals = data.jobs.filter((job) => job.available <= cursor);
+  const horizonEnd = cycle.cutoff + cycle.horizonMs;
+  const bins = forecastBuckets(cycle, binMs).map((bucket) => {
+    const complete =
+      bucket.end - bucket.start === binMs &&
+      bucket.start >= Math.max(data.run.start, cycle.cutoff) &&
+      bucket.end <= horizonEnd &&
+      coveredInterval(data, bucket.start, bucket.end, cursor);
+    return {
+      start: bucket.start,
+      end: bucket.end,
+      expected: bucket.mean,
+      actual: complete
+        ? arrivals.filter(
+            (job) => job.creation >= bucket.start && job.creation < bucket.end,
+          ).length
+        : null,
+      complete,
+    };
+  });
+  const covered = bins.filter((bin) => bin.complete);
+  const meanAbsoluteError = covered.length
+    ? covered.reduce(
+        (sum, bin) => sum + Math.abs(bin.actual! - bin.expected),
+        0,
+      ) / covered.length
+    : null;
+  return { binMs, bins, meanAbsoluteError };
+}
+
+/** Origin-aligned observed intervals; the default fixed origin preserves Overview history. */
 export function observedBins(
   data: Dataset,
   start: number,
   end: number,
   cursor: number,
   binMs = 15000,
+  origin = 0,
 ) {
   const bins = [];
   const arrivals = data.jobs.filter((j) => j.available <= cursor);
   for (
-    let t = Math.floor(start / binMs) * binMs;
+    let t = origin + Math.floor((start - origin) / binMs) * binMs;
     t < Math.min(end, cursor);
     t += binMs
   ) {

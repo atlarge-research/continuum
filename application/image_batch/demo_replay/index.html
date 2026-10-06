@@ -149,54 +149,64 @@
                 </select></label
               >
             </div>
-            <div id="analysis-forecast-input" class="input-strip"></div>
+            <div class="input-strip analysis-forecast-context">
+              <span id="analysis-forecast-state"></span>
+              <div
+                id="analysis-forecast-input"
+                class="analysis-input-values"
+              ></div>
+            </div>
             <div id="analysis-forecast-chart" class="chart detail-chart"></div>
-            <div class="forecast-legend">
-              <span class="actual">▮ Observed</span
-              ><span class="expected">– – Expected</span
-              ><span class="range-key">Sampled range</span
-              ><span>Lines: individual futures</span>
+            <div class="forecast-legend analysis-legend">
+              <span
+                class="actual"
+                title="Arrivals recorded by the replay cursor"
+                >Observed</span
+              ><span
+                class="filling-key"
+                title="Current interval still accumulating arrivals"
+                >Filling</span
+              ><span class="expected">Expected</span
+              ><span
+                class="range-key"
+                title="Minimum to maximum of captured sampled futures"
+                >Forecast range</span
+              ><span id="analysis-scenario-key" class="analysis-scenario-key"
+                >Selected scenario</span
+              >
             </div>
             <div id="forecast-quality" class="quality"></div>
-            <p class="analysis-notes">
-              Inspect a published forecast as its actual observations arrive.
-              Expected counts and sampled futures remain distinct.
-            </p>
-            <details class="analysis-explanation">
-              <summary>Forecast interpretation</summary>
-              <div id="analysis-forecast-notes" class="analysis-notes"></div>
-            </details>
-            <details class="analysis-explanation">
-              <summary>Application resource measurements</summary>
-              <div id="resource-detail"></div>
-            </details>
           </section>
           <section class="panel analysis-simulation">
             <div class="panel-heading">
               <h2>Simulation &amp; response</h2>
-              <span id="analysis-cycle"></span>
+              <button
+                id="analysis-details-button"
+                class="quiet"
+                aria-haspopup="dialog"
+                aria-controls="analysis-dialog"
+              >
+                Analysis details
+              </button>
+            </div>
+            <div class="analysis-options-heading">
+              <h3>Simulated alternatives</h3>
+              <span id="analysis-target"></span>
             </div>
             <div id="analysis-alternatives"></div>
             <div id="analysis-decision" class="decision"></div>
-            <div class="plot-heading">
-              <h3>Predicted and observed reservations</h3>
-              <label
-                >Sample
+            <div class="analysis-requests-heading">
+              <h3>Application CPU requests</h3>
+              <label class="scenario-selector"
+                >Simulation scenario
                 <select
                   id="scenario-select"
                   aria-label="Sampled simulation scenario"
                 ></select
               ></label>
             </div>
+            <p id="analysis-requests-scale" class="analysis-scale"></p>
             <div id="predicted-processing"></div>
-            <details class="analysis-explanation">
-              <summary>Simulation assumptions &amp; input</summary>
-              <div id="analysis-simulation-notes" class="analysis-notes"></div>
-            </details>
-            <details class="analysis-explanation">
-              <summary>Service performance &amp; deadline accounting</summary>
-              <div id="analysis-service" class="analysis-notes"></div>
-            </details>
           </section>
         </div>
         <div
@@ -345,6 +355,20 @@
         <div id="comparison-interpretation"></div>
         <h3>How the comparison was run</h3>
         <div id="comparison-settings"></div>
+      </div>
+    </dialog>
+    <dialog id="analysis-dialog" aria-labelledby="analysis-dialog-title">
+      <button id="close-analysis-details" class="quiet close">Close ×</button>
+      <h2 id="analysis-dialog-title">Analysis details</h2>
+      <div class="analysis-details">
+        <h3>Forecast interpretation</h3>
+        <div id="analysis-forecast-notes" class="analysis-notes"></div>
+        <h3>Simulation &amp; action</h3>
+        <div id="analysis-simulation-notes" class="analysis-notes"></div>
+        <h3>Application measurements</h3>
+        <div id="resource-detail"></div>
+        <h3>Service performance</h3>
+        <div id="analysis-service" class="analysis-notes"></div>
       </div>
     </dialog>
     <script id="replay-data" type="application/json">

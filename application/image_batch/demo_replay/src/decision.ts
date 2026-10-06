@@ -7,6 +7,8 @@ interface DecisionText {
   detail: string;
   warning: boolean;
   stage: string;
+  confirmedAt?: number;
+  currentConfirmed?: boolean;
 }
 export function decisionText(data: Dataset, view: ReplayView): DecisionText {
   const cycle = view.cycle;
@@ -81,6 +83,8 @@ export function decisionText(data: Dataset, view: ReplayView): DecisionText {
       detail: `First physical confirmation at ${time(confirmation.at)}. ${!view.fresh ? "Current worker observation unavailable during this gap." : "The cards show current physical state."} Assigned work continues; the VM stays powered.`,
       warning: false,
       stage: "Physical response",
+      confirmedAt: confirmation.at,
+      currentConfirmed: Boolean(stillObserved),
     });
   }
   const ack = events.find(

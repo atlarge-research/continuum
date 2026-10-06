@@ -34,6 +34,14 @@ test("preserves final physical confirmation across a synthetic observation gap a
   const gap = decisionText(capture, viewAt(capture, at));
   assert.equal(confirmed.stage, "Physical response");
   assert.equal(gap.stage, "Physical response");
+  assert.equal(confirmed.confirmedAt, confirmation.at);
+  assert.equal(confirmed.currentConfirmed, true);
+  assert.equal(gap.confirmedAt, confirmation.at);
+  assert.equal(gap.currentConfirmed, false);
+  assert.equal(
+    decisionText(capture, viewAt(capture, cycle.available)).confirmedAt,
+    undefined,
+  );
   const first = confirmed.detail.match(/\d\d:\d\d/)![0];
   // Independently read final raw confirmation: 1791197314498321920 ns.
   assert.equal(first, "00:01");

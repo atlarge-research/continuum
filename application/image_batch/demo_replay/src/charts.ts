@@ -142,7 +142,7 @@ export function forecastChart(
   data: Dataset,
   view: ReplayView,
   size: ChartSize = { width: 620, height: 240 },
-  options: { cycle?: Cycle | null; detail?: boolean } = {},
+  options: { cycle?: Cycle | null; detail?: boolean; scenario?: number } = {},
 ): string {
   const font = 18,
     left = 46,
@@ -155,10 +155,13 @@ export function forecastChart(
       ? latestReadyForecast(data, view.cursor)
       : options.cycle;
   const ready =
-    !!cycle && cycle.forecastStatus === "ready" && cycle.bins.length > 0;
+    !!cycle &&
+    cycle.available <= view.cursor &&
+    cycle.forecastStatus === "ready" &&
+    cycle.bins.length > 0;
   const start =
     detail && ready
-      ? Math.max(data.run.start, Math.min(cycle!.cutoff, view.cursor - 180000))
+      ? Math.max(data.run.start, cycle!.cutoff - 180000)
       : Math.max(data.run.start, view.cursor - 180000);
   const horizonEnd = cycle ? cycle.cutoff + cycle.horizonMs : view.cursor;
   const end = Math.max(view.cursor + 15000, horizonEnd);
@@ -173,6 +176,7 @@ export function forecastChart(
     view.cursor,
     view.cursor,
     displayBinMs,
+    detail && ready ? cycle!.bins[0].start : 0,
   );
   const history = detail
     ? []
@@ -196,16 +200,15 @@ export function forecastChart(
       (b) => b.end > Math.max(start, s.start) && b.start < Math.min(end, s.end),
     ),
   );
-  const ymax = Math.max(
-    5,
-    Math.ceil(
-      Math.max(
-        0,
-        ...observed.map((b) => b.count),
-        ...visibleBuckets.flatMap((b) => [b.mean, b.max]),
-      ) / 5,
-    ) * 5,
+  const peak = Math.max(
+    0,
+    ...observed.map((b) => b.count),
+    ...visibleBuckets.flatMap((b) => [b.mean, b.max]),
   );
+  const estimate = Math.max(2, peak / 3),
+    power = 10 ** Math.floor(Math.log10(estimate)),
+    step = [1, 2, 5, 10].find((value) => value * power >= estimate)! * power;
+  const ymax = detail ? step * 3 : Math.max(5, Math.ceil(peak / 5) * 5);
   const y = (v: number) => bottom - (v / ymax) * (bottom - top);
   const prefix = detail ? "analysis" : "overview";
   let body = `<defs><pattern id="${prefix}-arrival-open" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 6L6 0" stroke="var(--physical)" stroke-width="2"/></pattern>`;
@@ -215,7 +218,9 @@ export function forecastChart(
     body += `<clipPath id="${prefix}-forecast-${s.cycle.tick}-${s.kind}"><rect x="${n(clipLeft)}" y="${top}" width="${n(Math.max(0, clipRight - clipLeft))}" height="${bottom - top}"/></clipPath>`;
   }
   body += `</defs><rect x="${n(x(view.cursor))}" y="${top}" width="${n(Math.max(0, right - x(view.cursor)))}" height="${bottom - top}" fill="var(--twin)" opacity=".05"/>`;
-  for (const v of [0, ymax / 2, ymax])
+  for (const v of detail
+    ? [0, ymax / 3, (2 * ymax) / 3, ymax]
+    : [0, ymax / 2, ymax])
     body +=
       `<line class="gridline" x1="${left}" x2="${right}" y1="${n(y(v))}" y2="${n(y(v))}"/>` +
       text(left - 8, y(v) + 6, String(v), "end");
@@ -240,7 +245,7 @@ export function forecastChart(
     if (detail)
       for (let i = 0; i < s.cycle.futures.length; i++)
         lineBodies.push(
-          `<path class="future-line scenario-${i}" ${clip} d="${path(s.buckets.map((b) => b.scenarios[i]))}"><title>Sampled future ${i + 1}</title></path>`,
+          `<path class="future-line scenario-${i}${i === options.scenario ? " selected" : ""}" data-scenario="${i}" data-selected="${i === options.scenario}" ${clip} d="${path(s.buckets.map((b) => b.scenarios[i]))}"><title>Simulation scenario ${i + 1}</title></path>`,
         );
     lineBodies.push(
       `<path class="forecast-line ${s.kind}" ${attrs} ${clip} d="${path(s.buckets.map((b) => b.mean))}"><title>Expected arrivals from forecast issued ${formatTime(s.cycle.available - data.run.start)}</title></path>`,
@@ -260,13 +265,14 @@ export function forecastChart(
       "now",
       "middle",
     );
-  for (let i = 0; i <= 3; i++) {
-    const t = start + ((end - start) * i) / 3;
+  const xDivisions = detail ? 4 : 3;
+  for (let i = 0; i <= xDivisions; i++) {
+    const t = start + ((end - start) * i) / xDivisions;
     body += text(
       x(t),
       size.height - 3,
       formatTime(t - data.run.start),
-      i === 0 ? "start" : i === 3 ? "end" : "middle",
+      i === 0 ? "start" : i === xDivisions ? "end" : "middle",
     );
   }
   if (!ready)

@@ -2,7 +2,7 @@ import { latestReadyForecast } from "./forecast-history.ts";
 import { decisionText } from "./decision.ts";
 import { policyDiagrams } from "./policy-diagrams.ts";
 import type { Dataset, Cycle } from "./types.ts";
-import { viewAt, forecastActuals } from "./replay.ts";
+import { viewAt } from "./replay.ts";
 import type { ReplayView } from "./replay.ts";
 import { playbackCommand, advancePlayback } from "./playhead.ts";
 import type { Command, Playback } from "./playhead.ts";
@@ -20,6 +20,7 @@ import {
   resourceReservations,
   selectedForecast,
   predictedOccupancy,
+  forecastEvaluation,
 } from "./presentation.ts";
 const data: Dataset = JSON.parse(
   document.getElementById("replay-data")!.textContent!,
@@ -122,10 +123,10 @@ function workerCards(display: ReturnType<typeof workerDisplayAt>): string {
     })
     .join("");
 }
-function alternatives(cycle: Cycle | null): string {
+function alternatives(cycle: Cycle | null, analysis = false): string {
   if (!cycle || !cycle.valid || !cycle.candidates.length)
     return `<div class="simulation-status"><strong>Simulation update skipped</strong><span>Recorded action: ${cycle ? actionName(cycle.action) : "Waiting for publication"}</span><span>Recorded decision is shown below.</span></div>`;
-  return `<table class="alternative-table"><thead><tr><th>Capacity option</th><th>Within deadline</th><th>CPU allocation</th></tr></thead><tbody>${[
+  return `<table class="alternative-table"><thead><tr><th>Capacity option</th><th>${analysis ? "Predicted on time" : "Within deadline"}</th><th>${analysis ? "Allocation (core-min)" : "CPU allocation"}</th></tr></thead><tbody>${[
     "unchanged",
     "scale-up",
     "scale-down",
@@ -141,7 +142,7 @@ function alternatives(cycle: Cycle | null): string {
             : "Not evaluated";
       const allocation =
         c?.allocationCoreSeconds != null
-          ? `${(c.allocationCoreSeconds / 60).toFixed(1)} core-min`
+          ? `${(c.allocationCoreSeconds / 60).toFixed(1)}${analysis ? "" : " core-min"}`
           : "—";
       return `<tr class="${chosen ? "chosen" : ""}" data-candidate="${name}"><td>${actionName(name)}${chosen ? '<span class="choice-label" title="Recorded choice; application depends on safety checks">✓</span>' : ""}</td><td class="${c?.onTime != null && c.onTime < data.run.deadlineFraction ? "prediction-low" : ""}" title="Worst captured sampled future under historical controller timing rules">${service}</td><td title="Predicted requested application core-time">${allocation}</td></tr>`;
     })
@@ -151,7 +152,7 @@ function serviceText(cursor: number, detail = false): string {
   const s = deadlineStatus(data, cursor);
   const fraction = s.percent === null ? "—" : `${s.percent.toFixed(1)}%`;
   return detail
-    ? `<h3>Observed service performance</h3><p><strong>${fraction}</strong> of confirmed evaluation outcomes met the ${data.run.deadlineSeconds}s deadline: ${s.onTime} on time, ${s.missed} missed or failed, ${s.pending} pending. Target: ≥${Math.round(data.run.deadlineFraction * 100)}%. Pending outcomes are excluded from this provisional percentage; this is not the final whole-cohort result.</p><p>The deadline measures original API Job creation to terminal Job completion. Classifier processing can finish earlier and remains separate from this service clock. Evaluation arrivals only; preceding history remains internal.</p>`
+    ? `<p>Of the evaluation jobs whose outcomes are known at this replay time, <strong>${fraction}</strong> finished within the ${data.run.deadlineSeconds}-second deadline. ${s.onTime} finished on time, ${s.missed} missed the deadline or failed, and ${s.pending} are still pending. The target is at least ${Math.round(data.run.deadlineFraction * 100)}%. Pending jobs are excluded from this running percentage. Policy comparison shows the completed-run results, including every evaluation job.</p><p>Response time starts when Kubernetes creates the original Job and ends when that Job is reported complete. AI processing can finish earlier; cleanup and completion reporting still count toward the service deadline.</p>`
     : `<strong title="On-time fraction of confirmed evaluation outcomes; pending excluded">${fraction} on time</strong><span>${s.onTime}/${s.confirmed} confirmed</span><span class="missed">${s.missed} missed</span><span class="pending">${s.pending} pending</span><span class="service-target" title="Target applies to the full evaluation cohort, including failures and unfinished work">≤${data.run.deadlineSeconds}s · target ${Math.round(data.run.deadlineFraction * 100)}%</span>`;
 }
 function renderAnalysis(view: ReplayView): void {
@@ -160,45 +161,72 @@ function renderAnalysis(view: ReplayView): void {
   );
   if (forecastTick !== null && !available.some((c) => c.tick === forecastTick))
     forecastTick = null;
-  const cycle = selectedForecast(data, view.cursor, forecastTick),
-    select = element("forecast-select") as HTMLSelectElement;
+  const cycle = selectedForecast(data, view.cursor, forecastTick);
+  const select = element("forecast-select") as HTMLSelectElement;
   select.innerHTML =
     '<option value="latest">Latest</option>' +
     available
       .map(
         (c) =>
-          `<option value="${c.tick}">Cycle ${c.tick} · ${time(c.available)}${c.valid ? "" : " · fallback"}</option>`,
+          `<option value="${c.tick}">${time(c.available)}${c.valid ? "" : " · update skipped"}</option>`,
       )
       .join("");
   select.value = forecastTick === null ? "latest" : String(forecastTick);
-  element("analysis-forecast-input").innerHTML = cycle
-    ? `<span>Cycle ${cycle.tick} · issued ${time(cycle.available)}</span><span>Input cutoff ${time(cycle.cutoff)} · age ${Math.ceil((view.cursor - cycle.available) / 1000)}s</span>`
-    : "No operating forecast published";
-  element("analysis-cycle").textContent = cycle
-    ? `Recorded cycle ${cycle.tick}`
-    : "";
-  const quality = cycle ? forecastActuals(data, cycle, view.cursor) : [],
-    covered = quality.filter((b) => b.complete);
-  const mae = covered.length
-    ? covered.reduce((s, b) => s + Math.abs(b.actual! - b.expected), 0) /
-      covered.length
-    : null;
-  element("forecast-quality").innerHTML =
-    mae === null
-      ? "Forecast error waits for covered actual observations."
-      : `Mean absolute error: <strong>${mae.toFixed(2)} Jobs / ${cycle!.binMs / 1000}s</strong> · ${covered.length} covered bins`;
-  element("analysis-forecast-notes").innerHTML =
-    `<p>Shading spans the minimum and maximum of ${cycle?.futures.length ?? 0} captured sampled futures. It is a scenario range, not a calibrated confidence interval. The expected forecast can lie outside a small set of sampled futures.</p><p>Solid bars: arrivals recorded by the cursor. Hatched bars: the current interval still filling. Counts may update as new observations arrive. Brief worker-membership gaps do not establish lost arrivals. Actual observations appear only after publication. Configured decision cadence: ${data.run.cadenceSeconds}s; actual issue intervals include computation and vary.</p>`;
-  element("resource-detail").innerHTML =
-    `<table class="resource-table"><thead><tr><th>Worker</th><th>App CPU</th><th>App RAM</th><th>Coverage / age</th></tr></thead><tbody>${view.workers.map((w) => `<tr><td>${e(w.config.label)}</td><td>${precise(w.cpu, 2)} cores</td><td>${precise(w.memory, 1)} MiB</td><td>${view.fresh ? `${w.sampled}/${w.totalJobs} Jobs · ${w.sampleAge === null ? "—" : `${Math.ceil(w.sampleAge / 1000)}s`}` : "State unknown"}</td></tr>`).join("")}</tbody></table><p class="analysis-notes">CPU is a ${data.run.sampleMaxAgeMs - data.run.maxGapMs}ms short-window application rate; RAM is working-set memory. Available recent per-Job samples are aggregated; partial coverage is not a complete worker total. Percentages use configured VM cores and RAM, not reserved application capacity. Samples can sum above 100% because their windows differ; they are not simultaneous whole-node measurements.</p>`;
-  element("analysis-alternatives").innerHTML = alternatives(cycle);
-  const status = decisionText(data, { ...view, cycle });
-  element("analysis-decision").className =
-    `decision${status.warning ? " warning" : ""}`;
-  element("analysis-decision").innerHTML =
-    `<strong><span class="badge">${e(status.stage)}</span>${e(status.title)}</strong><p>${e(status.detail)}</p>`;
+  const horizonEnd = cycle ? cycle.cutoff + cycle.horizonMs : null;
+  const expired = horizonEnd !== null && view.cursor >= horizonEnd;
   const count = cycle?.futures.length ?? 0;
   scenario = Math.min(scenario, Math.max(0, count - 1));
+  const publication = element("analysis-forecast-state");
+  publication.dataset.cycle = String(cycle?.tick ?? "");
+  publication.dataset.pinned = String(forecastTick !== null);
+  publication.dataset.available = String(cycle?.available ?? "");
+  publication.innerHTML = cycle
+    ? `<span><strong>${forecastTick === null ? "Latest forecast" : "Selected forecast"}</strong> · ${time(cycle.available)} · ${Math.ceil((view.cursor - cycle.available) / 1000)}s old</span><span>${expired ? "Window ended" : `Through ${time(horizonEnd!)}`} · ${count} scenarios</span>`
+    : "Waiting for forecast publication";
+  element("analysis-forecast-input").innerHTML = cycle
+    ? `<span>Input: <strong>${cycle.inputQueue ?? "—"}</strong> queued · <strong>${cycle.inputAssigned ?? "—"}</strong> requested cores · <strong>${cycle.inputSlots ?? "—"}</strong> cores of app capacity</span>`
+    : "Waiting for observed input";
+  const evaluation = forecastEvaluation(data, cycle, view.cursor);
+  const covered = evaluation.bins.filter((bin) => bin.complete);
+  const quality = element("forecast-quality");
+  quality.dataset.cycle = String(cycle?.tick ?? "");
+  quality.dataset.binMs = String(evaluation.binMs);
+  quality.dataset.covered = String(covered.length);
+  quality.dataset.error = String(evaluation.meanAbsoluteError ?? "unknown");
+  quality.innerHTML =
+    evaluation.meanAbsoluteError === null
+      ? "Forecast error: awaiting complete observations"
+      : `Average forecast error: <strong>${evaluation.meanAbsoluteError.toFixed(2)} jobs per ${evaluation.binMs / 1000}s</strong>`;
+  element("analysis-scenario-key").textContent =
+    `Selected scenario ${scenario + 1}`;
+  element("analysis-target").textContent =
+    `Target: ≥${Math.round(data.run.deadlineFraction * 100)}% within ${data.run.deadlineSeconds}s`;
+  element("analysis-alternatives").dataset.cycle = String(cycle?.tick ?? "");
+  element("analysis-alternatives").innerHTML = alternatives(cycle, true);
+  const status = decisionText(data, { ...view, cycle });
+  const stage =
+    status.stage === "Physical response"
+      ? `${status.currentConfirmed ? "Confirmed" : "Confirmed earlier"} ${time(status.confirmedAt!)}`
+      : ((
+          {
+            Observe: "Awaiting decision",
+            Hold: "Capacity retained",
+            Fallback: "Reactive fallback",
+            "Guard veto": "Safety check blocked",
+            "Awaiting observation": "Awaiting observation",
+            "Admission pending": "Awaiting capacity",
+            "Decision recorded": "Selected",
+          } as Record<string, string>
+        )[status.stage] ?? status.stage);
+  const action = cycle
+    ? `${actionName(cycle.action)}${cycle.worker === null ? "" : ` · ${data.run.workers[cycle.worker].label}`}`
+    : "Awaiting decision";
+  const decision = element("analysis-decision");
+  decision.className = `decision${status.warning ? " warning" : ""}`;
+  decision.dataset.cycle = String(cycle?.tick ?? "");
+  decision.dataset.stage = status.stage;
+  decision.dataset.action = cycle?.action ?? "";
+  decision.innerHTML = `<strong>${e(action)}</strong><span class="analysis-action-stage">${e(stage)}</span>`;
   const scenarios = element("scenario-select") as HTMLSelectElement;
   scenarios.innerHTML = count
     ? Array.from(
@@ -207,17 +235,56 @@ function renderAnalysis(view: ReplayView): void {
       ).join("")
     : '<option value="0">—</option>';
   scenarios.value = String(scenario);
+  const capacities = [...new Set(view.workers.map((w) => w.config.slots))];
+  element("analysis-requests-scale").textContent =
+    capacities.length === 1
+      ? `Cores · ${capacities[0]} per worker for applications`
+      : "Cores · each bar uses its worker’s application capacity";
+  element("predicted-processing").dataset.scenario = String(scenario);
   element("predicted-processing").innerHTML =
-    `<table class="allocation-table"><thead><tr><th>Worker</th><th>Predicted CPU requests</th><th>Observed CPU requests</th></tr></thead><tbody>${view.workers
+    `<table class="allocation-table"><thead><tr><th>Worker</th><th>Predicted</th><th>Observed</th></tr></thead><tbody>${view.workers
       .map((w, i) => {
-        const predicted = predictedOccupancy(cycle, i, view.cursor, scenario);
-        const cell = (v: number | null, cls: string) =>
-          `<td class="allocation-cell ${cls}"><div class="allocation-body"><span>${v ?? "—"} / ${w.config.slots}</span><div class="allocation-track"><i style="width:${v === null ? 0 : Math.min(100, (v / w.config.slots) * 100)}%"></i></div></div></td>`;
-        return `<tr><td>${e(w.config.label)}</td>${cell(predicted, "predicted")}${cell(w.occupied, "observed")}</tr>`;
+        const predicted = expired
+          ? null
+          : predictedOccupancy(cycle, i, view.cursor, scenario);
+        const observed = resourceReservations(w).cpuRequested;
+        const cell = (value: number | null, kind: string) =>
+          `<td class="allocation-cell ${kind}" data-cores="${value ?? "unknown"}" data-capacity="${w.config.slots}"><div class="allocation-body"><span>${value === null ? "—" : Number(value.toFixed(2))}</span><div class="allocation-track"><i style="width:${value === null ? 0 : Math.min(100, (value / w.config.slots) * 100)}%"></i></div></div></td>`;
+        return `<tr data-worker="${i}"><td>${e(w.config.label)}</td>${cell(predicted, "predicted")}${cell(observed, "observed")}</tr>`;
       })
       .join("")}</tbody></table>`;
+  element("analysis-forecast-notes").innerHTML =
+    `<p>Solid bars show arrivals recorded by the replay time. Striped bars mark an interval that is still filling. Expected is the model’s expected arrival count. Forecast range spans the captured possible futures; it shows scenario variation, not a calibrated confidence interval. The expected value can lie outside the range of a small set of scenarios.</p><p>Select a simulation scenario to highlight its arrival pattern and inspect its predicted worker requests. Selecting an issued forecast keeps that forecast and its simulation while observations advance. Latest follows new publications.</p><p>Average forecast error is the average absolute difference between expected and observed arrivals in matching ${evaluation.binMs / 1000}-second intervals. Only complete intervals with monitoring coverage are included; partial intervals and gaps are excluded. The captured forecast uses ${cycle ? cycle.binMs / 1000 : "unrecorded"}-second intervals, which are added together for this display.</p>${cycle ? `<p>Input observed at ${time(cycle.cutoff)}. Forecast available in this replay at ${time(cycle.available)}. The controller recorded its proposal ${precise((cycle.available - cycle.cutoff) / 1000)} seconds after the input cutoff; the exact forecast issue time was not captured. Its recorded prediction window ends at ${time(horizonEnd!)}. Predictions remain as issued; the replay does not run the forecasting model again.</p>` : ""}`;
+  const detail = status.detail
+    .replace(
+      "The cards show current physical state.",
+      "The worker table shows current observed CPU requests.",
+    )
+    .replace(
+      "The cards show the observed outcome.",
+      "The worker table shows observed CPU requests.",
+    )
+    .replace(
+      "Cards change only on physical observation.",
+      "Observed requests change only when a physical observation is available.",
+    );
+  const allocationWindows = [
+    ...new Set(
+      cycle?.candidates.flatMap((candidate) =>
+        candidate.allocationWindowSeconds === null
+          ? []
+          : [candidate.allocationWindowSeconds],
+      ) ?? [],
+    ),
+  ];
+  const allocationWindow =
+    allocationWindows.length === 1
+      ? `recorded ${allocationWindows[0]}-second allocation window`
+      : "recorded allocation window for each option";
   element("analysis-simulation-notes").innerHTML =
-    `<p>${cycle && view.cursor > cycle.cutoff + cycle.horizonMs ? "The cursor is beyond this prediction horizon; predicted occupancy is unavailable." : `Predictions show the recorded selected option, sample ${scenario + 1}, at the playback cursor.`} They describe occupied requested CPU units, not measured CPU use. ${status.stage === "Guard veto" ? "The selected option was vetoed and remains hypothetical." : "A prediction is conditional on its proposed action and captured assumptions; later physical decisions may differ."}</p><p>Input: ${cycle?.inputQueue ?? "—"} queued Jobs, ${cycle?.inputAssigned ?? "—"} assigned CPU cores, ${cycle?.inputSlots ?? "—"} app CPU cores. Native scores and modeled timing are preserved from the historical run. Admission requests, acknowledgements and observed availability are distinct.</p>`;
+    `<p><strong>${e(action)} · ${e(stage)}.</strong> ${e(detail)}</p><p>The twin compares doing nothing, scaling up and scaling down. Each deadline percentage is the lowest predicted result across the simulated scenarios, rather than the score of only the selected scenario. Allocation is the predicted application CPU capacity committed over the ${allocationWindow}, in core-minutes. This window is separate from the arrival forecast horizon.</p><p>The worker table compares requested CPU cores at the replay time. Predicted uses scenario ${scenario + 1} under the selected action; Observed sums the CPU requests recorded on the cluster. Requested cores reserve capacity for applications and are separate from measured CPU use.${expired ? " This forecast’s prediction window has ended, so its current worker predictions are unavailable." : ""} Later physical decisions may change the allocation, even while an earlier forecast is selected.</p>`;
+  element("resource-detail").innerHTML =
+    `<table class="resource-table"><thead><tr><th>Worker</th><th>CPU used (cores)</th><th>RAM used (MiB)</th><th>Measurement coverage</th></tr></thead><tbody>${view.workers.map((w) => `<tr><td>${e(w.config.label)}</td><td>${precise(w.cpu, 2)}</td><td>${precise(w.memory, 1)}</td><td>${view.fresh ? `${w.sampled}/${w.totalJobs} jobs sampled · ${w.sampleAge === null ? "no fresh samples" : `${Math.ceil(w.sampleAge / 1000)}s old`}` : "Observation unavailable"}</td></tr>`).join("")}</tbody></table><p>These values add the available recent application measurements on each worker. CPU is measured use in cores; RAM is working-set memory in MiB. Partial coverage means only some assigned jobs have measurements. Missing measurements remain unavailable. This is application use, separate from requested resources and whole-node utilization.</p>`;
   element("analysis-service").innerHTML = serviceText(view.cursor, true);
   element("analysis-forecast-chart").innerHTML = forecastChart(
     data,
@@ -226,7 +293,7 @@ function renderAnalysis(view: ReplayView): void {
       width: element("analysis-forecast-chart").clientWidth,
       height: element("analysis-forecast-chart").clientHeight,
     },
-    { cycle, detail: true },
+    { cycle, detail: true, scenario },
   );
 }
 function renderComparison(): void {
@@ -489,7 +556,8 @@ document.addEventListener("keydown", (event) => {
       (event.target as HTMLElement)?.tagName,
     ) ||
     element("evidence-dialog").hasAttribute("open") ||
-    element("comparison-dialog").hasAttribute("open")
+    element("comparison-dialog").hasAttribute("open") ||
+    element("analysis-dialog").hasAttribute("open")
   )
     return;
   if (event.code === "Space") {
@@ -517,6 +585,14 @@ element("fullscreen").addEventListener("click", async () => {
     element("fullscreen").textContent = "Use browser full screen";
   }
 });
+const analysisDialog = element("analysis-dialog") as HTMLDialogElement;
+element("analysis-details-button").addEventListener("click", () => {
+  command({ type: "pause" });
+  analysisDialog.showModal();
+});
+element("close-analysis-details").addEventListener("click", () =>
+  analysisDialog.close(),
+);
 const comparisonDialog = element("comparison-dialog") as HTMLDialogElement;
 element("comparison-settings-button").addEventListener("click", () =>
   comparisonDialog.showModal(),

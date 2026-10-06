@@ -12,7 +12,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { viewAt } from "../src/replay.ts";
+import { coveredInterval, viewAt } from "../src/replay.ts";
 import { decisionText } from "../src/decision.ts";
 import { deadlineStatus, workerDisplayAt } from "../src/presentation.ts";
 import type { Dataset, PolicyResult } from "../src/types.ts";
@@ -695,21 +695,131 @@ try {
   await page
     .locator("#scenario-select")
     .selectOption({ value: String(scenario) });
-  await page
-    .getByText("Simulation assumptions & input", { exact: true })
-    .click();
+  assert.equal(
+    await page.locator("#analysis details, #analysis summary").count(),
+    0,
+  );
+  assert.equal(
+    await page.locator("#analysis-forecast-state").getAttribute("data-cycle"),
+    String(focusCycle.tick),
+  );
+  assert.equal(
+    await page.locator("#analysis-forecast-chart .future-line").count(),
+    focusCycle.futures.length,
+  );
+  assert.equal(
+    await page
+      .locator(
+        `#analysis-forecast-chart .future-line.selected[data-scenario="${scenario}"][data-selected="true"]`,
+      )
+      .count(),
+    1,
+  );
+  const observedView = viewAt(data, focusCycle.available);
+  for (let worker = 0; worker < data.run.workers.length; worker++) {
+    const row = page.locator(
+      `#predicted-processing tr[data-worker="${worker}"]`,
+    );
+    const observed = observedView.fresh
+      ? observedView.snapshot!.workers[worker].held.reduce(
+          (sum, job) => sum + job.cores,
+          0,
+        )
+      : "unknown";
+    const predicted = focusCycle.tasks
+      .filter(
+        (task) =>
+          task.candidate === focusCycle.action &&
+          task.scenario === scenario &&
+          task.worker === worker &&
+          task.scheduled !== null &&
+          task.scheduled <= focusCycle.available &&
+          task.finished !== null &&
+          task.finished > focusCycle.available,
+      )
+      .reduce((sum, task) => sum + task.cores, 0);
+    assert.equal(
+      await row.locator(".observed").getAttribute("data-cores"),
+      String(observed),
+    );
+    assert.equal(
+      await row.locator(".predicted").getAttribute("data-cores"),
+      String(predicted),
+    );
+  }
+  const displayMs = Math.ceil(15000 / focusCycle.binMs) * focusCycle.binMs;
+  const errorsByInterval: number[] = [];
+  for (
+    let i = 0;
+    i < focusCycle.bins.length;
+    i += displayMs / focusCycle.binMs
+  ) {
+    const native = focusCycle.bins.slice(i, i + displayMs / focusCycle.binMs);
+    const start = native[0].start,
+      end = native.at(-1)!.start + focusCycle.binMs;
+    if (
+      end - start !== displayMs ||
+      start < Math.max(data.run.start, focusCycle.cutoff) ||
+      end > focusCycle.cutoff + focusCycle.horizonMs ||
+      !coveredInterval(data, start, end, focusCycle.available)
+    )
+      continue;
+    const actual = data.jobs.filter(
+      (job) =>
+        job.available <= focusCycle.available &&
+        job.creation >= start &&
+        job.creation < end,
+    ).length;
+    const expected = native.reduce((sum, bin) => sum + bin.mean, 0);
+    errorsByInterval.push(Math.abs(actual - expected));
+    assert.equal(
+      await page
+        .locator(
+          `#analysis-forecast-chart .actual-bar[data-bin-start="${start}"][data-bin-end="${end}"]`,
+        )
+        .getAttribute("data-count"),
+      String(actual),
+    );
+  }
+  assert.ok(errorsByInterval.length > 0);
+  assert.equal(
+    await page.locator("#forecast-quality").getAttribute("data-bin-ms"),
+    String(displayMs),
+  );
+  assert.equal(
+    await page.locator("#forecast-quality").getAttribute("data-error"),
+    String(
+      errorsByInterval.reduce((sum, error) => sum + error, 0) /
+        errorsByInterval.length,
+    ),
+  );
+  await page.locator("#play").click();
+  await page.locator("#analysis-details-button").click();
+  const modalCursor = await page.locator("#seek").inputValue();
+  assert.ok(await page.locator("#analysis-dialog").isVisible());
+  assert.equal(await page.locator("#analysis-dialog h3").count(), 4);
   assert.match(
     await page.locator("#analysis-simulation-notes").innerText(),
-    new RegExp(`sample ${scenario + 1}`),
+    new RegExp(`scenario ${scenario + 1}`),
   );
+  await page.locator("#analysis-dialog").focus();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Space");
+  assert.equal(await page.locator("#seek").inputValue(), modalCursor);
+  assert.match(await page.locator("#play").innerText(), /Play/);
+  await page.keyboard.press("Escape");
+  assert.ok(!(await page.locator("#analysis-dialog").isVisible()));
+  await page.locator("#analysis-details-button").click();
+  await page.locator("#close-analysis-details").click();
+  assert.ok(!(await page.locator("#analysis-dialog").isVisible()));
+  await seek(focusCycle.available);
   await page.locator("#scenario-select").selectOption({ value: "0" });
-  await page
-    .getByText("Simulation assumptions & input", { exact: true })
-    .click();
   const analysisState = () =>
     page.evaluate(() =>
       [
         "analysis-forecast-chart",
+        "analysis-forecast-state",
         "analysis-decision",
         "predicted-processing",
         "forecast-quality",
@@ -720,9 +830,96 @@ try {
   await seek(data.run.end);
   await seek(focusCycle.available);
   assert.deepEqual(await analysisState(), analysisInitial);
-  await page.screenshot({ path: `${outputDir}/analysis-1920.png` });
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const analysisLayout = () =>
+      page.evaluate(() => {
+        const area = document.querySelector(".view-area")!;
+        const table = document.getElementById("predicted-processing")!;
+        return {
+          overflow: area.scrollHeight - area.clientHeight,
+          widthOverflow: document.documentElement.scrollWidth - innerWidth,
+          lastRowBottom: table
+            .querySelector("tbody tr:last-child")!
+            .getBoundingClientRect().bottom,
+          areaBottom: area.getBoundingClientRect().bottom,
+          fixed: [
+            "analysis-forecast-chart",
+            "analysis-forecast-state",
+            "analysis-decision",
+            "predicted-processing",
+          ].map((id) => {
+            const box = document.getElementById(id)!.getBoundingClientRect();
+            return [box.x, box.y, box.width, box.height];
+          }),
+          fonts: [
+            ...document.querySelectorAll(
+              "#analysis h2, #analysis h3, #analysis table, #analysis-forecast-state, #forecast-quality, #analysis .forecast-legend",
+            ),
+          ].map((el) => parseFloat(getComputedStyle(el).fontSize)),
+        };
+      });
+    const geometry = await analysisLayout();
+    assert.ok(
+      geometry.overflow <= 1 && geometry.widthOverflow <= 1,
+      `Analysis fits ${viewport.width}×${viewport.height}: ${JSON.stringify(geometry)}`,
+    );
+    assert.ok(geometry.lastRowBottom <= geometry.areaBottom + 1);
+    assert.ok(geometry.fonts.every((font) => font >= 18));
+    for (const cycle of [firstReady, focusCycle, readyCycles.at(-1)!]) {
+      await seek(cycle.available);
+      assert.deepEqual(
+        (await analysisLayout()).fixed,
+        geometry.fixed,
+        "Analysis geometry stays fixed as decisions and publications change",
+      );
+    }
+    await seek(focusCycle.available);
+    await page
+      .locator("#forecast-select")
+      .selectOption(String(focusCycle.tick));
+    await seek(focusCycle.cutoff + focusCycle.horizonMs);
+    assert.deepEqual(
+      await page
+        .locator("#predicted-processing .predicted")
+        .evaluateAll((cells) =>
+          cells.map((cell) => (cell as HTMLElement).dataset.cores),
+        ),
+      data.run.workers.map(() => "unknown"),
+    );
+    await seek(data.run.end);
+    const escapedText = await page
+      .locator(
+        "#analysis-forecast-state, #analysis-forecast-input, #analysis th, #analysis-decision",
+      )
+      .evaluateAll((elements) =>
+        elements.flatMap((element) => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const panel = element.closest(".panel")!.getBoundingClientRect();
+          return [...range.getClientRects()]
+            .filter((box) => box.left < panel.left || box.right > panel.right)
+            .map(() => element.textContent);
+        }),
+      );
+    assert.deepEqual(
+      escapedText,
+      [],
+      "Pinned forecast labels and table headers stay inside their panel",
+    );
+    await seek(focusCycle.available);
+    await page.screenshot({
+      path: `${outputDir}/analysis-${viewport.width}.png`,
+    });
+    await page.locator("#forecast-select").selectOption("latest");
+  }
+  await page.setViewportSize({ width: 1920, height: 1080 });
   checks.push(
-    `growing observed history, publication boundary, pinned forecast and causal rewind, reverse Analysis seek, sampled simulation scenarios`,
+    `growing observed history, publication boundary, pinned forecast and causal rewind, reverse Analysis seek, scenario-linked chart and CPU requests, matching source-derived forecast errors, modal keyboard isolation and single-screen stable Analysis layouts`,
   );
   await tab("comparison");
   assert.ok(data.comparison, "Matched policy comparison is present");
