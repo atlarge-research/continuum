@@ -32,6 +32,11 @@ let playback: Playback = { cursor: data.run.start, speed: 16, playing: false };
 let activeView = "overview",
   forecastTick: number | null = null,
   scenario = 0;
+const detailsDialogIds: Record<string, string> = {
+  overview: "evidence-dialog",
+  analysis: "analysis-dialog",
+  comparison: "comparison-dialog",
+};
 let comparisonSeed =
   data.comparison?.runs.find((r) => r.captureId === data.run.id)?.seed ??
   data.comparison?.runs[0]?.seed ??
@@ -420,6 +425,10 @@ function render(): void {
     forecastTick = null;
   element("app").dataset.cursor = String(cursor);
   element("app").dataset.view = activeView;
+  element("view-details-button").setAttribute(
+    "aria-controls",
+    detailsDialogIds[activeView],
+  );
   element("transport").hidden = activeView === "comparison";
   const accepting = view.fresh
     ? view.workers.filter((w) => w.state?.ready && w.state.accepting).length
@@ -608,23 +617,19 @@ element("fullscreen").addEventListener("click", async () => {
     element("fullscreen").textContent = "Use browser full screen";
   }
 });
-const analysisDialog = element("analysis-dialog") as HTMLDialogElement;
-element("analysis-details-button").addEventListener("click", () => {
+element("view-details-button").addEventListener("click", () => {
   command({ type: "pause" });
-  analysisDialog.showModal();
+  (element(detailsDialogIds[activeView]) as HTMLDialogElement).showModal();
 });
+const analysisDialog = element("analysis-dialog") as HTMLDialogElement;
 element("close-analysis-details").addEventListener("click", () =>
   analysisDialog.close(),
 );
 const comparisonDialog = element("comparison-dialog") as HTMLDialogElement;
-element("comparison-settings-button").addEventListener("click", () =>
-  comparisonDialog.showModal(),
-);
 element("close-comparison-settings").addEventListener("click", () =>
   comparisonDialog.close(),
 );
 const dialog = element("evidence-dialog") as HTMLDialogElement;
-element("evidence-button").addEventListener("click", () => dialog.showModal());
 element("close-evidence").addEventListener("click", () => dialog.close());
 const network =
   data.run.network === "5g_nl_kpn_mahimahi"

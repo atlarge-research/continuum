@@ -702,9 +702,6 @@ small {
 #analysis .scenario-selector select {
   width: 64px;
 }
-#analysis-details-button {
-  white-space: nowrap;
-}
 #analysis .analysis-forecast-context {
   grid-template-rows: 24px 24px;
   gap: 4px;
@@ -1039,9 +1036,6 @@ small {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
-}
-#comparison-settings-button {
-  white-space: nowrap;
 }
 .comparison-panel label {
   font-size: 18px;

@@ -99,6 +99,33 @@ try {
   const tab = async (name: string) => {
     await page.locator(`#tab-${name}`).click();
   };
+  const detailsButton = page.getByRole("button", {
+    name: "View details",
+    exact: true,
+  });
+  assert.equal(
+    await detailsButton.count(),
+    1,
+    "One shared details control exists",
+  );
+  for (const [view, dialog] of [
+    ["overview", "evidence-dialog"],
+    ["analysis", "analysis-dialog"],
+    ["comparison", "comparison-dialog"],
+  ]) {
+    await tab(view);
+    assert.equal(await detailsButton.getAttribute("aria-controls"), dialog);
+    await detailsButton.click();
+    assert.ok(await page.locator(`#${dialog}`).isVisible());
+    assert.equal(await page.locator("dialog[open]").count(), 1);
+    assert.match(await page.locator("#play").innerText(), /Play/);
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+  }
+  await tab("overview");
+  checks.push(
+    "one header details button opens the active view’s existing dialog",
+  );
   const overview = () =>
     page.evaluate(() =>
       [
@@ -897,7 +924,7 @@ try {
     ),
   );
   await page.locator("#play").click();
-  await page.locator("#analysis-details-button").click();
+  await page.locator("#view-details-button").click();
   const modalCursor = await page.locator("#seek").inputValue();
   assert.ok(await page.locator("#analysis-dialog").isVisible());
   assert.equal(await page.locator("#analysis-dialog h3").count(), 3);
@@ -915,7 +942,7 @@ try {
   assert.match(await page.locator("#play").innerText(), /Play/);
   await page.keyboard.press("Escape");
   assert.ok(!(await page.locator("#analysis-dialog").isVisible()));
-  await page.locator("#analysis-details-button").click();
+  await page.locator("#view-details-button").click();
   await page.locator("#close-analysis-details").click();
   assert.ok(!(await page.locator("#analysis-dialog").isVisible()));
   await seek(focusCycle.available);
@@ -1236,7 +1263,7 @@ try {
     );
   }
   const comparisonCursor = await page.locator("#seek").inputValue();
-  await page.locator("#comparison-settings-button").click();
+  await page.locator("#view-details-button").click();
   assert.ok(await page.locator("#comparison-dialog").isVisible());
   assert.ok(await page.locator("#comparison-settings").isVisible());
   assert.equal(await page.locator("#comparison-interpretation > p").count(), 3);
@@ -1261,7 +1288,7 @@ try {
   assert.equal(await page.locator("#seek").inputValue(), comparisonCursor);
   await page.keyboard.press("Escape");
   assert.ok(!(await page.locator("#comparison-dialog").isVisible()));
-  await page.locator("#comparison-settings-button").click();
+  await page.locator("#view-details-button").click();
   await page.locator("#close-comparison-settings").click();
   assert.ok(!(await page.locator("#comparison-dialog").isVisible()));
   for (const viewport of [
@@ -1567,7 +1594,7 @@ try {
     });
   assert.ok(Math.abs(scale.x - 1) < 0.01 && Math.abs(scale.y - 1) < 0.01);
   assert.equal(scale.font, "18px");
-  await page.locator("#evidence-button").click();
+  await page.locator("#view-details-button").click();
   assert.equal(
     await page
       .locator("#evidence-dialog")

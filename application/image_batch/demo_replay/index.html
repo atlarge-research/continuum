@@ -24,7 +24,13 @@
         </div>
         <div class="header-actions">
           <span class="replay-label">Execution &amp; prediction replay</span
-          ><button id="evidence-button" class="quiet">Evidence</button
+          ><button
+            id="view-details-button"
+            class="quiet"
+            aria-haspopup="dialog"
+            aria-controls="evidence-dialog"
+          >
+            View details</button
           ><button id="fullscreen" class="quiet" title="Enter full screen">
             Full screen</button
           ><img
@@ -180,14 +186,6 @@
           <section class="panel analysis-simulation">
             <div class="panel-heading">
               <h2>Simulation &amp; response</h2>
-              <button
-                id="analysis-details-button"
-                class="quiet"
-                aria-haspopup="dialog"
-                aria-controls="analysis-dialog"
-              >
-                Analysis details
-              </button>
             </div>
             <div class="analysis-options-heading">
               <h3>Predicted deadlines</h3>
@@ -229,14 +227,6 @@
                   aria-label="Comparison workload seed"
                 ></select>
               </label>
-              <button
-                id="comparison-settings-button"
-                class="quiet"
-                aria-haspopup="dialog"
-                aria-controls="comparison-dialog"
-              >
-                Settings &amp; interpretation
-              </button>
             </div>
           </div>
           <div class="policy-cards">
