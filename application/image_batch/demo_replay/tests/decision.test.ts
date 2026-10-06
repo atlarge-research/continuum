@@ -93,3 +93,46 @@ test("synthetic fallback identifies its action and retains physical action lifec
   assert.match(pending.title, /Worker 3.*requested/);
   assert.match(pending.detail, /fallback/i);
 });
+
+test("a follow-up observation failure does not veto the recorded hold decision", () => {
+  const failure = data.capacityEvents.find(
+    (event) =>
+      event.event === "cycle.error" &&
+      event.error === "observation membership is incomplete or unreconciled" &&
+      data.cycles.some(
+        (cycle) => cycle.tick === event.tick && cycle.action === "unchanged",
+      ),
+  )!;
+  assert.ok(
+    failure,
+    "Capture contains the reported post-decision observation failure",
+  );
+  const at = data.run.start + 8 * 60000;
+  assert.equal(viewAt(data, at).cycle?.tick, failure.tick);
+  const selected = decisionText(data, viewAt(data, failure.at - 1));
+  const later = decisionText(data, viewAt(data, at));
+  assert.equal(later.stage, "Hold");
+  assert.equal(later.warning, false);
+  assert.deepEqual(later, selected);
+  decisionText(data, viewAt(data, data.run.end));
+  assert.deepEqual(decisionText(data, viewAt(data, at)), later);
+  assert.ok(
+    viewAt(data, at).events.includes(failure),
+    "The recorded failure is preserved",
+  );
+});
+
+test("a new assignment still vetoes the recorded scale-down only after its error is available", () => {
+  const failure = data.capacityEvents.find(
+    (event) =>
+      event.event === "cycle.error" &&
+      event.error === "selected drain worker acquired a new assignment",
+  )!;
+  assert.ok(failure, "Capture contains a real scale-down safety veto");
+  const before = decisionText(data, viewAt(data, failure.at - 1));
+  assert.equal(before.stage, "Decision recorded");
+  const after = decisionText(data, viewAt(data, failure.at));
+  assert.equal(after.stage, "Guard veto");
+  assert.equal(after.warning, true);
+  assert.deepEqual(decisionText(data, viewAt(data, failure.at - 1)), before);
+});

@@ -36,6 +36,16 @@ export function decisionText(data: Dataset, view: ReplayView): DecisionText {
           warning: true,
         }
       : text;
+  // A hold skips actuation; a failed follow-up observation cannot veto it.
+  if (cycle.action === "unchanged")
+    return describe({
+      title: "Keep current worker admission",
+      detail: fallback
+        ? "Physical admission was retained."
+        : "The captured controller retained capacity after comparing its available alternatives.",
+      warning: false,
+      stage: fallback ? "Fallback" : "Hold",
+    });
   const events = view.events.filter((event) => event.tick === cycle.tick);
   const veto = events.find((event) => event.event === "cycle.error");
   if (veto) {
@@ -49,15 +59,6 @@ export function decisionText(data: Dataset, view: ReplayView): DecisionText {
       stage: "Guard veto",
     });
   }
-  if (cycle.action === "unchanged")
-    return describe({
-      title: "Keep current worker admission",
-      detail: fallback
-        ? "Physical admission was retained."
-        : "The captured controller retained capacity after comparing its available alternatives.",
-      warning: false,
-      stage: fallback ? "Fallback" : "Hold",
-    });
   const worker =
     cycle.worker === null ? "Worker" : data.run.workers[cycle.worker].label;
   const request = events.find((event) => event.event === "action.request");
