@@ -2,7 +2,7 @@
 
 ## Current state and next steps
 
-The accepted-data replay is on `codex/demo-replay-final-data`, awaiting the user's code review and explicit merge request into `codex/fns-2026-10-08`. Overview, Analysis, Policy comparison and their explanatory dialogs are approved. The shared **View details** header button opens the active tab's dialog; visual iteration is complete for review.
+The reviewed accepted-data replay is integrated into `codex/fns-2026-10-08`. Overview, Analysis, Policy comparison and their explanatory dialogs are approved. The shared **View details** header button opens the active tab's dialog. The remaining work is colleague feedback and presentation rehearsal.
 
 The packaged dataset is the accepted B/72001 forecast capture with its matched static/reactive/forecast comparison. Keep the captured 120-second deadline and issued prediction scores authoritative. Retrospective scoring under another deadline requires a separate analysis. The committed compact dataset builds the standalone offline HTML without private captures; use [README.md](README.md) for build and presentation instructions.
 
