@@ -476,9 +476,36 @@ const network =
   data.run.network === "5g_nl_kpn_mahimahi"
     ? "a KPN 5G trace captured by VU Amsterdam"
     : data.run.network;
+const sourceHost =
+  data.provenance.sourceHost === "node3"
+    ? "node3 in the VU MCS cluster"
+    : data.provenance.sourceHost;
+const acquiredAt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Amsterdam",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+}).format(new Date(data.provenance.acquiredAt));
+const evidenceTimingNotes = [
+  "Forecasts and simulated capacity options appear only after the controller recorded its proposed decision. Their exact publication times were not recorded.",
+  "Application measurements appear only when the capture shows they were already available. The exact time each monitoring query finished was not recorded.",
+  "Deadline predictions use the simulator results and timing assumptions from the captured run. This replay does not recalculate them.",
+  "Each sampled future is one possible pattern of arriving jobs. Their range shows variation between scenarios, not a statistical confidence interval.",
+];
 element("evidence-content").innerHTML =
   `<p>This is an offline replay tool for a workload executed on a real Kubernetes cluster managed using a closed-loop digital twin. In our use case, users send images to the cluster for processing by an AI inference service. Their cellular network connection is emulated using ${e(network)}. Through this tool, we explore how a closed-loop digital twin can support the operation of AI services in 6G systems.</p>
-<p>This tool presents the recorded closed-loop digital twin scenario. The <strong>Overview</strong> and <strong>Analysis</strong> tabs focus on the twin’s observations, predictions and decisions, while <strong>Policy comparison</strong> compares static, reactive and digital twin-based control.</p><ul><li>Workers are powered VMs. Scaling changes admission, including an observed delay for reserves; it does not measure VM boot or cellular radio control.</li><li>CPU and RAM bars use full configured VM capacity. Colored segments group assigned application requests by startup, release and processing; they are not CPU affinity or memory-placement maps. The hatched CPU section is capacity outside the captured application budget, not measured Kubernetes or host use. No system RAM allocation is inferred. RAM request labels use GiB (G). The blue marker shows measured application use as a percentage of configured VM capacity, separately from requests. Application CPU is a short-window rate; RAM is observed working-set memory. Partial or stale coverage remains visible.</li><li>Past forecast segments retain predictions as originally published; new forecasts replace future segments. A skipped update retains the last ready forecast through its actual horizon, separately from the recorded fallback decision. Prediction percentages describe the worst captured sampled future under the historical controller's timing rules. Sampled futures are not confidence intervals. Service/allocation predictions are separate from measured outcomes.</li><li>Forecast quality conservatively uses completed arrival bins with full collection coverage. Arrival bars show recorded counts independently of worker-membership gaps, with filling intervals distinguished. Queue gaps remain missing; later control actions can affect observed service outcomes.</li></ul><h3>Evidence timing</h3><ul>${data.provenance.availabilityNotes.map((note) => `<li>${e(note)}</li>`).join("")}</ul><dl><dt>Capture identity</dt><dd><code>${e(data.run.id)}</code></dd><dt>Captured scenario</dt><dd>${data.run.workers.length} workers · period ${data.run.periodSeconds}s · decision cadence ${data.run.cadenceSeconds}s</dd><dt>Provenance</dt><dd>Read-only subset from ${e(data.provenance.sourceHost)} · SHA-256 manifest ${e(data.provenance.manifestSha256)}</dd><dt>Acquired</dt><dd>${e(data.provenance.acquiredAt)}</dd></dl>`;
+<p>This tool presents the recorded closed-loop digital twin scenario. The <strong>Overview</strong> and <strong>Analysis</strong> tabs focus on the twin’s observations, predictions and decisions, while <strong>Policy comparison</strong> compares static, reactive and digital twin-based control.</p><ul>
+<li>Scaling changes how many worker VMs accept jobs, including a delay before an additional VM starts accepting work. Reserve VMs remain powered on.</li>
+<li>The CPU and RAM bars show each VM’s total capacity. Colored sections show resources requested for jobs that are starting, processing or finishing. These requests set aside capacity for a job, even when it uses less.</li>
+<li>The blue marker shows CPU or RAM actually used by the AI applications. The red hatched CPU section is capacity unavailable to these jobs, rather than measured system use. Missing or older application measurements are labelled.</li>
+<li>The forecast chart keeps past predictions as they were issued. New forecasts update the future part of the chart. If an update is skipped, the previous forecast remains visible until the end of its prediction window; the recorded control decision is shown separately.</li>
+<li>The predicted percentage of jobs finishing within the deadline is the lowest across the captured simulated futures. Predicted results are shown separately from the outcome measured on the cluster.</li>
+<li>Arrival bars count the jobs recorded in each interval; striped bars mark an interval that is still filling. Forecast accuracy is shown only for completed intervals where monitoring covers the whole interval. Missing queue observations remain gaps.</li>
+</ul><h3>Evidence timing</h3><ul>${evidenceTimingNotes.map((note) => `<li>${e(note)}</li>`).join("")}</ul><dl><dt>Capture identity</dt><dd><code>${e(data.run.id)}</code></dd><dt>Captured scenario</dt><dd>${data.run.workers.length} workers · ${data.run.periodSeconds}s workload cycle · decision interval set to ${data.run.cadenceSeconds}s</dd><dt>Provenance</dt><dd>Read-only subset from ${e(sourceHost)} · SHA-256 manifest ${e(data.provenance.manifestSha256)}</dd><dt>Acquired</dt><dd><time datetime="${e(data.provenance.acquiredAt)}">${e(acquiredAt)} (Amsterdam time)</time></dd></dl>`;
 addEventListener("resize", () => render());
 render();
 let previous = performance.now(),
