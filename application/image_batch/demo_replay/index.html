@@ -232,7 +232,10 @@
           <div class="policy-cards">
             <article>
               <h3>Static</h3>
-              <p>Keep capacity fixed.</p>
+              <p>
+                Keep processing capacity fixed as demand changes. The operator
+                sets capacity to cover expected peak demand.
+              </p>
               <dl>
                 <dt>Strength</dt>
                 <dd>Simple and predictable.</dd>
@@ -244,7 +247,10 @@
             </article>
             <article>
               <h3>Heuristic</h3>
-              <p>React to current demand.</p>
+              <p>
+                Use observed demand and threshold rules to adjust capacity.
+                Scale up or down after the load changes.
+              </p>
               <dl>
                 <dt>Strength</dt>
                 <dd>Adapts to observed demand.</dd>
@@ -256,7 +262,10 @@
             </article>
             <article class="twin-policy">
               <h3>Digital twin</h3>
-              <p>Evaluate future choices.</p>
+              <p>
+                Forecast demand and simulate capacity options. Choose an action,
+                apply it after safety checks, then observe the response.
+              </p>
               <dl>
                 <dt>Strength</dt>
                 <dd>Anticipates future demand.</dd>
@@ -274,9 +283,20 @@
             >
           </div>
           <div id="comparison-results"></div>
+          <article
+            id="comparison-takeaway"
+            aria-labelledby="comparison-takeaway-title"
+          >
+            <h3 id="comparison-takeaway-title">What the digital twin adds</h3>
+            <p>
+              All three policies can monitor current state. The twin adds
+              forecasts and simulated alternatives before choosing an action,
+              then checks the measured physical response.
+            </p>
+          </article>
         </div>
       </div>
-      <footer class="transport">
+      <footer id="transport" class="transport">
         <div class="transport-top">
           <div class="play-controls">
             <button id="play" class="primary" aria-label="Play replay">

@@ -310,6 +310,7 @@ function render(): void {
     forecastTick = null;
   element("app").dataset.cursor = String(cursor);
   element("app").dataset.view = activeView;
+  element("transport").hidden = activeView === "comparison";
   const accepting = view.fresh
     ? view.workers.filter((w) => w.state?.ready && w.state.accepting).length
     : null;
@@ -402,12 +403,15 @@ function render(): void {
   const area = element("overview").parentElement!;
   element("view-note").textContent =
     area.scrollHeight > area.clientHeight + 2
-      ? "Scroll ↓ · controls stay visible"
+      ? activeView === "comparison"
+        ? "Scroll ↓"
+        : "Scroll ↓ · controls stay visible"
       : "";
 }
 for (const name of ["overview", "analysis", "comparison"]) {
   element(`tab-${name}`).addEventListener("click", () => {
     activeView = name;
+    if (name === "comparison") playback = { ...playback, playing: false };
     for (const tab of ["overview", "analysis", "comparison"]) {
       element(tab).hidden = tab !== name;
       element(`tab-${tab}`).setAttribute("aria-selected", String(tab === name));
@@ -460,6 +464,7 @@ element("speed").addEventListener("change", (event) =>
 );
 document.addEventListener("keydown", (event) => {
   if (
+    activeView === "comparison" ||
     ["INPUT", "SELECT", "BUTTON"].includes(
       (event.target as HTMLElement)?.tagName,
     ) ||

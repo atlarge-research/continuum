@@ -183,14 +183,32 @@ try {
   );
   await tab("analysis");
   assert.equal(await page.locator("#play").innerText(), "Ⅱ Pause");
+  await page.locator("#speed").selectOption("4");
+  const beforeComparison = Number(await page.locator("#seek").inputValue());
   await tab("comparison");
-  assert.equal(await page.locator("#play").innerText(), "Ⅱ Pause");
-  await page.locator("#play").click();
+  assert.ok(!(await page.locator(".transport").isVisible()));
+  assert.equal(await page.locator("#play").innerText(), "▶ Play");
   const paused = await page.locator("#seek").inputValue();
+  assert.ok(
+    Number(paused) >= beforeComparison,
+    "Switching views retains the replay position",
+  );
   await page.waitForTimeout(140);
   assert.equal(await page.locator("#seek").inputValue(), paused);
-  await page.locator("#speed").selectOption("4");
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  for (const key of ["Space", "ArrowLeft", "ArrowRight", "Home"]) {
+    await page.keyboard.press(key);
+    assert.equal(await page.locator("#seek").inputValue(), paused);
+    assert.equal(await page.locator("#play").innerText(), "▶ Play");
+  }
+  await tab("analysis");
+  assert.ok(await page.locator(".transport").isVisible());
+  assert.equal(await page.locator("#seek").inputValue(), paused);
+  assert.equal(await page.locator("#speed").inputValue(), "4");
+  assert.equal(await page.locator("#play").innerText(), "▶ Play");
   await tab("overview");
+  assert.ok(await page.locator(".transport").isVisible());
+  assert.equal(await page.locator("#seek").inputValue(), paused);
   assert.equal(await page.locator("#speed").inputValue(), "4");
   assert.equal(
     await page.locator("#accelerated").innerText(),
@@ -827,6 +845,7 @@ try {
         "comparison-results",
         "comparison-settings",
         "comparison-interpretation",
+        "comparison-takeaway",
         "clock",
       ].map((id) => document.getElementById(id)!.innerHTML),
     );
@@ -844,6 +863,8 @@ try {
     "Application allocation",
     "Response time",
   ]);
+  assert.ok(!(await page.locator(".transport").isVisible()));
+  assert.ok(await page.locator("#comparison-takeaway").isVisible());
   const comparisonCursor = await page.locator("#seek").inputValue();
   await page.locator("#comparison-settings-button").click();
   assert.ok(await page.locator("#comparison-dialog").isVisible());
@@ -867,6 +888,12 @@ try {
       const cards = [...document.querySelectorAll(".policy-cards article")];
       return {
         overflow: area.scrollHeight - area.clientHeight,
+        footerHidden: (document.querySelector(".transport") as HTMLElement)
+          .hidden,
+        takeawayBottom: document
+          .getElementById("comparison-takeaway")!
+          .getBoundingClientRect().bottom,
+        areaBottom: area.getBoundingClientRect().bottom,
         heights: cards.map((card) => card.getBoundingClientRect().height),
         charts: [...document.querySelectorAll(".result-chart")].map((chart) => {
           const box = chart.getBoundingClientRect();
@@ -885,6 +912,8 @@ try {
       geometry.overflow <= 1,
       `Comparison fits ${viewport.width}×${viewport.height}: ${geometry.overflow}`,
     );
+    assert.ok(geometry.footerHidden);
+    assert.ok(geometry.takeawayBottom <= geometry.areaBottom + 1);
     assert.ok(
       Math.max(...geometry.heights) - Math.min(...geometry.heights) <= 1,
     );
@@ -907,7 +936,7 @@ try {
   }
   await page.setViewportSize({ width: 1920, height: 1080 });
   checks.push(
-    "comparison fits monitor and laptop viewports; equal cards, one-line rows, settings dialog and keyboard isolation",
+    "comparison fits monitor and laptop viewports; hidden transport, clearer equal policy cards, three graphs, visible takeaway, settings dialog and keyboard isolation",
   );
   const comparisonInitial = await comparisonState();
   await seek(data.run.end);
@@ -933,12 +962,17 @@ try {
       await page.locator(".view-area").evaluate((el) => {
         el.scrollTop = el.scrollHeight;
       });
-      assert.ok(await page.locator("#play").isVisible());
-      await page.locator("#restart").click();
-      assert.equal(
-        await page.locator("#seek").inputValue(),
-        String(data.run.start),
-      );
+      if (name === "comparison") {
+        assert.ok(!(await page.locator(".transport").isVisible()));
+        assert.ok(await page.locator("#comparison-takeaway").isVisible());
+      } else {
+        assert.ok(await page.locator("#play").isVisible());
+        await page.locator("#restart").click();
+        assert.equal(
+          await page.locator("#seek").inputValue(),
+          String(data.run.start),
+        );
+      }
       const widths = await page.evaluate(() => [
         document.documentElement.scrollWidth,
         innerWidth,

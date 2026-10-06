@@ -107,6 +107,9 @@ small {
   gap: 10px;
   padding: 14px 18px;
 }
+#app[data-view="comparison"] {
+  grid-template-rows: 64px 38px minmax(0, 1fr);
+}
 .masthead,
 .brand,
 .header-actions,
@@ -817,9 +820,11 @@ small {
   font-size: 23px;
 }
 .policy-cards p {
+  min-height: 67.5px;
   color: var(--muted);
   margin-top: 6px;
   font-size: 18px;
+  line-height: 1.25;
 }
 .policy-cards dl {
   margin: 10px 0 0;
@@ -934,6 +939,21 @@ small {
 }
 .result-axis > :last-child {
   text-align: right;
+}
+#comparison-takeaway {
+  min-width: 0;
+  border-left: 4px solid var(--brand);
+  border-radius: 0 7px 7px 0;
+  background: var(--soft-brand);
+  padding: 10px 12px;
+}
+#comparison-takeaway h3 {
+  margin-bottom: 6px;
+}
+#comparison-takeaway p {
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.3;
 }
 .comparison-details {
   font-size: 18px;
@@ -1284,6 +1304,12 @@ dialog dd {
   .comparison-panel .result-axis {
     margin-top: 6px;
   }
+  #comparison-takeaway {
+    padding: 6px 10px;
+  }
+  #comparison-takeaway p {
+    line-height: 1.25;
+  }
 }
 @media (max-width: 1100px) {
   .replay-label {
@@ -1348,6 +1374,12 @@ dialog dd {
   #app {
     padding: 8px;
     grid-template-rows: 90px 38px minmax(0, 1fr) auto;
+  }
+  #app[data-view="comparison"] {
+    grid-template-rows: 90px 38px minmax(0, 1fr);
+  }
+  .policy-cards p {
+    min-height: 0;
   }
   .masthead {
     align-items: flex-start;
