@@ -142,7 +142,12 @@ export function forecastChart(
   data: Dataset,
   view: ReplayView,
   size: ChartSize = { width: 620, height: 240 },
-  options: { cycle?: Cycle | null; detail?: boolean; scenario?: number } = {},
+  options: {
+    cycle?: Cycle | null;
+    detail?: boolean;
+    scenario?: number;
+    pinned?: boolean;
+  } = {},
 ): string {
   const font = 18,
     left = 46,
@@ -178,14 +183,17 @@ export function forecastChart(
     displayBinMs,
     detail && ready ? cycle!.bins[0].start : 0,
   );
-  const history = detail
-    ? []
-    : forecastHistory(data, view.cursor, displayBinMs);
+  const pinned = detail && options.pinned === true && ready;
+  const history = forecastHistory(
+    data,
+    pinned ? cycle!.available : view.cursor,
+    displayBinMs,
+  );
   const current = ready
     ? [
         {
           cycle: cycle!,
-          start: detail ? cycle!.cutoff : view.cursor,
+          start: pinned ? cycle!.available : view.cursor,
           end: horizonEnd,
           buckets: forecastBuckets(cycle!, displayBinMs),
         },
@@ -242,10 +250,10 @@ export function forecastChart(
       .map((b) => `L${n(x((b.start + b.end) / 2))},${n(y(b.min))}`)
       .join("");
     body += `<path class="scenario-range ${s.kind}" ${attrs} ${clip} d="${upper}${lower}Z" fill="var(--twin)" opacity=".18"><title>Forecast range: minimum to maximum of ${s.cycle.futures.length} sampled futures; issued ${formatTime(s.cycle.available - data.run.start)}. Not a confidence interval.</title></path>`;
-    if (detail)
+    if (detail && s.kind === "current")
       for (let i = 0; i < s.cycle.futures.length; i++)
         lineBodies.push(
-          `<path class="future-line scenario-${i}${i === options.scenario ? " selected" : ""}" data-scenario="${i}" data-selected="${i === options.scenario}" ${clip} d="${path(s.buckets.map((b) => b.scenarios[i]))}"><title>Simulation scenario ${i + 1}</title></path>`,
+          `<path class="future-line scenario-${i}${i === options.scenario ? " selected" : ""}" data-scenario="${i}" data-selected="${i === options.scenario}" ${clip} d="${path(s.buckets.map((b) => b.scenarios[i]))}"><title>Future ${i + 1}</title></path>`,
         );
     lineBodies.push(
       `<path class="forecast-line ${s.kind}" ${attrs} ${clip} d="${path(s.buckets.map((b) => b.mean))}"><title>Expected arrivals from forecast issued ${formatTime(s.cycle.available - data.run.start)}</title></path>`,

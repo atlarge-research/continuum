@@ -680,7 +680,7 @@ small {
   grid-template-rows: 38px 64px minmax(220px, 1fr) 48px 44px;
 }
 #analysis .analysis-simulation {
-  grid-template-rows: 38px 26px 120px 64px 38px 24px minmax(224px, 1fr);
+  grid-template-rows: 38px 34px 124px 64px 24px minmax(224px, 1fr);
 }
 #analysis .panel-heading {
   height: auto;
@@ -771,6 +771,9 @@ small {
   gap: 5px;
   font-size: 18px;
 }
+#analysis .analysis-options-heading h3 {
+  white-space: nowrap;
+}
 #analysis .analysis-options-heading,
 #analysis .analysis-requests-heading {
   display: flex;
@@ -800,8 +803,22 @@ small {
 #analysis #analysis-decision strong {
   line-height: 24px;
 }
+#analysis .analysis-action-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
 #analysis .analysis-action-stage {
   color: var(--muted);
+  font-size: 18px;
+}
+#analysis .analysis-action-reason {
+  margin: 0;
+  font-size: 18px;
+  line-height: 22px;
+  white-space: nowrap;
 }
 #analysis #analysis-decision .badge {
   color: var(--brand);
@@ -816,20 +833,97 @@ small {
 #analysis #predicted-processing {
   min-height: 0;
 }
-#analysis .alternative-table th,
-#analysis .alternative-table td {
-  padding: 3px 6px;
-  height: 30px;
+#analysis #analysis-alternatives {
+  min-height: 0;
+  height: 124px;
+}
+#analysis .decision-chart {
+  display: grid;
+  grid-template-rows: 22px repeat(3, 34px);
+  font-size: 18px;
+}
+#analysis .decision-chart-heading,
+#analysis .decision-row {
+  display: grid;
+  grid-template-columns: 124px minmax(160px, 1fr) 64px 136px;
+  column-gap: 8px;
+  align-items: center;
+}
+#analysis .decision-chart-heading {
+  color: var(--muted);
   white-space: nowrap;
 }
-#analysis .alternative-table th:first-child {
-  width: 30%;
+#analysis .decision-score-axis {
+  display: flex;
+  justify-content: space-between;
+  padding-inline: 10px;
 }
-#analysis .alternative-table th:nth-child(2) {
-  width: 33%;
+#analysis .decision-chart-heading > :nth-child(3) {
+  text-align: right;
 }
-#analysis .alternative-table th:last-child {
-  width: 37%;
+#analysis .decision-row {
+  border-bottom: 1px solid var(--line);
+}
+#analysis .decision-row.chosen {
+  background: var(--soft-brand);
+}
+#analysis .decision-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+#analysis .decision-choice {
+  width: 18px;
+  flex: none;
+  color: var(--brand);
+  font-weight: 750;
+}
+#analysis .decision-row.chosen .decision-action {
+  font-weight: 650;
+}
+#analysis .decision-scores {
+  display: block;
+  width: 100%;
+  height: 34px;
+  overflow: visible;
+}
+#analysis .decision-track {
+  stroke: #dce4ea;
+  stroke-width: 1;
+}
+#analysis .decision-target {
+  stroke: var(--amber);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+#analysis .decision-dot {
+  fill: #a08eaf;
+  stroke: #776389;
+  stroke-width: 1.5;
+}
+#analysis .decision-dot.selected {
+  fill: var(--brand);
+  stroke: var(--brand);
+  stroke-width: 2;
+}
+#analysis .decision-lowest {
+  text-align: right;
+  white-space: nowrap;
+  font-size: 18px;
+}
+#analysis .decision-lowest.below-target {
+  color: var(--amber);
+}
+#analysis .decision-allocation {
+  text-align: right;
+  white-space: nowrap;
+}
+#analysis .decision-unavailable {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
 }
 #analysis .allocation-table {
   height: 100%;
@@ -1715,16 +1809,11 @@ dialog dd {
     grid-template-rows: 36px 64px minmax(220px, 1fr) 48px 44px;
   }
   #analysis .analysis-simulation {
-    grid-template-rows: 36px 24px 104px 64px 34px 24px minmax(168px, 1fr);
+    grid-template-rows: 36px 34px 124px 64px 24px minmax(168px, 1fr);
   }
   #analysis button,
   #analysis select {
     padding-block: 4px;
-  }
-  #analysis .alternative-table th,
-  #analysis .alternative-table td {
-    padding-block: 0;
-    height: 26px;
   }
   #analysis .allocation-table th,
   #analysis .allocation-table td {
@@ -1751,7 +1840,7 @@ dialog dd {
     grid-template-rows: auto auto 280px auto auto;
   }
   #analysis .analysis-simulation {
-    grid-template-rows: auto auto auto 88px auto auto minmax(224px, 1fr);
+    grid-template-rows: auto auto 124px 88px auto minmax(224px, 1fr);
   }
   #analysis .analysis-forecast-context {
     grid-template-rows: auto auto;

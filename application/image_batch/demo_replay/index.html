@@ -190,22 +190,22 @@
               </button>
             </div>
             <div class="analysis-options-heading">
-              <h3>Simulated alternatives</h3>
+              <h3>Predicted deadlines</h3>
               <span id="analysis-target"></span>
-            </div>
-            <div id="analysis-alternatives"></div>
-            <div id="analysis-decision" class="decision"></div>
-            <div class="analysis-requests-heading">
-              <h3>Application CPU requests</h3>
               <label class="scenario-selector"
-                >Simulation scenario
+                >Future
                 <select
                   id="scenario-select"
                   aria-label="Sampled simulation scenario"
                 ></select
               ></label>
             </div>
-            <p id="analysis-requests-scale" class="analysis-scale"></p>
+            <div id="analysis-alternatives"></div>
+            <div id="analysis-decision" class="decision"></div>
+            <div class="analysis-requests-heading">
+              <h3>Application CPU requests</h3>
+              <p id="analysis-requests-scale" class="analysis-scale"></p>
+            </div>
             <div id="predicted-processing"></div>
           </section>
         </div>
@@ -361,14 +361,12 @@
       <button id="close-analysis-details" class="quiet close">Close ×</button>
       <h2 id="analysis-dialog-title">Analysis details</h2>
       <div class="analysis-details">
-        <h3>Forecast interpretation</h3>
+        <h3>Forecasts</h3>
         <div id="analysis-forecast-notes" class="analysis-notes"></div>
-        <h3>Simulation &amp; action</h3>
+        <h3>Simulation &amp; control</h3>
         <div id="analysis-simulation-notes" class="analysis-notes"></div>
-        <h3>Application measurements</h3>
-        <div id="resource-detail"></div>
-        <h3>Service performance</h3>
-        <div id="analysis-service" class="analysis-notes"></div>
+        <h3>CPU requests</h3>
+        <div id="analysis-resource-notes" class="analysis-notes"></div>
       </div>
     </dialog>
     <script id="replay-data" type="application/json">

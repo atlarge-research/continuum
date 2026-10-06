@@ -687,6 +687,82 @@ try {
   await seek(firstReady.available);
   assert.equal(await page.locator("#forecast-select").inputValue(), "latest");
   await seek(focusCycle.available);
+  await page.locator("#forecast-select").selectOption("latest");
+  for (const cycle of readyCycles) {
+    await seek(cycle.available);
+    assert.equal(
+      await page.locator("#analysis-alternatives").getAttribute("data-cycle"),
+      String(cycle.tick),
+    );
+    assert.equal(
+      await page
+        .locator("#analysis-alternatives [data-target]")
+        .getAttribute("data-target"),
+      String(data.run.deadlineFraction),
+    );
+    for (const candidate of cycle.candidates) {
+      const row = page.locator(
+        `#analysis-alternatives [data-candidate="${candidate.name}"]`,
+      );
+      const dots = await row
+        .locator("[data-scenario][data-value]")
+        .evaluateAll((elements) =>
+          elements.map((el) => ({
+            scenario: Number((el as HTMLElement).dataset.scenario),
+            value: Number((el as HTMLElement).dataset.value),
+          })),
+        );
+      assert.deepEqual(
+        dots,
+        candidate.valid
+          ? candidate.scenarioOnTime.map((value, scenario) => ({
+              scenario,
+              value,
+            }))
+          : [],
+      );
+      assert.equal(
+        await row.locator(".decision-allocation").getAttribute("data-value"),
+        String(candidate.allocationCoreSeconds ?? "unknown"),
+      );
+    }
+  }
+  await seek(focusCycle.available);
+  const previousIssue = readyCycles
+    .filter((cycle) => cycle.available < focusCycle.available)
+    .at(-1)!;
+  assert.ok(
+    await page
+      .locator(
+        `#analysis-forecast-chart .forecast-line.historical[data-cycle="${previousIssue.tick}"]`,
+      )
+      .count(),
+  );
+  const analysisHistory = await page
+    .locator("#analysis-forecast-chart")
+    .innerHTML();
+  await seek(data.run.end);
+  await seek(focusCycle.available);
+  assert.equal(
+    await page.locator("#analysis-forecast-chart").innerHTML(),
+    analysisHistory,
+  );
+  await page.locator("#forecast-select").selectOption(String(focusCycle.tick));
+  await seek(data.run.end);
+  const historyCycles = await page
+    .locator("#analysis-forecast-chart .forecast-line.historical")
+    .evaluateAll((elements) =>
+      elements.map((el) => Number((el as SVGElement).dataset.cycle)),
+    );
+  assert.ok(
+    historyCycles.every(
+      (tick) =>
+        data.cycles.find((cycle) => cycle.tick === tick)!.available <
+        focusCycle.available,
+    ),
+  );
+  await seek(focusCycle.available);
+  await page.locator("#forecast-select").selectOption("latest");
   const scenario = focusCycle.futures.length - 1;
   assert.ok(
     scenario >= 0,
@@ -715,6 +791,33 @@ try {
       .count(),
     1,
   );
+  assert.equal(
+    await page
+      .locator(
+        `#analysis-alternatives [data-scenario="${scenario}"][data-selected="true"]`,
+      )
+      .count(),
+    focusCycle.candidates.filter(
+      (candidate) =>
+        candidate.valid && candidate.scenarioOnTime.length > scenario,
+    ).length,
+  );
+  const recordedChoice = await page.locator("#analysis-decision").innerHTML();
+  const candidateAllocation = await page
+    .locator("#analysis-alternatives .decision-allocation")
+    .allTextContents();
+  await page.locator("#scenario-select").selectOption("0");
+  assert.equal(
+    await page.locator("#analysis-decision").innerHTML(),
+    recordedChoice,
+  );
+  assert.deepEqual(
+    await page
+      .locator("#analysis-alternatives .decision-allocation")
+      .allTextContents(),
+    candidateAllocation,
+  );
+  await page.locator("#scenario-select").selectOption(String(scenario));
   const observedView = viewAt(data, focusCycle.available);
   for (let worker = 0; worker < data.run.workers.length; worker++) {
     const row = page.locator(
@@ -797,10 +900,12 @@ try {
   await page.locator("#analysis-details-button").click();
   const modalCursor = await page.locator("#seek").inputValue();
   assert.ok(await page.locator("#analysis-dialog").isVisible());
-  assert.equal(await page.locator("#analysis-dialog h3").count(), 4);
-  assert.match(
-    await page.locator("#analysis-simulation-notes").innerText(),
-    new RegExp(`scenario ${scenario + 1}`),
+  assert.equal(await page.locator("#analysis-dialog h3").count(), 3);
+  assert.equal(await page.locator("#analysis-dialog p").count(), 3);
+  assert.equal(await page.locator("#analysis-dialog table").count(), 0);
+  assert.ok(
+    (await page.locator("#analysis-dialog").innerText()).split(/\s+/).length <=
+      160,
   );
   await page.locator("#analysis-dialog").focus();
   await page.keyboard.press("Home");
@@ -821,6 +926,7 @@ try {
         "analysis-forecast-chart",
         "analysis-forecast-state",
         "analysis-decision",
+        "analysis-alternatives",
         "predicted-processing",
         "forecast-quality",
         "clock",
@@ -919,7 +1025,7 @@ try {
   }
   await page.setViewportSize({ width: 1920, height: 1080 });
   checks.push(
-    `growing observed history, publication boundary, pinned forecast and causal rewind, reverse Analysis seek, scenario-linked chart and CPU requests, matching source-derived forecast errors, modal keyboard isolation and single-screen stable Analysis layouts`,
+    `growing observed history, publication boundary, pinned forecast and causal rewind, reverse Analysis seek, issued Analysis history, source-accurate per-future deadlines and allocation, scenario-linked forecasts and CPU requests, matching source-derived forecast errors, concise modal and keyboard isolation and single-screen stable Analysis layouts`,
   );
   await tab("comparison");
   assert.ok(data.comparison, "Matched policy comparison is present");

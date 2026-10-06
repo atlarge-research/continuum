@@ -173,17 +173,129 @@ test("a pinned Analysis forecast keeps its historical chart start after its hori
     data,
     viewAt(data, 271000),
     { width: 620, height: 280 },
-    { cycle, detail: true },
+    { cycle, detail: true, pinned: true },
   );
   const late = forecastChart(
     data,
     viewAt(data, 500000),
     { width: 620, height: 280 },
-    { cycle, detail: true },
+    { cycle, detail: true, pinned: true },
   );
   const startLabel = '<text x="46" y="277" text-anchor="start">01:01</text>';
   assert.ok(early.includes(startLabel));
   assert.ok(late.includes(startLabel));
   assert.match(late, /Forecast horizon elapsed/);
   assert.match(late, /class="forecast-line current"/);
+});
+
+const issuedSegments = (chart: string) =>
+  [
+    ...chart.matchAll(
+      /<path class="forecast-line (historical|current)" data-cycle="(\d+)" data-available="(\d+)" data-start="(\d+)" data-end="(\d+)"/g,
+    ),
+  ].map(([, kind, tick, available, start, end]) => ({
+    kind,
+    tick: Number(tick),
+    available: Number(available),
+    start: Number(start),
+    end: Number(end),
+  }));
+
+test("Latest Analysis preserves issued forecast segments at publication boundaries and reverses exactly", () => {
+  const cycle = capture.cycles[3];
+  const cursor = cycle.available + 30000;
+  const render = (data: Dataset, at: number, selected: Cycle) =>
+    forecastChart(
+      data,
+      viewAt(data, at),
+      { width: 620, height: 280 },
+      {
+        cycle: selected,
+        detail: true,
+        scenario: 1,
+      },
+    );
+  const chart = render(capture, cursor, cycle);
+  assert.deepEqual(issuedSegments(chart), [
+    ...capture.cycles.slice(0, 4).map((issued, index) => ({
+      kind: "historical",
+      tick: issued.tick,
+      available: issued.available,
+      start: issued.available,
+      end:
+        capture.cycles[index + 1]?.available < cursor
+          ? capture.cycles[index + 1].available
+          : cursor,
+    })),
+    {
+      kind: "current",
+      tick: cycle.tick,
+      available: cycle.available,
+      start: cursor,
+      end: cycle.cutoff + cycle.horizonMs,
+    },
+  ]);
+  assert.equal((chart.match(/class="future-line/g) ?? []).length, 3);
+  assert.ok(
+    [...chart.matchAll(/<path class="future-line[^>]+>/g)].every(([path]) =>
+      path.includes(`analysis-forecast-${cycle.tick}-current`),
+    ),
+  );
+  const beforePublication = render(
+    capture,
+    cycle.available - 1,
+    capture.cycles[2],
+  );
+  assert.ok(
+    issuedSegments(beforePublication).every(
+      (segment) => segment.tick < cycle.tick,
+    ),
+  );
+  const atPublication = issuedSegments(render(capture, cycle.available, cycle));
+  assert.equal(atPublication.at(-2)!.end, cycle.available);
+  assert.equal(atPublication.at(-1)!.start, cycle.available);
+  const prefix = structuredClone(capture);
+  prefix.cycles = prefix.cycles.filter((issued) => issued.available <= cursor);
+  assert.equal(render(prefix, cursor, cycle), chart);
+  render(capture, capture.run.end, capture.cycles.at(-1)!);
+  assert.equal(render(capture, cursor, cycle), chart);
+});
+
+test("pinned Analysis preserves its issued forecast without overlap or later publications", () => {
+  const cycle = capture.cycles[3];
+  const render = (cursor: number) =>
+    forecastChart(
+      capture,
+      viewAt(capture, cursor),
+      { width: 620, height: 280 },
+      {
+        cycle,
+        detail: true,
+        scenario: 2,
+        pinned: true,
+      },
+    );
+  const early = render(cycle.available + 30000);
+  const late = render(capture.cycles[7].available + 1000);
+  const segments = issuedSegments(early);
+  assert.ok(segments.some((segment) => segment.kind === "historical"));
+  assert.equal(segments.at(-1)!.kind, "current");
+  assert.equal(segments.at(-1)!.start, cycle.available);
+  assert.equal(segments.at(-1)!.end, cycle.cutoff + cycle.horizonMs);
+  assert.ok(
+    segments.slice(0, -1).every((segment) => segment.end <= cycle.available),
+  );
+  assert.deepEqual(issuedSegments(late), segments);
+  assert.ok(
+    issuedSegments(late).every((segment) => segment.tick <= cycle.tick),
+  );
+  assert.equal((late.match(/class="future-line/g) ?? []).length, 3);
+  assert.equal((late.match(/data-selected="true"/g) ?? []).length, 1);
+  assert.equal(render(cycle.available + 30000), early);
+  const before = render(cycle.available - 1);
+  assert.ok(
+    issuedSegments(before).every(
+      (segment) => segment.available <= cycle.available - 1,
+    ),
+  );
 });
