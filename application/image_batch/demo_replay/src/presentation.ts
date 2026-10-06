@@ -153,10 +153,6 @@ export function comparisonConclusion(
       `${tradeoff}Completed jobs had a response-time p95 of ${values}. This is the time within which about 95% of completed jobs finished.`,
     );
   }
-  if (comparison.status === "accepted-final")
-    parts.push(
-      "This is a selected development workload. Performance on unseen workloads and the smallest static capacity that would meet the target have not been established. The comparison evaluates the complete twin controller and does not isolate the separate contributions of forecasting and simulation.",
-    );
   return parts.join("\n\n");
 }
 /** Percentages describe the available application samples, never the entire host. */

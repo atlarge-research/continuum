@@ -832,10 +832,7 @@ try {
     }
     assert.ok(forecast.p95CompletedSeconds! > reactive.p95CompletedSeconds!);
     assert.match(conclusion, /lower allocation came with slower responses/);
-    assert.match(
-      conclusion,
-      /selected.*development|development.*illustration/i,
-    );
+    assert.ok(!conclusion.includes("This is a selected development workload."));
     assert.ok(!conclusion.includes("do not establish allocation savings"));
   }
   await page.locator("#comparison-seed").selectOption(String(seeds[0]));
@@ -940,12 +937,23 @@ try {
   await page.locator("#comparison-settings-button").click();
   assert.ok(await page.locator("#comparison-dialog").isVisible());
   assert.ok(await page.locator("#comparison-settings").isVisible());
-  assert.equal(await page.locator("#comparison-interpretation > p").count(), 4);
-  const technical = page.locator("#comparison-settings details");
-  assert.equal(await technical.getAttribute("open"), null);
-  await technical.locator("summary").click();
-  assert.ok((await technical.getAttribute("open")) !== null);
-  await technical.locator("summary").click();
+  assert.equal(await page.locator("#comparison-interpretation > p").count(), 3);
+  const settings = page.locator("#comparison-settings");
+  assert.equal(await settings.locator("details,summary").count(), 0);
+  assert.ok(
+    await settings
+      .getByRole("heading", {
+        name: "Controller settings and source",
+        level: 3,
+        exact: true,
+      })
+      .isVisible(),
+  );
+  assert.ok(
+    await settings
+      .getByText(data.comparison.sourceSha256, { exact: true })
+      .isVisible(),
+  );
   await page.locator("#comparison-dialog").focus();
   await page.keyboard.press("Home");
   assert.equal(await page.locator("#seek").inputValue(), comparisonCursor);
@@ -1046,7 +1054,7 @@ try {
   }
   await page.setViewportSize({ width: 1920, height: 1080 });
   checks.push(
-    "comparison fits monitor and laptop viewports; hidden transport, clearer equal policy cards, three conceptual decision diagrams, three graphs, visible takeaway, grouped interpretation, settings dialog and keyboard isolation",
+    "comparison fits monitor and laptop viewports; hidden transport, clearer equal policy cards, three conceptual decision diagrams, three graphs, visible takeaway, grouped interpretation, visible controller settings and source, settings dialog and keyboard isolation",
   );
   const comparisonInitial = await comparisonState();
   await seek(data.run.end);

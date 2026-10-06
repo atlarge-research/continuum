@@ -279,11 +279,6 @@ test("comparison conclusion retains service, conservative savings and the latenc
     text,
     /81.0s under the reactive heuristic.*91.0s under the twin/,
   );
-  assert.match(text, /selected development workload/);
-  assert.match(
-    text,
-    /unseen workloads.*smallest static capacity.*not been established/,
-  );
   const reactive = result.runs.find((r) => r.policy === "reactive")!;
   reactive.timelyJobs = 200;
   const forecast = result.runs.find((r) => r.policy === "forecast")!;

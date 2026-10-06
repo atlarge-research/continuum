@@ -311,12 +311,12 @@ function renderComparison(): void {
     <p>Static started with ${fixed.initialWorkers} workers accepting jobs; ${adaptiveStart}. All used the same pool of ${fixed.workerCount} powered VMs. Activating a reserve introduced an admission delay of at least ${fixed.acquisitionSeconds} seconds.</p>
     <h3>Reading the graphs</h3>
     <p>The deadline graph counts every evaluation job, including failed and unfinished jobs. Response time runs from original Kubernetes Job creation to final completion; its p95 includes completed jobs only.</p>
-    <p>Application allocation counts CPU capacity committed to workers accepting jobs, finishing existing jobs after stopping new admissions, or awaiting requested activation. The displayed ranges allow for gaps in monitoring. Reserve VMs stay powered, so lower application allocation does not establish lower energy use or cost.</p>
-    <details><summary>Controller settings and source</summary>
+    <p>Application allocation counts CPU capacity committed to workers accepting jobs, finishing existing jobs after stopping new admissions, or awaiting requested activation. The displayed ranges allow for gaps in monitoring.</p>
+    <h3>Controller settings and source</h3>
     <p>The reactive heuristic checked demand every ${reactive.cadenceSeconds} seconds; the twin made decisions every ${forecast.cadenceSeconds} seconds. ${e(reactiveSettings)}</p>
     <p>The heuristic shown here adjusts worker admission using observed resource demand. Other autoscalers, including Kubernetes HPA, may use different rules and measurements.</p>
     <p>Workload seed: ${comparisonSeed}. Recorded network profile: <code>${e(fixed.network)}</code>. Allocation ranges describe observation coverage, not statistical confidence intervals.</p>
-    <p>Source report SHA-256: <code>${e(comparison.sourceSha256)}</code></p></details>`;
+    <p>Source report SHA-256: <code>${e(comparison.sourceSha256)}</code></p>`;
 }
 function render(): void {
   const cursor = Math.floor(playback.cursor),
