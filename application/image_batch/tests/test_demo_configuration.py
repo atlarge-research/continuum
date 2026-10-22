@@ -83,6 +83,20 @@ class DeploymentTests(unittest.TestCase):
         )
         self.assertEqual(self.module().resolve_deployment(self.config)["replay_command"], [])
 
+    def test_disabled_emulation_does_not_require_wireless_preset(self):
+        """Explicitly disabled and default networking accept an omitted wireless preset."""
+        config = (
+            self.config.read_text()
+            .replace("network_emulation=True\n", "")
+            .replace("wireless_network_preset=lte_nl_kpn_mahimahi\n", "")
+        )
+        for network_setting in ("network_emulation=False\n", ""):
+            with self.subTest(network_setting=network_setting):
+                self.config.write_text(config + network_setting)
+                result = self.module().resolve_deployment(self.config)
+                self.assertEqual(result["replay_command"], [])
+                self.assertEqual(result["network_preset"], "")
+
     def test_live_inventory_mismatch_fails_before_mutation(self):
         """Matching node names alone cannot authorize operations on another address pool."""
         module = self.module()

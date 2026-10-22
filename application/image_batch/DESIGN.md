@@ -4,9 +4,17 @@ This document records the architectural and experimental reasoning behind the im
 
 ## Experimental purpose and boundary
 
-The demo is a scientific vertical slice of an eventual closed-loop digital twin. It must create real endpoint-to-cloud traffic, execute measurable work on Kubernetes, and preserve enough evidence to reconstruct completed work and the cluster state at a chosen cutoff. That evidence supplies causal arrival forecasts, OpenDC inputs and a repeated capacity controller.
+The demo is a scientific vertical slice of a closed-loop digital twin. It creates real endpoint-to-cloud traffic, executes measurable work on Kubernetes, and preserves enough evidence to reconstruct completed work and the cluster state at a chosen cutoff. That evidence supplies causal arrival forecasts, OpenDC inputs and a repeated capacity controller.
 
 The demo observes and forecasts workload, simulates worker-count alternatives, and repeatedly controls worker admission on the real cluster. Live-state reconstruction remains an approximation with explicit validity checks. Its purpose is to test modeling assumptions under controlled conditions; reproducible timing and trace correctness take priority over production fault tolerance.
+
+## Relationship to OpenDT
+
+This reference implements physical closed-loop control inside Continuum. Continuum provisions the real environment; the reference observes workload and cluster state, forecasts arrivals, uses OpenDC to evaluate capacity alternatives, and applies guarded worker-admission changes through Kubernetes. Later observations establish whether an action took effect. Its offline dashboard replays this evidence rather than executing the loop.
+
+[OpenDT](https://github.com/atlarge-research/opendt) is the destination for extending the digital-twin platform. Its [paper](https://atlarge-research.com/pdfs/2026-icpe-opendt.pdf) distinguishes the prototype's telemetry and calibrated simulation from the intended automated physical steering. Model-calibration feedback changes a predictive model; changing a simulated topology explores a hypothetical system. Neither alone closes a control loop around the real service.
+
+The transferable idea is the causal chain from observation to candidate evaluation, decision, actuation and subsequent observation. A physical action needs a target, an effective time, confirmation and a response to failure or stale evidence. These responsibilities can be implemented within OpenDT's own services and interfaces; importing this repository's deployment machinery, data formats or controller implementation is not required. Keep the resulting implementation in OpenDT so its maintainers can develop it independently.
 
 ## Component and data flow
 
@@ -38,7 +46,7 @@ Cellular access uses separate uplink and downlink traces, while cloud-to-cloud, 
 
 The inherited location and cellular profiles are accepted inputs from the student's benchmarking work. The [thesis](https://atlarge-research.com/pdfs/2025-gleb-network-simulation-bsc-thesis.pdf#page=35) describes wired client-to-datacenter RTT measurements and estimates one-way core delay as half the RTT, assuming symmetric paths. Deliberately high core throughput and minimal jitter are modeling defaults. These profiles approximate the selected paths rather than establishing universal properties of a region or provider. The demo combines KPN 5G access with the `eu_central_1` core profile.
 
-The demo retains four cloud VMs and one endpoint on one physical host. Endpoint-to-endpoint communication is outside the network model. Trace repetition is independent of workload arrival periods and forecast cycles. Validation of replay behavior does not establish the representativeness of every network profile; unshaped captures remain a distinct baseline.
+The reference separates a Kubernetes control plane, worker VMs and an endpoint sender. They can span multiple physical hosts. Endpoint-to-endpoint communication is outside the network model. Trace repetition is independent of workload arrival periods and forecast cycles. Validation of replay behavior does not establish the representativeness of every network profile; captures without network shaping remain distinct from trace-emulated captures.
 
 ## Open-loop workload generation
 
@@ -72,7 +80,7 @@ The endpoint records the complete plan, every actual send start and outcome, and
 
 Forecasting repeats the expected low-peak-low intensity over a longer run to approximate a compressed diurnal pattern. Cycle length and cycle count are explicit: adding cycles extends the run without changing its period or rate bounds. This keeps the period aligned with forecasting and Job execution time. The generator samples one continuous stochastic process over the full duration; it must not copy and paste one cycle's request timestamps.
 
-Changing peak height or cycle length can add realism later, but it is deferred until the complete closed loop works. Beginning with a stable recurring mean separates forecasting or policy errors from unnecessary workload variation.
+Varying peak height or cycle length can add workload realism. The reference uses a stable recurring mean to separate forecasting or policy errors from additional workload variation.
 
 ## Workload duration and network meaning
 
@@ -80,7 +88,7 @@ The calibrated workload uses four images per Job to keep endpoint-to-cloud data 
 
 The MobileNet workload would otherwise finish too quickly for useful five-second Prometheus sampling. Repeated inference on each preprocessed image extends execution while still returning one classification per image. This increases compute without increasing transferred data, which helps avoid hiding future latency and bandwidth effects behind an arbitrarily larger network payload.
 
-A repetition count of 128 was calibrated specifically on node3 to produce roughly 30--35 seconds of worker execution and several resource samples. It is not a realistic application algorithm or generally meaningful parameter. It is a synthetic experimental load multiplier. A later credible FNS/6G workload or heavier model should replace this mechanism when available.
+The reference uses 128 repetitions as a synthetic load multiplier to allow several resource samples per execution. It is not a realistic application algorithm or a generally meaningful parameter. Check execution duration and sampling quality on the assigned hardware before relying on that workload. A credible FNS/6G workload or heavier model should replace this mechanism when available.
 
 ## Observability model
 
@@ -157,11 +165,11 @@ Queued and starting Jobs retain their full execution profile. Starting work occu
 
 The arrival horizon bounds new arrivals, not execution duration. A fixed observation window measures timely completion; following the same cohort to completion measures its eventual response distribution. These answer different questions. Backlog and future arrivals remain distinguishable, original creation times retain earlier waiting, and unfinished work is explicit. Neither boundary defines a scaling policy or an SLO threshold.
 
-Initial placement and worker availability are part of the simulated state. Assigned work must remain on its worker, including during cordoning, until its modeled execution finishes. Observed allocatable resources are not calibrated application capacity; the planned worker model uses the explicit one-core allowance below. Runner capacity is separate and should be provided by the control plane. A simulation that starts with an empty cluster cannot represent this initial state faithfully.
+Initial placement and worker availability are part of the simulated state. Assigned work must remain on its worker, including during cordoning, until its modeled execution finishes. Observed allocatable resources are not calibrated application capacity; the worker model uses the explicit one-core allowance below. Runner capacity is separate and should be provided by the control plane. A simulation that starts with an empty cluster cannot represent this initial state faithfully.
 
 Retrospective evaluation may use later observations to establish what happened and whether measurement coverage was complete. The experiment end bounds the evaluated arrival period, not when evidence became available; gaps and capture failures still exclude affected intervals. Forecast training and profile selection retain their causal cutoffs.
 
-Node3 calibration uses 0.02–0.30 Jobs/second as a starting profile. Daemon and monitoring reservations leave three whole one-CPU Job slots per worker, and container startup occupies a slot too. Higher average demand can therefore accumulate queues despite the nominal twelve worker vCPUs. Recovery is checked across cycles; stochastic bursts can still carry a queue into the next cycle.
+Choose arrival rates against measured execution duration and modeled application slots, rather than nominal VM vCPUs. Container startup occupies a slot too, so demand can accumulate queues even when measured classifier CPU use appears low. Check recovery across cycles; stochastic bursts can carry a queue into the next cycle.
 
 ## Direct OpenDC execution boundary
 
@@ -175,7 +183,7 @@ Known-arrival old/new replay comparisons require the same run, cutoff, observed 
 
 ## Planned worker capacity and runner placement
 
-Model each C-core worker with C - 1 application cores, a deliberate allowance for fractional system reservations. Three four-core workers therefore offer nine one-CPU Job slots. Use the frozen measured application profile. Omit explicit daemon workload and energy overhead while retaining the worker power model's idle baseline.
+Model each C-core worker with C - 1 application cores, a deliberate allowance for fractional system reservations. Six five-core workers therefore offer 24 one-CPU Job slots when all six accept work. Use the frozen measured application profile. Omit explicit daemon workload and energy overhead while retaining the worker power model's idle baseline.
 
 Prefer the control-plane VM for OpenDC so it does not wait for worker Job slots. Keep application Jobs off the control plane and verify runner headroom there before relying on loop timing. The control plane and runner remain outside simulated worker capacity and energy; no additional worker-core deduction is needed with this placement.
 

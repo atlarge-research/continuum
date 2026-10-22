@@ -1,188 +1,169 @@
-# Image batch demo
+# Closed-loop digital twin: live reference demonstration
 
-Run image-classification Jobs on Kubernetes, capture their workload and resource use, forecast arrivals, and compare OpenDC simulations with observations. Results stay cloud-side. The demo includes a repeated controller that evaluates OpenDC capacity choices and cordons or uncordons warm worker reserves.
+Provision a Kubernetes cluster with Continuum, run a real image-processing service, and let a digital twin change how many workers accept new Jobs. Compare static, reactive and forecast-based control, then build an offline dashboard from your own measurements.
 
-Run commands from the repository root with Python 3.10+. Use new output directories to preserve previous results. See [DESIGN](DESIGN.md) for scientific reasoning and [HANDOFF](OPENDT_HANDOFF.md) for deployment details, current evidence and continuation notes.
+For the OpenDT student project, build the new closed loop **in [OpenDT](https://github.com/atlarge-research/opendt)**. This Continuum implementation is a reference you can study or reuse. The [design](DESIGN.md#relationship-to-opendt) explains the relationship and the [OpenDT paper](https://atlarge-research.com/pdfs/2026-icpe-opendt.pdf) provides the research context.
 
-## Local smoke run
+## What you will run
 
-Start a local adapter with a lightweight checksum worker; no cluster or inference model is needed:
+The application is a cloud image-classification service with demand that rises and falls over time. An endpoint sends batches of four images to an adapter, the service's entry point. For each batch, the adapter creates a **Kubernetes Job**: a temporary task that runs an image classifier on a worker VM, stores the results and finishes. The classifier assigns labels to images; the digital twin forecasts how many batches will arrive.
 
-```bash
-python3 -m pip install -r application/image_batch/requirements-adapter.txt
-python3 application/image_batch/src/adapter.py \
-  --submitter local --data-dir /tmp/fns-image-batch
-```
+Each worker can process only a limited number of Jobs at once. When demand exceeds available capacity, Jobs wait, increasing their response time. Keeping many workers allocated helps absorb peaks but leaves capacity reserved during quiet periods. The experiment compares three ways to balance service performance and allocated resources: keep capacity fixed, react to current demand, or anticipate demand using forecasts and simulation.
 
-In a second terminal, send one seeded workload cycle:
+Here, **scaling up** means allowing an already-running reserve worker to accept new Jobs. **Scaling down** means stopping new assignments to a worker while its current Jobs finish. All worker VMs remain powered; the controlled quantity is how many accept work. The demo measures application capacity allocation, rather than physical energy savings. The idea is that worker VMs currently not accepting jobs are part of a warm VM pool managed by a cloud/cluster operator. The operator can quickly assign these warm VMs to users that require VMs. Hence, the user does not have to pay for worker VMs that do not accept jobs. 
 
-```bash
-python3 application/image_batch/src/endpoint.py \
-  --adapter-url http://127.0.0.1:8080 \
-  --images application/image_classification/src/images \
-  --batch-size 4 --arrival-pattern periodic --period-seconds 60 \
-  --minimum-rate 0.2 --peak-rate 1 --max-concurrency 16 --random-seed 42
-```
+The forecast-based controller observes the real service, forecasts future batch arrivals and uses **OpenDC** to estimate the effects of keeping, adding or removing an accepting worker. It chooses an action to reduce, keep, or increase allocation while targeting completion of at least 95% of Jobs within 120 seconds of their creation, including waiting time. Later observations show what actually happened and inform the next decision, closing the feedback loop. Meeting that target depends on the workload, hardware and model accuracy; it is not guaranteed.
 
-The endpoint prints request receipts and a final schedule summary. Inspect a request using its printed ID:
+![Closed-loop diagram: observe, forecast, simulate with OpenDC, decide and apply worker admission, then observe the real service again](docs/closed-loop.png)
 
-```bash
-curl http://127.0.0.1:8080/v1/batches/REQUEST_ID
-curl http://127.0.0.1:8080/v1/metrics
-```
+*Follow the numbered steps clockwise, then follow the action through Kubernetes and the workers back to observation. These control services run in the Continuum reference; students from the DS course should build their loop in OpenDT. [Open the diagram full-size](docs/closed-loop.png).*
 
-## Kubernetes demo deployment
+You will run the live service and compare the three policies, then use the offline dashboard below to inspect your recorded workload, forecasts, decisions and outcomes. The dashboard displays saved evidence without running the controller.
 
-Use `configuration/fns_demo_v1.cfg` with Continuum's [provisioning instructions](../../README.md). It provisions one endpoint, a Kubernetes control plane and three workers. Before deployment, follow the [cluster setup notes](OPENDT_HANDOFF.md#cluster-setup-reference) to load images, enable worker packing and check network replay.
+![Reference dashboard showing workers, measured service behavior, forecasts and recorded decisions](docs/replay-overview.png)
 
-Build the application images:
+*The included reference dataset illustrates the dashboard. [Open the dashboard screenshot full-size](docs/replay-overview.png). Follow the steps below to display your own matched experiments.*
 
-```bash
-docker build -f application/image_batch/docker/adapter.Dockerfile -t continuum/image-batch-adapter:fns-v1 .
-docker build -f application/image_batch/docker/worker.Dockerfile -t continuum/image-batch-worker:fns-v1 .
-docker build -f application/image_batch/docker/endpoint.Dockerfile -t continuum/image-batch-endpoint:fns-v1 .
-```
+## 1. Provision the environment
 
-With Kubernetes and monitoring ready:
+Start with your course accounts on **two prepared physical cluster nodes**, with no VMs or Kubernetes yet running. Follow [Setup: from host accounts to a running service](SETUP.md) for the Continuum configuration, provisioning, image builds and service readiness checks.
 
-```bash
-python3 application/image_batch/src/configure_cadvisor_scrape.py
-kubectl apply -f application/image_batch/manifests/adapter.yaml
-```
+The resulting environment has one control plane, six workers and one endpoint sender. Run setup and captures from the first physical node; build the offline replay on your laptop. The endpoint is a workload generator, not a Kubernetes worker.
 
-Run the endpoint against `http://<cloud-node-ip>:30080`. Keep the calibrated four-image batches and 128 inference repetitions. Use the [closed-loop workflow](#closed-loop-physical-experiments) for the selected workload and matched evaluation settings. Keep the adapter at one replica and restart the experiment if it or the observer crashes or is replaced.
+After setup, open Bash at the repository root and define a shortcut for the demo helper:
 
-## Save observations and generate a run report
+~~~bash
+demo() { bash application/image_batch/scripts/student_demo.sh "$@"; }
+~~~
 
-Save the endpoint's stdout as `endpoint.jsonl`. Copy the observer files before removing its Pod:
+## 2. Submit a batch and inspect the service
 
-```bash
-kubectl cp -n fns-demo \
-  -c opendt-observer image-batch-adapter-POD:/var/lib/opendt ./opendt-audit
-```
+Use the template service before starting measured experiments. The four-image batch matches the capture workload:
 
-From the repository root, generate a PDF from those files:
+~~~bash
+ADAPTER_URL=$(demo url)
 
-```bash
-python3 -m venv /tmp/fns-analysis-venv
-/tmp/fns-analysis-venv/bin/pip install -r application/image_batch/requirements-analysis.txt
-export PYTHONPATH="$PWD/application/image_batch/src"
-/tmp/fns-analysis-venv/bin/python -m reporting.analyzer \
-  --endpoint-log ./endpoint.jsonl --observer-dir ./opendt-audit \
-  --output-dir ./logs/image-batch-report
-```
+curl --fail "$ADAPTER_URL/healthz"
 
-Open `logs/image-batch-report/report.pdf`. Repeat `--endpoint-log` to compare captured runs, or add `--run-id ID` to select one. The report preserves separate run distributions; different arrival plans are not aligned by batch index. Numerical CSVs, summaries and a self-contained `metrics.json` accompany the PDF.
+tar -cf logs/student-demo/manual-batch.tar \
+  -C application/image_classification/src/images \
+  ILSVRC2012_val_00000001.JPEG ILSVRC2012_val_00000002.JPEG \
+  ILSVRC2012_val_00000003.JPEG ILSVRC2012_val_00000004.JPEG
 
-To preserve complete measured series for later combined reports, run `/tmp/fns-analysis-venv/bin/python -m reporting.measured --endpoint-log CAPTURE/endpoint.jsonl --observer-dir CAPTURE/observer --output NEW_MEASURED.json` using the analysis environment and `PYTHONPATH` above. Repeat `--endpoint-log` for execution repetitions. Pass the saved payload to `/tmp/fns-analysis-venv/bin/python -m reporting.assembly --metrics NEW_MEASURED.json --output-dir NEW_REPORT`; additional `--metrics` files can supply saved `forecast-report.json`, simulator or combined evidence. The new report retains all plotted numbers in `metrics.json` for offline regeneration. Combined and standalone commands use the same topic-oriented landscape style. Supply only the evidence sections available; study selection and held-out roles come from explicit study metadata. Optional supplementary evidence adds causal forecast illustrations and matched scenario-seed sensitivity. See the [current report and reproduction evidence](OPENDT_HANDOFF.md#reports-and-preserved-evidence).
+curl --fail -H 'Content-Type: application/x-tar' \
+  -H 'X-Continuum-Workload-Run-ID: student-manual' \
+  --data-binary @logs/student-demo/manual-batch.tar "$ADAPTER_URL/v1/batches"
 
-## Arrival forecasting
+demo kubectl get jobs,pods -n fns-demo
+~~~
 
-Install the forecasting dependencies and generate a forecast plus simulation inputs:
+Submission returns HTTP 202 and a `request_id`. Replace `REQUEST_ID` below with that value:
 
-```bash
-python3 -m venv /tmp/fns-forecast-venv
-/tmp/fns-forecast-venv/bin/pip install -r application/image_batch/requirements-forecast.txt
-/tmp/fns-forecast-venv/bin/python application/image_batch/src/forecast_workload.py \
-  --observer-dir ./opendt-audit --run-id WORKLOAD_RUN_ID --period-seconds 240 \
-  --phase-origin ORIGIN_UTC --cutoff CUTOFF_UTC \
-  --horizon-seconds 60 --scenarios 10 --simulation-inputs \
-  --output-dir ./logs/forecast-one
-```
+~~~bash
+curl --fail "$ADAPTER_URL/v1/batches/REQUEST_ID"
+curl --fail "$ADAPTER_URL/v1/metrics"
+~~~
 
-Match `--period-seconds` to the workload. Set `ORIGIN_UTC` from the endpoint's `schedule.ready.details.schedule_start_timestamp`; `CUTOFF_UTC` is the forecast time. Check `forecast.json` and `simulation/manifest.json` for readiness. Ready forecasts contain sampled arrivals and simulator input bundles. For repeated forecasts, replace `--cutoff` with `--interval-seconds 10` and use live observer files.
+Poll the request until it finishes. The status response includes result metadata; classification results stay cloud-side. Adapter metrics describe requests and timing, while the observer collects Kubernetes state and Prometheus resource samples.
 
-## Direct controlled OpenDC execution
+Before capturing, wait for all manual Jobs to finish, then run `demo check` to check [forecast profile readiness](SETUP.md#check-the-service-and-forecast-inputs). Do not submit extra requests during the measured trio.
 
-Build the pinned simulator image:
+## 3. Capture a matched policy comparison
 
-```bash
-docker build -f application/image_batch/docker/opendc.Dockerfile \
-  -t continuum/opendc:master-7db7e1a2331fd .
-```
+Keep the checkout, images, configuration and inventory unchanged across all three runs. Use the same seed and workload settings, and reserve the cluster for one capture at a time. The capture runner creates a separate namespace for each run and requires no other active Jobs anywhere in the cluster.
 
-The [controlled-run instructions](OPENDT_HANDOFF.md#controlled-opendc-run-reference) cover an empty-cluster smoke test and the optional Kubernetes integration test. To simulate captured workload, use the workflow below.
+Create a fresh run directory and define the common command in the same Bash session:
 
-For the updated FNS-demo source-build compatibility experiment, build a separate image:
+~~~bash
+RUN_TAG="student-$(date -u +%Y%m%d-%H%M%S)"
+RUN_DIR="logs/student-demo/runs/$RUN_TAG"
+mkdir -p "$RUN_DIR"
 
-```bash
-docker build -f application/image_batch/docker/opendc.Dockerfile \
-  --build-arg OPENDC_COMMIT=cf10c06eb73c7e60e1076e376922b1201caf12d1 \
-  --build-arg OPENDC_SOURCE_SHA256=b60208e517037eaeae10f5ef32f36716bda5500de9c9a89f4e8cfc240f5ccb25 \
-  --build-arg OPENDC_RUNTIME=fns-demo \
-  -t continuum/opendc:fns-cf10c06 .
-OPENDC_RUNTIME=fns-demo python3 application/image_batch/src/opendc_run.py prepare \
-  --fixture memory --output-dir /tmp/fns-memory-inputs
-```
+COMMON=(
+  --seed 42 --admission-mode fifo
+  --period-seconds 600 --cycles 4 --warmup-cycles 2
+  --minimum-rate 0.02 --peak-rate 0.18
+  --horizon-seconds 180 --scenarios 3 --followup-seconds 600
+  --minimum-workers 1 --maximum-workers 6
+  --arm-active-workers '{"fixed":5,"reactive":4,"forecast":4}'
+  --require-evaluated-sender-fidelity
+)
 
-Use new output directories and the matching image when running those inputs. Host-side preparation defaults to the preserved engine; `OPENDC_RUNTIME=fns-demo` selects the new topology/trace contract. Manifests record the engine separately from [Dante's example](https://github.com/atlarge-research/FNS-demo), pinned at `41aaa9e20a4e299329924454316e6c91eb39f42f`. The example supplies no updated runtime JARs or engine source pin, so this source build does not establish equivalence to the developer's unavailable binary.
+run_capture() {
+  local arm="$1" active="$2" cadence="$3"
+  shift 3
+  demo capture "${COMMON[@]}" \
+    --control-arm "$arm" --active-workers "$active" \
+    --cadence-seconds "$cadence" \
+    --output "$RUN_DIR/$arm" --namespace "fns-$RUN_TAG-$arm" "$@"
+}
+~~~
 
-For assigned-task placement and native cordon, add `--initialization-mode pinned-trace` when preparing scenarios or observation-validation inputs with `OPENDC_RUNTIME=fns-demo`. Run those inputs with the matching FNS image. Results distinguish validated task placement from the remaining startup-delay, exhausted-work and observation gaps.
+These are a teaching starting configuration, not a promise that one policy will outperform another. Each run sends arrivals for 40 minutes, including 20 minutes of warm-up, followed by up to 10 minutes of completion collection. Forecast control starts after warm-up; do not expect an immediate decision.
 
-Compatible pinned suites can run in one native process using `python /app/opendc_native_batch.py --suite-dir /inputs --output-dir /results/batch` inside the matching FNS image (override its default entrypoint). Mount the prepared suite read-only and a new results directory writable, retaining the usual runner resource limits. The resulting `batch.json` works with the action evaluator. Shared process cost is reported once. Empty members are completed analytically and labeled separately; compatible nonempty members share native execution, while incompatible matrices retain individual execution.
+Preview all three configurations without contacting the cluster:
 
-## Closed-loop physical experiments
+~~~bash
+run_capture forecast 4 90 --preview
+run_capture fixed 5 90 --preview
+run_capture reactive 4 30 --preview
+~~~
 
-The capture command requires an existing calibrated Continuum QEMU cloud cluster, its provisioning configuration and generated `inventory_vms`, SSH access, the tested native image, and the Python dependencies used by the forecasting workflow. It creates a fresh namespace, sends an independent workload, saves observer and controller evidence, and restores experiment-owned admission and network state after successful collection. It does not provision VMs. Use the [handoff](OPENDT_HANDOFF.md#where-to-resume) for the current experiment protocol, infrastructure state and preserved evidence.
+Then run the following **one at a time**, waiting for `CAPTURE_COLLECTED` and checking completion before continuing:
 
-Set `CAPTURE_DIR`, `RUN_NAMESPACE` and `WORKLOAD_SEED` to fresh experiment values and `EXPERIMENT_CONFIG` to the selected settings JSON linked from the handoff, then run:
+~~~bash
+run_capture forecast 4 90
+run_capture fixed 5 90
+run_capture reactive 4 30
+~~~
 
-```bash
-OPENDC_RUNTIME=fns-demo PYTHONPATH=application/image_batch/src:. \
-  python3 -m capture_run --output "$CAPTURE_DIR" --namespace "$RUN_NAMESPACE" \
-  --continuum-config configuration/fns_demo_v1.cfg \
-  --experiment-config "$EXPERIMENT_CONFIG" \
-  --seed "$WORKLOAD_SEED" --admission-mode fifo --control-arm forecast
-```
+Static retains five accepting workers. Reactive and forecast control start with four and can adjust within the shared bounds. The shared per-policy allocation mapping keeps comparison accounting consistent; reactive checks every 30 seconds and forecast control every 90 seconds.
 
-Add `--preview` to print resolved settings without contacting the cluster or creating a capture. Deployment identities, resources, SSH key and replay preset come from the supplied configuration and its `<base_path>/.continuum/inventory_vms`; `--inventory` selects another generated inventory. Live node names, addresses and host/guest clock alignment are checked before mutation. `--template-namespace` and `--template-deployment` select the existing application to clone.
+In a second terminal, inspect the current namespace without changing the workload:
 
-Use the [current handoff](OPENDT_HANDOFF.md#where-to-resume) to select a sealed study protocol and its workload settings. `--experiment-config` loads experiment settings; explicit CLI flags override them. `--control-arm fixed` retains initial capacity; standalone reactive reproduction uses `--control-arm reactive --cadence-seconds 30`. Sealed matrices supply their declared cadence and worker overrides automatically. `--require-evaluated-sender-fidelity` additionally requires timely dispatch during the evaluated cycles. Use `--help` for the complete supported settings. Outputs include receipts, final inventories, raw observer streams, frozen forecasts/native results and the controller journal; failed attempts retain resources and failure records for diagnosis.
+~~~bash
+demo() { bash application/image_batch/scripts/student_demo.sh "$@"; }
+demo kubectl get namespaces
+demo kubectl get nodes
+~~~
 
-`--active-workers` selects normal initial allocation; fixed retains that allocation, while dynamic policies use `--minimum-workers` and `--maximum-workers`. `--acquisition-seconds` adds a minimum admission delay on powered Ready reserves and defaults to zero. The sealed matrix records these counts in `worker_bounds`; use the selected experiment's protocol and inventory from the [handoff](OPENDT_HANDOFF.md) for multi-host runs.
+Set `RUN_NAMESPACE` to the namespace printed by the capture, then inspect Jobs and the observer:
 
-`python3 -m demo_workflow --help` exposes tracked source freezing, protocol sealing, matrix execution, metric collection and read-only infrastructure snapshots/comparisons. Run from the repository root with the same Python path. Matrix execution verifies sealed source, deployment and image identities, checks the time reserve, and archives then removes its native staging files after successful capture cleanup. `python3 -m demo_cleanup --help` exposes the same archival operation for standalone captures. Historical supporting-study scripts remain provenance; only workflows exercised on a configured deployment establish live portability.
+~~~bash
+RUN_NAMESPACE="fns-REPLACE_WITH_RUN_TAG-forecast"
+demo kubectl get jobs,pods -n "$RUN_NAMESPACE"
+demo kubectl logs -n "$RUN_NAMESPACE" deployment/image-batch-adapter \
+  -c opendt-observer --tail=20
+~~~
 
-Produce a self-contained physical evidence file and an offline PDF in new destinations:
+On the capture host, each arm's output directory contains `endpoint.jsonl`, `observer/`, `controller/journal.jsonl`, frozen forecast/simulation inputs and final cluster inventories. The capture collects these before removing its namespace. `cleanup.json` and `observer-drain.json` record completion and restoration. Keep the whole directory.
 
-```bash
-PYTHONPATH=application/image_batch/src python3 -m closed_loop_evidence \
-  --capture "$CAPTURE_DIR" --role pilot --output "$METRICS_FILE"
-PYTHONPATH=application/image_batch/src python3 -m reporting.assembly \
-  --metrics "$METRICS_FILE" --output-dir "$REPORT_DIR"
-```
+If a command fails, stop the trio and preserve its output. Failed captures deliberately retain resources for diagnosis. Inspect `failure.json` and the live namespace with the instructor before removing resources or starting another run; a restarted process is not a resumed experiment. Use a fresh run directory for a replacement comparison.
 
-For an approved illustrative campaign, `python3 application/image_batch/scripts/demo_export.py --checkpoint "$CAMPAIGN_CHECKPOINT" --output "$DEMO_BUNDLE"` exports a fresh offline bundle with `index.json`, whole-case metrics, plotting JSON and summary CSV. Select the complete scenario named by the index for the HTML demo; its `demo_ready` flag is separate from held-out validation. See the [handoff](OPENDT_HANDOFF.md#where-to-resume) for the checkpoint and selection evidence.
+## 4. Generate metrics and an offline report
 
-Use the study role recorded before execution; held-out comparisons require matching planned workloads and evaluation windows. The PDF reports accepting, draining and requested pending core-time separately from powered worker availability. A surviving capture can reattach its controller with `python3 -m closed_loop_resume --capture-output "$CAPTURE_DIR"` using the same source path and runtime environment; the owner, journal and observer identity must still match.
+After all three captures finish, run from the repository root in the original session:
 
-## Manual provisional scenario workflow
+~~~bash
+demo python -m closed_loop_evidence \
+  --capture "$RUN_DIR/fixed" --capture "$RUN_DIR/reactive" \
+  --capture "$RUN_DIR/forecast" \
+  --role pilot --output "$RUN_DIR/trio-metrics.json"
 
-Prepare scenarios with `opendc_scenarios.py prepare`, run them with `opendc_batch.py`, then generate an action report:
+demo python -m reporting.assembly \
+  --metrics "$RUN_DIR/trio-metrics.json" --output-dir "$RUN_DIR/report"
+~~~
 
-```bash
-python3 application/image_batch/src/opendc_evaluate.py \
-  --batch-dir ./logs/scenarios-one-cluster --output-dir ./logs/scenarios-one-report
-```
+Open `report/report.pdf` beneath `RUN_DIR`. The portable `report/metrics.json` preserves the plotted evidence. These are pilot measurements: inspect missing observations, sender fidelity, failed/unfinished Jobs, service deadlines and allocation before interpreting differences. Completed-only latency and the fraction meeting a deadline answer different questions.
 
-Each command provides `--help`; the [handoff](OPENDT_HANDOFF.md#manual-run-reference) gives the preparation and execution commands. To redraw saved action results, replace `--batch-dir` with `--metrics-file ./logs/scenarios-one-report/metrics.json`.
+Keep all captures and the report on the first physical host at their original absolute paths until replay acquisition finishes. Data collection is separate from dashboard conversion; a completed run still needs technically valid, matching evidence.
 
-For the combined action and forecast-validation PDF:
+## 5. Build your offline dashboard
 
-```bash
-PYTHONPATH=application/image_batch/src /tmp/fns-analysis-venv/bin/python -m reporting.assembly \
-  --metrics SAVED_REPORT/metrics.json --split validation \
-  --output-dir NEW_REPORT_DIRECTORY
-```
+On your laptop, follow [Build a replay from your own trio](demo_replay/README.md#build-a-replay-from-your-own-trio). It downloads the forecast capture and the combined comparison report from the capture host, converts them with `--status preliminary`, and builds `dist/continuum-replay.html`.
 
-Open `NEW_REPORT_DIRECTORY/report.pdf`; plotted comparison values are in `comparison.json`. Repeat `--metrics` to combine saved evidence. Omit `--split validation` to include all supplied validation runs; use `--forecast-seed` to choose a scenario seed. Only sections with supplied evidence are included.
+Open that file directly in Chrome. Explore **Overview**, **Analysis** and **Policy comparison**; play, pause and seek to connect a published forecast, the selected action and its observed effect. This dashboard is an offline replay, not a live monitoring endpoint.
 
-## Observation validation
+The current converter expects **exactly six workers and a matched static/reactive/forecast trio**. A single capture can produce a PDF, but cannot populate this dashboard by itself. You can also [build the included reference replay](demo_replay/README.md#build-the-included-reference) before collecting your own data.
 
-Use `opendc_validation.py prepare` for replay inputs and `evaluate` for measured comparisons. Follow the [recorded experiment commands](/home/matthijs/continuum/logs/fns-provisional/packing-validation-20260921/COMMANDS.md) to reproduce the historical chronological validation and held-out evaluation. That provisional study retains partial scale-down accounting. The optional pinned path uses native cordon with complete represented-work accounting; both remain manual experiments with approximate initialization and uncalibrated energy assumptions.
-
-For independent validation workload runs, use `opendc_study.py --metrics RUN_A.json --metrics RUN_B.json --output NEW_SELECTION.json` to freeze an equally weighted configuration choice. Each metrics file must identify its distinct `workload_seed`. Preserve that selection before held-out execution and restrict the held-out preparation index's `forecast_counts` to the selected count.
-
-For a controlled physical cordon or reserve-admission capture, `opendc_intervention.py --intervention CAPTURE/intervention.json --final-pods CAPTURE/pods-final.json --output NEW_VERDICT.json` checks preserved placement and drain evidence. It reports API-boundary ambiguities explicitly; a successful API command alone is insufficient.
-
-Append controlled-action validation to the main PDF with `/tmp/fns-analysis-venv/bin/python -m reporting.assembly --metrics MAIN_METRICS.json --metrics CONTROLLED_METRICS.json --output-dir NEW_REPORT`. The controlled input can be an individual comparison or a saved controlled report's `metrics.json`; the combined payload redraws offline through the same command. Validation pages appear last and show worker assignments, completion counts, start/runtime errors, per-Job responses and detailed arrival/wait/execution timelines against the action actually observed. Different workloads remain separate. The standalone `/tmp/fns-analysis-venv/bin/python -m reporting.controlled --comparison COMPARISON.json --output-dir NEW_REPORT` entry point remains available.
+For the reasoning behind the implementation, read [observation and forecasting](DESIGN.md#observability-model), [repeated capacity control](DESIGN.md#repeated-capacity-control), and [interpretation limits](DESIGN.md#known-limitations-relevant-to-interpretation). Advanced simulator, forecast and reporting tools expose `--help`; they are not additional prerequisites for this walkthrough.

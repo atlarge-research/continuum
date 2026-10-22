@@ -1,5 +1,8 @@
 # Continuum
 Continuum is a deployment and benchmarking framework for the edge-cloud compute continuum.
+
+For a complete application example, start with the [closed-loop digital twin demonstration](application/image_batch/README.md): provision a Kubernetes cluster with Continuum, run an image-processing service under capacity control, and build an offline dashboard from your measurements.
+
 Continuum offers the following features:
 
 1. Continuum automates the creation of a cluster of cloud, edge, and endpoint virtual machines to emulate a compute continuum environment.

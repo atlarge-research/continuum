@@ -84,6 +84,7 @@ def resolve_deployment(config_path, inventory_path=None):
     Node naming follows Continuum's QEMU cloud-init convention. Live preflight
     verifies these identities before any mutation; no address is inferred from
     the current user's name, home directory or a developer's old experiment.
+    A wireless preset is not required when network emulation is disabled or omitted.
 
     Args:
         config_path (str or Path): Continuum .cfg used to provision the existing cluster.
@@ -133,12 +134,13 @@ def resolve_deployment(config_path, inventory_path=None):
     if cores < 2 or not math.isfinite(memory) or memory <= 0:
         raise ValueError("configured worker resources are invalid")
     controller, endpoint = controllers[0], endpoints[0]
-    uplink, downlink = mahimahi_values({"infrastructure": dict(infra)})
     replay = []
-    if infra.getboolean("network_emulation", fallback=False) and uplink:
-        replay = generate_mahimati_command(
-            endpoint["ansible_host"], addresses[:-1], uplink, downlink
-        )[0]
+    if infra.getboolean("network_emulation", fallback=False):
+        uplink, downlink = mahimahi_values({"infrastructure": dict(infra)})
+        if uplink:
+            replay = generate_mahimati_command(
+                endpoint["ansible_host"], addresses[:-1], uplink, downlink
+            )[0]
     return {
         "controller": f'{controller["ansible_user"]}@{controller["ansible_host"]}',
         "endpoint": f'{endpoint["ansible_user"]}@{endpoint["ansible_host"]}',
