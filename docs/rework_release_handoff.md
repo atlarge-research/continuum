@@ -64,8 +64,11 @@ and the retirement packet performed no VM operation or benchmark rerun.
 1. Complete the bounded reproduction/configuration/support reviews.
    `docs/reproduction_inventory.md` records the complete candidate survey and
    remaining historical associations; obtain one final scope confirmation
-   before reproduction-driven deletions. The tracked configuration/fixture
-   inventory is separate and still open.
+   before reproduction-driven deletions. `docs/configuration_inventory.md`
+   accounts for 310 inputs and 47 fixture/support/metadata sources; its preserved
+   per-file evidence is bound to b22cadc. Final historical dispositions, required
+   equivalents and fresh runtime acceptance remain open; refresh affected rows
+   after later schema/example/test changes.
 2. Implement the approved registry_refresh hard cut and address demonstrated
    cache-recipe gaps through bounded reviewed packets; validate the narrow
    same-revision QEMU resume contract. Sweeps remain candidate-only.

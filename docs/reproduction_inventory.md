@@ -6,6 +6,10 @@ remains in `docs/release_certification_matrix.md`. One final user confirmation i
 still required before reproduction-driven deletions. No such deletion is authorized
 by this inventory.
 
+Tracked configuration/profile and fixture coverage is separately recorded in
+`docs/configuration_inventory.md`; complete path accounting does not close the
+historical-scope or final-runtime gates.
+
 ## Survey and interpretation
 
 The survey covers the current README and research/configuration documentation,
