@@ -363,22 +363,11 @@ PY
 fi
 
 if [ "$SCENARIO" = "latest-result-tail" ]; then
-  target_scenario="${2:-}"
-  artifact_kind="${3:-stdout}"
-  case "$artifact_kind" in
-    stdout|stderr|metadata)
-      ;;
-    *)
-      echo "Usage: $0 latest-result-tail <scenario> [stdout|stderr|metadata]" >&2
-      exit 2
-      ;;
-  esac
-  if [ -z "$target_scenario" ]; then
-    echo "Usage: $0 latest-result-tail <scenario> [stdout|stderr|metadata]" >&2
-    echo "Known retained scenarios:" >&2
-    print_retained_scenarios >&2
+  if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
+    echo "Usage: $0 latest-result-tail <scenario> [stdout|stderr|metadata] [result-index] [--full]" >&2
     exit 2
   fi
+  target_scenario=$2
   validate_scenario_name "$target_scenario" || exit $?
   if ! scenario_path=$(retained_scenario_path "$target_scenario"); then
     echo "Unsupported retained scenario for result tail: $target_scenario" >&2
@@ -386,52 +375,82 @@ if [ "$SCENARIO" = "latest-result-tail" ]; then
     print_retained_scenarios >&2
     exit 2
   fi
+  if [ ! -x "$PYTHON_BIN" ]; then
+    echo "Could not find Continuum smoke Python interpreter: $PYTHON_BIN" >&2
+    exit 2
+  fi
   results_dir="$scenario_path/.continuum/test_results"
-  if [ ! -d "$results_dir" ]; then
-    echo "No test-results directory for scenario: $target_scenario" >&2
-    echo "Path: $results_dir" >&2
-    exit 1
-  fi
-  latest_result=$(
-    find "$results_dir" -maxdepth 1 -type f -name 'test_results_*.json' \
-      -printf '%T@ %p\n' | sort -n | tail -n 1 | sed 's/^[^ ]* //'
-  )
-  if [ -z "$latest_result" ]; then
-    echo "No retained test result found for scenario: $target_scenario" >&2
-    echo "Path: $results_dir" >&2
-    exit 1
-  fi
-  artifact_path=$(
-    LATEST_RESULT_PATH="$latest_result" ARTIFACT_KIND="$artifact_kind" "$PYTHON_BIN" - <<'PY'
+  shift 2
+  exec "$PYTHON_BIN" - "$results_dir" "$@" <<'PY'
+from collections import deque
 import json
-import os
+from pathlib import Path
+import re
+import shutil
+import sys
 
-field = "%s_artifact" % os.environ["ARTIFACT_KIND"]
-if os.environ["ARTIFACT_KIND"] == "metadata":
-    field = "metadata_artifact"
-with open(os.environ["LATEST_RESULT_PATH"], "r", encoding="utf-8") as filep:
-    payload = json.load(filep)
-results = payload.get("results", [])
-if results:
-    print(results[0].get(field, ""))
+args = sys.argv[2:]
+kind = "stdout"
+index_text = "1"
+if args and args[0] in ("stdout", "stderr", "metadata"):
+    kind = args.pop(0)
+if args and args[0] != "--full":
+    index_text = args.pop(0)
+if not re.fullmatch(r"[1-9][0-9]*", index_text) or args not in ([], ["--full"]):
+    print("Usage: latest-result-tail <scenario> [stdout|stderr|metadata] "
+          "[positive result-index] [--full]", file=sys.stderr)
+    sys.exit(2)
+full = bool(args)
+
+try:
+    result_index = int(index_text)
+    results_dir = Path(sys.argv[1]).resolve(strict=True)
+    if not results_dir.is_dir():
+        raise ValueError("Not a test-results directory: %s" % results_dir)
+    candidates = [
+        path for path in results_dir.glob("test_results_*.json")
+        if path.is_file() and not path.is_symlink()
+    ]
+    if not candidates:
+        raise ValueError("No retained test result found in %s" % results_dir)
+    latest_result = max(candidates, key=lambda path: (path.stat().st_mtime_ns, str(path)))
+    latest_result = latest_result.resolve(strict=True)
+    if latest_result.parent != results_dir:
+        raise ValueError("Result JSON escapes retained results directory: %s" % latest_result)
+    with latest_result.open("r", encoding="utf-8") as summary:
+        payload = json.load(summary)
+    if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+        raise ValueError("Result JSON must contain a results list: %s" % latest_result)
+    entries = payload["results"]
+    if not 1 <= result_index <= len(entries):
+        raise ValueError("Result index %s out of range (1..%d)" % (index_text, len(entries)))
+    entry = entries[result_index - 1]
+    if not isinstance(entry, dict):
+        raise ValueError("Selected result entry must be a mapping")
+    recorded = entry.get("%s_artifact" % kind)
+    if not isinstance(recorded, str) or not recorded:
+        raise ValueError("Selected result has no %s artifact path" % kind)
+    artifact = Path(recorded)
+    if not artifact.is_absolute() or ".." in artifact.parts:
+        raise ValueError("Refusing nonabsolute or parent-traversal artifact: %s" % artifact)
+    artifact = artifact.resolve(strict=True)
+    try:
+        artifact.relative_to(results_dir)
+    except ValueError:
+        raise ValueError("Refusing result artifact outside retained results directory: %s" % artifact)
+    if not artifact.is_file():
+        raise ValueError("Result artifact is not a regular file: %s" % artifact)
+    with artifact.open("rb") as source:
+        print("LATEST_RESULT=%s" % latest_result)
+        print("ARTIFACT=%s" % artifact, flush=True)
+        if full:
+            shutil.copyfileobj(source, sys.stdout.buffer)
+        else:
+            sys.stdout.buffer.writelines(deque(source, maxlen=120))
+except (OSError, ValueError, RuntimeError) as exc:
+    print("Cannot inspect retained result: %s" % exc, file=sys.stderr)
+    sys.exit(1)
 PY
-  )
-  case "$artifact_path" in
-    "$results_dir"/*)
-      ;;
-    *)
-      echo "Refusing result artifact outside retained results directory: $artifact_path" >&2
-      exit 1
-      ;;
-  esac
-  if [ ! -r "$artifact_path" ]; then
-    echo "Result artifact is not readable: $artifact_path" >&2
-    exit 1
-  fi
-  printf 'LATEST_RESULT=%s\n' "$latest_result"
-  printf 'ARTIFACT=%s\n' "$artifact_path"
-  tail -n 120 -- "$artifact_path"
-  exit $?
 fi
 
 if [ "$SCENARIO" = "prune-scenario" ]; then

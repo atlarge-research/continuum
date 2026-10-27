@@ -57,6 +57,8 @@ yet replaced the current schema.
 | `sh scripts/test/run_smoke_host.sh release-artifact-audit` | Validate retained release-evidence artifacts on the certification host |
 | `sh scripts/test/run_smoke_host.sh phase_smoke_matrix` | Run the three phase-boundary host-backed smoke scenarios as the normal user |
 | `sh scripts/test/run_smoke_host.sh operational_regression` | Run the phase matrix plus retained benchmark smoke |
+| `sh scripts/test/run_smoke_host.sh latest-result-summary benchmark_k8s_resume` | List every entry in the latest retained benchmark result |
+| `sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume stdout 2 --full` | Print the complete second entry's stdout; kinds are stdout/stderr/metadata, index defaults to 1, output defaults to the final 120 lines, and `--full` must be last |
 | `sh scripts/test/run_smoke_host.sh network_validation` | Run the dedicated network-validation suite as the normal user |
 | `sh scripts/test/run_smoke_host.sh qemu_infra_parity` | Run the QEMU infra-only old-main parity suite as the normal user |
 | `sh scripts/test/run_smoke_host.sh qemu_k8s_nobench_parity` | Run the QEMU Kubernetes no-benchmark old-main parity suite as the normal user |

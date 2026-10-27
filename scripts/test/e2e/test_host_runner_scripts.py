@@ -8,6 +8,7 @@ import os
 import pwd
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -1070,3 +1071,192 @@ class HostRunnerScriptTests(unittest.TestCase):
                 str(smoke_base_root / "qemu_kube_kata_empty_startup_parity"),
                 result.stdout,
             )
+
+
+class RetainedResultTailTests(unittest.TestCase):
+    """Exercise the real inspector, including containment and byte output."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.repo = Path(__file__).resolve().parents[3]
+        self.base = self.root / "retained"
+        self.scenario = "benchmark_k8s_resume"
+        self.results = self.base / self.scenario / ".continuum/test_results"
+        self.results.mkdir(parents=True)
+        self.summary = self.results / "test_results_2026-10-27_18-00-00.json"
+        self.entries = []
+        self.contents = {}
+        for index in (1, 2):
+            entry = {}
+            for kind in ("stdout", "stderr", "metadata"):
+                path = self.results / f"entry-{index}-{kind}.txt"
+                content = b"".join(
+                    f"entry-{index}-{kind}-{line:03d}\n".encode() for line in range(150))
+                path.write_bytes(content)
+                entry[f"{kind}_artifact"] = str(path)
+                self.contents[index, kind] = content
+            self.entries.append(entry)
+        self._save()
+
+    def _save(self, payload=None):
+        if payload is None:
+            payload = {"results": self.entries}
+        self.summary.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _tail(self, *args):
+        env = os.environ.copy()
+        env.update({"HOME": str(self.root), "CONTINUUM_SMOKE_BASE_ROOT": str(self.base),
+                    "CONTINUUM_SMOKE_PYTHON": sys.executable})
+        return subprocess.run(
+            ["sh", str(self.repo / "scripts/test/run_smoke_host.sh"), "latest-result-tail", *args],
+            check=False, capture_output=True, env=env, cwd=self.repo)
+
+    def _content(self, result):
+        self.assertEqual(result.returncode, 0, result.stderr)
+        headers = result.stdout.split(b"\n", 2)
+        self.assertTrue(headers[0].startswith(b"LATEST_RESULT="), headers)
+        self.assertTrue(headers[1].startswith(b"ARTIFACT="), headers)
+        return headers[2]
+
+    def test_default_is_first_stdout_final_120_lines(self):
+        expected = b"".join(self.contents[1, "stdout"].splitlines(keepends=True)[-120:])
+        self.assertEqual(self._content(self._tail(self.scenario)), expected)
+
+    def test_every_kind_selects_requested_entry_and_full_output(self):
+        for kind in ("stdout", "stderr", "metadata"):
+            with self.subTest(kind=kind):
+                self.assertEqual(self._content(self._tail(self.scenario, kind, "2", "--full")),
+                                 self.contents[2, kind])
+
+    def test_optional_positions_and_default_index(self):
+        for args, index, kind in ((("--full",), 1, "stdout"),
+                                  (("stderr", "--full"), 1, "stderr"),
+                                  (("2", "--full"), 2, "stdout")):
+            with self.subTest(args=args):
+                self.assertEqual(self._content(self._tail(self.scenario, *args)),
+                                 self.contents[index, kind])
+
+    def test_full_and_tail_preserve_bytes_and_missing_final_newline(self):
+        content = b"".join(b"line-%03d\xff\r\n" % n for n in range(150)) + b"last\xfe"
+        Path(self.entries[0]["stdout_artifact"]).write_bytes(content)
+        self.assertEqual(self._content(self._tail(self.scenario, "--full")), content)
+        self.assertEqual(self._content(self._tail(self.scenario)),
+                         b"".join(content.splitlines(keepends=True)[-120:]))
+
+    def test_latest_summary_not_latest_artifact_or_first_filename(self):
+        newer = self.results / "test_results_2026-01-01_00-00-00.json"
+        newer.write_text(json.dumps({"results": [self.entries[1]]}), encoding="utf-8")
+        os.utime(self.summary, (100, 100))
+        os.utime(newer, (200, 200))
+        result = self._tail(self.scenario, "--full")
+        self.assertEqual(self._content(result), self.contents[2, "stdout"])
+        self.assertIn(str(newer).encode(), result.stdout.split(b"\n", 1)[0])
+
+    def test_only_selected_entry_is_used(self):
+        self.entries[0]["stdout_artifact"] = "/etc/passwd"
+        self._save()
+        self.assertEqual(self._content(self._tail(self.scenario, "stdout", "2", "--full")),
+                         self.contents[2, "stdout"])
+
+    def test_rejects_invalid_indexes(self):
+        for index in ("0", "-1", "1.5", "abc", "3", "9" * 5000):
+            with self.subTest(index=index[:20]):
+                result = self._tail(self.scenario, "stdout", index)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b"")
+
+    def test_rejects_unknown_kind_order_extras_and_paths(self):
+        for args in (("bogus",), ("/etc/passwd",), ("../stdout",), ("--full", "stdout"),
+                     ("2", "stderr"), ("stdout", "--full", "2"),
+                     ("stdout", "1", "--full", "extra"), ("stdout", "1", "--full", "--full")):
+            with self.subTest(args=args):
+                result = self._tail(self.scenario, *args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b"")
+
+    def test_rejects_unknown_scenarios_and_aggregate_root(self):
+        for scenario in ("unknown", "../evil", "/tmp/evil", "operational_regression"):
+            with self.subTest(scenario=scenario):
+                self.assertNotEqual(self._tail(scenario).returncode, 0)
+
+    def test_every_retained_mapping_and_benchmark_alias_is_inspectable(self):
+        scenarios = ("infra_one_vm", "software_k8s_two_vm", "network_netperf_two_vm",
+                     "benchmark_k8s_resume", "network_validation", "qemu_infra_parity",
+                     "qemu_k8s_nobench_parity", "qemu_k8s_image_parity",
+                     "qemu_kubeedge_software_parity", "qemu_kubeedge_image_parity",
+                     "qemu_mist_software_parity", "qemu_mist_image_parity",
+                     "qemu_endpoint_software_parity", "qemu_endpoint_image_parity",
+                     "qemu_openfaas_software_parity", "qemu_openfaas_image_parity",
+                     "qemu_openfaas_image_local_parity", "qemu_kubecontrol_empty_parity",
+                     "qemu_kubecontrol_empty_trace_parity", "qemu_kube_kata_empty_startup_parity",
+                     "prereqs", "benchmark_k8s_resume_infra", "benchmark_k8s_resume_software",
+                     "benchmark_k8s_resume_application")
+        for scenario in scenarios:
+            with self.subTest(scenario=scenario):
+                child = "benchmark_k8s_resume" if scenario.startswith("benchmark_k8s_resume") else scenario
+                results = self.base / child / ".continuum/test_results"
+                results.mkdir(parents=True, exist_ok=True)
+                artifact = results / "stdout.txt"
+                artifact.write_bytes(b"mapped\n")
+                (results / self.summary.name).write_text(
+                    json.dumps({"results": [{"stdout_artifact": str(artifact)}]}), encoding="utf-8")
+                self.assertEqual(self._content(self._tail(scenario, "--full")), b"mapped\n")
+
+    def test_rejects_missing_results_directory_summary_or_artifact(self):
+        self.assertNotEqual(self._tail("infra_one_vm").returncode, 0)
+        self.summary.unlink()
+        self.assertNotEqual(self._tail(self.scenario).returncode, 0)
+        self._save()
+        Path(self.entries[0]["stdout_artifact"]).unlink()
+        result = self._tail(self.scenario)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b"")
+
+    def test_rejects_malformed_payload_entry_or_artifact_field(self):
+        for payload in ([], {"results": []}, {"results": {}}, {"results": [None]},
+                        {"results": [{}]}, {"results": [{"stdout_artifact": 42}]}):
+            with self.subTest(payload=payload):
+                self._save(payload)
+                result = self._tail(self.scenario)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b"")
+        self.summary.write_text("{broken", encoding="utf-8")
+        self.assertNotEqual(self._tail(self.scenario).returncode, 0)
+
+    def test_rejects_arbitrary_and_parent_traversal_artifact_paths(self):
+        outside = self.root / "secret.txt"
+        outside.write_bytes(b"outside-secret")
+        parent_secret = self.results.parent / "secret.txt"
+        parent_secret.write_bytes(b"outside-secret")
+        for path in (str(outside), str(self.results / ".." / "secret.txt"), "../secret.txt"):
+            with self.subTest(path=path):
+                self.entries[0]["stdout_artifact"] = path
+                self._save()
+                result = self._tail(self.scenario)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn(b"outside-secret", result.stdout)
+
+    def test_rejects_symlink_escape(self):
+        outside = self.root / "secret.txt"
+        outside.write_bytes(b"outside-secret")
+        artifact = Path(self.entries[0]["stdout_artifact"])
+        artifact.unlink()
+        artifact.symlink_to(outside)
+        result = self._tail(self.scenario)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn(b"outside-secret", result.stdout)
+
+    def test_rejects_unreadable_or_nonregular_artifact(self):
+        artifact = Path(self.entries[0]["stdout_artifact"])
+        artifact.unlink()
+        artifact.mkdir()
+        self.assertNotEqual(self._tail(self.scenario).returncode, 0)
+        artifact.rmdir()
+        artifact.write_bytes(b"private-content")
+        if os.geteuid() != 0:
+            artifact.chmod(0)
+            result = self._tail(self.scenario)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, b"")

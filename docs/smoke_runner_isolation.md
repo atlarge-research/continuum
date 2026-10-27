@@ -60,6 +60,28 @@ sh scripts/test/run_smoke_host.sh latest-result-summary benchmark_k8s_resume
 sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume stdout
 ```
 
+Artifact inspection accepts exactly this order:
+
+```text
+latest-result-tail <scenario> [stdout|stderr|metadata] [result-index] [--full]
+```
+
+Defaults are stdout, one-based result index 1, and the final 120 lines.
+`--full` prints the complete selected artifact without decoding or truncation;
+it must be last. Kind and index may be omitted. For example, inspect every
+entry in a three-phase benchmark result with indexes 1, 2 and 3:
+
+```bash
+sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume stdout 2 --full
+sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume stderr 2 --full
+sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume metadata 2 --full
+```
+
+Only the selected entry of the latest summary JSON supplies the artifact path.
+The inspector rejects invalid indexes/order, arbitrary path arguments, parent
+traversal, symlink escapes and missing/unreadable/nonregular artifacts. Canonical
+artifact paths must stay inside that child's canonical test-results directory.
+
 The script retains the existing named suite/scenario mapping, including local
 and multi-host OpenFaaS, Columbo trace and Kata startup paths. `list-suites`
 describes configured suites; availability is not runtime certification.
