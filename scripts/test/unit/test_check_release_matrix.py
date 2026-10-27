@@ -111,29 +111,27 @@ Nothing else in this tiny fixture.
 
 ```bash
 scripts/test/run_cloud_static_audit.sh
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
+sh scripts/test/run_smoke_host.sh release-artifact-audit
 python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_claims.py
 python3 scripts/test/check_release_matrix.py
 python3 scripts/test/check_docs_paths.py
 git diff --check
-sudo -n /usr/local/bin/continuum-hostctl sync-repo
-sudo -n /usr/local/bin/continuum-hostctl verify
 sh scripts/test/setup_agent_host.sh verify
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity
+sh scripts/test/run_smoke_host.sh operational_regression
+sh scripts/test/run_smoke_host.sh network_validation
+sh scripts/test/run_smoke_host.sh qemu_infra_parity
+sh scripts/test/run_smoke_host.sh qemu_k8s_image_parity
+sh scripts/test/run_smoke_host.sh qemu_k8s_nobench_parity
+sh scripts/test/run_smoke_host.sh qemu_kubeedge_software_parity
+sh scripts/test/run_smoke_host.sh qemu_kubeedge_image_parity
+sh scripts/test/run_smoke_host.sh qemu_mist_software_parity
+sh scripts/test/run_smoke_host.sh qemu_mist_image_parity
+sh scripts/test/run_smoke_host.sh qemu_endpoint_software_parity
+sh scripts/test/run_smoke_host.sh qemu_endpoint_image_parity
+sh scripts/test/run_smoke_host.sh qemu_openfaas_software_parity
+sh scripts/test/run_smoke_host.sh qemu_openfaas_image_local_parity
+sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity
 ```
 """
 
@@ -159,7 +157,7 @@ sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_imag
 2. Runtime claims require VM-backed or cloud-backed evidence.
 3. Intermediate rework milestones may certify smaller module sets before the
    final main replacement.
-4. Final main replacement requires old-main parity or explicit deprecation.
+4. Final main replacement requires approved reproduction scope and zero unaccounted rows.
 """
 
     def _parity_backlog(
@@ -1197,8 +1195,8 @@ When converting this seed into issues:
                 root,
                 self._passing_matrix(),
                 release_notes_text=self._passing_release_notes().replace(
-                    "sudo -n -u continuum-smoke "
-                    "/usr/local/bin/run-continuum-smoke release-artifact-audit\n",
+                    "sh "
+                    "scripts/test/run_smoke_host.sh release-artifact-audit\n",
                     "",
                 ),
             )
@@ -1209,8 +1207,8 @@ When converting this seed into issues:
                     check_release_matrix.MatrixIssue(
                         "release-notes-pretag-command-missing",
                         "section 7 is missing "
-                        "'sudo -n -u continuum-smoke "
-                        "/usr/local/bin/run-continuum-smoke release-artifact-audit'",
+                        "'sh "
+                        "scripts/test/run_smoke_host.sh release-artifact-audit'",
                     )
                 ],
             )
@@ -1382,13 +1380,13 @@ When converting this seed into issues:
 
             self.assertEqual(check_release_matrix.find_matrix_issues(root), [])
 
-    def test_release_notes_known_limitations_must_include_host_helper_blocker(self):
+    def test_release_notes_known_limitations_must_include_normal_user_prerequisites(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             matrix_text = (
                 self._passing_matrix()
                 + "\n## 8. Next Steps\n\n"
-                "Refresh `HOSTCTL_INTERFACE_VERSION` and `prime-registry-cache`.\n"
+                "Verify normal-user prerequisites before runtime.\n"
             )
             self._write_repo(root, matrix_text)
 
@@ -1397,8 +1395,8 @@ When converting this seed into issues:
                 [
                     check_release_matrix.MatrixIssue(
                         "release-notes-known-limitation-missing",
-                        "host-helper-interface: section 5 must mention the "
-                        "host-helper interface and cache-prime blocker",
+                        "runner-prerequisites: section 5 must mention "
+                        "normal-user host prerequisites",
                     )
                 ],
             )
@@ -1407,10 +1405,10 @@ When converting this seed into issues:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             release_notes = self._passing_release_notes().replace(
-                "sudo -n /usr/local/bin/continuum-hostctl verify\n"
+                "git diff --check\n"
                 "sh scripts/test/setup_agent_host.sh verify\n",
                 "sh scripts/test/setup_agent_host.sh verify\n"
-                "sudo -n /usr/local/bin/continuum-hostctl verify\n",
+                "git diff --check\n",
             )
             self._write_repo(root, self._passing_matrix(), release_notes_text=release_notes)
 
@@ -1420,7 +1418,7 @@ When converting this seed into issues:
                     check_release_matrix.MatrixIssue(
                         "release-notes-pretag-command-order",
                         "section 7 lists 'sh scripts/test/setup_agent_host.sh verify' "
-                        "before 'sudo -n /usr/local/bin/continuum-hostctl verify'; "
+                        "before 'git diff --check'; "
                         "keep pre-tag commands in documented order",
                     )
                 ],
@@ -1454,79 +1452,58 @@ When converting this seed into issues:
                 "## 4. Old-Main Provider And Topology Parity",
                 "Preferred M1 host command sequence:\n\n"
                 "1. `scripts/test/run_cloud_static_audit.sh`\n"
-                "2. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`\n"
-                "2. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
-                "4. `sh scripts/test/setup_agent_host.sh verify`\n"
-                "5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
-                "qemu_infra_parity`\n\n"
-                "## 4. Old-Main Provider And Topology Parity",
-            )
-            self._write_repo(root, matrix_text)
-
-            self.assertEqual(
-                check_release_matrix.find_matrix_issues(root),
-                [
-                    check_release_matrix.MatrixIssue(
-                        "matrix-host-command-numbering",
-                        "Preferred M1 host command sequence lists "
-                        "'sudo -n /usr/local/bin/continuum-hostctl verify' "
-                        "as item 2; expected item 3",
-                    )
-                ],
-            )
-
-    def test_preferred_host_sequence_must_include_ready_suite_wrapper_commands(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            matrix_text = self._passing_matrix().replace(
-                "## 4. Old-Main Provider And Topology Parity",
-                "Preferred M1 host command sequence:\n\n"
-                "1. `scripts/test/run_cloud_static_audit.sh`\n"
-                "2. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`\n"
-                "3. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
-                "4. `sh scripts/test/setup_agent_host.sh verify`\n\n"
-                "## 4. Old-Main Provider And Topology Parity",
-            )
-            self._write_repo(root, matrix_text)
-
-            self.assertEqual(
-                check_release_matrix.find_matrix_issues(root),
-                [
-                    check_release_matrix.MatrixIssue(
-                        "matrix-host-ready-suite-command-missing",
-                        "P-QEMU-01 uses ready suite qemu_infra_parity but Preferred "
-                        "M1 host command sequence is missing 'sudo -n -u "
-                        "continuum-smoke /usr/local/bin/run-continuum-smoke "
-                        "qemu_infra_parity'",
-                    )
-                ],
-            )
-
-    def test_preferred_host_sequence_must_include_helper_setup_commands(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            matrix_text = self._passing_matrix().replace(
-                "## 4. Old-Main Provider And Topology Parity",
-                "Preferred M1 host command sequence:\n\n"
-                "1. `scripts/test/run_cloud_static_audit.sh`\n"
-                "2. `sudo -n /usr/local/bin/continuum-hostctl verify`\n"
                 "3. `sh scripts/test/setup_agent_host.sh verify`\n"
-                "4. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
-                "qemu_infra_parity`\n\n"
+                "3. `sh scripts/test/run_smoke_host.sh qemu_infra_parity`\n\n"
                 "## 4. Old-Main Provider And Topology Parity",
             )
             self._write_repo(root, matrix_text)
+            self.assertEqual(check_release_matrix.find_matrix_issues(root), [
+                check_release_matrix.MatrixIssue(
+                    "matrix-host-command-numbering",
+                    "Preferred M1 host command sequence lists "
+                    "'sh scripts/test/setup_agent_host.sh verify' "
+                    "as item 3; expected item 2",
+                )
+            ])
 
-            self.assertEqual(
-                check_release_matrix.find_matrix_issues(root),
-                [
-                    check_release_matrix.MatrixIssue(
-                        "matrix-host-required-command-missing",
-                        "Preferred M1 host command sequence is missing "
-                        "'sudo -n /usr/local/bin/continuum-hostctl sync-repo'",
-                    )
-                ],
+    def test_preferred_host_sequence_must_include_ready_suite_commands(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            matrix_text = self._passing_matrix().replace(
+                "## 4. Old-Main Provider And Topology Parity",
+                "Preferred M1 host command sequence:\n\n"
+                "1. `scripts/test/run_cloud_static_audit.sh`\n"
+                "2. `sh scripts/test/setup_agent_host.sh verify`\n\n"
+                "## 4. Old-Main Provider And Topology Parity",
             )
+            self._write_repo(root, matrix_text)
+            self.assertEqual(check_release_matrix.find_matrix_issues(root), [
+                check_release_matrix.MatrixIssue(
+                    "matrix-host-ready-suite-command-missing",
+                    "P-QEMU-01 uses ready suite qemu_infra_parity but Preferred "
+                    "M1 host command sequence is missing "
+                    "'sh scripts/test/run_smoke_host.sh qemu_infra_parity'",
+                )
+            ])
+
+    def test_preferred_host_sequence_requires_normal_user_verification(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            matrix_text = self._passing_matrix().replace(
+                "## 4. Old-Main Provider And Topology Parity",
+                "Preferred M1 host command sequence:\n\n"
+                "1. `scripts/test/run_cloud_static_audit.sh`\n"
+                "2. `sh scripts/test/run_smoke_host.sh qemu_infra_parity`\n\n"
+                "## 4. Old-Main Provider And Topology Parity",
+            )
+            self._write_repo(root, matrix_text)
+            self.assertEqual(check_release_matrix.find_matrix_issues(root), [
+                check_release_matrix.MatrixIssue(
+                    "matrix-host-required-command-missing",
+                    "Preferred M1 host command sequence is missing "
+                    "'sh scripts/test/setup_agent_host.sh verify'",
+                )
+            ])
 
     def test_subset_row_parent_must_exist(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1663,8 +1640,8 @@ When converting this seed into issues:
                     check_release_matrix.MatrixIssue(
                         "release-notes-ready-suite-command-missing",
                         "M1-QEMU-IMAGE uses ready suite qemu_kubecontrol_empty_parity "
-                        "but section 7 is missing 'sudo -n -u continuum-smoke "
-                        "/usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity'",
+                        "but section 7 is missing 'sh "
+                        "scripts/test/run_smoke_host.sh qemu_kubecontrol_empty_parity'",
                     )
                 ],
             )
@@ -1738,11 +1715,11 @@ When converting this seed into issues:
                 "Nothing else in this tiny fixture.",
                 "`P-QEMU-02` remains unclaimed.",
             ).replace(
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_openfaas_software_parity\n",
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_openfaas_software_parity\n"
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_kubecontrol_empty_parity\n",
             )
             self._write_repo(root, matrix_text, release_notes_text=release_notes)
@@ -1780,8 +1757,8 @@ When converting this seed into issues:
                     check_release_matrix.MatrixIssue(
                         "release-notes-nonready-suite-command-listed",
                         "P-QEMU-02 uses non-ready suite qemu_kubecontrol_empty_parity "
-                        "but section 7 lists 'sudo -n -u continuum-smoke "
-                        "/usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity'",
+                        "but section 7 lists 'sh "
+                        "scripts/test/run_smoke_host.sh qemu_kubecontrol_empty_parity'",
                     )
                 ],
             )

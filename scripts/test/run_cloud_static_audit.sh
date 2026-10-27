@@ -213,8 +213,8 @@ run_capture prereq_qemu_kube_kata_empty_startup_parity "QEMU kube_kata empty sta
 forced_prefetch_notice() {
     cat <<'EOF'
 Cloud-safe cache readiness is only a prerequisite signal for cache-backed
-application parity rows. Certification still requires the dedicated smoke-user
-wrapper context plus retained VM/application evidence on the documented
+application parity rows. Certification still requires the normal-user physical-host
+runner context plus retained VM/application evidence on the documented
 resource shape. Cache-backed P-QEMU-05, P-QEMU-08, and exact P-QEMU-10 are
 certified separately by retained wrapper evidence.
 See docs/release_certification_matrix.md for the active claim boundaries.

@@ -1,5 +1,11 @@
 # Columbo On Continuum
 
+Approved scope is `docs/rework_milestone_release_plan.md`: the minimal `call_1`
+full control-plane trace slice, not all paper figures/sweeps. Current factual
+row status is `docs/release_certification_matrix.md`. Use the normal-user
+host exports/procedure in `docs/smoke_runner_isolation.md`; dated results below
+remain historical and do not certify the migrated candidate.
+
 ## Purpose
 
 This document explains how the Columbo paper functionality is represented on
@@ -59,10 +65,10 @@ core extension.
 ## Evidence Contract
 
 The `qemu_kubecontrol_empty_parity` suite is the evidence gate for this slice.
-Because the dedicated smoke user does not access Docker directly, the local
-registry cache must first contain `redplanet00/kubeedge-applications:empty`
-through the reviewed `continuum-hostctl prime-registry-cache --suite
-qemu_kubecontrol_empty_parity` path. A retained VM-backed run must prove:
+The local registry cache must first contain
+`redplanet00/kubeedge-applications:empty`. Prime as the Docker-capable normal
+user with `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite
+qemu_kubecontrol_empty_parity`. A retained VM-backed run must prove:
 
 1. Continuum reaches `phase_completed = application`,
 2. experiment lock and state artifacts are written,
@@ -88,7 +94,7 @@ Retained certification evidence now exists for the exact local-QEMU profile:
 | Benchmark manifest | `/mnt/sdc/continuum_smoke/qemu_kubecontrol_empty_parity/.continuum/logs/benchmark/2026-07-03_16_42_16_empty-call_metrics_manifest.json` |
 | Evidence note | `docs/release_evidence_qemu_kubecontrol_empty_2026-07-03.md` |
 
-The retained image currently exposes kubelet, worker, application, and
+The July 3 retained image exposed kubelet, worker, application, and
 resource-utilization evidence. The legacy Columbo trace points for
 `apiserver`, `controller-manager`, and `scheduler` are absent from the
 retained control-plane logs, so the generated dataframe leaves those phase

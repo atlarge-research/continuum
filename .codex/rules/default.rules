@@ -220,25 +220,7 @@ prefix_rule(
     match = ["env XDG_CACHE_HOME=/tmp/continuum-xdg-cache ANSIBLE_LOCAL_TEMP=/tmp/continuum-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/continuum-ansible-remote ansible-lint -c .ansible-lint playbooks roles"],
 )
 
-prefix_rule(
-    pattern = ["sudo", "-n", "/usr/local/bin/continuum-hostctl"],
-    decision = "allow",
-    justification = "Allow Continuum host helper for controlled smoke-test setup",
-    match = [
-        "sudo -n /usr/local/bin/continuum-hostctl show-config",
-        "sudo -n /usr/local/bin/continuum-hostctl sync-repo",
-        "sudo -n /usr/local/bin/continuum-hostctl install-wrapper",
-        "sudo -n /usr/local/bin/continuum-hostctl verify",
-        "sudo -n /usr/local/bin/continuum-hostctl print-agent-command",
-        "sudo -n /usr/local/bin/continuum-hostctl help",
-    ],
-)
 
-prefix_rule(
-    pattern = ["sudo", "-n", "-u", "continuum-smoke", "/usr/local/bin/run-continuum-smoke"],
-    decision = "allow",
-    justification = "Run continuum with a specific user to limit sudo access",
-)
 
 prefix_rule(
     pattern = ["virsh", "list", "--all"],
@@ -251,9 +233,9 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["bash", "scripts/test/setup_agent_host.sh"],
+    pattern = ["sh", "scripts/test/setup_agent_host.sh"],
     decision = "allow",
-    justification = "Setup agent host for smoke tests",
+    justification = "Normal-user setup and prerequisite verification; no privileged operations",
 )
 
 prefix_rule(

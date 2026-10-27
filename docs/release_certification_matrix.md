@@ -1,5 +1,12 @@
 # Continuum Release Certification Matrix
 
+The 2026-10-27 policy in `docs/rework_milestone_release_plan.md` replaces full
+old-main parity as a pre-main gate. Existing row statuses, dates and evidence
+below are unchanged historical facts, not refreshed normal-user certification.
+The transitional legacy inventory remains complete pending final scope review.
+For current host commands and migrated-root exports use
+`docs/smoke_runner_isolation.md`. No merge/push/tag/release is authorized.
+
 ## 1. Purpose
 
 This is the working matrix for turning the milestone release plan into
@@ -67,26 +74,24 @@ old `main`.
 Preferred M1 host command sequence:
 
 1. `scripts/test/run_cloud_static_audit.sh`
-2. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
-3. `sudo -n /usr/local/bin/continuum-hostctl verify`
-4. `sh scripts/test/setup_agent_host.sh verify`
-5. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression`
-6. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation`
-7. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity` when certifying old-main QEMU infrastructure parity rows.
-8. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` when certifying the Kubernetes image-classification parity row.
-9. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity` when certifying the Kubernetes no-benchmark parity row.
-10. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` when certifying the KubeEdge software-only subset row.
-11. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity` when certifying the full KubeEdge image-classification parity row.
-12. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` when certifying the Mist software-only subset row.
-13. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` when certifying the full Mist image-classification parity row.
-14. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` when certifying the endpoint-runtime software-only subset row.
-15. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` when certifying the full endpoint image/runtime parity row.
-16. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` when certifying the OpenFaaS software-only subset row.
-17. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity` when certifying the OpenFaaS single-host application subset row.
-18. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity` when certifying the exact OpenFaaS application parent row.
-19. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity` when certifying the Columbo-style kubecontrol module/profile/suite integration row.
-20. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_trace_parity` when certifying the strict Columbo-style kubecontrol control-plane trace row.
-21. `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kube_kata_empty_startup_parity` when certifying the local-QEMU Kata startup row.
+2. `sh scripts/test/setup_agent_host.sh verify`
+3. `sh scripts/test/run_smoke_host.sh operational_regression`
+4. `sh scripts/test/run_smoke_host.sh network_validation`
+5. `sh scripts/test/run_smoke_host.sh qemu_infra_parity` when certifying old-main QEMU infrastructure parity rows.
+6. `sh scripts/test/run_smoke_host.sh qemu_k8s_image_parity` when certifying the Kubernetes image-classification parity row.
+7. `sh scripts/test/run_smoke_host.sh qemu_k8s_nobench_parity` when certifying the Kubernetes no-benchmark parity row.
+8. `sh scripts/test/run_smoke_host.sh qemu_kubeedge_software_parity` when certifying the KubeEdge software-only subset row.
+9. `sh scripts/test/run_smoke_host.sh qemu_kubeedge_image_parity` when certifying the full KubeEdge image-classification parity row.
+10. `sh scripts/test/run_smoke_host.sh qemu_mist_software_parity` when certifying the Mist software-only subset row.
+11. `sh scripts/test/run_smoke_host.sh qemu_mist_image_parity` when certifying the full Mist image-classification parity row.
+12. `sh scripts/test/run_smoke_host.sh qemu_endpoint_software_parity` when certifying the endpoint-runtime software-only subset row.
+13. `sh scripts/test/run_smoke_host.sh qemu_endpoint_image_parity` when certifying the full endpoint image/runtime parity row.
+14. `sh scripts/test/run_smoke_host.sh qemu_openfaas_software_parity` when certifying the OpenFaaS software-only subset row.
+15. `sh scripts/test/run_smoke_host.sh qemu_openfaas_image_local_parity` when certifying the OpenFaaS single-host application subset row.
+16. `sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity` when certifying the exact OpenFaaS application parent row.
+17. `sh scripts/test/run_smoke_host.sh qemu_kubecontrol_empty_parity` when certifying the Columbo-style kubecontrol module/profile/suite integration row.
+18. `sh scripts/test/run_smoke_host.sh qemu_kubecontrol_empty_trace_parity` when certifying the strict Columbo-style kubecontrol control-plane trace row.
+19. `sh scripts/test/run_smoke_host.sh qemu_kube_kata_empty_startup_parity` when certifying the local-QEMU Kata startup row.
 
 The current wrapper supports `operational_regression`, which chains
 `phase_smoke_matrix` and `benchmark_k8s_resume`. The dedicated
@@ -99,7 +104,7 @@ VM-backed wrapper scenario for rows claimed by the milestone.
 Before publishing a release candidate from the certification host, also run:
 
 ```bash
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
+sh scripts/test/run_smoke_host.sh release-artifact-audit
 python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_claims.py
 ```
@@ -110,7 +115,7 @@ the cloud-static audit required gates passed, and that structured
 benchmark/network artifacts are parseable. The pre-tag readiness check
 aggregates the documented M1 evidence, verifies that every release-evidence doc
 listed in the release notes names the current git commit and clean source-tree
-state, and should fail until the working tree is clean and host-helper interface
+state, and must fail until the working tree is clean and normal-user host
 verification records `PASS`. The release-claims check validates that
 public-facing docs still point support claims to this matrix. They do not claim QEMU
 as Continuum core, full main replacement, uncertified cloud support, or full
@@ -204,10 +209,10 @@ that moves to `certified`.
 | --- | --- |
 | Matrix row ID |  |
 | Git commit |  |
-| Tree state | clean, dirty synced to runner, or other explicit source state |
+| Tree state | Clean reviewed source tree for candidate certification; record dirty diagnostic runs separately without certification |
 | Date | YYYY-MM-DD |
 | Command |  |
-| Runner context | Local shell, dedicated wrapper, or cloud runner |
+| Runner context | Normal-user physical host, local shell, or approved cloud runner; include identity, canonical base path and venv |
 | Provider / host prerequisites |  |
 | Config | Use `N/A` for aggregate evidence covering multiple configs |
 | Suite | Use `N/A` for aggregate evidence covering multiple suites |
@@ -225,14 +230,13 @@ that moves to `certified`.
 2. Rerun affected M1 VM-backed rows if runtime, runner, verifier, profile,
    playbook, or config code changes after the recorded VM-evidence source
    commit.
-3. Run `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
+3. Run `sh scripts/test/run_smoke_host.sh
    release-artifact-audit` on the certification host before tagging any row as
    release-ready.
 4. Run `python3 scripts/test/check_release_pretag.py` and keep M1 untagged
    until it reports zero issues.
-5. Verify the installed `/usr/local/bin/continuum-hostctl` helper on the
-   certification host before tagging. If the helper-interface contract changes,
-   replace the root-owned helper only through a manual reviewed operator action.
+5. Verify normal-user prerequisites with `sh scripts/test/setup_agent_host.sh verify`
+   before host execution. No installed helper or dedicated-repo sync is used.
 6. Keep `docs/release_notes_m1_draft.md` synchronized with this matrix before
    publishing an intermediate release.
 7. Refresh any certified VM-backed row if runtime, runner, verifier, profile,
@@ -243,8 +247,8 @@ that moves to `certified`.
 9. Keep remaining GCP/AWS rows historical until a maintainer nominates exact
    scope, credentials, cost guardrails, YAML/profile targets, suites, and
    evidence requirements.
-10. Convert the parity table into issues after M1, grouped by provider and
-    software family, with repo docs remaining the first authoritative artifact.
+10. Retain the full parity table as historical candidate inventory until the
+    approved reproduction/configuration scope review, not an automatic work queue.
 11. Keep each historical row unresolved and in
     `docs/old_main_parity_issue_seed.md` until it is certified. Any future
     unsupported terminal closure requires the separate atomic checked-

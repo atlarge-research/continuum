@@ -1,46 +1,32 @@
 ---
 name: continuum-cloud-static-audit
-description: Use this repo-local skill when working on Continuum cloud-safe audit tasks, static checks, planning-doc drift checks, or follow-up work from scripts/test/run_cloud_static_audit.sh.
+description: Use when working on Continuum cloud-safe audit tasks, planning-doc drift checks, or follow-up from scripts/test/run_cloud_static_audit.sh.
 ---
 
 # Continuum Cloud Static Audit
 
-Use this skill for Continuum audit work that must be safe in a cloud or sandboxed agent
-environment where the full VM-backed framework cannot run.
+Read `AGENTS.md` and use continuum-test-workflows for test selection.
+The current `scripts/test/run_cloud_static_audit.sh` is the gate authority;
+inspect it when changing gates. Run it from the repository root:
 
-## Workflow
+```bash
+scripts/test/run_cloud_static_audit.sh
+```
 
-1. Read `AGENTS.md` first.
-2. For general test selection, also use `continuum-test-workflows`. For VM-backed
-   host runner work, use `continuum-smoke-host-runner` instead of this skill.
-3. Inspect the audit entrypoints:
-   - `scripts/test/run_cloud_static_audit.sh`
-   - `scripts/test/check_docs_paths.py`
-   - `scripts/test/test_check_docs_paths.py`
-4. Run:
+Required blockers: compile sweep; shell syntax for audit, smoke runner and host
+setup; git diff whitespace; unit, local-e2e and combined unittest discovery;
+documentation paths; public release claims; certification matrix; suite catalog.
 
-   ```bash
-   scripts/test/run_cloud_static_audit.sh
-   ```
+Informational by default: artifact audit, pre-tag readiness, pytest mirrors,
+TODO/FIXME inventory, YAML/Ansible lint baselines and suite prerequisites.
+Assess findings against changed scope; applicable changed-file lint still
+needs explicit validation. Historical evidence may be stale for pre-tagging
+without failing required cloud-safe gates. Never weaken freshness checks to
+make old evidence certify a new candidate.
 
-5. Inspect the newest report under `logs/cloud_static_audit/`.
-6. Treat required gates as blockers and informational checks as evidence unless the user asks
-   to burn down a specific baseline.
+Read the newest report under ignored `logs/cloud_static_audit/`; do not commit
+generated reports. Negative-path tests may intentionally log errors: inspect
+the final test summary. Static/parser success is not runtime certification.
 
-## How To Interpret Results
-
-- Required gates are `py_compile`, `unittest discover`, docs path reference checking, and suite
-  catalog listing.
-- `pytest`, TODO/FIXME scan, `yamllint`, `ansible-lint`, and suite prerequisite checks are
-  informational by default.
-- TODO/FIXME matches are debt inventory, not pass/fail status.
-- Generated reports belong under ignored `logs/cloud_static_audit/`, not `docs/`.
-- Do not commit dated generated reports unless the user explicitly asks for an audit snapshot.
-
-## Guardrails
-
-- Do not run VM-backed Continuum scenarios from this skill.
-- Do not treat the old `docs/cloud_audit_report_2026-04-29.md` diff as current truth.
-- Keep docs-path checks low-noise: ignore schema keys, bare filenames, generated artifact names,
-  and planned future paths such as `scripts/test/unit/` and `scripts/test/e2e/`.
-- Before editing, check `git status --short` and avoid touching unrelated dirty files.
+Do not start VMs through this skill. For approved physical-host work use
+continuum-smoke-host-runner and `docs/smoke_runner_isolation.md`.

@@ -1,5 +1,13 @@
 # Phase D Handoff
 
+Historical completed Phase-D record: commands and runtime counts below describe
+that checkpoint, not a current execution queue or candidate certification.
+For current normal-user host commands use `docs/smoke_runner_isolation.md`;
+for the active restart point use `docs/rework_release_handoff.md`.
+Approved scope is `docs/rework_milestone_release_plan.md`; factual current
+row status remains `docs/release_certification_matrix.md`.
+Do not execute the historical installed-wrapper commands below.
+
 This document is the clean handoff note for the completed Phase-D runtime state.
 Phase-E resume/state integrity and Phase-F test architecture closure have since
 landed, so use this file as historical evidence for application and retained

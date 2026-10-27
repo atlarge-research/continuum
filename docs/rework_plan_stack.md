@@ -1,181 +1,65 @@
 # Continuum Rework Plan Stack (Canonical)
 
-## 1. Purpose
+## Planning authority
 
-This is the single map for planning authority, sequencing, and synchronization
-across the closed active rework baseline and deferred follow-up tracks.
+This is the authority map, not a second policy ledger.
 
-Fast onboarding brief: `docs/rework_kickoff.md`.
+1. `docs/rework_milestone_release_plan.md` owns the fourteen approved pre-main
+   policies, reproduction boundary, ordered gates and publication prohibition.
+2. `docs/configuration_restructuring_design.md` owns YAML composition,
+   parser/bootstrap validation, normalized configuration and resume semantics.
+3. `docs/software_module_architecture_plan.md` owns software module graph,
+   selector/scope, tag governance, registry and planner semantics.
+4. `docs/release_certification_matrix.md` is the factual row-status and
+   evidence authority; policy changes do not renew historical runs.
+5. `docs/rework_release_handoff.md` is the concise operational checkpoint,
+   subordinate to the above. `docs/rework_kickoff.md` is navigation only.
 
-## 2. Planning Authority
+`docs/ansible_restructuring_design.md` and
+`docs/phase_c_implementation_plan.md` are historical phase records, not an
+active architecture queue. `docs/post_release_roadmap.md` is retired.
+The old overhaul dispatcher remains retired. Domain semantics must not
+contradict approved scope; resolve a domain conflict in its domain document
+and synchronize dependent operational docs atomically.
 
-1. `docs/ansible_restructuring_design.md`
-   - Program-level architecture and phase roadmap (A-G).
-2. `docs/phase_c_implementation_plan.md`
-   - Execution plan for Phase C.
-3. `docs/configuration_restructuring_design.md`
-   - YAML composition, parsing, validation, normalization contracts.
-4. `docs/software_module_architecture_plan.md`
-   - Software semantics (module graph, tags, registry constraints, planner behavior).
-5. `docs/rework_milestone_release_plan.md`
-   - Release certification, intermediate milestone sequencing, old-main parity gates.
-6. `docs/release_certification_matrix.md`
-   - Concrete certified/candidate/historical rows for milestone and parity claims.
-7. `docs/post_release_roadmap.md`
-   - Future-release roadmap after the final parity release.
+## Locked boundaries
 
-Current pause/resume checkpoint: `docs/rework_release_handoff.md`. It records
-the latest release-readiness execution state for future agents, but it is not a
-policy authority and must stay subordinate to the milestone release plan and
-certification matrix.
+- Core/module boundary: Continuum core owns planning, validation,
+  selector/scope resolution, module contracts, runtime handoff, state and
+  evidence contracts. Provider/software/application stacks are modules.
+  `qemu` is a provider module and must not be described as core.
+- Runtime claims require VM-backed or cloud-backed evidence, or host-backed
+  evidence where the applicable matrix gate permits it. Static success alone
+  is insufficient.
+- Intermediate rework milestones may certify bounded subsets; they are not
+  final main replacement releases.
+- Final main replacement requires approved reproduction scope and zero
+  unaccounted rows in the reproduction/config inventories, followed by final
+  explicit user approval. The complete old-main parity inventory remains
+  historical candidate coverage, not the replacement release scope.
+- Existing hard-cut schema, cluster-first `infrastructure.clusters[]`,
+  `software.modules[]`, exact-match AND selectors, structured scope
+  identities, explicit-only dependencies, deterministic planning and
+  reserved-tag collision errors remain. Benchmark tags cannot overwrite
+  `role`; use namespaced keys such as `benchmark.role`.
+- Parser/bootstrap validates and defaults once. Runtime uses canonical keys
+  without compatibility fallbacks. Keep the parser orchestration facade,
+  domain validators and layered semantic config-access helpers; no
+  speculative configuration-library migration.
+- The registry terminology hard cut is approved but not yet implemented.
+  Follow the current domain schema until its atomic implementation packet.
+- No new core features, speculative architecture or automatic recovery.
+  Normal-user migration and the QEMU repair follow the ordered approved gates.
+- No merge, push, tag, release or publication before final explicit approval.
 
-## 3. Conflict Rules
+## Synchronization
 
-1. Narrower scope overrides broader scope.
-2. Software semantic conflicts resolve to `docs/software_module_architecture_plan.md`.
-3. Parser/runtime semantic conflicts resolve to `docs/configuration_restructuring_design.md`.
-4. Release/publishing conflicts resolve to `docs/rework_milestone_release_plan.md`
-   after the architecture docs settle implementation semantics.
-5. Parent docs must be synchronized after child-plan decision changes.
-
-## 4. Locked Global Decisions
-
-1. Hard cutover:
-   - no long-lived dual runtime schema mode,
-   - no warning-first compatibility strategy.
-2. Infrastructure is cluster-first:
-   - `infrastructure.clusters[]` is the canonical topology abstraction,
-   - each cluster contains resources and emits `cluster=<id>` on all contained resources.
-3. Resource identity is generic and tag-based:
-   - resources are identified by numeric ID + tag map,
-   - base infra tags are `tier` and `cluster`.
-4. Benchmark phase participates in placement:
-   - benchmark execution units must use selectors/tags for assignment,
-   - benchmark can consume software-produced tags/artifacts via resolved runtime metadata.
-5. Internal-first dependency handling:
-   - dependency/capability wiring is internal registry logic,
-   - user schema has no dependency edge field,
-   - dependency strategy is explicit-only (missing requirements hard-fail; no auto-injection).
-6. Fail-fast validation:
-   - reserved tag collisions are hard errors,
-   - selector/cycle/conflict violations are hard errors.
-7. Selector/scope semantics are locked:
-   - selector language is exact-match only (`match: {k:v}` with implicit AND),
-   - selectors use canonical normalized representation + deterministic `selector_id`,
-   - scope identities are structured objects for `vm`, `cluster`, `selector`.
-8. Target software model:
-   - `software.modules[]`,
-   - tag-based resource identity,
-   - scoped constraints are part of target model semantics (details in software architecture plan).
-9. Tag governance includes benchmark lifecycle rule:
-   - benchmark must not overwrite `role`,
-   - benchmark role semantics use namespaced keys (for example `benchmark.role`).
-10. Image prefetch intent is run-scoped with infra execution:
-   - user knob is `run.image_prefetch` (`off|on`, default `off`),
-   - `infrastructure.image_prefetch` is invalid (hard cutover, no alias),
-   - local registry lifecycle stays internal and is activated only when required image pulls exist.
-11. Validation boundary is single-pass and early:
-   - exhaustive schema/default/type validation happens at parser/bootstrap boundaries,
-   - runtime config-access paths should be thin reads over canonical keys (no fallback aliasing/default patching),
-   - runtime key/type failures are treated as invariant violations and should crash fast.
-12. Config access surface is layered (avoid both magic-index access and getter explosion):
-   - keep dedicated helpers for stable structural semantics (for example run targets, orchestrator identity, module/stage lookup),
-   - use generic typed parameter access for dynamic config bags (benchmark stage config, module-local config) instead of one function per key,
-   - allow key-specific helpers only when they encode cross-cutting semantic meaning (not simple key forwarding).
-13. Config-library migration is deferred until post-rework stabilization:
-   - no Hydra/OmegaConf or Pydantic migration during active PR-3/PR-4/Phase C delivery,
-   - parser/runtime work remains decomposition-first on the current stack,
-   - any future library adoption requires a dedicated RFC/ADR and plan-stack synchronization before implementation.
-14. Parser decomposition guardrail:
-   - `input/configuration/yaml_parser.py` remains an orchestration facade,
-   - domain validation logic belongs in dedicated modules,
-   - avoid reintroducing monolithic parser growth when extending schema/runtime contracts.
-15. Core/module boundary:
-   - Continuum core owns planning, validation, selector/scope resolution,
-     module contracts, runtime handoff, state, and evidence contracts,
-   - infrastructure providers, resource managers, addons, execution helpers, and
-     applications are modules or module families,
-   - `qemu` is an infrastructure provider module and must not be described as
-     core.
-16. Runtime claims require VM-backed or cloud-backed evidence, or host-backed
-    evidence when appropriate:
-   - static, unit, parser, and runner tests are required but not sufficient for
-     public runtime support claims,
-   - each claimed provider/software/application combination needs fresh
-     VM-backed, cloud-backed, or host-backed evidence appropriate to the release
-     claim.
-17. Final replacement release requires old-main parity under the current
-    checked status model:
-   - intermediate rework milestones may certify smaller module sets,
-   - `historical` is non-terminal and remains in the parity seed,
-   - an explicit deprecation closure is not currently representable as a
-     checked terminal status,
-   - closing an unsupported row without certification requires a separate
-     atomic change adding an explicit checked terminal disposition across the
-     matrix checker, certification matrix, and parity seed.
-
-## 5. Execution Dependency Chain
-
-1. Keep software model authoritative (`docs/software_module_architecture_plan.md`).
-2. Align configuration/parser/runtime contracts (`docs/configuration_restructuring_design.md`).
-3. Execute Phase C against those contracts (`docs/phase_c_implementation_plan.md`).
-4. Continue remaining phases (`docs/ansible_restructuring_design.md`).
-
-## 6. Execution Status
-
-1. PR-1 (completed): Parser schema pivot to canonical `infrastructure.clusters[]` + `software.modules[]` validation.
-2. PR-2 (completed): Module registry + explicit-only dependency/capability validation baseline is landed; parser/runtime conflict and exclusivity validation coverage is landed with targeted tests.
-3. PR-3 (completed): Selector resolution + tag governance + scoped constraint engine baseline.
-4. PR-4 (completed): Runtime/planner integration for software placement plus benchmark assignment plumbing that Phase D later consumed when application execution was ungated.
-5. PR-5 (completed): Example/profile finalization + tests/smokes + documentation closure, with user-facing schema/migration docs, host-runner isolation, and real host-backed smoke closure landed.
-6. Phase D (completed): Application runtime execution, role consolidation, retained K8s benchmark smoke, and teardown evidence are landed.
-7. Phase E (completed): Resume contract integrity, schema-v2 state, and runner artifact validation are landed.
-8. Phase F (completed): Major-function coverage audit plus unit/e2e test layout closure are landed.
-9. Release certification planning (active): Intermediate subrelease policy and old-main parity gates are documented.
-10. Phase G (deferred): Lifecycle/reproducibility hardening is outside the active closure and remains gated by a future RFC/ADR.
-
-## 7. Decision Traceability Matrix
-
-| ID | Decision | Main Spec | Primary Code Surface | Verification |
-| --- | --- | --- | --- | --- |
-| D1 | Hard cutover | `docs/rework_plan_stack.md` | `input/input.py`, `input/configuration/yaml_parser.py` | parser/runtime tests |
-| D2 | Cluster-first infra topology (`clusters[]`) | `docs/configuration_restructuring_design.md` | infra parser + normalized model | parser + normalization tests |
-| D3 | Benchmark placement via selectors/tags | `docs/configuration_restructuring_design.md` | benchmark parser + planner assignment | planner/benchmark tests |
-| D4 | Internal dependency wiring, explicit-only strategy | `docs/software_module_architecture_plan.md` | module registry + dependency validator | missing-requirement tests |
-| D5 | No user dependency edges | `docs/software_module_architecture_plan.md` | `input/configuration/yaml_parser.py` | schema validation tests |
-| D6 | Reserved tag collisions hard-fail | `docs/software_module_architecture_plan.md` | placement/tag validation layer | planner constraint tests |
-| D7 | Scoped constraints (`vm/cluster/selector`) | `docs/software_module_architecture_plan.md` | scoped constraint engine | scoped conflict tests |
-| D8 | Deterministic planning | `docs/software_module_architecture_plan.md` | selector sort + toposort | deterministic ordering tests |
-| D9 | Exact-match selector language + canonical selector identity | `docs/software_module_architecture_plan.md` | selector canonicalizer | parser/planner determinism tests |
-| D10 | Structured scope identity records | `docs/software_module_architecture_plan.md` | scoped diagnostic/lockfile writer | scoped diagnostics tests |
-| D11 | Benchmark cannot overwrite `role` (`benchmark.role` namespacing) | `docs/software_module_architecture_plan.md` | benchmark tag mutation validator | cross-domain tag governance tests |
-| D12 | Run-scoped image prefetch + internal registry lifecycle | `docs/configuration_restructuring_design.md` | `input/configuration/yaml_parser.py`, `infrastructure/image_registry.py`, `infrastructure/infrastructure.py` | parser/runtime registry tests |
-| D13 | Layered config access (semantic helpers + generic parameter readers) | `docs/configuration_restructuring_design.md` | `input/configuration/config_access.py`, runtime callers | config-access/runtime regression tests |
-| D14 | Hydra/Pydantic migration is post-rework only (deferred policy) | `docs/rework_plan_stack.md` | planning stack (`docs/rework_plan_stack.md`, `docs/ansible_restructuring_design.md`) | post-rework RFC/ADR gate |
-| D15 | Parser decomposition guardrail (`yaml_parser` orchestration-only) | `docs/rework_plan_stack.md` | `input/configuration/yaml_parser.py`, `input/configuration/software_domain_validation.py`, `input/configuration/benchmark_domain_validation.py`, `input/configuration/selector_assignment_validation.py`, `input/configuration/run_schema_validation.py`, `input/configuration/infrastructure_schema_validation.py`, `input/configuration/provider_schema_validation.py` | parser decomposition regression tests |
-| D16 | Provider/software/application stacks are modules, not core | `docs/rework_milestone_release_plan.md` | module registry, provider/resource-manager/application modules | docs review + module-set certification |
-| D17 | Public runtime claims require provider-appropriate runtime evidence | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `scripts/test/run_tests.py`, `scripts/test/test_config.json`, smoke host wrapper | release certification matrix + saved artifacts |
-| D18 | Final `main` replacement requires old-main parity under current statuses; unsupported terminal closure requires a future atomic checked-disposition change | `docs/rework_milestone_release_plan.md`, `docs/release_certification_matrix.md` | `configuration/tests/`, `configs/experiments/`, migration docs | old-main parity checklist |
-
-## 8. Synchronization Gate (Per PR)
-
-Before merge:
-
-1. Update the authoritative doc first.
-2. Update dependent docs in Section 2.
-3. Verify no contradiction with Section 4 decisions.
-
-## 9. Compression Rule for Planning Docs
-
-1. Keep detail once in the authoritative doc; reference elsewhere.
-2. Prefer checklists/tables over repeated prose.
-3. Keep examples minimal and move edge cases to tests.
-
-## 10. Selector/Scope Closure Status
-
-1. Selector language locked to exact-match `match: {k:v}` with implicit AND.
-2. Canonical selector normalization and `selector_id` strategy locked.
-3. Canonical structured scope identity format locked for `vm`, `cluster`, and `selector`.
+Before each nontrivial packet, freeze exact files and acceptance criteria,
+obtain independent read-only plan review, implement/test, and independently
+review the complete uncommitted diff. Resolve actionable findings before a
+local commit. Preserve unrelated edits and private/generated evidence.
+Keep policy detail once in the milestone authority and semantics once in the
+domain authorities. Historical phase completion is not candidate certification.
 
 ## 11. Historical Implementation Snapshot (Frozen May 22, 2026)
 
@@ -337,12 +221,8 @@ Closed for the active rework baseline:
 3. Developer-facing architecture docs for parser/runtime decomposition boundaries, module contracts, runtime phases, and operational testing are published across the design docs.
 4. Runnable examples/templates are synchronized with parser validation and covered by repository regression tests.
 5. The final doc-audit gate is represented by `scripts/test/check_docs_paths.py` and `scripts/test/run_cloud_static_audit.sh`; generated reports stay under ignored `logs/cloud_static_audit/`.
-6. After the active rework stabilizes, revisit observability/reproducibility
-   packaging as a dedicated design topic:
-   - decide whether structured run packages should replace scattered per-feature
-     metric files,
-   - evaluate durable metric retention and optional time-series database support
-     without making the current Phase-E CSV/manifest artifacts the final design.
+6. The earlier speculative observability/package/database follow-up is retired;
+   it is not authorized by historical documentation closure.
 
 ## 14. Deferred Outside Active Closure
 

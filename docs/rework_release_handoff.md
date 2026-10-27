@@ -1,95 +1,61 @@
 # Continuum Rework Release Handoff
 
-## Purpose And Authority
+This is a subordinate operational restart point, not policy or certification.
+Use `docs/rework_plan_stack.md`, `docs/rework_milestone_release_plan.md` and
+`docs/release_certification_matrix.md` for authority, policy and factual rows.
 
-This is the live operational restart point for release-readiness work. It
-records the completed runtime-remediation checkpoint and the next decision
-boundary; it does not define policy or duplicate certification rows, finding
-reports, or release evidence.
+## Current checkpoint — 2026-10-27
 
-Use these authorities:
+Source baseline: clean `2f11e62347ea04aca137a07b540ef3234f080820`,
+branch `pr-23-curated`, checkout `/home/matthijs/continuum`.
+All fourteen policies and the exceptional baseline action were approved.
+The user then amended execution to normal-user `matthijs` on node4 and node3;
+preserve evidence and retire the smoke accounts/obsolete installed wrappers
+only after replacement verification. Continue the same goal until
+2026-10-28 10:00 Europe/Amsterdam (09:00 UTC), without bypassing approval gates.
+No merge/push/tag/release/publication is authorized.
 
-1. `docs/rework_plan_stack.md` for planning precedence and locked decisions,
-2. `docs/rework_milestone_release_plan.md` for the active release-readiness
-   phase and release policy,
-3. `docs/release_certification_matrix.md` as the sole authority for current
-   certification status, claim boundaries, evidence, and row actions.
+Compact original evidence, private old-home material and installed-boundary
+snapshots are verified outside Git under
+`/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`;
+node3 evidence is under
+`/mnt/sdb/continuum_migration_evidence/20261027T173000Z-node3`.
+Large disks were not copied. Only the approved benchmark child was pruned.
+Other retained child roots were not emptied.
 
-Use the commit history and those governing documents for detail beyond this
-compact restart checkpoint.
+The one source-unchanged operational baseline as matthijs failed at its first
+infrastructure child, result `test_results_2026-10-27_17-41-13.json` under
+`infra_one_vm/.continuum/test_results/`. The cache cleanup deleted freshly
+copied current-run YAML before cloud-localds. Generated source YAML remains in
+tmp; no successful state.json was produced. Full output and failure artifacts
+are separately preserved. No targeted retry was performed.
+Attribution is unchanged source/config with migrated execution identity and
+filesystem metadata, not an unchanged historical runner boundary.
 
-## Current Checkpoint
+## Resume sequence
 
-Start in `/home/matthijs/continuum` on branch `pr-23-curated`. Commit
-`e6aa3a2df043cacbe8b58e5f70a536e859ff8dfe` (`e6aa3a2`) is the completed
-final runtime-remediation checkpoint.
+1. Complete atomic policy/current-runner synchronization, independent diff
+   review and local commit. Use `docs/smoke_runner_isolation.md` for current
+   normal-user commands, not installed legacy helpers.
+2. Implement the approved narrow indexed/full result-tail interface.
+3. Record exact host cache metadata, implement/test/review the minimal QEMU
+   cleanup and creation-only mode/ACL fix, and resolve forced-rebuild drift.
+4. Run exact multi-host OpenFaaS validation as matthijs. Preserve valid peer
+   disk metadata and all evidence. Only then perform a separately reviewed
+   exact UID/ACL/account/helper retirement packet.
+5. Complete bounded reproduction/config/support inventories; obtain final user
+   reproduction-scope confirmation before reproduction-driven deletions.
+6. Complete approved slimming and final exact-candidate acceptance.
 
-The checkpoint advances from the N-02 endpoint and records two remediation
-ranges:
+The failed baseline counts as zero clean operational runs: two clean post-fix
+runs remain required, at least one on the exact final candidate. Historical
+matrix evidence is not renewed by source tests or identity migration.
+Old named/default ACLs and excluded disk UID ownership still need the bounded
+retirement audit; do not delete the accounts prematurely or perform blanket
+recursive ownership repair.
 
-1. N-02 endpoint:
-   `1c8042376ae9f7f53ce7c24dda60a2f2a108de31`.
-2. First final-review remediation range, exactly six linear commits:
-   `1c8042376ae9f7f53ce7c24dda60a2f2a108de31..7f322c96a0545f866dc5efda183930701463c5d5`.
-3. Closure-review follow-up range, exactly seven linear commits:
-   `7f322c96a0545f866dc5efda183930701463c5d5..e6aa3a2df043cacbe8b58e5f70a536e859ff8dfe`.
-4. Complete post-N-02 remediation range, exactly 13 linear commits:
-   `1c8042376ae9f7f53ce7c24dda60a2f2a108de31..e6aa3a2df043cacbe8b58e5f70a536e859ff8dfe`.
-
-The original six branch-wide findings and the subsequent closure-review
-findings have been addressed in those ranges. This statement records the
-implementation checkpoint; it does not claim renewed runtime validation or a
-new review verdict.
-
-The earlier six-packet closure of R-01 through R-15 at `71d29b7b1a53`, from
-baseline `41b0418`, remains closed historical context. It is not the current
-checkpoint and is not reopened by the later remediation work. Consult commit
-history for the detailed finding-to-commit maps rather than extending this
-handoff into a cumulative changelog.
-
-## Resulting Runtime Invariants
-
-The post-N-02 remediation ranges establish these implementation boundaries:
-
-1. benchmark execution authorization fails closed,
-2. image requirements, caches, and runtime launches preserve immutable image
-   identity,
-3. network validation requires current-run, complete, attributable, structured
-   evidence,
-4. phase dependencies and numeric validity are enforced parser-first,
-5. zero-work text-translation configurations are rejected,
-6. resume support is limited to the provider path validated by the
-   implementation: QEMU.
-
-## Certification And Evidence Boundary
-
-This documentation synchronization changes no certification row, evidence
-claim, or release status. Do not promote or demote any matrix row because of
-the remediation checkpoint. `docs/release_certification_matrix.md` remains the
-sole certification authority.
-
-Existing retained VM-backed evidence predates the later runtime-affecting
-changes in the remediation ranges. As already required by the certification
-matrix and milestone release plan, affected evidence must be refreshed on the
-exact, clean publication candidate before tagging. Static, unit, and
-documentation checks do not renew VM, Kubernetes, application, network,
-provider, or cloud certification.
-
-## Next Decision Boundary
-
-1. After this synchronization is committed and the tree is clean, decide
-   whether to begin the M1 evidence refresh on that exact revision as the
-   publication candidate. Any evidence used for publication must name and run
-   against the exact clean publication candidate.
-2. Do not select or update work from the retired
-   `.codex/OVERHAUL_EXECUTION_PLAN.md`; `.codex/NEXT_AGENT.md` remains the
-   pointer away from that completed historical dispatcher.
-3. Defer Phase-G architecture work until a separate RFC/ADR and an explicit
-   scope decision authorize it.
-
-## Operational Boundaries
-
-Do not start certification-host or VM-backed work from this documentation
-synchronization. Do not commit generated audit reports, runtime logs, VM
-artifacts, credentials, service keys, local `.tmp` files, or machine-specific
-overrides.
+Historical remediation through `e6aa3a2` remains in Git; it is not the current
+runtime acceptance result. Do not resume the retired
+`.codex/OVERHAUL_EXECUTION_PLAN.md`. Phase-G and speculative architecture work
+are not authorized. Keep generated logs, credentials and private archives out
+of commits.

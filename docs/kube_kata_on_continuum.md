@@ -1,5 +1,10 @@
 # Kube Kata On Continuum
 
+Current policy is `docs/rework_milestone_release_plan.md`; factual status is
+`docs/release_certification_matrix.md`. Use the normal-user exports/procedure
+in `docs/smoke_runner_isolation.md`. Dated results below remain historical;
+they do not certify the migrated candidate or every legacy Kata variant.
+
 ## Purpose
 
 This document records the first rework slice for the legacy Kata startup
@@ -32,10 +37,10 @@ memory per VM, CPU quota `1.0`, Kubernetes `v1.27.0`, pod deployment mode,
 
 ## Host Prerequisites
 
-The candidate suite requires the dedicated local runner model from
+The candidate suite requires the normal-user physical-host workflow from
 `docs/smoke_runner_isolation.md`:
 
-1. `continuum-smoke` through `/usr/local/bin/run-continuum-smoke`,
+1. the normal user through `sh scripts/test/run_smoke_host.sh`,
 2. `/dev/kvm` and nested KVM enabled on the physical host,
 3. local QEMU/libvirt and SSH access,
 4. enough local capacity for two 8-core / 64 GiB guests plus host overhead,
@@ -67,19 +72,18 @@ The row remains a candidate until a retained wrapper run proves all of these:
 Before the VM run, use:
 
 ```bash
-sudo -n /usr/local/bin/continuum-hostctl sync-repo
-sudo -n /usr/local/bin/continuum-hostctl verify
-sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_kube_kata_empty_startup_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+sh scripts/test/setup_agent_host.sh verify
+sh scripts/test/run_smoke_host.sh prime-registry-cache --suite qemu_kube_kata_empty_startup_parity
+sh scripts/test/run_smoke_host.sh \
   prime-registry-cache --check-only --suite qemu_kube_kata_empty_startup_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke \
+sh scripts/test/run_smoke_host.sh \
   check-prereqs --suite qemu_kube_kata_empty_startup_parity
 ```
 
 Run the candidate only through:
 
 ```bash
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kube_kata_empty_startup_parity
+sh scripts/test/run_smoke_host.sh qemu_kube_kata_empty_startup_parity
 ```
 
 ## Current Status

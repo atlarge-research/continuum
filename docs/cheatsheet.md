@@ -35,12 +35,12 @@ intent, then prefetches into the local registry using `run.image_prefetch`:
 All VMs get images from this registry when applicable. This avoids repeated
 pulls across many VMs and helps prevent remote registry rate limits.
 
-For `image_prefetch: "off"` suites, the dedicated smoke user does not need
-host-side Docker when all required images are already present in the local
-registry cache. Prime or verify the cache with
-`scripts/test/prime_local_registry_cache.py`; host-runner installations can
-expose the same operation through `continuum-hostctl prime-registry-cache`
-after the maintenance helper is refreshed.
+For `image_prefetch: "off"` suites, runtime does not need host-side Docker
+when required images are already in the local registry cache. Prime as the
+Docker-capable normal user through the repo runner. Use the explicit retained
+root/venv exports in `docs/smoke_runner_isolation.md`; no installed helper or
+separate account is used. Registry refresh terminology is approved but has not
+yet replaced the current schema.
 
 ## Useful Commands
 
@@ -52,23 +52,23 @@ after the maintenance helper is refreshed.
 | `python3 scripts/test/run_tests.py --suite smoke --check-prereqs` | Check host readiness without provisioning |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity` | Prime the local registry cache for an `image_prefetch: "off"` image suite as a Docker-capable user |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity --check-only` | Verify that the local registry cache is ready without Docker access |
-| `sudo -n /usr/local/bin/continuum-hostctl prime-registry-cache --suite qemu_openfaas_image_parity` | Prime the full OpenFaaS image parity cache after installing the `2026-07-06-kubecontrol-trace-cache` helper |
+| `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite qemu_openfaas_image_parity` | Prime the full OpenFaaS image parity cache as the Docker-capable normal user |
 | `scripts/test/run_cloud_static_audit.sh` | Run cloud-safe compile, tests, docs, lint, and suite metadata checks |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` | Validate retained release-evidence artifacts on the certification host |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke phase_smoke_matrix` | Run the three phase-boundary host-backed smoke scenarios through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression` | Run the phase matrix plus retained benchmark smoke |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation` | Run the dedicated network-validation suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity` | Run the QEMU infra-only old-main parity suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity` | Run the QEMU Kubernetes no-benchmark old-main parity suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity` | Run the QEMU Kubernetes image-classification old-main parity suite after the local registry cache is primed |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity` | Run the QEMU KubeEdge software-only parity suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity` | Run the full QEMU KubeEdge image-classification parity suite after the local registry cache is primed |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity` | Run the QEMU Mist software-only parity suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity` | Run the full QEMU Mist image-classification parity suite after the local registry cache is primed |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity` | Run the QEMU endpoint-runtime software-only parity suite through the installed wrapper |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity` | Run the full QEMU endpoint image-classification parity suite after the local registry cache is primed |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity` | Run the QEMU OpenFaaS software-only suite on the single-host CPU-capped variant |
-| `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity` | Run the full QEMU OpenFaaS image-classification parity suite after the local registry cache is primed |
+| `sh scripts/test/run_smoke_host.sh release-artifact-audit` | Validate retained release-evidence artifacts on the certification host |
+| `sh scripts/test/run_smoke_host.sh phase_smoke_matrix` | Run the three phase-boundary host-backed smoke scenarios as the normal user |
+| `sh scripts/test/run_smoke_host.sh operational_regression` | Run the phase matrix plus retained benchmark smoke |
+| `sh scripts/test/run_smoke_host.sh network_validation` | Run the dedicated network-validation suite as the normal user |
+| `sh scripts/test/run_smoke_host.sh qemu_infra_parity` | Run the QEMU infra-only old-main parity suite as the normal user |
+| `sh scripts/test/run_smoke_host.sh qemu_k8s_nobench_parity` | Run the QEMU Kubernetes no-benchmark old-main parity suite as the normal user |
+| `sh scripts/test/run_smoke_host.sh qemu_k8s_image_parity` | Run the QEMU Kubernetes image-classification old-main parity suite after the local registry cache is primed |
+| `sh scripts/test/run_smoke_host.sh qemu_kubeedge_software_parity` | Run the QEMU KubeEdge software-only parity suite as the normal user |
+| `sh scripts/test/run_smoke_host.sh qemu_kubeedge_image_parity` | Run the full QEMU KubeEdge image-classification parity suite after the local registry cache is primed |
+| `sh scripts/test/run_smoke_host.sh qemu_mist_software_parity` | Run the QEMU Mist software-only parity suite as the normal user |
+| `sh scripts/test/run_smoke_host.sh qemu_mist_image_parity` | Run the full QEMU Mist image-classification parity suite after the local registry cache is primed |
+| `sh scripts/test/run_smoke_host.sh qemu_endpoint_software_parity` | Run the QEMU endpoint-runtime software-only parity suite as the normal user |
+| `sh scripts/test/run_smoke_host.sh qemu_endpoint_image_parity` | Run the full QEMU endpoint image-classification parity suite after the local registry cache is primed |
+| `sh scripts/test/run_smoke_host.sh qemu_openfaas_software_parity` | Run the QEMU OpenFaaS software-only suite on the single-host CPU-capped variant |
+| `sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity` | Run the full QEMU OpenFaaS image-classification parity suite after the local registry cache is primed |
 
 ## VM Debugging
 

@@ -1,313 +1,163 @@
-# Continuum Rework Milestone Release Plan
+# Continuum Pre-Main Stabilization Policy
 
-## 1. Purpose
+## 1. Authority and execution order
 
-This document defines the release path from the current rework branch toward a
-stable Continuum release that can eventually replace the old `main` branch.
+This is the policy authority approved on 2026-10-27, including the explicit
+normal-user migration amendment. It supersedes the earlier full old-main parity
+release gate and speculative future-work queues. The authority map is
+`docs/rework_plan_stack.md`; factual certification rows and evidence remain in
+`docs/release_certification_matrix.md`. This policy does not renew those rows.
 
-The plan deliberately separates:
+Execute in order: preserve failure evidence and one source-unchanged baseline;
+synchronize policy and the amended runner boundary; narrow result inspection;
+minimal QEMU cache repair; exact multi-host OpenFaaS validation; bounded support
+inventories; approved slimming; exact-candidate acceptance. Each nontrivial
+packet needs a bounded exact-file plan, independent read-only plan review,
+proportional tests, full independent uncommitted diff review, and resolution of
+actionable findings before a local commit. No later gate is waived by an earlier
+static or runtime success.
 
-1. core framework readiness,
-2. provider and software-module certification,
-3. old-main feature parity,
-4. future product/research extensions.
+## 2. Approved consolidated policies
 
-The rework should ship through intermediate milestone releases first. A final
-replacement release should happen only after the old public Continuum feature
-surface is certified with provider-appropriate runtime evidence on the reworked
-stack under the current checked model. Closing an unsupported surface without
-certification first requires the separate atomic checked-disposition change
-defined below.
+1. **Required reproductions.** Before main, preserve and validate the
+   Continuum/FastContinuum 2023 framework reproduction, the SPEC-RG 2023 artifact
+   path, the Columbo ICPE 2025 minimal local-QEMU `call_1` full control-plane
+   trace slice, and the exact documented local-QEMU Kata startup slice.
+   Columbo does not require every figure or parameter sweep. Kata is not
+   assigned to an inferred thesis. All other named papers, theses, student
+   projects, and legacy replicate/config families are preservation candidates
+   until the complete reproduction inventory and the user's final scope
+   confirmation. Full old-main parity is no longer the pre-main release gate.
+2. **Product boundary.** No new core product features before main. Limit work
+   to stabilization, approved reproduction, narrow diagnostics, safety and
+   meaningful tests. Do not introduce databases, frontends, package hubs,
+   content-addressed cache generations, generalized inspectors or recovery,
+   cross-commit resume tracking, or broad host-management machinery.
+3. **Stop/resume v1.** QEMU only; same revision, same base path, same topology
+   and software contract; linear infrastructure → software → application.
+   Same revision is an operator precondition, not new Git-tracking machinery.
+   Cross-commit resume, arbitrary software replacement on mutated VMs, and
+   concurrent runs sharing a base path remain unsupported.
+4. **Application sweeps.** Sequential same-application runs with changed
+   benchmark parameters remain candidate-only until actual cleanup and
+   idempotence evidence proves safe reuse. This does not authorize unsupported
+   multi-stage benchmark pipelines.
+5. **Cache and ownership.** Keep one mutable current QEMU cache per stable
+   runner/host/profile-tokenized owner slot. Runtime runs as the normal user
+   (`matthijs` on the approved node4/node3 hosts), never as root. Sharing one
+   cache between Unix users is unsupported. The approved one-time migration
+   preserves compact evidence and numeric metadata before bounded conversion;
+   it is not runtime permission repair. Remove old accounts and installed
+   wrappers only after replacement runtime verification and an exact UID/ACL
+   retirement audit. For a valid peer, preserve QCOW2/cloud-init identity,
+   owner/group/mode/ACL; coordinated reprovisioning may change disk contents
+   and invalidate/republish only the ready marker. An invalid owner's exact
+   sidecar, QCOW2 and derived cloud-init disk may be removed, never current-run
+   YAML or unrelated peers. Access/cleanup failures must identify the path,
+   operation and operator remedy, with no privilege escalation or automatic
+   ownership repair.
+6. **Configuration structure.** Keep experiment, environment profile and
+   software profile as three composed YAML documents. Configuration and
+   software semantic authorities remain their domain architecture documents;
+   no configuration-library migration is authorized.
+7. **Shipped inventory.** Every tracked `.yaml` under `configs/experiments/`
+   and `configs/profiles/` is shipped inventory, including templates with
+   an explicit template classification. Parser acceptance is not runtime
+   support. Inventory legacy `.cfg` inputs and test-only fixtures separately.
+   Each tracked file needs one classification/disposition and zero unaccounted
+   rows before the configuration gate closes.
+8. **Registry terminology.** The approved future hard cut is
+   `run.registry_refresh: missing|all`, default `missing`, without aliases.
+   Current `run.image_prefetch: "off"` fetches missing required registry
+   images; `"on"` refreshes all required registry images. Keep the current
+   schema until the bounded terminology packet updates parser, schema,
+   examples, tests and docs atomically. Cache priming and guest preload are
+   separate operations, not synonyms for this setting.
+9. **Retained inspection.** Permanently keep ordinary logs, raw stdout/stderr,
+   metadata, state/lock, benchmark/network artifacts, storage/pruning controls,
+   `latest-result-summary`, and narrowly indexed/full `latest-result-tail`.
+   Keep `debug-playbook` temporary through current diagnosis and multi-host
+   verification, then remove its dedicated surface in a reviewed slimming
+   packet. Do not replace it with a generalized command runner.
+10. **Evidence checks.** Provisionally preserve current checkers. In the
+    slimming review, retain only mechanisms preventing a demonstrated false
+    claim; consolidate proven duplication atomically with audit gates, tests,
+    skills and docs. The current audit script, not an old skill summary,
+    defines required gates. Historical evidence remains truthful and distinct
+    from current runner commands; source freshness checks remain enforced.
+11. **Acceptance evidence.** Require full unit and local-e2e/combined discovery,
+    focused tests, applicable lint, documentation paths, release claims/matrix
+    and all required canonical audit gates. Require exact runtime and manual
+    evidence for the approved bounded matrix, not an unlimited cross-product.
+    Since the baseline failed, require two clean post-fix operational runs,
+    at least one on the exact final candidate. Also require exact multi-host
+    OpenFaaS and every approved reproduction on the final candidate.
+12. **Publication prohibition.** No merge, push, tag, release or publication
+    until the final acceptance package and the user's explicit approval.
+    Local reviewed commits do not grant publication authority.
+13. **Deletion.** No reproduction-driven deletion before the complete candidate
+    inventory and one final user scope confirmation. Delete only approved
+    out-of-scope behavior or demonstrated duplication, through bounded
+    independently reviewed packets; preserve required provenance and evidence.
+    Do not remove meaningful tests merely to reduce size.
+14. **Document authority.** The plan stack maps authority; this document owns
+    policy; configuration and software plans own domain semantics; the
+    certification matrix owns factual row status; the concise release handoff
+    is subordinate operational context. Phase plans are historical. The old
+    post-release roadmap and overhaul dispatcher are retired, not a work queue.
 
-## 2. Core Versus Modules
+## 3. Core versus modules
 
-The Continuum core is the structured planning and runtime framework. It owns:
+The core owns validation, composition, selector/scope resolution, module
+contracts, deterministic planning/runtime handoff, state/lock and evidence
+contracts. Provider/software/application stacks are modules. In particular,
+`qemu` is a provider module and must not be described as core.
 
-1. YAML/profile composition and schema validation,
-2. normalized infrastructure, software, and benchmark domains,
-3. selector and scope resolution,
-4. module registry contracts and dependency/capability validation,
-5. deterministic planner snapshots and runtime handoff metadata,
-6. runtime phase gating, state, lock, and resume contracts,
-7. test-runner success detection and artifact contracts.
+Runtime claims require VM-backed or cloud-backed evidence (or host-backed
+evidence where the particular gate permits it). Static/parser checks cannot
+certify runtime. Intermediate rework milestones may certify bounded module sets
+but are not final main replacement releases.
 
-Everything that deploys a concrete platform or workload is a module or module
-family. This includes:
-
-1. infrastructure providers such as `qemu`, `gcp`, `aws`, and `baremetal`,
-2. resource-manager/software modules such as `kubernetes`, `kubeedge`, `mist`,
-   `kubecontrol`, `kube_kata`, and `none`,
-3. addons and execution modules such as `endpoint_runtime`, `openfaas`, and
-   `observability`,
-4. benchmark and application stages such as `image_classification`,
-   `text_translation`, `stress`, `mem_usage`, `empty`, and `empty_kata`.
-
-Important release boundary: `qemu` is an infrastructure provider module. It is a
-high-value certification target because it enables local VM-backed testing, but
-it is not part of the Continuum core.
-
-## 3. Release Principles
-
-1. Intermediate releases are milestone or pre-release artifacts, not final
-   replacements for old `main`.
-2. No public runtime support claim is release-ready without the
-   provider-appropriate runtime evidence required by its applicable gate in
-   `docs/release_certification_matrix.md`. Depending on that explicit gate,
-   the evidence may be VM-backed, cloud-backed, or host-backed.
-3. Static checks, unit tests, parser tests, and dry-run checks are mandatory,
-   but they are not sufficient for runtime support claims.
-4. A module combination is certified only for the provider, topology, software
-   modules, benchmark stage, environment, and runtime targets that were tested.
-5. The final replacement release must preserve old-main public functionality
-   under the current checked contract. An intentional unsupported closure first
-   requires a separate atomic change adding an explicit checked terminal
-   disposition.
-6. Evidence beats prose: every certified row needs a config, command, host or
-   cloud prerequisites, artifacts, latest run date, and success criteria.
-7. Keep the core small. New research or teaching features should arrive as
-   modules, profiles, or reproducibility packages unless they change shared
-   planning semantics.
-
-## 4. Certification Labels
-
-Use these labels consistently in docs, release notes, and issue planning.
+## 4. Factual certification labels
 
 | Label | Meaning |
 | --- | --- |
-| `core-ready` | Non-VM core behavior is covered by static checks, unit tests, parser/repository regressions, and runner metadata tests. |
-| `certified` | The exact module set has fresh provider-appropriate runtime evidence required by its applicable certification-matrix gate. |
-| `certified-candidate` | The module set has passed before, but needs a fresh release-certification run before publication. |
-| `ported-unverified` | Code/configs exist in the rework branch, but no current full runtime evidence is recorded. |
-| `historical` | A legacy `.cfg` or research artifact exists, but the path is not release-supported on the rework stack. This is not a final replacement disposition by itself. |
-| `deprecated-proposed` | Candidate for removal or demotion. Requires rationale, owner review, and migration/deprecation notes. |
+| `core-ready` | Static, unit, parser/repository and runner-contract evidence only. |
+| `certified` | The exact row has the evidence required by its matrix gate; candidate freshness is checked separately. |
+| `certified-candidate` | Passed previously; needs a fresh candidate run. |
+| `ported-unverified` | Code/config exists without current full runtime evidence. |
+| `historical` | Preserved legacy input, not a runtime support claim or final scope decision. |
+| `deprecated-proposed` | Proposed demotion/removal, requiring scope approval and rationale. |
 
-`docs/release_certification_matrix.md` is the sole authority for concrete row
-status.
+Do not change row statuses merely because policy or runner identity changed.
+Historical old-main config rows and `docs/old_main_parity_issue_seed.md` remain
+a complete transitional candidate inventory until the bounded scope review.
+Existing local `origin/main` inventory checking stays in place to prevent
+unaccounted legacy files, not to require every historical feature before main.
 
-## 5. Current Baseline
+## 5. Exact-candidate acceptance
 
-The structured planning engine, canonical YAML/profile model, runtime handoff,
-resume contract, phase-aware runner, and cloud-safe regression baseline are
-implemented. This plan intentionally does not duplicate changing certification
-statuses or dated evidence inventories.
+Freeze one clean locally committed candidate after approved packets/reviews.
+Record HEAD, empty status, `git diff main...HEAD --stat` and shortstat.
+Before each physical-host run, record source revision/status and verify the
+normal-user host prerequisites; there is no dedicated repository sync step.
 
-`docs/release_certification_matrix.md` is the factual authority for current row
-status, exact claim boundaries, and primary evidence. The current operational
-checkpoint is `docs/rework_release_handoff.md`, and M1 publication wording is in
-`docs/release_notes_m1_draft.md`.
+An operational run must create four new JSONs with six successful executions:
+three single-entry smoke results and one three-entry benchmark result. Every
+exit code is zero; no timeout, failed or unreachable Ansible host is acceptable.
+`operational_regression` has no retained root: inspect its real children
+`infra_one_vm`, `software_k8s_two_vm`, `network_netperf_two_vm` and
+`benchmark_k8s_resume`.
 
-## 6. Old-Main Parity Inventory
+The exact `qemu_openfaas_image_parity` run must be 1/1 successful, request the
+full 26-vCPU shape, select node3 as external physical host, produce the expected
+OpenFaaS/benchmark artifacts and retain its VMs. No missing current YAML,
+QCOW2 permission error or broad permission repair is acceptable.
 
-Before the final replacement release, build a parity matrix from the old public
-surface. The initial inventory comes from the old documentation and test
-configuration tree:
-
-1. provider coverage:
-   - `configuration/tests/qemu/`,
-   - `configuration/tests/gcp/`,
-   - `configuration/tests/aws/01_infraonly-cloud.cfg`.
-2. topology coverage:
-   - cloud-only,
-   - edge-only,
-   - endpoint-only,
-   - combined cloud/edge/endpoint.
-3. software/resource-manager coverage, including Kubernetes, KubeEdge, Mist,
-   endpoint runtime, observability, OpenFaaS, and application paths,
-4. public feature coverage:
-   - MQTT/operating service behavior,
-   - Docker/containerd-backed resource-manager deployment,
-   - benchmark/application execution and result collection,
-   - machine-learning example workloads,
-   - provider-specific cloud prerequisites and credentials.
-
-For each parity row, the current checked outcomes are:
-
-1. port and certify on the YAML rework stack, after which the row leaves
-   `docs/old_main_parity_issue_seed.md`, or
-2. remain unresolved under a non-terminal status and stay in that backlog.
-
-If maintainers later choose to close an unsupported historical provider without
-certification, that requires a separate atomic change introducing an explicit
-checked terminal disposition and updating the matrix checker, certification
-matrix, and parity seed together. This plan does not define that future
-disposition.
-
-The release-matrix checker treats this as checked planning state: every legacy
-test config present in the current worktree or in the local `origin/main`
-`configuration/tests/` inventory must have a row disposition in
-`docs/release_certification_matrix.md`, and a git worktree must have the local
-`origin/main` ref available for that inventory check. This keeps final
-replacement planning anchored to the old public test surface even if files move
-during the rework.
-
-## 7. Evidence Required For A Certified Row
-
-Every `certified` row must name:
-
-1. the YAML experiment and profile files,
-2. the exact runner suite or command,
-3. provider, host, and credential prerequisites,
-4. runtime targets covered: infrastructure, software, application, cleanup,
-5. expected artifacts:
-   - `<base_path>/.continuum/experiment_lock.yaml`,
-   - `<base_path>/.continuum/state.json`,
-   - relevant provider logs,
-   - relevant software readiness logs,
-   - relevant benchmark or network result artifacts.
-6. success criteria beyond exit code,
-7. latest run date and operator/runner context,
-8. known limitations and skipped assertions.
-
-Release notes should claim only rows that have this evidence.
-The working row checklist and evidence template live in
-`docs/release_certification_matrix.md`.
-
-## 8. Milestones
-
-### M0: Release-Readiness Documentation
-
-Goal:
-
-1. define the core/module boundary,
-2. define certification labels,
-3. document old-main parity as the final replacement gate,
-4. connect operational testing policy to release claims.
-
-Exit criteria:
-
-1. this document exists and is linked from the planning stack,
-2. future-release scope is separated from first-milestone release scope,
-3. the docs avoid calling provider modules part of the core,
-4. no milestone is presented as a final `main` replacement.
-
-### M1: First Certified Module-Set Milestone
-
-Goal:
-
-1. publish a pre-release or milestone branch/tag for the structured core plus one
-   fully tested vertical slice,
-2. prove the planning engines, module contracts, runner, state, and artifacts can
-   support a real end-to-end VM execution.
-
-Target certified rows:
-
-1. `core-ready` non-VM checks,
-2. local `qemu` infrastructure-only smoke,
-3. local `qemu + kubernetes` software smoke,
-4. local `qemu` network-validation smoke,
-5. local `qemu + kubernetes + endpoint_runtime + image_classification`
-   benchmark smoke with resume and teardown.
-
-Required work:
-
-1. run the cloud-safe audit from a clean tree,
-2. run the full local VM smoke matrix on the dedicated QEMU/libvirt host,
-3. record evidence and artifact locations in release notes,
-4. mark all other modules as `ported-unverified`, `historical`, or
-   `deprecated-proposed`,
-5. ensure pre-tag evidence names the exact commit being tagged and records a
-   clean source-tree state,
-6. publish as an intermediate release only.
-
-### M2: Provider Parity Milestone
-
-This milestone name is independent of the retained `M2-*` identifiers used by
-post-M1 research case-study rows in the certification matrix.
-
-Goal:
-
-1. close the provider gap between the rework branch and old `main`.
-
-Target rows:
-
-1. QEMU old-main parity rows,
-2. GCP old-main parity rows,
-3. AWS infra-only row,
-4. bare-metal remains unclaimed unless certified; an unsupported terminal
-   outcome requires the separate checked-disposition change described above.
-
-Required work:
-
-1. port or validate YAML equivalents for the old provider test configs,
-2. define cloud credential and quota prerequisites,
-3. satisfy the provider-appropriate runtime-evidence gate defined for each
-   claimed row in `docs/release_certification_matrix.md`, using VM-backed,
-   cloud-backed, or host-backed evidence only where that gate permits it,
-4. document provider-specific limitations and costs.
-
-### M3: Software And Application Parity Milestone
-
-Goal:
-
-1. close old-main functionality gaps above the provider layer.
-
-Target rows:
-
-1. remaining uncertified or historical software/application rows in the
-   certification matrix,
-2. MQTT/operating-service behavior,
-3. machine-learning benchmark/application paths that were public in old `main`.
-
-Required work:
-
-1. convert legacy configs to YAML profiles or declare them historical,
-2. add scenario tests and success detection for each supported stack,
-3. keep cross-product coverage bounded by certifying representative module sets,
-4. avoid expanding the core to absorb per-project behavior.
-
-### M4: Final Release Candidate
-
-Goal:
-
-1. prepare the first replacement candidate for old `main`.
-
-Exit criteria:
-
-1. every old-main public claim is `certified` under the current checked model;
-   any unsupported terminal closure first lands as a separate atomic checked-
-   disposition change,
-2. all release notes, README text, config docs, and migration notes agree,
-3. the cloud-safe audit passes,
-4. every certified row's provider-appropriate runtime-evidence gate in
-   `docs/release_certification_matrix.md` passes,
-5. known limitations are documented in user-facing language,
-6. upgrade and rollback guidance exists.
-
-### M5: Main Merge And Final Release
-
-Goal:
-
-1. merge the reworked framework into `main` without surprising users with a
-   smaller public feature surface.
-
-Exit criteria:
-
-1. M4 is complete,
-2. old-main parity decisions are accepted by maintainers,
-3. final release notes name certified module sets precisely,
-4. post-release work is moved into issues or a project board.
-
-## 9. Near-Term Work Queue
-
-1. Keep `docs/release_certification_matrix.md` as the sole current row-status
-   and evidence ledger.
-2. Keep the cloud-safe audit and affected runtime evidence fresh on the exact
-   source tree being tagged.
-3. Keep historical and other non-ready surfaces unresolved and in the parity
-   backlog until certified; scope any unsupported terminal closure as a
-   separate atomic checked-disposition change.
-4. Keep public documentation tied to matrix claim boundaries.
-
-## 10. Deferred Future Work
-
-These are not blockers for M1 unless a release claim depends on them:
-
-1. visual frontend,
-2. structured experiment database,
-3. durable reproducibility-package format,
-4. public project/research package catalog,
-5. paper-specific evaluation and figures,
-6. major config-library migration,
-7. long-term plugin/package distribution model.
-
-The future roadmap is tracked separately in `docs/post_release_roadmap.md`.
+Inspect every JSON and every result index: complete stdout/stderr, metadata,
+state/lock, benchmark/network artifacts, multi-host placement and limitations.
+Present the final branch delta, reproduction/config inventories with zero
+unaccounted rows, supported/unsupported boundaries, commands/results,
+artifact locations and independent final review. Await explicit publication
+approval. The final reproduction inventory still requires user confirmation
+before any reproduction-driven deletion; autonomous execution does not waive it.

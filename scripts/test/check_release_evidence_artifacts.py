@@ -143,9 +143,68 @@ CLOUD_AUDIT_PREREQ_STATUS_TITLE_BY_SUITE = {
 }
 REQUIRED_EVIDENCE_CONTEXT_FIELDS = ("Git commit", "Tree state", "Date")
 ARTIFACT_AUDIT_SUMMARY_MARKER = "local release-evidence artifact audit"
-ARTIFACT_AUDIT_COMMAND = (
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit"
-)
+ARTIFACT_AUDIT_COMMAND = "sh scripts/test/run_smoke_host.sh release-artifact-audit"
+
+
+# Frozen pre-migration records only. Do not extend this exception to new evidence.
+# Current candidate readiness still requires the existing source-freshness checks.
+HISTORICAL_RUNNER_COMMITS = {
+    "docs/release_evidence_m1_2026-06-01.md": "295a5eec7664f1fb95047704422ddc736bb05718",
+    "docs/release_evidence_m1_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_endpoint_image_2026-06-02.md": "57b18f44f4d560b7448119c7f91fd1c48686abe8",
+    "docs/release_evidence_qemu_endpoint_image_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_endpoint_software_2026-05-31.md": "9b380abed1909aa0afad8ef32bc71a1d203941ea",
+    "docs/release_evidence_qemu_endpoint_software_2026-06-02.md": "57b18f44f4d560b7448119c7f91fd1c48686abe8",
+    "docs/release_evidence_qemu_endpoint_software_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_infra_parity_2026-05-31.md": "9b380abed1909aa0afad8ef32bc71a1d203941ea",
+    "docs/release_evidence_qemu_infra_parity_2026-06-02.md": "57b18f44f4d560b7448119c7f91fd1c48686abe8",
+    "docs/release_evidence_qemu_infra_parity_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_k8s_image_2026-06-02.md": "aaad31f27e3c747ff269a6b4700791e58da0b74f",
+    "docs/release_evidence_qemu_k8s_image_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_k8s_nobench_2026-05-31.md": "9b380abed1909aa0afad8ef32bc71a1d203941ea",
+    "docs/release_evidence_qemu_k8s_nobench_2026-06-02.md": "57b18f44f4d560b7448119c7f91fd1c48686abe8",
+    "docs/release_evidence_qemu_k8s_nobench_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_kube_kata_empty_2026-07-09.md": "2f78df31af51b8fff67356c0888a865505dddf2b",
+    "docs/release_evidence_qemu_kubecontrol_empty_2026-07-03.md": "8cc99c3de40f76cb65f375bd76ddf978cb6f4442",
+    "docs/release_evidence_qemu_kubecontrol_trace_2026-07-06.md": "ccc8e92e328f973bda72332236cc1315f06613bb",
+    "docs/release_evidence_qemu_kubeedge_image_2026-06-02.md": "6217ce4187ec486840bfdb6ff72085836956caad",
+    "docs/release_evidence_qemu_kubeedge_image_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_kubeedge_software_2026-05-31.md": "9b380abed1909aa0afad8ef32bc71a1d203941ea",
+    "docs/release_evidence_qemu_kubeedge_software_2026-06-02.md": "805bbda1dff84b7272375cad541db26f9f98f4c4",
+    "docs/release_evidence_qemu_kubeedge_software_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_mist_image_2026-06-02.md": "57b18f44f4d560b7448119c7f91fd1c48686abe8",
+    "docs/release_evidence_qemu_mist_image_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_mist_software_2026-05-31.md": "9b380abed1909aa0afad8ef32bc71a1d203941ea",
+    "docs/release_evidence_qemu_mist_software_2026-06-02.md": "57b18f44f4d560b7448119c7f91fd1c48686abe8",
+    "docs/release_evidence_qemu_mist_software_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_openfaas_image_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_openfaas_image_local_2026-06-02.md": "b755ef218e010ae434d37b8adc50829703c6619b",
+    "docs/release_evidence_qemu_openfaas_image_local_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+    "docs/release_evidence_qemu_openfaas_software_2026-05-31.md": "9b380abed1909aa0afad8ef32bc71a1d203941ea",
+    "docs/release_evidence_qemu_openfaas_software_2026-06-02.md": "4c5b9bda5c398819e62ee5a1339eb38148de8fe0",
+    "docs/release_evidence_qemu_openfaas_software_2026-07-08.md": "f9ab4217c40604dc145692664667a13e8cc2a994",
+}
+
+
+def _recorded_runner_command(
+    evidence_doc: str, evidence_text: str, current_command: str
+) -> str:
+    """Keep frozen historical commands without allowing new docs to self-qualify."""
+    fields = _evidence_table_fields(evidence_text)
+    date = fields.get("Date", "")
+    runner = fields.get("Runner context", "") + fields.get("Runner user", "")
+    historical_commit = HISTORICAL_RUNNER_COMMITS.get(evidence_doc)
+    if historical_commit is not None and fields.get("Git commit") == historical_commit:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date) and date < "2026-10-27":
+            if "continuum-smoke" in runner:
+                return current_command.replace(
+                    "sh scripts/test/run_smoke_host.sh",
+                    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke",
+                    1,
+                )
+    return current_command
+
+
 REQUIRED_ARTIFACT_FIELD_MARKERS = (
     ("test-results summary", ("test-results", "test results")),
     ("experiment lock", ("experiment lock",)),
@@ -3104,7 +3163,9 @@ def _check_evidence_doc_command_fields(
         evidence_path = root / evidence_doc
         if not evidence_path.exists():
             continue
-        fields = _evidence_table_fields(evidence_path.read_text(encoding="utf-8"))
+        evidence_text = evidence_path.read_text(encoding="utf-8")
+        fields = _evidence_table_fields(evidence_text)
+        expected_command = _recorded_runner_command(evidence_doc, evidence_text, expected_command)
         suite_field = fields.get("Suite", "")
         evidence_suites = set(re.findall(r"[A-Za-z0-9_-]+", suite_field))
         if evidence_suites != matrix_suites:
@@ -3158,6 +3219,7 @@ def _check_evidence_doc_commands(root: Path) -> list[EvidenceArtifactIssue]:
                     )
                 )
                 continue
+            command = _recorded_runner_command(claim.evidence_doc, evidence_text, command)
             if command in evidence_text:
                 continue
             issues.append(
@@ -3294,6 +3356,11 @@ def _check_artifact_audit_summary(
                 if key != "Command"
             }
         )
+        if "Command" in checked_fields:
+            checked_fields = dict(checked_fields)
+            checked_fields["Command"] = _recorded_runner_command(
+                evidence_doc, evidence_text, ARTIFACT_AUDIT_COMMAND
+            )
         for field, expected in checked_fields.items():
             if field not in fields:
                 if summary_required:

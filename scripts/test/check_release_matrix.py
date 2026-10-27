@@ -55,34 +55,30 @@ REQUIRED_CLOUD_AUDIT_GATES = (
 )
 REQUIRED_M1_PRE_TAG_COMMANDS = (
     "scripts/test/run_cloud_static_audit.sh",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit",
+    "sh scripts/test/run_smoke_host.sh release-artifact-audit",
     "python3 scripts/test/check_release_pretag.py",
     "python3 scripts/test/check_release_claims.py",
     "python3 scripts/test/check_release_matrix.py",
     "python3 scripts/test/check_docs_paths.py",
     "git diff --check",
-    "sudo -n /usr/local/bin/continuum-hostctl sync-repo",
-    "sudo -n /usr/local/bin/continuum-hostctl verify",
     "sh scripts/test/setup_agent_host.sh verify",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity",
-    "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity",
+    "sh scripts/test/run_smoke_host.sh operational_regression",
+    "sh scripts/test/run_smoke_host.sh network_validation",
+    "sh scripts/test/run_smoke_host.sh qemu_infra_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_k8s_image_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_k8s_nobench_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_kubeedge_software_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_kubeedge_image_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_mist_software_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_mist_image_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_endpoint_software_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_endpoint_image_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_openfaas_software_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_openfaas_image_local_parity",
+    "sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity",
 )
 REQUIRED_M1_HOST_SEQUENCE_COMMANDS = (
     "scripts/test/run_cloud_static_audit.sh",
-    "sudo -n /usr/local/bin/continuum-hostctl sync-repo",
-    "sudo -n /usr/local/bin/continuum-hostctl verify",
     "sh scripts/test/setup_agent_host.sh verify",
 )
 REQUIRED_EVIDENCE_TEMPLATE_FIELDS = (
@@ -130,9 +126,9 @@ REQUIRED_PLAN_STACK_BOUNDARIES = (
         "must distinguish intermediate milestones from final main replacement",
     ),
     (
-        "old-main-parity-gate",
-        ("old-main parity", "explicit deprecation"),
-        "must keep old-main parity or explicit deprecation as the final replacement gate",
+        "approved-reproduction-scope",
+        ("approved reproduction scope", "zero unaccounted rows"),
+        "must require approved reproduction scope and zero unaccounted rows before main",
     ),
 )
 REQUIRED_PARITY_BACKLOG_CONVERSION_MARKERS = (
@@ -163,66 +159,66 @@ REQUIRED_PARITY_BACKLOG_CONVERSION_MARKERS = (
     ),
 )
 PRETAG_WRAPPER_COMMAND_BY_SUITE = {
-    "smoke": "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression",
+    "smoke": "sh scripts/test/run_smoke_host.sh operational_regression",
     "benchmark_smoke": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression"
+        "sh scripts/test/run_smoke_host.sh operational_regression"
     ),
     "network_validation": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation"
+        "sh scripts/test/run_smoke_host.sh network_validation"
     ),
     "qemu_infra_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity"
+        "sh scripts/test/run_smoke_host.sh qemu_infra_parity"
     ),
     "qemu_k8s_nobench_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity"
+        "sh scripts/test/run_smoke_host.sh qemu_k8s_nobench_parity"
     ),
     "qemu_k8s_image_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity"
+        "sh scripts/test/run_smoke_host.sh qemu_k8s_image_parity"
     ),
     "qemu_kubeedge_software_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_kubeedge_software_parity"
     ),
     "qemu_kubeedge_image_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_kubeedge_image_parity"
     ),
     "qemu_mist_software_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity"
+        "sh scripts/test/run_smoke_host.sh qemu_mist_software_parity"
     ),
     "qemu_mist_image_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity"
+        "sh scripts/test/run_smoke_host.sh qemu_mist_image_parity"
     ),
     "qemu_endpoint_software_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_endpoint_software_parity"
     ),
     "qemu_endpoint_image_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_endpoint_image_parity"
     ),
     "qemu_openfaas_software_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_openfaas_software_parity"
     ),
     "qemu_openfaas_image_local_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_openfaas_image_local_parity"
     ),
     "qemu_openfaas_image_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_openfaas_image_parity"
     ),
     "qemu_kubecontrol_empty_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_kubecontrol_empty_parity"
     ),
     "qemu_kubecontrol_empty_trace_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_kubecontrol_empty_trace_parity"
     ),
     "qemu_kube_kata_empty_startup_parity": (
-        "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+        "sh scripts/test/run_smoke_host.sh "
         "qemu_kube_kata_empty_startup_parity"
     ),
 }
@@ -1086,10 +1082,10 @@ RELEASE_NOTES_LIMITATION_REQUIREMENTS = (
         "section 5 must mention the local registry cache blocker",
     ),
     (
-        "host-helper-interface",
-        ("hostctl_interface_version", "prime-registry-cache"),
-        ("hostctl_interface_version", "prime-registry-cache"),
-        "section 5 must mention the host-helper interface and cache-prime blocker",
+        "runner-prerequisites",
+        ("normal-user prerequisites",),
+        ("normal-user", "normal user"),
+        "section 5 must mention normal-user host prerequisites",
     ),
     (
         "cloud-provider-evidence",

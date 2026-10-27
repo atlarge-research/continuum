@@ -30,14 +30,13 @@ isProject: false
 
 ## 0. Authority and Scope
 
-This is the program-level roadmap.
-Plan precedence and locked decisions are defined in `docs/rework_plan_stack.md`.
-
-This file owns:
-
-1. phase sequencing (A-G),
-2. program-level outcomes,
-3. cross-phase dependency boundaries.
+This is a historical record of the completed restructuring phases, not the
+current program roadmap or execution queue. Approved scope and ordered gates
+are in `docs/rework_milestone_release_plan.md`; authority is mapped by
+`docs/rework_plan_stack.md`. Current evidence is factual status in
+`docs/release_certification_matrix.md`, and the restart point is
+`docs/rework_release_handoff.md`. Historical phase completion does not renew
+candidate runtime evidence.
 
 ## 1. Program Objectives
 
@@ -197,20 +196,11 @@ Phase-F test architecture closure status (updated May 21, 2026):
 4. `scripts/test/run_cloud_static_audit.sh` runs unit and e2e discovery as
    first-class required gates before the combined discovery gate.
 
-## Phase G: Deferred Lifecycle Hardening
+## Phase G: Retired Speculative Queue
 
-Objective: additional image/build lifecycle robustness after core stabilization.
-This is not part of the active PR-23 closure criteria.
-Forward-looking scope: consolidate module/core extension-point contracts
-(including image requirement exposure) to avoid interface drift as new internal
-capabilities are added.
-Deferred library track: evaluate optional configuration-library adoption
-(Pydantic for schema validation and Hydra/OmegaConf for composition) only via
-explicit RFC/ADR design review before implementation.
-Deferred observability track: revisit reproducibility packages and metric
-retention after the active rework stabilizes, including whether Continuum should
-offer a first-class structured run package and optional time-series database
-support instead of accumulating separate metric files.
+No lifecycle-platform, configuration-library, database or structured-package
+project is authorized by this historical plan. Follow the approved narrow
+stabilization/reproduction scope instead.
 
 ## 5. Program Deliverables
 

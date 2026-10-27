@@ -41,7 +41,7 @@ REQUIRED_PRETAG_COMMANDS = REQUIRED_M1_PRE_TAG_COMMANDS
 EXPECTED_M1_EVIDENCE_FIELDS = {
     "Required gates": "PASS",
     "Result": "TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0",
-    "Verify command": "sudo -n /usr/local/bin/continuum-hostctl verify",
+    "Verify command": "sh scripts/test/setup_agent_host.sh verify",
     "Verify result": "PASS",
 }
 POST_EVIDENCE_ALLOWED_PATH_PREFIXES = (

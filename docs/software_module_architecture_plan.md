@@ -1,5 +1,13 @@
 # Software Module Architecture Plan (Final Target)
 
+This document owns domain semantics, not an expansion of release scope.
+The approved policies in `docs/rework_milestone_release_plan.md` constrain
+pre-main work; factual support remains in `docs/release_certification_matrix.md`.
+Module extensibility is not permission to add features. Arbitrary software
+replacement on retained mutated VMs is unsupported; preserve the same software
+contract for QEMU resume. Benchmark pipeline representation does not imply
+multi-stage runtime support or certified parameter-sweep idempotence.
+
 ## 0. Authority
 
 This document is the single source of truth for software schema and planner semantics.

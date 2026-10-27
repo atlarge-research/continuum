@@ -1,5 +1,14 @@
 # YAML Migration Notes
 
+The 2026-10-27 approved policy is `docs/rework_milestone_release_plan.md`.
+It replaces full old-main parity as the release gate with approved reproduction
+scope and complete bounded inventories; legacy inputs are preserved until final
+scope confirmation. Normal-user host migration and current commands are in
+`docs/smoke_runner_isolation.md`. Historical matrix rows/evidence below are not
+renewed by migration. The future `run.registry_refresh: missing|all` terminology
+hard cut is approved but not yet implemented; current examples still use
+`run.image_prefetch`.
+
 This note covers the hard-cut migration from legacy config paths to the canonical YAML model.
 
 ## Scope

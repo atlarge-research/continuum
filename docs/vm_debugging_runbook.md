@@ -3,6 +3,11 @@
 This runbook describes how to inspect Continuum-managed VMs during failed
 operational smoke runs.
 
+Use the normal-user commands and explicit retained-root/venv exports in
+`docs/smoke_runner_isolation.md`. Support status remains in
+`docs/release_certification_matrix.md`; active gates are
+`docs/rework_milestone_release_plan.md`. Preserve failures before any retry.
+
 The intended order is:
 
 1. read Continuum logs first,
@@ -167,7 +172,7 @@ Retained benchmark smoke failure:
 
 1. keep the retained base path intact,
 2. inspect benchmark stdout/stderr and `<base_path>/.continuum/logs/benchmark/`,
-3. use the installed wrapper's bounded `debug-playbook` scenario from `docs/smoke_runner_isolation.md` when Ansible replay is needed,
+3. use the repo runner's temporary bounded `debug-playbook` scenario from `docs/smoke_runner_isolation.md` only when approved Ansible replay is needed; it is removed after the current diagnosis and multi-host verification,
 4. rerun only the smallest relevant wrapper scenario after applying a fix.
 
 ## 8. Suggested Debugging Discipline

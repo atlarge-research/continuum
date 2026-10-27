@@ -36,10 +36,11 @@ but no runtime, config, profile, playbook, wrapper, or runner path may change
 after that evidence source commit without rerunning the affected wrapper
 scenario.
 
-Current checkpoint note: the VM-backed evidence set has been refreshed on one
-runtime source line. Keep it tag-ready by rerunning any affected wrapper
-scenario if runtime, runner, verifier, profile, playbook, or config code changes
-after the recorded VM-evidence source commit.
+Current checkpoint: this evidence predates the normal-user migration and later
+runtime changes. It is not tag-ready for the current candidate. Preserve dated
+evidence unchanged and refresh affected runtime rows before claiming current
+support. Approved scope/gates are in `docs/rework_milestone_release_plan.md`;
+no merge, push, tag, release or publication is authorized.
 
 ## 3. What This Milestone Certifies
 
@@ -114,10 +115,12 @@ milestones.
 5. Cloud-provider rows need YAML profiles, credential/cost documentation, and
    cloud-backed evidence before they can be release-supported.
 6. Cache-backed full application parity rows require an explicitly primed local
-   registry cache for certification. Host-side cache priming is exposed through
-   the allowlisted `continuum-hostctl prime-registry-cache` helper.
+   registry cache for certification. Prime as a Docker-capable normal user via
+   `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite <suite>`.
 7. Broader QEMU/OpenFaaS claims beyond the certified exact `P-QEMU-10` config
    still need their own resource-shape/capacity review and retained evidence.
+8. Normal-user prerequisites and the reviewed venv must be verified; retired
+   installed helpers and the old smoke account are not the active procedure.
 
 ## 6. User-Facing Wording
 
@@ -144,36 +147,32 @@ Run these checks before tagging:
 
 ```bash
 scripts/test/run_cloud_static_audit.sh
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit
+sh scripts/test/run_smoke_host.sh release-artifact-audit
 python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_claims.py
 python3 scripts/test/check_release_matrix.py
 python3 scripts/test/check_docs_paths.py
 git diff --check
-sudo -n /usr/local/bin/continuum-hostctl sync-repo
-sudo -n /usr/local/bin/continuum-hostctl verify
 sh scripts/test/setup_agent_host.sh verify
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke operational_regression
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke network_validation
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_k8s_nobench_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubeedge_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_mist_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_endpoint_image_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_software_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_local_parity
-sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_openfaas_image_parity
+sh scripts/test/run_smoke_host.sh operational_regression
+sh scripts/test/run_smoke_host.sh network_validation
+sh scripts/test/run_smoke_host.sh qemu_infra_parity
+sh scripts/test/run_smoke_host.sh qemu_k8s_image_parity
+sh scripts/test/run_smoke_host.sh qemu_k8s_nobench_parity
+sh scripts/test/run_smoke_host.sh qemu_kubeedge_software_parity
+sh scripts/test/run_smoke_host.sh qemu_kubeedge_image_parity
+sh scripts/test/run_smoke_host.sh qemu_mist_software_parity
+sh scripts/test/run_smoke_host.sh qemu_mist_image_parity
+sh scripts/test/run_smoke_host.sh qemu_endpoint_software_parity
+sh scripts/test/run_smoke_host.sh qemu_endpoint_image_parity
+sh scripts/test/run_smoke_host.sh qemu_openfaas_software_parity
+sh scripts/test/run_smoke_host.sh qemu_openfaas_image_local_parity
+sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity
 ```
 
-Keep this order. Updating `/usr/local/bin/continuum-hostctl` is a manual
-reviewed operator action and is not part of the agent pre-tag command block.
-The live `setup_agent_host.sh verify` check must run after the installed
-`continuum-hostctl verify` check because older installed helpers can pass their
-own verification while missing the current helper-interface contract.
+Keep this order. Run from the live reviewed checkout as the normal user, with
+explicit retained-root and venv exports from `docs/smoke_runner_isolation.md`.
+No dedicated-repo sync, wrapper install or root-helper verification is used.
 
 The wrapper scenarios above are the VM-backed evidence gate for the rows claimed
 in section 3. If runtime, runner, verifier, profile, or playbook code changed
@@ -191,5 +190,5 @@ not.
 2. Keep GCP/AWS historical rows unclaimed until maintainers nominate exact
    provider scope, credentials, budget/capacity guardrails, YAML/profile
    targets, suites, and evidence requirements.
-3. Convert the remaining parity matrix into repo-doc-backed issues grouped by
-   provider and module family.
+3. Preserve the remaining parity matrix as candidate inventory until the
+   approved complete scope review; do not treat it as an automatic work queue.

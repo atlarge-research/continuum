@@ -1,5 +1,10 @@
 # Operational Testing Strategy
 
+Current scope and acceptance gates are `docs/rework_milestone_release_plan.md`;
+factual status remains `docs/release_certification_matrix.md`. Run physical
+suites as the normal user using `docs/smoke_runner_isolation.md`; preserve
+historical evidence without treating it as a current-candidate result.
+
 This document defines how Continuum should be tested beyond unit tests.
 
 The goal is to make operational tests phase-aware, reproducible, and useful
@@ -244,7 +249,7 @@ code and SSH output heuristics. It also requires schema-v2 state payloads and
 matching `resume_contract` hashes between `experiment_lock.yaml` and `state.json`.
 
 Release certification adds one more local audit step on the certification host:
-run `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke
+run `sh scripts/test/run_smoke_host.sh
 release-artifact-audit` to check the primary artifact paths named by release
 evidence docs. This confirms that retained
 runner summary JSON reports zero failures, cloud-static required gates passed,
@@ -381,8 +386,8 @@ human-readable docs. The active suite contract is now:
    `python3 scripts/test/run_tests.py --list-suites`,
 17. operators can validate a specific host before a long smoke run with
    `python3 scripts/test/run_tests.py --suite <name> --check-prereqs`,
-18. for least-privilege host execution, prefer a dedicated smoke user plus the
-   wrapper documented in `docs/smoke_runner_isolation.md`.
+18. for authorized physical-host execution, use the normal-user repository
+   runner documented in `docs/smoke_runner_isolation.md`, without sudo scripts.
 
 ## 8. Current Repository State
 
@@ -441,8 +446,7 @@ What is already covered:
 
 Deferred after the active rework:
 
-1. final reproducibility-package architecture for durable run packages and optional external
-   metric retention,
+1. no new reproducibility-package or database architecture is authorized,
 2. live external-QEMU teardown coverage; current owner isolation is exercised only with mocks,
 3. policy decisions for which slow scenario regressions are mandatory in local development,
    CI, and release certification.
@@ -481,13 +485,8 @@ The current active runner contract is implemented and validated through:
    certification needs OpenFaaS software evidence without the application
    registry path on a single-host CPU-capped variant.
 
-Longer-term observability/reproducibility note:
-
-1. the current benchmark metric manifest and CSV files are a pragmatic Phase-E evidence format,
-2. they should not settle the final reproducibility-package architecture,
-3. after the active rework stabilizes, revisit observability as a first-class design topic:
-   structured run packages, durable metric retention, and optional time-series database support
-   should be evaluated together instead of accumulating ad hoc per-feature files.
+Speculative observability/reproducibility architecture is not an active work
+queue. Use the approved retained artifact interfaces and policy boundaries.
 
 Cache-integrity note:
 

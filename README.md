@@ -17,8 +17,11 @@ providers such as QEMU, GCP, and AWS are modules that plug into the core rather
 than being part of the core itself. Current certification status is tracked in
 `docs/release_certification_matrix.md`, while release-readiness policy is
 defined in `docs/rework_milestone_release_plan.md`;
-until old-main parity is closed, rework outputs should be treated as milestone
-or pre-release artifacts rather than a full replacement for `main`.
+rework outputs remain milestone/pre-release artifacts until the approved
+reproduction scope, bounded support inventories and final acceptance gates
+close with explicit user approval. Full old-main parity is a historical
+candidate inventory, not the pre-main release scope. Host execution uses the
+normal-user workflow in `docs/smoke_runner_isolation.md`.
 
 ## Features
 Continuum's public feature surface includes the following software families.

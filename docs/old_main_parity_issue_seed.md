@@ -1,5 +1,12 @@
 # Old-Main Parity Issue Seed
 
+Historical candidate inventory, not an authoritative pre-main release queue.
+`docs/rework_milestone_release_plan.md` replaces full old-main parity with the
+approved reproduction boundary. Existing rows/actions below are preserved
+unchanged until complete inventory and final user scope confirmation; they do
+not require implementing every historical provider before main. The current
+checker preserves inventory completeness, not an obsolete scope gate.
+
 ## 1. Purpose
 
 This document is the issue seed for work after the first M1 intermediate

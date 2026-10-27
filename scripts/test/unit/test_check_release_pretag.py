@@ -77,7 +77,7 @@ class CheckReleasePretagTests(unittest.TestCase):
     def _write_evidence(
         self,
         root: Path,
-        verify_command="sudo -n /usr/local/bin/continuum-hostctl verify",
+        verify_command="sh scripts/test/setup_agent_host.sh verify",
         verify_result="PASS",
         report_path=None,
         git_commit="abcdef0",
@@ -232,7 +232,7 @@ class CheckReleasePretagTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             omitted = (
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_openfaas_software_parity"
             )
             self._write_release_notes(root, omitted_command=omitted)
@@ -256,10 +256,10 @@ class CheckReleasePretagTests(unittest.TestCase):
             notes_path = root / "docs" / "release_notes_m1_draft.md"
             notes_path.write_text(
                 notes_path.read_text(encoding="utf-8").replace(
-                    "sudo -n /usr/local/bin/continuum-hostctl verify\n"
+                    "git diff --check\n"
                     "sh scripts/test/setup_agent_host.sh verify\n",
                     "sh scripts/test/setup_agent_host.sh verify\n"
-                    "sudo -n /usr/local/bin/continuum-hostctl verify\n",
+                    "git diff --check\n",
                 ),
                 encoding="utf-8",
             )
@@ -270,7 +270,7 @@ class CheckReleasePretagTests(unittest.TestCase):
                     check_release_pretag.PretagIssue(
                         "pretag-command-order",
                         "section 7 lists 'sh scripts/test/setup_agent_host.sh verify' "
-                        "before 'sudo -n /usr/local/bin/continuum-hostctl verify'; "
+                        "before 'git diff --check'; "
                         "keep pre-tag commands in documented order",
                     )
                 ],
@@ -319,13 +319,13 @@ class CheckReleasePretagTests(unittest.TestCase):
                 ],
             )
 
-    def test_host_helper_evidence_must_use_installed_helper_verifier(self):
+    def test_host_verification_rejects_retired_privileged_verifier(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             self._write_release_notes(root)
             self._write_evidence(
                 root,
-                verify_command="sh scripts/test/setup_agent_host.sh verify",
+                verify_command="sudo -n /usr/local/bin/continuum-hostctl verify",
             )
 
             self.assertEqual(
@@ -334,8 +334,8 @@ class CheckReleasePretagTests(unittest.TestCase):
                     check_release_pretag.PretagIssue(
                         "pretag-host-helper-command-mismatch",
                         "docs/release_evidence_m1_2026-07-08.md Verify command="
-                        "'sh scripts/test/setup_agent_host.sh verify' expected "
-                        "'sudo -n /usr/local/bin/continuum-hostctl verify'",
+                        "'sudo -n /usr/local/bin/continuum-hostctl verify' expected "
+                        "'sh scripts/test/setup_agent_host.sh verify'",
                     )
                 ],
             )

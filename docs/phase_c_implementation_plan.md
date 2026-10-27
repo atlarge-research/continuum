@@ -1,4 +1,10 @@
-# Phase C Implementation Plan (Authoritative Execution Plan)
+# Phase C Implementation Plan (Historical)
+
+Completed historical record, not the current execution queue. Use
+`docs/rework_release_handoff.md` for active work and
+`docs/rework_milestone_release_plan.md` for approved scope/gates. Historical
+commands and checkpoints below do not authorize reruns or Phase-G extensions.
+Current factual status is `docs/release_certification_matrix.md`.
 
 ## 0. Authority and Scope
 

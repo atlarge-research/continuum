@@ -6,6 +6,16 @@ SAFE_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PATH=$SAFE_PATH
 export PATH
 
+[ "$(id -u)" -ne 0 ] || { echo "Run as a normal user, not root." >&2; exit 2; }
+case "${HOME:-}" in
+  /*) ;;
+  *) echo "HOME must be an existing canonical absolute directory." >&2; exit 2 ;;
+esac
+if [ "$HOME" = / ] || [ ! -d "$HOME" ] || [ "$(realpath -- "$HOME")" != "$HOME" ]; then
+  echo "HOME must be an existing canonical absolute directory, not /." >&2
+  exit 2
+fi
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 if [ -n "${CONTINUUM_REPO_ROOT:-}" ]; then
@@ -21,15 +31,25 @@ if [ ! -f "$REPO_ROOT/continuum.py" ] || [ ! -f "$REPO_ROOT/scripts/test/run_tes
 fi
 
 SCENARIO="${1:-infra_one_vm}"
-BASE_ROOT="${CONTINUUM_SMOKE_BASE_ROOT:-${HOME:-/home/continuum-smoke}/continuum_smoke}"
-PYTHON_BIN="${CONTINUUM_SMOKE_PYTHON:-${HOME:-/home/continuum-smoke}/venvs/continuum/bin/python3}"
+BASE_ROOT="${CONTINUUM_SMOKE_BASE_ROOT:-$HOME/continuum_smoke}"
+PYTHON_BIN="${CONTINUUM_SMOKE_PYTHON:-$HOME/venvs/continuum/bin/python3}"
+for path in "$BASE_ROOT" "$(dirname -- "$PYTHON_BIN")"; do
+  case "$path" in
+    /*) ;;
+    *) echo "Runtime paths must be canonical absolute paths: $path" >&2; exit 2 ;;
+  esac
+  if [ "$path" = / ] || [ "$(realpath -m -- "$path")" != "$path" ]; then
+    echo "Runtime paths must be canonical and must not be /: $path" >&2
+    exit 2
+  fi
+done
 VENV_BIN=$(dirname -- "$PYTHON_BIN")
 ANSIBLE_PLAYBOOK_BIN="${CONTINUUM_SMOKE_ANSIBLE_PLAYBOOK:-$VENV_BIN/ansible-playbook}"
 LIBVIRT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}"
 QEMU_BRIDGE_NAME="${CONTINUUM_QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${CONTINUUM_QEMU_BRIDGE_GATEWAY:-}"
 RUN_MODE="config"
-REMOTE_TMP_TAG="${CONTINUUM_SMOKE_REMOTE_TMP_TAG:-$(basename -- "${HOME:-/home/continuum-smoke}")}"
+REMOTE_TMP_TAG="${CONTINUUM_SMOKE_REMOTE_TMP_TAG:-$(basename -- "$HOME")}"
 DEBUG_PLAYBOOK=""
 
 invalid_name_pattern() {
@@ -434,13 +454,13 @@ fi
 
 if [ ! -x "$PYTHON_BIN" ]; then
   echo "Could not find Continuum smoke Python interpreter: $PYTHON_BIN" >&2
-  echo "Create the dedicated runner venv first." >&2
+  echo "Create the normal-user runner venv first." >&2
   exit 2
 fi
 
 if [ "$RUN_MODE" = "debug_playbook" ] && [ ! -x "$ANSIBLE_PLAYBOOK_BIN" ]; then
   echo "Could not find ansible-playbook in the runner venv: $ANSIBLE_PLAYBOOK_BIN" >&2
-  echo "Create or refresh the dedicated runner venv first." >&2
+  echo "Create or refresh the normal-user runner venv first." >&2
   exit 2
 fi
 
@@ -554,7 +574,7 @@ case "$SCENARIO" in
     chmod 0750 "$BASE_PATH" "$CONTINUUM_HOME" "$MPLCONFIGDIR_PATH" "$XDG_CACHE_HOME_PATH"
     cd "$REPO_ROOT"
     exec env -i \
-      HOME="${HOME:-/home/continuum-smoke}" \
+      HOME="$HOME" \
       PATH="$VENV_BIN:$SAFE_PATH" \
       PYTHONPATH=. \
       PYTHONDONTWRITEBYTECODE=1 \
@@ -575,7 +595,7 @@ case "$SCENARIO" in
     chmod 0755 "$BASE_PATH" "$CONTINUUM_HOME" "$TEST_RESULTS_DIR" "$MPLCONFIGDIR_PATH"
     cd "$REPO_ROOT"
     exec env -i \
-      HOME="${HOME:-/home/continuum-smoke}" \
+      HOME="$HOME" \
       PATH="$VENV_BIN:$SAFE_PATH" \
       PYTHONPATH=. \
       PYTHONDONTWRITEBYTECODE=1 \
@@ -597,7 +617,7 @@ case "$SCENARIO" in
     chmod 0755 "$BASE_PATH" "$CONTINUUM_HOME" "$TEST_RESULTS_DIR" "$MPLCONFIGDIR_PATH"
     cd "$REPO_ROOT"
     exec env -i \
-      HOME="${HOME:-/home/continuum-smoke}" \
+      HOME="$HOME" \
       PATH="$VENV_BIN:$SAFE_PATH" \
       PYTHONPATH=. \
       PYTHONDONTWRITEBYTECODE=1 \
@@ -624,7 +644,7 @@ case "$SCENARIO" in
       "$XDG_CACHE_HOME_PATH"
     cd "$REPO_ROOT"
     exec env -i \
-      HOME="${HOME:-/home/continuum-smoke}" \
+      HOME="$HOME" \
       PATH="$VENV_BIN:$SAFE_PATH" \
       PYTHONPATH=. \
       PYTHONDONTWRITEBYTECODE=1 \
@@ -659,7 +679,7 @@ if [ "$RUN_MODE" = "debug_playbook" ]; then
   PLAYBOOK_PATH="$REPO_ROOT/$DEBUG_PLAYBOOK"
 
   exec env -i \
-    HOME="${HOME:-/home/continuum-smoke}" \
+    HOME="$HOME" \
     PATH="$VENV_BIN:$SAFE_PATH" \
     PYTHONPATH=. \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -680,7 +700,7 @@ fi
 
 if [ "$RUN_MODE" = "suite" ]; then
   exec env -i \
-    HOME="${HOME:-/home/continuum-smoke}" \
+    HOME="$HOME" \
     PATH="$VENV_BIN:$SAFE_PATH" \
     PYTHONPATH=. \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -698,7 +718,7 @@ if [ "$RUN_MODE" = "suite" ]; then
 fi
 
 exec env -i \
-  HOME="${HOME:-/home/continuum-smoke}" \
+  HOME="$HOME" \
   PATH="$VENV_BIN:$SAFE_PATH" \
   PYTHONPATH=. \
   PYTHONDONTWRITEBYTECODE=1 \

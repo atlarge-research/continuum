@@ -14,8 +14,33 @@ from scripts.test import check_release_evidence_artifacts
 
 TEST_RESULT_PATH_RE = re.compile(r"(/[^`\s]+/\.continuum/test_results/test_results_[^`\s]+\.json)")
 
-
 class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
+    def test_command_validation_distinguishes_historical_and_current_runner(self):
+        historical = "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_infra_parity"
+        current = "sh scripts/test/run_smoke_host.sh qemu_infra_parity"
+        frozen_doc = "docs/release_evidence_qemu_infra_parity_2026-07-08.md"
+        frozen_commit = "f9ab4217c40604dc145692664667a13e8cc2a994"
+        new_doc = "docs/release_evidence_example.md"
+        for document, commit, context, date, command, accepted in (
+            (frozen_doc, frozen_commit, "Dedicated continuum-smoke wrapper", "2026-07-08", historical, True),
+            (new_doc, "current", "Normal user matthijs", "2026-10-27", current, True),
+            (new_doc, "current", "Normal user matthijs", "2026-10-27", historical, False),
+            (new_doc, frozen_commit, "Dedicated continuum-smoke wrapper", "2026-07-08", historical, False),
+            (frozen_doc, "current", "Dedicated continuum-smoke wrapper", "2026-07-08", historical, False),
+            (frozen_doc, frozen_commit, "Dedicated continuum-smoke wrapper", "2026-10-27", historical, False),
+        ):
+            with self.subTest(document=document, commit=commit, command=command):
+                with tempfile.TemporaryDirectory() as tempdir:
+                    root = Path(tempdir)
+                    self._write_matrix(root, config_path="configs/experiments/parity/qemu/01.yaml",
+                                       claim_text="suite `qemu_infra_parity`", evidence_doc=document)
+                    (root / document).write_text(
+                        f"| Git commit | `{commit}` |\n| Date | {date} |\n"
+                        f"| Runner context | {context} |\n| Command | `{command}` |\n",
+                        encoding="utf-8")
+                    issues = check_release_evidence_artifacts._check_evidence_doc_commands(root)
+                    self.assertEqual(not issues, accepted, issues)
+
     def _write_matrix(
         self,
         root: Path,
@@ -2165,8 +2190,8 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 self._evidence_text(
                     "| Suite | `wrong_suite` |\n"
                     "| Result summary path | `%s` |\n"
-                    "Command: sudo -n -u continuum-smoke /usr/local/bin/"
-                    "run-continuum-smoke qemu_infra_parity\n" % (artifact,),
+                    "Command: sh scripts/test/"
+                    "run_smoke_host.sh qemu_infra_parity\n" % (artifact,),
                     matrix_row_id="P-QEMU-01",
                     mentioned_config_path=config_path,
                 ),
@@ -2205,7 +2230,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
             )
             self._write_test_results(artifact, config_path=config_path)
             command = (
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_infra_parity"
             )
             (root / "docs" / "release_evidence_example.md").write_text(
@@ -2254,8 +2279,8 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     "| Suite | `qemu_infra_parity` |\n"
                     "| Result summary path | `%s` |\n"
                     "\nCommand:\n\n```bash\n"
-                    "sudo -n -u continuum-smoke /usr/local/bin/"
-                    "run-continuum-smoke qemu_infra_parity\n```\n" % (artifact,),
+                    "sh scripts/test/"
+                    "run_smoke_host.sh qemu_infra_parity\n```\n" % (artifact,),
                     omitted_context_field="Command",
                     matrix_row_id="P-QEMU-01",
                     mentioned_config_path=config_path,
@@ -2298,8 +2323,8 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 self._evidence_text(
                     "| Suite | `qemu_infra_parity` |\n"
                     "| Result summary path | `%s` |\n"
-                    "Command: sudo -n -u continuum-smoke /usr/local/bin/"
-                    "run-continuum-smoke qemu_infra_parity\n" % (artifact,),
+                    "Command: sh scripts/test/"
+                    "run_smoke_host.sh qemu_infra_parity\n" % (artifact,),
                     matrix_row_id="P-QEMU-01",
                     mentioned_config_path=config_path,
                 ),
@@ -2312,8 +2337,8 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     check_release_evidence_artifacts.EvidenceArtifactIssue(
                         "evidence-doc-command-field-mismatch",
                         "docs/release_evidence_example.md Command='fixture command' "
-                        "but suite qemu_infra_parity expects 'sudo -n -u "
-                        "continuum-smoke /usr/local/bin/run-continuum-smoke "
+                        "but suite qemu_infra_parity expects 'sh "
+                        "scripts/test/run_smoke_host.sh "
                         "qemu_infra_parity'",
                     )
                 ],
@@ -2387,7 +2412,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
             )
             self._write_test_results(artifact)
             command = (
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_infra_parity"
             )
             (root / "docs" / "release_evidence_example.md").write_text(
@@ -2435,8 +2460,8 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     check_release_evidence_artifacts.EvidenceArtifactIssue(
                         "evidence-doc-command-missing-for-suite",
                         "docs/release_evidence_example.md P-QEMU-01 uses suite "
-                        "qemu_infra_parity but evidence does not record 'sudo -n -u "
-                        "continuum-smoke /usr/local/bin/run-continuum-smoke "
+                        "qemu_infra_parity but evidence does not record 'sh "
+                        "scripts/test/run_smoke_host.sh "
                         "qemu_infra_parity'",
                     )
                 ],
@@ -3174,7 +3199,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     "Local release-evidence artifact audit on the certification host:\n\n"
                     "| Field | Value |\n"
                     "| --- | --- |\n"
-                    "| Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke release-artifact-audit` |\n"
+                    "| Command | `sh scripts/test/run_smoke_host.sh release-artifact-audit` |\n"
                     "| Result | `TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0` |\n"
                     % (artifact,)
                 ),
@@ -3223,8 +3248,8 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                     check_release_evidence_artifacts.EvidenceArtifactIssue(
                         "artifact-audit-summary-mismatch",
                         "docs/release_evidence_example.md Command='wrong command' "
-                        "expected 'sudo -n -u continuum-smoke "
-                        "/usr/local/bin/run-continuum-smoke release-artifact-audit'",
+                        "expected 'sh "
+                        "scripts/test/run_smoke_host.sh release-artifact-audit'",
                     )
                 ],
             )
@@ -3578,7 +3603,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 encoding="utf-8",
             )
             command = (
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_infra_parity"
             )
             (root / "docs" / "release_evidence_example.md").write_text(
@@ -3723,7 +3748,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
             )
             (root / "docs" / "release_evidence_example.md").write_text(
                 self._evidence_text(
-                    "| Command | `sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke qemu_kubecontrol_empty_parity` |\n"
+                    "| Command | `sh scripts/test/run_smoke_host.sh qemu_kubecontrol_empty_parity` |\n"
                     "| Report | `%s` |\n" % (artifact,),
                     matrix_row_id="M2-QEMU-KUBECONTROL-EMPTY",
                     mentioned_config_path=None,
@@ -3754,7 +3779,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 encoding="utf-8",
             )
             command = (
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_infra_parity"
             )
             (root / "docs" / "release_evidence_example.md").write_text(
@@ -3799,7 +3824,7 @@ class CheckReleaseEvidenceArtifactsTests(unittest.TestCase):
                 encoding="utf-8",
             )
             command = (
-                "sudo -n -u continuum-smoke /usr/local/bin/run-continuum-smoke "
+                "sh scripts/test/run_smoke_host.sh "
                 "qemu_infra_parity"
             )
             (root / "docs" / "release_evidence_example.md").write_text(
