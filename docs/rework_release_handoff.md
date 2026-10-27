@@ -4,58 +4,79 @@ This is a subordinate operational restart point, not policy or certification.
 Use `docs/rework_plan_stack.md`, `docs/rework_milestone_release_plan.md` and
 `docs/release_certification_matrix.md` for authority, policy and factual rows.
 
-## Current checkpoint — 2026-10-27
+## Current checkpoint — 2026-10-28
 
-Source baseline: clean `2f11e62347ea04aca137a07b540ef3234f080820`,
-branch `pr-23-curated`, checkout `/home/matthijs/continuum`.
-All fourteen policies and the exceptional baseline action were approved.
-The user then amended execution to normal-user `matthijs` on node4 and node3;
-preserve evidence and retire the smoke accounts/obsolete installed wrappers
-only after replacement verification. Continue the same goal until
-2026-10-28 10:00 Europe/Amsterdam (09:00 UTC), without bypassing approval gates.
+Branch `pr-23-curated`, checkout `/home/matthijs/continuum`.
+All fourteen policies, the exceptional baseline and the normal-user migration
+amendment are approved. Continue the same goal until 2026-10-28 10:00
+Europe/Amsterdam (09:00 UTC); midnight does not extend that deadline.
 No merge/push/tag/release/publication is authorized.
 
-Compact original evidence, private old-home material and installed-boundary
-snapshots are verified outside Git under
+Policy/current-runner synchronization, indexed/full retained-result inspection
+and the minimal host-owned QEMU cache repair were independently reviewed,
+validated and committed locally. Runtime verification below used clean
+`2baea151783b22b50d6afb22babc349c39019b50`; it is not evidence for a later
+final candidate. Use the normal-user procedure and explicit migrated-root/venv
+exports in `docs/smoke_runner_isolation.md`, not installed legacy helpers.
+
+The unchanged-source baseline on `2f11e62347ea04aca137a07b540ef3234f080820`
+failed at its first infrastructure child, result
+`test_results_2026-10-27_17-41-13.json`. Cleanup deleted freshly copied YAML
+before cloud-localds; no successful state.json was produced. Evidence is
+preserved, and this counts as zero clean operational runs. Attribution was
+unchanged source/config with migrated identity/metadata, not an unchanged
+historical runner boundary.
+
+The exact multi-host OpenFaaS run completed 1/1 successfully on clean 2baea15:
+26 requested vCPUs, node3 external host, no failed/unreachable Ansible host,
+four completed endpoint publishers and retained benchmark artifacts.
+Result: `test_results_2026-10-27_20-53-27.json` under the OpenFaaS image scenario.
+Full stdout/stderr/metadata, state/lock and compact artifacts were inspected
+and archived. The run was functional evidence, not a sustained 5-Hz claim:
+150 images per endpoint took roughly 87–93 seconds. Actual Kubernetes was
+v1.27.16 versus the configured v1.27.0 minor-repository setting; do not claim
+an exact patch pin.
+
+The reviewed one-time retirement completed with full verified backups and
+16,671 captured commands: both continuum-smoke accounts/private groups are
+absent; old active homes, node4 dedicated repo/tmp paths, installed helpers
+and old sudoers fragment are removed from active paths. Data/helpers remain
+recoverable under root-private
+`/var/lib/continuum-retired-20261027-node4` and the node3 counterpart.
+Normal matthijs identities, groups and preexisting ALL sudo grants are unchanged.
+Exact old-principal metadata/ACL deltas, normal setup/prerequisites/results
+access, three Ready Kubernetes nodes and ready OpenFaaS/function containers
+passed. All seven workload VMs and eight unrelated shutoff domains were
+unchanged. Container-store numeric IDs/copied ACLs remain deliberately
+untouched behind the inspected protective ancestors; no global zero-ID claim.
+
+## Evidence and remaining work
+
+Private durable evidence is outside Git under
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`;
-node3 evidence is under
+original node3 evidence is under
 `/mnt/sdb/continuum_migration_evidence/20261027T173000Z-node3`.
-Large disks were not copied. Only the approved benchmark child was pruned.
-Other retained child roots were not emptied.
+The retirement-prepared/applied directories include exact manifests, private
+backups and command captures; the mutation journal is separately durable.
+Large retained disks were not copied. No recursive old-home deletion occurred,
+and the retirement packet performed no VM operation or benchmark rerun.
 
-The one source-unchanged operational baseline as matthijs failed at its first
-infrastructure child, result `test_results_2026-10-27_17-41-13.json` under
-`infra_one_vm/.continuum/test_results/`. The cache cleanup deleted freshly
-copied current-run YAML before cloud-localds. Generated source YAML remains in
-tmp; no successful state.json was produced. Full output and failure artifacts
-are separately preserved. No targeted retry was performed.
-Attribution is unchanged source/config with migrated execution identity and
-filesystem metadata, not an unchanged historical runner boundary.
+1. Complete the bounded reproduction/configuration/support reviews.
+   `docs/reproduction_inventory.md` records the complete candidate survey and
+   remaining historical associations; obtain one final scope confirmation
+   before reproduction-driven deletions. The tracked configuration/fixture
+   inventory is separate and still open.
+2. Implement the approved registry_refresh hard cut and address demonstrated
+   cache-recipe gaps through bounded reviewed packets; validate the narrow
+   same-revision QEMU resume contract. Sweeps remain candidate-only.
+3. Complete approved slimming, including temporary debug-playbook removal,
+   without deleting required provenance or weakening freshness checks.
+4. Create a clean final candidate and complete static/runtime/manual acceptance:
+   two clean post-fix operational runs, at least one on that exact candidate;
+   exact final-candidate multi-host OpenFaaS and every approved reproduction;
+   bounded support matrix and zero unaccounted inventory rows.
+5. Present the final package and await explicit publication approval.
 
-## Resume sequence
-
-1. Complete atomic policy/current-runner synchronization, independent diff
-   review and local commit. Use `docs/smoke_runner_isolation.md` for current
-   normal-user commands, not installed legacy helpers.
-2. Implement the approved narrow indexed/full result-tail interface.
-3. Record exact host cache metadata, implement/test/review the minimal QEMU
-   cleanup and creation-only mode/ACL fix, and resolve forced-rebuild drift.
-4. Run exact multi-host OpenFaaS validation as matthijs. Preserve valid peer
-   disk metadata and all evidence. Only then perform a separately reviewed
-   exact UID/ACL/account/helper retirement packet.
-5. Complete bounded reproduction/config/support inventories; obtain final user
-   reproduction-scope confirmation before reproduction-driven deletions.
-6. Complete approved slimming and final exact-candidate acceptance.
-
-The failed baseline counts as zero clean operational runs: two clean post-fix
-runs remain required, at least one on the exact final candidate. Historical
-matrix evidence is not renewed by source tests or identity migration.
-Old named/default ACLs and excluded disk UID ownership still need the bounded
-retirement audit; do not delete the accounts prematurely or perform blanket
-recursive ownership repair.
-
-Historical remediation through `e6aa3a2` remains in Git; it is not the current
-runtime acceptance result. Do not resume the retired
-`.codex/OVERHAUL_EXECUTION_PLAN.md`. Phase-G and speculative architecture work
-are not authorized. Keep generated logs, credentials and private archives out
-of commits.
+Historical matrix evidence is not renewed by source tests or migration.
+Do not resume the retired overhaul dispatcher or speculative Phase-G work.
+Keep generated logs, credentials, private archives and images out of commits.

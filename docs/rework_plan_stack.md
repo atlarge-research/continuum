@@ -22,6 +22,10 @@ The old overhaul dispatcher remains retired. Domain semantics must not
 contradict approved scope; resolve a domain conflict in its domain document
 and synchronize dependent operational docs atomically.
 
+`docs/reproduction_inventory.md` is subordinate factual candidate-scope evidence,
+not another policy authority or certification ledger. Its final user scope
+confirmation and the separate configuration/fixture inventory remain open gates.
+
 ## Locked boundaries
 
 - Core/module boundary: Continuum core owns planning, validation,
