@@ -92,7 +92,7 @@ def _single_process_result(results, operation):
     validated = _validated_process_results(results, 1, operation)
     output, error = validated[0]
     if error:
-        raise RuntimeError("%s failed: unexpected stderr" % (operation,))
+        raise RuntimeError("%s failed: %s" % (operation, "\n".join(map(str, error))))
     return output
 
 
@@ -108,7 +108,10 @@ def _validated_process_results(results, expected_count, operation):
         if not isinstance(output, list) or not isinstance(error, list):
             raise RuntimeError("%s failed: malformed process output" % (operation,))
         if any(_SYNTHETIC_NONZERO_MARKER in str(line) for line in error):
-            raise RuntimeError("%s failed: command returned nonzero" % (operation,))
+            details = "\n".join(str(line) for line in error
+                                if _SYNTHETIC_NONZERO_MARKER not in str(line))
+            raise RuntimeError("%s failed: command returned nonzero%s" %
+                               (operation, ": " + details if details else ""))
         validated.append((output, error))
     return validated
 
@@ -149,7 +152,7 @@ def _cleanup_base_image_cache(machine, config, raw_base_name):
         machine,
         config,
         "cleanup",
-        [paths["metadata"], paths["image"], paths["cloud_init"], paths["user_data"]],
+        [paths["metadata"], paths["image"], paths["cloud_init"]],
         ({"protocol", "status"},),
     )
     if response["status"] != "ok":
@@ -444,9 +447,7 @@ def _base_image_cache_invalid_reason(config, machines, raw_base_name, machine=No
         reason = response["reason"]
         if reason not in (
             "image missing",
-            "image unreadable",
             "metadata missing",
-            "metadata unreadable",
         ):
             raise RuntimeError("QEMU cache check returned an unknown invalid reason")
         return reason

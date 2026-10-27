@@ -1,5 +1,4 @@
 {
-    "base_image_rebuild_frequency": 10,
     "test_timeout_minutes": 90,
     "stop_on_failure": false,
     "physical_machine_cores": 20,
@@ -18,8 +17,6 @@
             "directories": [
                 "configs/experiments/smoke/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "prerequisites": {
                 "summary": "Requires a local QEMU/libvirt host with SSH access for VM-backed smoke execution",
@@ -37,16 +34,12 @@
         "full": {
             "directories": [
                 "configs/experiments/"
-            ],
-            "use_cache": false,
-            "rebuild_base_images": true
+            ]
         },
         "network_validation": {
             "directories": [
                 "configs/experiments/network_validation/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "infra_only_override": {
@@ -73,8 +66,6 @@
             "directories": [
                 "configs/experiments/parity/qemu/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "prerequisites": {
                 "summary": "Requires a local QEMU/libvirt host with SSH access and tc support for infra-only parity rows",
@@ -94,8 +85,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_k8s_nobench/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "prerequisites": {
                 "summary": "Requires a local QEMU/libvirt host with SSH access for Kubernetes no-benchmark parity",
@@ -115,8 +104,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_k8s_image/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "require_network_validation_results": true,
@@ -186,8 +173,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_kubeedge_software/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "prerequisites": {
                 "summary": "Requires a local QEMU/libvirt host with SSH access for KubeEdge software parity",
@@ -206,8 +191,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_kubeedge_image/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "required_stdout_markers": [
@@ -275,8 +258,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_mist_software/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "require_teardown": true
@@ -298,8 +279,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_mist_image/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "require_teardown": true,
@@ -369,8 +348,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_endpoint_software/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "require_teardown": true
@@ -393,8 +370,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_endpoint_image/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "require_teardown": true,
@@ -464,8 +439,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_openfaas_software/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "prerequisites": {
                 "summary": "Requires a local QEMU/libvirt host with SSH access for OpenFaaS software parity on a single-host CPU-capped variant",
@@ -484,8 +457,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_openfaas_image/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "required_stdout_markers": [
@@ -553,8 +524,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_openfaas_image_local/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "required_stdout_markers": [
@@ -622,8 +591,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_kubecontrol_empty/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "required_stdout_markers": [
@@ -691,8 +658,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_kubecontrol_empty/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "required_stdout_markers": [
@@ -791,8 +756,6 @@
             "directories": [
                 "configs/experiments/parity/qemu_kube_kata_empty_startup/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "require_teardown": true,
@@ -907,8 +870,6 @@
             "directories": [
                 "configs/experiments/benchmark_smoke/"
             ],
-            "use_cache": true,
-            "rebuild_base_images": false,
             "stop_on_failure": true,
             "success_detection": {
                 "require_teardown": true,

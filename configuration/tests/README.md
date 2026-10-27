@@ -51,6 +51,9 @@ readiness and cleanup assertions matter in addition to exit code and SSH hints.
 
 Keep failed state and complete outputs before diagnosis or approved pruning.
 Use `docs/vm_debugging_runbook.md` for direct artifact/state/SSH inspection.
-Do not retry blindly, change ownership automatically, or treat historical
-cache/rebuild options as verified until the approved QEMU repair packet resolves
-their actual owner/profile slot behavior.
+Do not retry blindly or change ownership automatically. QEMU owns cache validation
+and rebuild decisions on each physical owner/profile slot. The obsolete runner
+flags `--rebuild-base-images` and `--use-cache`, and test-config keys
+`base_image_rebuild_frequency`, `rebuild_base_images` and `use_cache`, are rejected.
+The historical result field `base_images_rebuilt` remains empty; it is not evidence
+of runtime cache reuse or rebuilding.

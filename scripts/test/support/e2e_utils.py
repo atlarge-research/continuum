@@ -7,7 +7,6 @@ import argparse
 import csv
 from datetime import datetime
 import fnmatch
-import getpass
 import importlib.util
 import json
 import math
@@ -322,129 +321,6 @@ def _normalized_payload_for_testing(path: Path, data: Dict) -> Dict:
         "%s: unsupported YAML kind '%s' for test runner (expected ContinuumExperiment or "
         "ContinuumExperimentLock)" % (path, kind)
     )
-
-
-def get_username() -> str:
-    """Get the current username for base image naming.
-
-    Returns:
-        Username string
-    """
-    return getpass.getuser()
-
-
-def identify_base_images(config: Dict, base_path_override: Optional[str] = None) -> List[str]:
-    """Identify which base images will be needed for a given config.
-
-    Args:
-        config: Parsed config dictionary
-        base_path_override: Optional override for base_path
-
-    Returns:
-        List of expected base image names (without .qcow2 extension)
-    """
-    base_images = []
-    infra = config.get("infrastructure", {})
-    benchmark = config.get("benchmark", {})
-
-    username = get_username()
-    provider = infra.get("provider", "qemu")
-
-    # Only QEMU uses base images in this way
-    if provider != "qemu":
-        return base_images
-
-    infra_only = infra.get("infra_only", False)
-
-    if infra_only:
-        # For infra_only, base image is just "base"
-        base_images.append(f"base0_{username}")
-    else:
-        # Determine resource manager
-        resource_manager = benchmark.get("resource_manager", "none")
-        if resource_manager == "mist":
-            resource_manager = "kubeedge"  # Mist uses KubeEdge setup
-
-        # Cloud base images
-        if infra.get("cloud_nodes", 0) > 0:
-            base_images.append(f"base_cloud_{resource_manager}0_{username}")
-
-        # Edge base images
-        if infra.get("edge_nodes", 0) > 0:
-            base_images.append(f"base_edge_{resource_manager}0_{username}")
-
-        # Endpoint base images
-        if infra.get("endpoint_nodes", 0) > 0:
-            base_images.append(f"base_endpoint0_{username}")
-
-    return base_images
-
-
-def get_base_image_paths(base_images: List[str], base_path: str) -> List[str]:
-    """Get full paths to base image files.
-
-    Args:
-        base_images: List of base image names (without extension)
-        base_path: Base path where images are stored
-
-    Returns:
-        List of full paths to .qcow2 files
-    """
-    image_paths = []
-    images_dir = os.path.join(base_path, ".continuum", "images")
-
-    for base_name in base_images:
-        image_path = os.path.join(images_dir, f"{base_name}.qcow2")
-        image_paths.append(image_path)
-
-    return image_paths
-
-
-def delete_base_images(base_image_paths: List[str]) -> List[str]:
-    """Delete base image files if they exist.
-
-    Args:
-        base_image_paths: List of full paths to base image files
-
-    Returns:
-        List of images that were actually deleted
-    """
-    deleted = []
-    for image_path in base_image_paths:
-        if os.path.exists(image_path):
-            try:
-                os.remove(image_path)
-                deleted.append(image_path)
-            except OSError as e:
-                # Log but continue
-                print(f"Warning: Could not delete {image_path}: {e}")
-    return deleted
-
-
-def should_rebuild_base_images(
-    test_run_count: int,
-    rebuild_frequency: int,
-    force_rebuild: bool,
-    use_cache: bool,
-) -> bool:
-    """Determine if base images should be rebuilt.
-
-    Args:
-        test_run_count: Current test run number
-        rebuild_frequency: How often to rebuild (every N runs)
-        force_rebuild: Force rebuild flag
-        use_cache: Use cache only flag
-
-    Returns:
-        True if images should be rebuilt
-    """
-    if use_cache:
-        return False
-    if force_rebuild:
-        return True
-    if rebuild_frequency > 0 and test_run_count % rebuild_frequency == 0:
-        return True
-    return False
 
 
 def verify_network_validation_results(config: Dict, stdout: str = "") -> Tuple[bool, str]:

@@ -1,5 +1,11 @@
 from pathlib import Path
+import json
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 
 import yaml
@@ -12,7 +18,11 @@ class QemuImageRoleTests(unittest.TestCase):
         return yaml.safe_load(task_path.read_text(encoding="utf-8"))
 
     def _task_names(self, tasks):
-        return [task.get("name") for task in tasks]
+        names = []
+        for task in tasks:
+            names.append(task.get("name"))
+            names.extend(self._task_names(task.get("block", [])))
+        return names
 
     def test_qemu_os_image_grants_libvirt_access_to_generated_qcow2(self):
         tasks = self._load_tasks("qemu_os_image")
@@ -38,6 +48,122 @@ class QemuImageRoleTests(unittest.TestCase):
         self.assertIn("Grant kvm group ACL on VM qcow2 images", names)
         self.assertIn("Set VM cloud-init disk modes for libvirt access", names)
         self.assertIn("Grant kvm group ACL on VM cloud-init disks", names)
+
+
+
+@unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook is required")
+class QemuBaseImageExecutionTests(unittest.TestCase):
+    """Execute the role in a disposable local slot with strict, inert disk tools."""
+
+    def _fixture(self, root, failure=""):
+        slot = root / "slot"
+        images = slot / ".continuum/images"
+        images.mkdir(parents=True)
+        (images / "ubuntu2004.qcow2").write_bytes(b"backing")
+        (slot / ".continuum/user_data_base.yml").write_bytes(b"user-data")
+        binaries = root / "bin"
+        binaries.mkdir()
+        log = root / "calls.jsonl"
+        script = """#!%s
+import json
+import os
+from pathlib import Path
+import sys
+
+tool = Path(sys.argv[0]).name
+args = sys.argv[1:]
+images = Path(os.environ["TEST_SLOT"]) / ".continuum/images"
+if tool == "qemu-img":
+    assert args == ["create", "-f", "qcow2", "-F", "qcow2", "-b",
+                    str(images / "ubuntu2004.qcow2"), str(images / "base.qcow2")], args
+elif tool == "cloud-localds":
+    assert args == [str(images / "user_data_base.img"),
+                    str(images.parent / "user_data_base.yml")], args
+elif tool == "setfacl":
+    assert args[:2] == ["-m", "g:kvm:rw"] and len(args) == 3, args
+    assert args[2] in [str(images / "base.qcow2"), str(images / "user_data_base.img")], args
+else:
+    raise AssertionError(tool)
+with open(os.environ["TEST_CALLS"], "a") as filep:
+    filep.write(json.dumps([tool, args]) + "\\n")
+if tool == os.environ.get("TEST_FAILURE"):
+    print("simulated " + tool + " failure", file=sys.stderr)
+    sys.exit(7)
+if tool != "setfacl":
+    target = Path(args[-1] if tool == "qemu-img" else args[0])
+    target.write_bytes(tool.encode())
+    target.chmod(0o600)
+""" % sys.executable
+        for name in ("qemu-img", "cloud-localds", "setfacl"):
+            binary = binaries / name
+            binary.write_text(script, encoding="utf-8")
+            binary.chmod(0o700)
+        play = root / "play.yml"
+        play.write_text(yaml.safe_dump([{
+            "hosts": "localhost", "connection": "local", "gather_facts": False,
+            "become": False,
+            "vars": {"base_path": str(slot), "image_name": "base",
+                     "ansible_python_interpreter": sys.executable},
+            "environment": {
+                "PATH": str(binaries) + os.pathsep + os.environ["PATH"],
+                "TEST_SLOT": str(slot), "TEST_CALLS": str(log), "TEST_FAILURE": failure,
+            },
+            "roles": ["qemu_base_image"],
+        }]), encoding="utf-8")
+        env = dict(os.environ)
+        config = root / "ansible.cfg"
+        config.write_text("[defaults]\n", encoding="utf-8")
+        env.update({
+            "ANSIBLE_CONFIG": str(config), "ANSIBLE_BECOME": "False",
+            "ANSIBLE_ROLES_PATH": str(Path(__file__).resolve().parents[3] / "roles/infrastructure"),
+            "ANSIBLE_LOCAL_TEMP": str(root / "ansible-local"),
+            "ANSIBLE_REMOTE_TMP": str(root / "ansible-remote"),
+            "ANSIBLE_NOCOLOR": "1",
+        })
+        return images, log, play, env
+
+    def _run(self, play, env):
+        return subprocess.run(
+            [shutil.which("ansible-playbook"), "-i", "localhost,", str(play)],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            timeout=60, check=False,
+        )
+
+    def test_only_new_disks_receive_mode_and_acl_initialization(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            images, log, play, env = self._fixture(Path(tempdir))
+            result = self._run(play, env)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            disks = [images / "base.qcow2", images / "user_data_base.img"]
+            for disk in disks:
+                self.assertEqual(disk.stat().st_mode & 0o777, 0o664)
+            calls = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertEqual([call[0] for call in calls],
+                             ["qemu-img", "setfacl", "cloud-localds", "setfacl"])
+            for disk, mode in zip(disks, (0o640, 0o600)):
+                disk.chmod(mode)
+            before = [(disk.read_bytes(), disk.stat()) for disk in disks]
+            log.write_text("")
+            result = self._run(play, env)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(log.read_text(), "")
+            for disk, (contents, metadata) in zip(disks, before):
+                self.assertEqual(disk.read_bytes(), contents)
+                after = disk.stat()
+                self.assertEqual((after.st_uid, after.st_gid, after.st_mode),
+                                 (metadata.st_uid, metadata.st_gid, metadata.st_mode))
+
+    def test_creation_failures_report_original_operation_and_numeric_context(self):
+        for failure in ("qemu-img", "cloud-localds"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tempdir:
+                images, _log, play, env = self._fixture(Path(tempdir), failure)
+                result = self._run(play, env)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                for token in ("simulated " + failure + " failure", str(images),
+                              "uid", "gid", "mode", "operator", "ACL"):
+                    self.assertIn(token, result.stdout)
+                if failure == "cloud-localds":
+                    self.assertEqual((images / "base.qcow2").stat().st_mode & 0o777, 0o664)
 
 
 class DockerSetupRoleTests(unittest.TestCase):

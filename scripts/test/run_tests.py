@@ -213,7 +213,18 @@ def load_test_config(config_path: str) -> Dict:
         Configuration dictionary
     """
     with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        config = json.load(f)
+    retired = {"base_image_rebuild_frequency", "use_cache", "rebuild_base_images"}
+    locations = [("root", config)] + [
+        ("suite %s" % name, suite) for name, suite in config.get("test_suites", {}).items()
+    ]
+    for location, values in locations:
+        obsolete = retired.intersection(values)
+        if obsolete:
+            raise ValueError("%s: retired cache option(s) %s; QEMU owns authoritative "
+                             "host-local cache validation and rebuild decisions" %
+                             (location, ", ".join(sorted(obsolete))))
+    return config
 
 
 def validate_suite_prerequisites(suite_name: str, suite_config: Dict) -> List[str]:
@@ -439,7 +450,6 @@ def _run_single_test(
     try:
         config = test_utils.parse_config_simple(config_path)
         base_path = base_path_override or config.get("infrastructure", {}).get("base_path", "~")
-        base_images = test_utils.identify_base_images(config, base_path_override)
         result["parameter_overrides"] = {
             "base_path": base_path_override,
             "middleIP": middle_ip_override,
@@ -595,8 +605,6 @@ def _run_tests(
     middle_ip_override: Optional[int] = None,
     middle_ip_base_override: Optional[int] = None,
     external_physical_machines_override: Optional[str] = None,
-    rebuild_base_images: bool = False,
-    use_cache: bool = False,
     stop_on_failure: bool = False,
     coordinator=None,
 ) -> List[Dict]:
@@ -609,15 +617,12 @@ def _run_tests(
         middle_ip_override: Optional middleIP override
         middle_ip_base_override: Optional middleIP_base override
         external_physical_machines_override: Optional external_physical_machines override
-        rebuild_base_images: Force rebuild base images
-        use_cache: Use cache only (never rebuild)
         stop_on_failure: Stop on first failure
 
     Returns:
         List of test result dictionaries
     """
     results = []
-    rebuild_frequency = test_config.get("base_image_rebuild_frequency", 10)
     timeout_minutes = test_config.get("test_timeout_minutes", 30)
 
     print_colored(f"\n{'='*80}", Colors.BOLD)
@@ -628,29 +633,12 @@ def _run_tests(
         coordinator.raise_if_cancelled()
         print_colored(f"[{i}/{len(config_files)}] Testing: {config_path}", Colors.BLUE)
 
-        # Parse config to identify base images
+        # Parse only for host selection. QEMU owns validation of each host/profile cache.
+        config = {}
         try:
             config = test_utils.parse_config_simple(config_path)
-            base_path = base_path_override or config.get("infrastructure", {}).get("base_path", "~")
-            base_images = test_utils.identify_base_images(config, base_path_override)
-            base_image_paths = test_utils.get_base_image_paths(base_images, base_path)
         except Exception as e:
             print_colored(f"  Warning: Could not parse config: {e}", Colors.YELLOW)
-            base_images = []
-            base_image_paths = []
-
-        # Check if we should rebuild base images
-        should_rebuild = test_utils.should_rebuild_base_images(
-            i,
-            rebuild_frequency,
-            rebuild_base_images,
-            use_cache,
-        )
-
-        deleted_images = []
-        if should_rebuild and base_image_paths:
-            print_colored(f"  Rebuilding base images: {', '.join(base_images)}", Colors.YELLOW)
-            deleted_images = test_utils.delete_base_images(base_image_paths)
 
         # Determine if external physical machine is needed
         external_machines_override = external_physical_machines_override
@@ -689,7 +677,8 @@ def _run_tests(
             coordinator=coordinator,
         )
 
-        result["base_images_rebuilt"] = [os.path.basename(img) for img in deleted_images]
+        # Historical artifact field: the runner no longer deletes or rebuilds cache files.
+        result["base_images_rebuilt"] = []
         results.append(result)
 
         # Print result
@@ -822,16 +811,6 @@ def main():
         help="Override external_physical_machines for all tests",
     )
     parser.add_argument(
-        "--rebuild-base-images",
-        action="store_true",
-        help="Force rebuild base images for all tests",
-    )
-    parser.add_argument(
-        "--use-cache",
-        action="store_true",
-        help="Use cache only (never rebuild base images)",
-    )
-    parser.add_argument(
         "--stop-on-failure",
         action="store_true",
         default=None,
@@ -863,7 +842,11 @@ def main():
         print_colored(f"Error: Test config file not found: {test_config_path}", Colors.RED)
         sys.exit(1)
 
-    test_config = load_test_config(test_config_path)
+    try:
+        test_config = load_test_config(test_config_path)
+    except ValueError as exc:
+        print_colored("Error: %s" % exc, Colors.RED)
+        sys.exit(1)
     available_suites = list(test_config.get("test_suites", {}).keys())
     if not available_suites:
         print_colored("Error: No test suites defined in test config", Colors.RED)
@@ -888,9 +871,6 @@ def main():
             selected_suites = test_config["test_suites"]
         sys.exit(check_suite_prerequisites(selected_suites))
 
-    # Initialize default values for rebuild_base_images and use_cache
-    rebuild_base_images = False
-    use_cache = False
     stop_on_failure = test_config.get("stop_on_failure", False)
 
     # Determine which config files to test
@@ -937,8 +917,6 @@ def main():
             sys.exit(1)
 
         directories = suite_config["directories"]
-        use_cache = suite_config.get("use_cache", False)
-        rebuild_base_images = suite_config.get("rebuild_base_images", False)
         stop_on_failure = suite_config.get("stop_on_failure", stop_on_failure)
 
         exclude_patterns = test_config.get("exclude_patterns", [])
@@ -977,12 +955,6 @@ def main():
             sys.exit(0)
 
     # Override with command-line flags (applies to both single config and test suites)
-    if args.use_cache:
-        use_cache = True
-        rebuild_base_images = False
-    if args.rebuild_base_images:
-        rebuild_base_images = True
-        use_cache = False
     if args.stop_on_failure is not None:
         stop_on_failure = args.stop_on_failure
 
@@ -1000,8 +972,6 @@ def main():
         middle_ip_override=args.middle_ip,
         middle_ip_base_override=args.middle_ip_base,
         external_physical_machines_override=args.external_physical_machines,
-        rebuild_base_images=rebuild_base_images,
-        use_cache=use_cache,
         stop_on_failure=stop_on_failure,
     )
 

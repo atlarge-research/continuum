@@ -104,6 +104,16 @@ Run only the exact scenario authorized by the active packet. Before host
 execution, record clean HEAD/status and verify prerequisites. No concurrent
 runs may share one base path. A cache belongs to one stable runner identity.
 
+QEMU validates each owning host/profile slot and decides reuse or rebuilding.
+The runner does not delete guessed base images: `--rebuild-base-images`,
+`--use-cache`, and the root/suite test-config keys `base_image_rebuild_frequency`,
+`rebuild_base_images`, `use_cache` are retired and rejected. The retained result
+field `base_images_rebuilt: []` makes no claim about QEMU's runtime decisions.
+Invalid-cache cleanup removes only its ready sidecar, QCOW2 and derived cloud-init
+disk, not the current run's user-data YAML. Inspection/access failures abort with
+path, numeric ownership/mode and ACL context; no permission repair is automatic.
+Existing peer disks skipped by creation keep their mode and ACLs unchanged.
+
 Keep failed state until diagnosis. Before pruning, preserve compact evidence
 outside the child root, identify excluded disks and show the exact target.
 Deletion requires the explicit confirmation flag:

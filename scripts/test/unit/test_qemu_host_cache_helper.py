@@ -48,20 +48,57 @@ class QemuHostCacheHelperTests(unittest.TestCase):
                 {"status": "invalid", "reason": "metadata missing"},
             )
 
-        with mock.patch.object(host_cache_helper, "readable", return_value="unreadable"):
-            self.assertEqual(
-                host_cache_helper.check("image", "metadata"),
-                {"status": "invalid", "reason": "image unreadable"},
-            )
-        with mock.patch.object(host_cache_helper, "readable", return_value=None):
-            with mock.patch("builtins.open", side_effect=PermissionError("denied")):
-                self.assertEqual(
-                    host_cache_helper.check("image", "metadata"),
-                    {"status": "invalid", "reason": "metadata unreadable"},
-                )
+    def test_permission_failure_is_fatal_with_numeric_context_and_remedy(self):
+        for target in ("image", "metadata"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tempdir:
+                image = pathlib.Path(tempdir) / "image"
+                metadata = pathlib.Path(tempdir) / "metadata"
+                image.write_bytes(b"image")
+                metadata.write_bytes(b"metadata")
+                denied = image if target == "image" else metadata
+                denied.chmod(0)
+                stderr = io.StringIO()
+                try:
+                    with contextlib.redirect_stderr(stderr):
+                        with self.assertRaises(PermissionError):
+                            host_cache_helper.check(str(image), str(metadata))
+                finally:
+                    denied.chmod(0o600)
+                details = stderr.getvalue()
+                for token in (str(denied), "read", "uid=", "gid=", "mode=", "sticky=",
+                              "ACL", "operator", "PermissionError"):
+                    self.assertIn(token, details)
+
+    def test_cleanup_parent_permission_failure_preserves_file_and_original_error(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            parent = pathlib.Path(tempdir) / "images"
+            parent.mkdir()
+            image = parent / "image"
+            image.write_bytes(b"keep")
+            parent.chmod(0o500)
+            stderr = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(stderr):
+                    with self.assertRaises(PermissionError):
+                        host_cache_helper.remove_paths([str(image)])
+            finally:
+                parent.chmod(0o700)
+            self.assertEqual(image.read_bytes(), b"keep")
+            for token in (str(image), str(parent), "unlink", "uid=", "gid=", "mode=",
+                          "sticky=", "ACL", "operator"):
+                self.assertIn(token, stderr.getvalue())
+
+    def test_diagnostic_failure_never_masks_original_error(self):
+        error = PermissionError("original access denied")
+        with mock.patch("builtins.open", side_effect=error):
+            with mock.patch.object(host_cache_helper.os, "lstat", side_effect=OSError("stat failed")):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(PermissionError) as raised:
+                        host_cache_helper.readable("image")
+        self.assertIs(raised.exception, error)
 
     def test_cleanup_preserves_exact_order_and_fsyncs_each_removed_parent(self):
-        paths = ["ready", "image", "cloud-init", "user-data"]
+        paths = ["ready", "image", "cloud-init"]
         events = []
 
         def unlink(path):
@@ -85,8 +122,6 @@ class QemuHostCacheHelperTests(unittest.TestCase):
                 ("fsync", "image"),
                 ("unlink", "cloud-init"),
                 ("fsync", "cloud-init"),
-                ("unlink", "user-data"),
-                ("fsync", "user-data"),
             ],
         )
 
@@ -141,21 +176,27 @@ class QemuHostCacheHelperTests(unittest.TestCase):
                 open_side_effect = OSError("open failed") if failure == "open" else None
                 fsync_side_effect = OSError("fsync failed") if failure == "fsync" else None
                 close_side_effect = OSError("close failed") if failure == "close" else None
-                with mock.patch.object(host_cache_helper.os, "unlink"):
+                with mock.patch.object(host_cache_helper, "_report_failure"):
+                    self._assert_directory_failure(failure, open_side_effect,
+                                                   fsync_side_effect, close_side_effect)
+
+    def _assert_directory_failure(self, failure, open_side_effect, fsync_side_effect,
+                                  close_side_effect):
+        with mock.patch.object(host_cache_helper.os, "unlink"):
+            with mock.patch.object(
+                host_cache_helper.os,
+                "open",
+                return_value=19,
+                side_effect=open_side_effect,
+            ):
+                with mock.patch.object(
+                    host_cache_helper.os, "fsync", side_effect=fsync_side_effect
+                ):
                     with mock.patch.object(
-                        host_cache_helper.os,
-                        "open",
-                        return_value=19,
-                        side_effect=open_side_effect,
+                        host_cache_helper.os, "close", side_effect=close_side_effect
                     ):
-                        with mock.patch.object(
-                            host_cache_helper.os, "fsync", side_effect=fsync_side_effect
-                        ):
-                            with mock.patch.object(
-                                host_cache_helper.os, "close", side_effect=close_side_effect
-                            ):
-                                with self.assertRaisesRegex(OSError, "%s failed" % (failure,)):
-                                    host_cache_helper._durable_unlink("cache/ready")
+                        with self.assertRaisesRegex(OSError, "%s failed" % (failure,)):
+                            host_cache_helper._durable_unlink("cache/ready")
 
     def test_failed_operation_emits_no_success_response(self):
         stdout = io.StringIO()
@@ -257,7 +298,7 @@ class QemuHostCacheHelperTests(unittest.TestCase):
         response = {"status": "ok", "metadata_b64": "e30="}
         cases = (
             ("check", ["image", "metadata"]),
-            ("cleanup", ["metadata", "image", "cloud-init", "user-data"]),
+            ("cleanup", ["metadata", "image", "cloud-init"]),
             ("invalidate", ["metadata"]),
             ("publish", ["metadata", "payload"]),
         )

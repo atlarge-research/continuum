@@ -159,7 +159,6 @@ def _mock_process(returncode=0, stdout=b"output\n", stderr=b""):
 def _run_with_process(process, detection=(True, "ok"), **kwargs):
     with (
         mock.patch.object(run_tests_module.test_utils, "parse_config_simple", return_value=_basic_config()),
-        mock.patch.object(run_tests_module.test_utils, "identify_base_images", return_value=[]),
         mock.patch.object(run_tests_module.test_utils, "detect_success", return_value=detection),
         mock.patch.object(run_tests_module.subprocess, "Popen", return_value=process) as popen,
         mock.patch.object(run_tests_module.os, "killpg", side_effect=ProcessLookupError),
@@ -173,6 +172,52 @@ class RunTestsCliTests(unittest.TestCase):
         self.test_config_path = str(
             (Path(__file__).resolve().parents[1] / "test_config.json").resolve()
         )
+
+    def test_retired_cache_cli_flags_are_rejected(self):
+        runner = Path(__file__).resolve().parents[1] / "run_tests.py"
+        for flag in ("--use-cache", "--rebuild-base-images"):
+            with self.subTest(flag=flag):
+                result = subprocess.run(
+                    [sys.executable, str(runner), flag, "--list-suites"],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("unrecognized arguments", result.stderr)
+
+    def test_retired_cache_config_keys_fail_cleanly_at_root_and_suite(self):
+        runner = Path(__file__).resolve().parents[1] / "run_tests.py"
+        for key in ("base_image_rebuild_frequency", "use_cache", "rebuild_base_images"):
+            for location in ("root", "suite"):
+                with self.subTest(key=key, location=location), tempfile.TemporaryDirectory() as tempdir:
+                    config = {"test_suites": {"smoke": {"directories": []}}}
+                    target = config if location == "root" else config["test_suites"]["smoke"]
+                    target[key] = False
+                    path = Path(tempdir) / "config.json"
+                    path.write_text(json.dumps(config), encoding="utf-8")
+                    result = subprocess.run(
+                        [sys.executable, str(runner), "--test-config", str(path), "--list-suites"],
+                        capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(key, result.stdout)
+                    self.assertIn("QEMU", result.stdout)
+                    self.assertNotIn("Traceback", result.stdout + result.stderr)
+
+    def test_runner_never_deletes_legacy_named_base_image(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            import getpass
+            image = Path(tempdir) / ".continuum/images" / ("base0_" + getpass.getuser() + ".qcow2")
+            image.parent.mkdir(parents=True)
+            image.write_bytes(b"preserve")
+            config = {"infrastructure": {"infra_only": True, "base_path": tempdir}}
+            result = {"success": True, "execution_time": 0, "success_reason": "mocked VM boundary"}
+            with mock.patch.object(run_tests_module.test_utils, "parse_config_simple", return_value=config):
+                with mock.patch.object(run_tests_module, "_run_single_test", side_effect=lambda *a, **k: dict(result)):
+                    results = run_tests_module.run_tests(
+                        ["mock.yaml"] * 10, {}, external_physical_machines_override="",
+                    )
+            self.assertEqual(image.read_bytes(), b"preserve")
+            self.assertTrue(all(item["base_images_rebuilt"] == [] for item in results))
 
     def test_kubecontrol_trace_suite_requires_full_metric_evidence(self):
         config = run_tests_module.load_test_config(self.test_config_path)
@@ -266,8 +311,6 @@ class RunTestsCliTests(unittest.TestCase):
                 "smoke": {"directories": ["configs/experiments/"]},
                 "network_validation": {
                     "directories": ["configs/experiments/network_validation/"],
-                    "use_cache": True,
-                    "rebuild_base_images": False,
                 },
             },
             "exclude_patterns": ["template.yaml"],
@@ -770,9 +813,6 @@ class RunSingleTestTests(unittest.TestCase):
                     side_effect=[_basic_config(), _basic_config()],
                 ),
                 mock.patch.object(
-                    run_tests_module.test_utils, "identify_base_images", return_value=[]
-                ),
-                mock.patch.object(
                     run_tests_module.test_utils,
                     "override_config_parameters",
                     return_value=str(override),
@@ -828,9 +868,6 @@ print(int(bool(mask & (1 << (signal.SIGINT - 1)))),
                 return_value=_basic_config(),
             ),
             mock.patch.object(
-                run_tests_module.test_utils, "identify_base_images", return_value=[]
-            ),
-            mock.patch.object(
                 run_tests_module.test_utils,
                 "detect_success",
                 return_value=(True, "probe"),
@@ -864,11 +901,6 @@ print(int(bool(mask & (1 << (signal.SIGINT - 1)))),
                         run_tests_module.test_utils,
                         "parse_config_simple",
                         return_value=_basic_config(),
-                    ),
-                    mock.patch.object(
-                        run_tests_module.test_utils,
-                        "identify_base_images",
-                        return_value=[],
                     ),
                     mock.patch.object(
                         run_tests_module.subprocess, "Popen", return_value=process
@@ -918,11 +950,6 @@ print(int(bool(mask & (1 << (signal.SIGINT - 1)))),
                         return_value=_basic_config(),
                     ),
                     mock.patch.object(
-                        run_tests_module.test_utils,
-                        "identify_base_images",
-                        return_value=[],
-                    ),
-                    mock.patch.object(
                         run_tests_module.subprocess,
                         "Popen",
                         return_value=signaling_process,
@@ -960,9 +987,6 @@ print(int(bool(mask & (1 << (signal.SIGINT - 1)))),
                 "parse_config_simple",
                 return_value=_basic_config(),
             ),
-            mock.patch.object(
-                run_tests_module.test_utils, "identify_base_images", return_value=[]
-            ),
             mock.patch.object(run_tests_module.subprocess, "Popen", side_effect=launch),
             mock.patch.object(
                 run_tests_module.os, "killpg", side_effect=ProcessLookupError
@@ -983,9 +1007,6 @@ print(int(bool(mask & (1 << (signal.SIGINT - 1)))),
                 "parse_config_simple",
                 return_value=_basic_config(),
             ),
-            mock.patch.object(
-                run_tests_module.test_utils, "identify_base_images", return_value=[]
-            ),
             mock.patch.object(run_tests_module.subprocess, "Popen", side_effect=launch),
         ):
             with self.assertRaises(SystemExit) as raised:
@@ -1005,17 +1026,6 @@ print(int(bool(mask & (1 << (signal.SIGINT - 1)))),
                 run_tests_module.test_utils,
                 "parse_config_simple",
                 return_value=_basic_config(),
-            ),
-            mock.patch.object(
-                run_tests_module.test_utils, "identify_base_images", return_value=[]
-            ),
-            mock.patch.object(
-                run_tests_module.test_utils, "get_base_image_paths", return_value=[]
-            ),
-            mock.patch.object(
-                run_tests_module.test_utils,
-                "should_rebuild_base_images",
-                return_value=False,
             ),
             mock.patch.object(run_tests_module, "_run_single_test", side_effect=execute),
             mock.patch.object(
@@ -1064,17 +1074,6 @@ print(int(bool(mask & (1 << (signal.SIGINT - 1)))),
                 run_tests_module.test_utils,
                 "parse_config_simple",
                 return_value=_basic_config(),
-            ),
-            mock.patch.object(
-                run_tests_module.test_utils, "identify_base_images", return_value=[]
-            ),
-            mock.patch.object(
-                run_tests_module.test_utils, "get_base_image_paths", return_value=[]
-            ),
-            mock.patch.object(
-                run_tests_module.test_utils,
-                "should_rebuild_base_images",
-                return_value=False,
             ),
             mock.patch.object(run_tests_module, "_run_single_test", side_effect=fail),
             mock.patch.object(run_tests_module.signal, "signal") as signal_mock,

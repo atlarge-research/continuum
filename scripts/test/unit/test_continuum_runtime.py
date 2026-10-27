@@ -4496,12 +4496,10 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                 {"ssh": machine.name, "ssh_key": False},
             )
 
-    def test_missing_and_unreadable_owner_artifacts_are_invalid(self):
+    def test_missing_owner_artifacts_are_invalid(self):
         reasons = (
             "image missing",
             "metadata missing",
-            "image unreadable",
-            "metadata unreadable",
         )
         with tempfile.TemporaryDirectory() as tempdir:
             config = self._config(tempdir)
@@ -4520,6 +4518,27 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                         ),
                         reason,
                     )
+
+    def test_unreadable_cache_protocol_is_rejected_without_invalidation(self):
+        for reason in ("image unreadable", "metadata unreadable"):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as tempdir:
+                machine = self._machine(is_local=False)
+                machine.process.return_value = self._protocol({"status": "invalid", "reason": reason})
+                with self.assertRaises(RuntimeError):
+                    qemu_module._select_base_image_rebuilds(self._config(tempdir), [machine])
+                self.assertEqual(machine.process.call_count, 1)
+
+    def test_cache_failure_preserves_real_stderr_without_synthetic_source_dump(self):
+        machine = self._machine(is_local=False)
+        machine.process.return_value = [[[], [
+            "PermissionError: unlink /exact/cache.qcow2; operator must inspect ownership",
+            qemu_module._SYNTHETIC_NONZERO_MARKER + ": embedded helper source",
+        ]]]
+        with self.assertRaises(RuntimeError) as raised:
+            qemu_module._cleanup_base_image_cache(machine, self._config("/exact"), self.RAW_BASE_NAME)
+        self.assertIn("/exact/cache.qcow2", str(raised.exception))
+        self.assertIn("PermissionError", str(raised.exception))
+        self.assertNotIn("embedded helper source", str(raised.exception))
 
     def test_malformed_and_non_mapping_metadata_are_invalid(self):
         payloads = (b"{", b"[]", b"not-json", b"\xff")
@@ -4653,7 +4672,9 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             qemu_module._cleanup_base_image_cache(machine, config, self.RAW_BASE_NAME)
             qemu_module._cleanup_base_image_cache(machine, config, self.RAW_BASE_NAME)
 
-            self.assertTrue(all(not pathlib.Path(path).exists() for path in paths.values()))
+            self.assertTrue(pathlib.Path(paths["user_data"]).exists())
+            self.assertTrue(all(not pathlib.Path(paths[key]).exists()
+                                for key in ("metadata", "image", "cloud_init")))
 
     def test_cleanup_paths_and_payloads_are_inert_argv_data(self):
         raw_base_name = "base $(touch SHOULD_NOT_EXIST); peer user"
@@ -4674,7 +4695,6 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                     expected["metadata"],
                     expected["image"],
                     expected["cloud_init"],
-                    expected["user_data"],
                 ],
             )
             self.assertNotIn("shell", machine.process.call_args.kwargs)
@@ -4771,12 +4791,12 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                 operation = command[3]
                 events.append("invalid:%s" % (operation,))
                 if operation == "check":
-                    return self._protocol({"status": "invalid", "reason": "image unreadable"})
+                    return self._protocol({"status": "invalid", "reason": "image missing"})
                 if operation == "invalidate":
                     host_cache_helper.remove_paths([invalid_paths["metadata"]])
                     return self._protocol({"status": "ok"})
                 if operation == "cleanup":
-                    for path in invalid_paths.values():
+                    for path in (invalid_paths[key] for key in ("metadata", "image", "cloud_init")):
                         if os.path.exists(path):
                             os.remove(path)
                     return self._protocol({"status": "ok"})
@@ -4832,6 +4852,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             self.assertTrue(pathlib.Path(valid_paths["cloud_init"]).exists())
             self.assertTrue(pathlib.Path(valid_paths["user_data"]).exists())
             self.assertFalse(pathlib.Path(invalid_paths["image"]).exists())
+            self.assertTrue(pathlib.Path(invalid_paths["user_data"]).exists())
 
     def test_partial_multi_owner_invalidation_failure_prevents_prepare_and_restore(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -4856,7 +4877,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                     events.append("%s:%s" % (owner_name, operation))
                     if operation == "check":
                         return self._protocol(
-                            {"status": "invalid", "reason": "image unreadable"}
+                            {"status": "invalid", "reason": "image missing"}
                         )
                     if operation == "invalidate" and fail_invalidation:
                         with mock.patch.object(
@@ -4904,7 +4925,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             machine = self._machine(is_local=False)
             synthetic = "Command exited with non-zero return code 1: cleanup"
             machine.process.side_effect = [
-                self._protocol({"status": "invalid", "reason": "image unreadable"}),
+                self._protocol({"status": "invalid", "reason": "image missing"}),
                 self._protocol({"status": "ok"}),
                 [([], [synthetic])],
             ]

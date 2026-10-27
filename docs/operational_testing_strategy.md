@@ -500,6 +500,16 @@ Cache-integrity note:
 5. external-owner behavior currently has mocked and static coverage, but no
    live external-host certification.
 
+QEMU alone decides reuse/rebuild per physical owner and profile slot; the test
+runner never deletes guessed legacy base-image names. The retired CLI options
+`--rebuild-base-images` / `--use-cache` and root/suite JSON keys
+`base_image_rebuild_frequency`, `rebuild_base_images`, `use_cache` fail explicitly.
+The historical `base_images_rebuilt` result field remains `[]`, not a runtime
+cache claim. Missing artifacts invalidate a cache, but access/inspection errors
+abort before invalidation and require operator inspection of the exact path,
+numeric ownership/mode, parent sticky bit and ACLs. Cleanup preserves the current
+run's user-data YAML; mode and ACL initialization apply only to newly created disks.
+
 ## 10. How A User Or Research Collaborator Can Help
 
 The most useful external input is not more ad hoc test cases. It is explicit

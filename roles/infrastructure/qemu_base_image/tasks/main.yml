@@ -55,40 +55,87 @@
       Run the qemu_os_image role first.
   when: not qemu_base_source_stat.stat.exists
 
-- name: Create base qcow2 image
-  ansible.builtin.command: >
-    qemu-img create -f qcow2 -F qcow2
-    -b {{ base_path }}/.continuum/images/ubuntu2004.qcow2
-    {{ base_path }}/.continuum/images/{{ image_name }}.qcow2
-  args:
-    creates: "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
+- name: Prepare new base image disks without changing existing peers
+  block:
+    - name: Create base qcow2 image
+      ansible.builtin.command: >
+        qemu-img create -f qcow2 -F qcow2
+        -b {{ base_path }}/.continuum/images/ubuntu2004.qcow2
+        {{ base_path }}/.continuum/images/{{ image_name }}.qcow2
+      args:
+        creates: "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
+      register: qemu_base_image_created
 
-- name: Set base qcow2 mode for libvirt access
-  ansible.builtin.file:
-    path: "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
-    mode: "0664"
+    - name: Set base qcow2 mode for libvirt access
+      ansible.builtin.file:
+        path: "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
+        mode: "0664"
+      when: qemu_base_image_created.changed
 
-- name: Grant kvm group ACL on base qcow2 image
-  ansible.builtin.command: >
-    setfacl -m g:kvm:rw
-    {{ base_path }}/.continuum/images/{{ image_name }}.qcow2
-  changed_when: false
+    - name: Grant kvm group ACL on base qcow2 image
+      ansible.builtin.command: >
+        setfacl -m g:kvm:rw
+        {{ base_path }}/.continuum/images/{{ image_name }}.qcow2
+      changed_when: false
+      when: qemu_base_image_created.changed
 
-- name: Create cloud-init disk for base image
-  ansible.builtin.command: >
-    cloud-localds
-    {{ base_path }}/.continuum/images/user_data_{{ image_name }}.img
-    {{ base_path }}/.continuum/user_data_{{ image_name }}.yml
-  args:
-    creates: "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"
+    - name: Create cloud-init disk for base image
+      ansible.builtin.command: >
+        cloud-localds
+        {{ base_path }}/.continuum/images/user_data_{{ image_name }}.img
+        {{ base_path }}/.continuum/user_data_{{ image_name }}.yml
+      args:
+        creates: "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"
+      register: qemu_base_cloud_init_created
 
-- name: Set base cloud-init disk mode for libvirt access
-  ansible.builtin.file:
-    path: "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"
-    mode: "0664"
+    - name: Set base cloud-init disk mode for libvirt access
+      ansible.builtin.file:
+        path: "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"
+        mode: "0664"
+      when: qemu_base_cloud_init_created.changed
 
-- name: Grant kvm group ACL on base cloud-init disk
-  ansible.builtin.command: >
-    setfacl -m g:kvm:rw
-    {{ base_path }}/.continuum/images/user_data_{{ image_name }}.img
-  changed_when: false
+    - name: Grant kvm group ACL on base cloud-init disk
+      ansible.builtin.command: >
+        setfacl -m g:kvm:rw
+        {{ base_path }}/.continuum/images/user_data_{{ image_name }}.img
+      changed_when: false
+      when: qemu_base_cloud_init_created.changed
+  rescue:
+    - name: Preserve original base disk preparation failure
+      ansible.builtin.set_fact:
+        qemu_base_image_failed_task: "{{ ansible_failed_task.name }}"
+        qemu_base_image_failed_result: "{{ ansible_failed_result }}"
+        qemu_base_image_diagnostic_paths:
+          - "{{ base_path }}/.continuum/images/{{ image_name }}.qcow2"
+          - "{{ base_path }}/.continuum/images/user_data_{{ image_name }}.img"
+          - "{{ base_path }}/.continuum/user_data_{{ image_name }}.yml"
+          - "{{ base_path }}/.continuum/images"
+          - "{{ base_path }}/.continuum"
+
+    - name: Inspect exact base slot numeric ownership and modes
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop: "{{ qemu_base_image_diagnostic_paths }}"
+      register: qemu_base_image_diagnostic_stats
+      failed_when: false
+
+    - name: Inspect exact base slot numeric ACLs
+      ansible.builtin.command:
+        argv: ["getfacl", "-n", "-p", "--", "{{ item }}"]
+      loop: "{{ qemu_base_image_diagnostic_paths }}"
+      register: qemu_base_image_diagnostic_acls
+      changed_when: false
+      failed_when: false
+
+    - name: Report original base disk failure with operator context
+      ansible.builtin.fail:
+        msg: >-
+          QEMU base disk operation failed: {{ qemu_base_image_failed_task }}.
+          Original error: {{ qemu_base_image_failed_result }}.
+          Numeric ownership/mode context: {{ qemu_base_image_diagnostic_stats.results }}.
+          Numeric ACL context: {{ qemu_base_image_diagnostic_acls.results }}.
+          An operator must inspect this exact slot's ownership, permissions, parent sticky bit
+          and ACLs. No automatic privilege escalation or ownership repair is used.
