@@ -4938,7 +4938,8 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             runner.run_playbook.assert_not_called()
 
     def _successful_rebuild_process(self, machine, published_operations, fail_operation=None,
-                                    create_response=None, shutdown_response=None):
+                                    create_response=None, shutdown_response=None,
+                                    running_names=None, events=None):
         synthetic = "Command exited with non-zero return code 9: injected"
 
         def process(_config, command, **kwargs):
@@ -4951,6 +4952,8 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                 == ["python3", "-c", qemu_module._HOST_CACHE_HELPER_SOURCE]
                 else None
             )
+            if events is not None and operation:
+                events.append((machine.name, operation))
             if operation:
                 if operation == "check":
                     return self._protocol({"status": "invalid", "reason": "metadata missing"})
@@ -4962,22 +4965,26 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
             if decoded_command[0] == "virsh":
                 operation = decoded_command[3]
+                if events is not None:
+                    events.append((machine.name, operation))
                 if fail_operation == operation:
                     return [(["partial"], [synthetic])]
+                display_name = (machine.base_names[0] if machine.is_local
+                                else "'%s'" % machine.base_names[0])
                 if operation == "create":
                     if create_response is not None:
                         return create_response
                     message = "Domain %s created from %s" % (
-                        machine.base_names[0],
+                        display_name,
                         decoded_command[4],
                     )
                     return [([message, ""], [])]
                 if operation == "shutdown":
                     if shutdown_response is not None:
                         return shutdown_response
-                    return [(["Domain %s is being shutdown" % (machine.base_names[0],), ""], [])]
+                    return [(["Domain %s is being shutdown" % display_name, ""], [])]
                 if operation == "list":
-                    return [([], [])]
+                    return [(running_names if running_names is not None else [], [])]
 
             if decoded_command[0] == "ls":
                 if fail_operation == "timezone-discovery":
@@ -4986,11 +4993,11 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             if decoded_command[:2] == ["sudo", "ln"]:
                 if fail_operation == "timezone":
                     return [([], [synthetic])]
-                return [([], [])]
+                return [([], []) for _ in kwargs.get("ssh", [])]
             if decoded_command[:2] == ["sudo", "cloud-init"]:
                 if fail_operation == "cloud-init":
                     return [([], [synthetic])]
-                return [([], [])]
+                return [([], []) for _ in kwargs.get("ssh", [])]
             self.fail("unexpected rebuild command %r" % (command,))
 
         return process
@@ -5003,6 +5010,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         readiness_failure=False,
         create_response=None,
         shutdown_response=None,
+        running_names=None,
     ):
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
@@ -5012,6 +5020,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         machine.process.side_effect = self._successful_rebuild_process(
             machine, published, fail_operation=fail_operation, create_response=create_response,
             shutdown_response=shutdown_response,
+            running_names=running_names,
         )
         runner = mock.Mock()
         self._last_rebuild = (machine, runner, published)
@@ -5061,6 +5070,11 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             with self.subTest(output=output):
                 _machine, _runner, published = self._run_rebuild(create_response=[[output, []]])
                 self.assertEqual(published, ["publish"])
+
+    def test_base_launch_already_accepts_quoted_domain(self):
+        response = [[["Domain 'base_test' created from /exact/domain.xml", ""], []]]
+        _machine, _runner, published = self._run_rebuild(create_response=response)
+        self.assertEqual(published, ["publish"])
 
     def test_base_launch_rejects_invalid_records_and_preserves_raw_output(self):
         message = "Domain base_test created from /exact/domain.xml"
@@ -5113,27 +5127,83 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             ["check", "invalidate", "cleanup", "create", "shutdown", "list", "publish"],
         )
 
-    def test_base_shutdown_accepts_only_presentation_blank_lines(self):
-        message = "Domain %s is being shutdown" % self.RAW_BASE_NAME
+    def _successful_shutdown_outputs(self):
+        return (
+            ["Domain %s is being shutdown" % self.RAW_BASE_NAME],
+            ["Domain '%s' is being shutdown" % self.RAW_BASE_NAME, ""],
+            ["Arrêt du domaine demandé"], ["different successful message", "extra message"],
+            [], ["", " \t"],
+        )
+
+    def test_base_shutdown_uses_state_not_success_message(self):
+        message = "Domain '%s' is being shutdown" % self.RAW_BASE_NAME
         response = Machine("local", True).process(
             {}, [sys.executable, "-c", "print(%r)" % (message + "\n",)]
         )
         self.assertEqual(response, [[[message, ""], []]])
-        for output in ([message], response[0][0], ["", " \t", message, "", "\t"]):
+        for output in self._successful_shutdown_outputs() + (response[0][0],):
             with self.subTest(output=output):
                 _machine, _runner, published = self._run_rebuild(shutdown_response=[[output, []]])
                 self.assertEqual(published, ["publish"])
 
-    def test_base_shutdown_rejects_bad_records_and_preserves_raw_output(self):
+    def test_base_shutdown_rejects_nonstring_records_and_preserves_raw_output(self):
         message = "Domain %s is being shutdown" % self.RAW_BASE_NAME
-        for output in ([], ["", " \t"], [message, "unexpected"], ["wrong"],
-                       ["Domain wrong_vm is being shutdown"], [None, message],
-                       [0, message], [" " + message]):
+        for output in ([None], [0], [None, message], [message, "", 42]):
             with self.subTest(output=output):
                 with self.assertRaises(RuntimeError) as raised:
                     self._run_rebuild(shutdown_response=[[output, []]])
                 self.assertIn(repr(output), str(raised.exception))
                 self.assertEqual(self._last_rebuild[2], [])
+
+    def test_successful_shutdown_messages_cannot_bypass_running_domain_confirmation(self):
+        for output in self._successful_shutdown_outputs():
+            with self.subTest(output=output):
+                with mock.patch.object(qemu_module, "_BASE_SHUTDOWN_ATTEMPTS", 2):
+                    with self.assertRaisesRegex(RuntimeError, "not confirmed after 2 attempts"):
+                        self._run_rebuild(shutdown_response=[[output, []]],
+                                          running_names=[self.RAW_BASE_NAME, ""])
+                self.assertEqual(self._last_rebuild[2], [])
+                list_calls = [call for call in self._last_rebuild[0].process.call_args_list
+                              if call.args[1][:4] == ["virsh", "--connect",
+                                                     "qemu:///system", "list"]]
+                self.assertEqual(len(list_calls), 2)
+
+    def test_mixed_version_owners_all_confirm_stopped_before_any_publication(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._config(tempdir)
+            local = self._machine(raw_base_name="base_cloud_none_np1_mm0_0_user")
+            remote = self._machine(is_local=False, raw_base_name="base_cloud_none_np1_mm0_1_user")
+            remote.base_ips = ["192.0.2.21"]
+            events, published = [], []
+            for owner in (local, remote):
+                owner.process.side_effect = self._successful_rebuild_process(
+                    owner, published, events=events,
+                )
+            patches = (
+                mock.patch.object(infrastructure_module, "add_ssh"),
+                mock.patch.object(image_registry_module, "has_prefetch_requirements",
+                                  return_value=False),
+                mock.patch.object(qemu_module.config_access, "orchestrator_name",
+                                  return_value=None),
+                mock.patch.object(qemu_module, "_base_install_playbooks_for_base_names",
+                                  return_value=[]),
+            )
+            with patches[0], patches[1], patches[2], patches[3]:
+                qemu_module.base_image(config, [local, remote], runner=mock.Mock())
+            self.assertEqual([event for event in events if event[1] in ("list", "publish")], [
+                (local.name, "list"), (remote.name, "list"),
+                (local.name, "publish"), (remote.name, "publish"),
+            ])
+            self.assertEqual(published, ["publish", "publish"])
+            for owner in (local, remote):
+                confirmations = [call for call in owner.process.call_args_list
+                                 if call.args[1][:4] == ["virsh", "--connect",
+                                                        "qemu:///system", "list"]]
+                self.assertEqual(len(confirmations), 1)
+                self.assertEqual(confirmations[0].args[1], ["virsh", "--connect",
+                                 "qemu:///system", "list", "--state-running", "--name"])
+                self.assertEqual(confirmations[0].kwargs,
+                                 {} if owner.is_local else {"ssh": remote.name, "ssh_key": False})
 
     def test_base_shutdown_stderr_and_nonzero_remain_fatal(self):
         message = "Domain %s is being shutdown" % self.RAW_BASE_NAME
@@ -5158,9 +5228,14 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
     def test_ordinary_vm_launch_already_accepts_trailing_blank(self):
         machine = mock.Mock()
-        machine.process.return_value = [(["Domain vm created from /exact/domain.xml", ""], [])]
-        with mock.patch.object(qemu_module.time, "sleep"):
-            self.assertEqual(qemu_module.launch_vms({}, [machine], repeat=["create argv"]), [])
+        for display_name in ("vm", "'vm'"):
+            with self.subTest(display_name=display_name):
+                machine.process.return_value = [(["Domain %s created from /exact/domain.xml"
+                                                  % display_name, ""], [])]
+                with mock.patch.object(qemu_module.time, "sleep"):
+                    self.assertEqual(
+                        qemu_module.launch_vms({}, [machine], repeat=["create argv"]), [],
+                    )
 
     def test_failed_machine_process_stages_prevent_publication(self):
         stages = (

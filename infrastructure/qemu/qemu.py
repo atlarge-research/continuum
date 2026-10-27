@@ -989,13 +989,8 @@ def base_image(config, machines, runner=None):
             _owner_process(machine, config, command),
             "base VM shutdown on %s" % (machine.name,),
         )
-        expected = "Domain %s is being shutdown" % (raw_base_name,)
-        shutdown_output = (
-            [line for line in output if line.strip()]
-            if all(isinstance(line, str) for line in output)
-            else []
-        )
-        if shutdown_output != [expected]:
+        # Success prose varies by virsh version/locale; confirm actual state below.
+        if not all(isinstance(line, str) for line in output):
             raise RuntimeError(
                 "Base VM shutdown on %s returned an invalid response: %r" % (machine.name, output)
             )
