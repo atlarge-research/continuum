@@ -14,13 +14,13 @@ class SchemaValidationTests(unittest.TestCase):
     def setUp(self):
         self.path = Path("/tmp/schema-validation.yaml")
         self.allowed_targets = {"infrastructure", "software", "application"}
-        self.allowed_image_prefetch_modes = {"off", "on"}
+        self.allowed_registry_refresh_modes = {"missing", "all"}
         self.allowed_tiers = ("cloud", "edge", "endpoint")
         self.network_override_keys = {"cloud_latency_avg", "cloud_location"}
         self.network_override_numeric_keys = ("cloud_latency_avg",)
         self.network_override_string_keys = ("cloud_location",)
 
-    def test_validate_run_normalizes_and_defaults_image_prefetch(self):
+    def test_validate_run_normalizes_and_defaults_registry_refresh(self):
         run = {
             "targets": [" infrastructure ", "software"],
             "dry_run": False,
@@ -31,10 +31,10 @@ class SchemaValidationTests(unittest.TestCase):
             self.path,
             "run",
             self.allowed_targets,
-            self.allowed_image_prefetch_modes,
+            self.allowed_registry_refresh_modes,
         )
         self.assertEqual(targets, ["infrastructure", "software"])
-        self.assertEqual(run["image_prefetch"], "off")
+        self.assertEqual(run["registry_refresh"], "missing")
         self.assertFalse(run["prepare_for_resume"])
 
     def test_validate_run_defaults_clean_and_dry_run(self):
@@ -44,12 +44,12 @@ class SchemaValidationTests(unittest.TestCase):
             self.path,
             "run",
             self.allowed_targets,
-            self.allowed_image_prefetch_modes,
+            self.allowed_registry_refresh_modes,
         )
         self.assertEqual(targets, ["software"])
         self.assertFalse(run["dry_run"])
         self.assertFalse(run["clean"])
-        self.assertEqual(run["image_prefetch"], "off")
+        self.assertEqual(run["registry_refresh"], "missing")
         self.assertFalse(run["prepare_for_resume"])
 
     def test_validate_run_accepts_prepare_for_resume_for_infra_only(self):
@@ -59,7 +59,7 @@ class SchemaValidationTests(unittest.TestCase):
             self.path,
             "run",
             self.allowed_targets,
-            self.allowed_image_prefetch_modes,
+            self.allowed_registry_refresh_modes,
         )
         self.assertEqual(targets, ["infrastructure"])
         self.assertTrue(run["prepare_for_resume"])
@@ -72,7 +72,7 @@ class SchemaValidationTests(unittest.TestCase):
                 self.path,
                 "run",
                 self.allowed_targets,
-                self.allowed_image_prefetch_modes,
+                self.allowed_registry_refresh_modes,
             )
         self.assertIn("run.prepare_for_resume", str(exc.exception))
         self.assertIn("must be boolean", str(exc.exception))
@@ -88,26 +88,49 @@ class SchemaValidationTests(unittest.TestCase):
                 self.path,
                 "run",
                 self.allowed_targets,
-                self.allowed_image_prefetch_modes,
+                self.allowed_registry_refresh_modes,
             )
         self.assertIn("run.prepare_for_resume", str(exc.exception))
         self.assertIn("run.targets is exactly [infrastructure]", str(exc.exception))
 
-    def test_validate_run_rejects_invalid_image_prefetch(self):
-        run = {"targets": ["infrastructure"], "image_prefetch": "always"}
+    def test_validate_run_accepts_registry_refresh_modes(self):
+        for source, expected in (("missing", "missing"), ("all", "all"), (" ALL ", "all")):
+            with self.subTest(source=source):
+                run = {"targets": ["infrastructure"], "registry_refresh": source}
+                run_schema_validation.validate_run(
+                    run, self.path, "run", self.allowed_targets,
+                    self.allowed_registry_refresh_modes,
+                )
+                self.assertEqual(run["registry_refresh"], expected)
+
+    def test_validate_run_rejects_removed_image_prefetch_even_with_new_field(self):
+        for include_new in (False, True):
+            with self.subTest(include_new=include_new):
+                run = {"targets": ["infrastructure"], "image_prefetch": "off"}
+                if include_new:
+                    run["registry_refresh"] = "missing"
+                with self.assertRaisesRegex(ValueError, "run.image_prefetch") as exc:
+                    run_schema_validation.validate_run(
+                        run, self.path, "run", self.allowed_targets,
+                        self.allowed_registry_refresh_modes,
+                    )
+                self.assertIn("unexpected key", str(exc.exception))
+
+    def test_validate_run_rejects_invalid_registry_refresh(self):
+        run = {"targets": ["infrastructure"], "registry_refresh": "always"}
         with self.assertRaises(ValueError) as exc:
             run_schema_validation.validate_run(
                 run,
                 self.path,
                 "run",
                 self.allowed_targets,
-                self.allowed_image_prefetch_modes,
+                self.allowed_registry_refresh_modes,
             )
-        self.assertIn("run.image_prefetch", str(exc.exception))
-        self.assertIn("must be one of off, on", str(exc.exception))
+        self.assertIn("run.registry_refresh", str(exc.exception))
+        self.assertIn("must be one of all, missing", str(exc.exception))
 
-    def test_validate_infrastructure_rejects_legacy_image_prefetch_location(self):
-        infrastructure = {"image_prefetch": "on", "clusters": []}
+    def test_validate_infrastructure_rejects_legacy_registry_refresh_location(self):
+        infrastructure = {"registry_refresh": "all", "clusters": []}
         with self.assertRaises(ValueError) as exc:
             infrastructure_schema_validation.validate_infrastructure(
                 infrastructure,
@@ -123,8 +146,8 @@ class SchemaValidationTests(unittest.TestCase):
                 0.0,
                 lambda clusters: [],
             )
-        self.assertIn("infrastructure.image_prefetch", str(exc.exception))
-        self.assertIn("use run.image_prefetch", str(exc.exception))
+        self.assertIn("infrastructure.registry_refresh", str(exc.exception))
+        self.assertIn("use run.registry_refresh", str(exc.exception))
 
     def test_validate_infrastructure_normalizes_clusters_and_resources(self):
         calls = []

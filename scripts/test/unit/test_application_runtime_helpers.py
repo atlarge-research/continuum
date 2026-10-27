@@ -426,7 +426,7 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
                 "endpoint_nodes": 0,
             },
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {

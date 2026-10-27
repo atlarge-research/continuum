@@ -8,7 +8,7 @@ use:
 
 run:
   targets: [infrastructure, software, application]
-  image_prefetch: "off"
+  registry_refresh: missing
   dry_run: false
   clean: false
 

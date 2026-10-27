@@ -116,7 +116,7 @@ class TextTranslationImageSelectionTests(unittest.TestCase):
         )
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"image_prefetch": "on"}},
+            "domains": {"run": {"registry_refresh": "all"}},
             "prefetch_image_requirements": [
                 {
                     "source_ref": source_ref,

@@ -32,7 +32,7 @@ class LegacyProjectionTests(unittest.TestCase):
                 "targets": ["infrastructure", "software"],
                 "dry_run": False,
                 "clean": True,
-                "image_prefetch": "on",
+                "registry_refresh": "all",
                 "prepare_for_resume": False,
             },
             "provider": {
@@ -98,7 +98,7 @@ class LegacyProjectionTests(unittest.TestCase):
         self.assertEqual(config["infrastructure"]["cloud_location"], "nl")
         self.assertEqual(config["infrastructure"]["cloud_latency_avg"], 10)
         self.assertEqual(config["mode"], "cloud")
-        self.assertEqual(config["domains"]["run"]["image_prefetch"], "on")
+        self.assertEqual(config["domains"]["run"]["registry_refresh"], "all")
         self.assertFalse(config["domains"]["run"]["prepare_for_resume"])
         self.assertEqual(config["config_format"], "yaml")
 

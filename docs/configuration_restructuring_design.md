@@ -11,10 +11,11 @@ arbitrary software replacement on mutated guests and concurrent shared-base-path
 runs are unsupported. Same-application changed-parameter sweeps remain
 candidate-only pending cleanup/idempotence evidence.
 
-The approved future registry terminology is `run.registry_refresh: missing|all`
-(default `missing`), but it is NOT the current schema. Until its atomic
-implementation packet, use quoted `run.image_prefetch: "off"|"on"` below.
-The future hard cut has no compatibility aliases.
+The accepted registry terminology is `run.registry_refresh: missing|all`
+(default `missing`). The removed run.image_prefetch key/off-on modes have no
+compatibility aliases. Registry-cache priming and guest preload remain separate
+operations. Section 10.1 preserves historical implementation syntax, not the
+current accepted schema; old-format locks must be regenerated from source inputs.
 
 ## 0. Authority and Boundary
 
@@ -90,7 +91,7 @@ use:
 
 run:
   targets: [infrastructure, software, application]
-  image_prefetch: "off"
+  registry_refresh: missing
   dry_run: false
   clean: false
 
@@ -197,11 +198,11 @@ Cluster-level infra intent is normalized to concrete resource records with base 
 1. `run.targets` required and non-empty.
 2. allowed targets: `infrastructure`, `software`, `application`.
 3. invalid combinations fail fast.
-4. `run.image_prefetch` is optional with allowed values `off` and `on`.
-5. default `run.image_prefetch` is `off`.
+4. `run.registry_refresh` is optional with allowed values `missing` and `all`.
+5. default `run.registry_refresh` is `missing`.
 6. `run.prepare_for_resume` is optional boolean intent for retained-resume infrastructure prep and defaults to `false`.
 7. `run.prepare_for_resume: true` is valid only when `run.targets` is exactly `[infrastructure]`.
-8. parser/defaulting writes canonical `domains.run.image_prefetch` and `domains.run.prepare_for_resume`; runtime accessors treat these paths as required and fail fast if missing.
+8. parser/defaulting writes canonical `domains.run.registry_refresh` and `domains.run.prepare_for_resume`; runtime accessors treat these paths as required and fail fast if missing.
 
 ## 6.3 Phase-Aware Domains
 
@@ -225,7 +226,7 @@ Cluster-level infra intent is normalized to concrete resource records with base 
 5. numeric resource constraints enforced.
 6. all resources in a cluster receive base tags: `tier=<tier>`, `cluster=<id>`.
 7. optional omitted resource fields receive documented defaults.
-8. `infrastructure.image_prefetch` is invalid; image prefetch intent is modeled at `run.image_prefetch`.
+8. `infrastructure.registry_refresh` and removed `infrastructure.image_prefetch` are invalid; registry refresh intent is modeled only at `run.registry_refresh`.
 
 ## 6.5 Software Modules
 
@@ -255,8 +256,8 @@ Selector canonicalization contract:
 
 1. Local registry behavior is internal runtime implementation detail (not user-configurable schema).
 2. Required images are derived internally from software/benchmark execution intent.
-3. `run.image_prefetch: off` means pull/push only required images missing from local registry cache (repo + tag aware).
-4. `run.image_prefetch: on` means force refresh pull/push for all required images.
+3. `run.registry_refresh: missing` means pull/push only required images missing from local registry cache (repo + tag aware).
+4. `run.registry_refresh: all` means force refresh pull/push for all required images.
 5. Missing required images are always pulled regardless of prefetch mode.
 6. Local registry is created/started only when required image pulls exist.
 7. Initial software image-catalog coverage includes Kubernetes control-plane images for `kubecontrol`/`kube_kata`, resolved from orchestrator `kube_version`.

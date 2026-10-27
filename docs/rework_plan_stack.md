@@ -50,8 +50,9 @@ confirmation and the separate configuration/fixture inventory remain open gates.
   without compatibility fallbacks. Keep the parser orchestration facade,
   domain validators and layered semantic config-access helpers; no
   speculative configuration-library migration.
-- The registry terminology hard cut is approved but not yet implemented.
-  Follow the current domain schema until its atomic implementation packet.
+- The approved registry terminology hard cut is run.registry_refresh missing/all,
+  default missing, without aliases; use the current domain schema. Frozen
+  historical ledger entries below retain their original image_prefetch spelling.
 - No new core features, speculative architecture or automatic recovery.
   Normal-user migration and the QEMU repair follow the ordered approved gates.
 - No merge, push, tag, release or publication before final explicit approval.

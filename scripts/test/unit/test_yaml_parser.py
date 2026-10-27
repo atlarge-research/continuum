@@ -49,7 +49,7 @@ class YamlParserTests(unittest.TestCase):
         root: Path,
         base_path: str,
         run_targets=None,
-        run_image_prefetch: str | None = None,
+        run_registry_refresh: str | None = None,
         run_prepare_for_resume: bool | str | None = None,
         clusters=None,
         modules=None,
@@ -98,8 +98,8 @@ class YamlParserTests(unittest.TestCase):
             "software": {"modules": modules},
         }
         run = {"targets": run_targets}
-        if run_image_prefetch is not None:
-            run["image_prefetch"] = run_image_prefetch
+        if run_registry_refresh is not None:
+            run["registry_refresh"] = run_registry_refresh
         if run_prepare_for_resume is not None:
             run["prepare_for_resume"] = run_prepare_for_resume
 
@@ -1109,13 +1109,13 @@ class YamlParserTests(unittest.TestCase):
             self.assertIn("cluster=edge-1", stderr)
             self.assertIn("Partial assignments are unsupported", stderr)
 
-    def test_run_image_prefetch_defaults_to_off(self):
+    def test_run_registry_refresh_defaults_to_missing(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             exp_path, _ = self._build_triplet(root, tempdir)
             parser = argparse.ArgumentParser()
             cfg = input_module.start(parser, str(exp_path))
-            self.assertEqual(cfg["domains"]["run"]["image_prefetch"], "off")
+            self.assertEqual(cfg["domains"]["run"]["registry_refresh"], "missing")
 
     def test_run_prepare_for_resume_defaults_to_false(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1229,33 +1229,70 @@ class YamlParserTests(unittest.TestCase):
             self.assertIn("run.prepare_for_resume", stderr)
             self.assertIn("run.targets is exactly [infrastructure]", stderr)
 
-    def test_run_image_prefetch_accepts_on_and_off(self):
+    def test_run_registry_refresh_accepts_missing_and_all(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
-            for mode in ("off", "on"):
-                exp_path, _ = self._build_triplet(root, tempdir, run_image_prefetch=mode)
+            for mode in ("missing", "all"):
+                exp_path, _ = self._build_triplet(root, tempdir, run_registry_refresh=mode)
                 parser = argparse.ArgumentParser()
                 cfg = input_module.start(parser, str(exp_path))
-                self.assertEqual(cfg["domains"]["run"]["image_prefetch"], mode)
+                self.assertEqual(cfg["domains"]["run"]["registry_refresh"], mode)
 
-    def test_run_image_prefetch_rejects_invalid_values(self):
+    def test_run_image_prefetch_is_removed_even_with_registry_refresh(self):
+        for include_new in (False, True):
+            with self.subTest(include_new=include_new), tempfile.TemporaryDirectory() as tempdir:
+                exp_path, _ = self._build_triplet(Path(tempdir), tempdir)
+                payload = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
+                payload["run"]["image_prefetch"] = "off"
+                if include_new:
+                    payload["run"]["registry_refresh"] = "missing"
+                self._write(exp_path, payload)
+                stderr = self._parse_error(exp_path)
+                self.assertIn("run.image_prefetch", stderr)
+                self.assertIn("unexpected key", stderr)
+
+    def test_lock_replay_rejects_removed_image_prefetch(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            run = payload["normalized_config"]["run"]
+            run.pop("registry_refresh", None)
+            run["image_prefetch"] = "off"
+            self._write(lock_path, payload)
+            stderr = self._parse_error(lock_path)
+            self.assertIn("normalized_config.run.image_prefetch", stderr)
+            self.assertIn("unexpected key", stderr)
+
+    def test_registry_refresh_rejects_legacy_modes_and_non_strings(self):
+        for mode in ("off", "on", True, False, None, 0, [], {}):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tempdir:
+                exp_path, _ = self._build_triplet(Path(tempdir), tempdir)
+                payload = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
+                payload["run"]["registry_refresh"] = mode
+                self._write(exp_path, payload)
+                stderr = self._parse_error(exp_path)
+                self.assertIn("run.registry_refresh", stderr)
+                self.assertIn("must be one of", stderr)
+
+    def test_run_registry_refresh_rejects_invalid_values(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
-            exp_path, _ = self._build_triplet(root, tempdir, run_image_prefetch="always")
+            exp_path, _ = self._build_triplet(root, tempdir, run_registry_refresh="always")
             stderr = self._parse_error(exp_path)
-            self.assertIn("run.image_prefetch", stderr)
+            self.assertIn("run.registry_refresh", stderr)
             self.assertIn("must be one of", stderr)
 
-    def test_infrastructure_image_prefetch_is_rejected(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            exp_path, _ = self._build_triplet(root, tempdir)
-            payload = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
-            payload["infrastructure"]["image_prefetch"] = "on"
-            self._write(exp_path, payload)
-            stderr = self._parse_error(exp_path)
-            self.assertIn("infrastructure.image_prefetch", stderr)
-            self.assertIn("use run.image_prefetch", stderr)
+    def test_infrastructure_registry_refresh_settings_are_rejected(self):
+        for key, value in (("image_prefetch", "on"), ("registry_refresh", "all")):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tempdir:
+                root = Path(tempdir)
+                exp_path, _ = self._build_triplet(root, tempdir)
+                payload = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
+                payload["infrastructure"][key] = value
+                self._write(exp_path, payload)
+                stderr = self._parse_error(exp_path)
+                self.assertIn("infrastructure.%s" % key, stderr)
+                self.assertIn("use run.registry_refresh", stderr)
 
     def test_scoped_exclusive_conflict_on_shared_vm_fails(self):
         with tempfile.TemporaryDirectory() as tempdir:

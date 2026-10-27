@@ -44,7 +44,7 @@ def _validate_kind(data: dict, expected: str, path: Path):
 
 _ALLOWED_TARGETS = {"infrastructure", "software", "application"}
 _ALLOWED_TIERS = ("cloud", "edge", "endpoint")
-_ALLOWED_IMAGE_PREFETCH_MODES = {"off", "on"}
+_ALLOWED_REGISTRY_REFRESH_MODES = {"missing", "all"}
 _NETWORK_OVERRIDE_NUMERIC_KEYS = (
     "cloud_latency_avg",
     "cloud_latency_var",
@@ -99,7 +99,7 @@ def _validate_run(run: dict, path: Path, prefix: str) -> list[str]:
         path,
         prefix,
         _ALLOWED_TARGETS,
-        _ALLOWED_IMAGE_PREFETCH_MODES,
+        _ALLOWED_REGISTRY_REFRESH_MODES,
     )
 
 

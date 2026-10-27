@@ -20,7 +20,7 @@ class ExperimentLockWriterTests(unittest.TestCase):
             "targets": ["infrastructure"],
             "dry_run": False,
             "clean": False,
-            "image_prefetch": "off",
+            "registry_refresh": "missing",
             "prepare_for_resume": False,
         }
         module = {
@@ -215,7 +215,7 @@ class ExperimentLockWriterTests(unittest.TestCase):
                 "domains": {
                     "run": {
                         "targets": ["infrastructure", "software", "application"],
-                        "image_prefetch": "off",
+                        "registry_refresh": "missing",
                     },
                     "software": {
                         "modules": [

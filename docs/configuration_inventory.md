@@ -16,7 +16,7 @@ requires merging or adding documents.
 | Concern | Current behavior and bounded conclusion |
 | --- | --- |
 | Composition and resolution | `input/configuration/profile_composition.py` loads exactly one environment and one software profile. `input/configuration/yaml_io.py` tries an existing absolute reference, experiment-relative references (literal, .yaml, .yml), repository-relative references (same suffix order), the named repository profile and finally the named home-directory profile. First existing file wins. This is file resolution, not layered override/deep-merge semantics; record the selected source paths/lock. |
-| Defaults | Schema validation fills run booleans with false, current image_prefetch with off, nonzero-count VM specs with 1 core/1 GiB/quota 1, storage limits with zero, and network defaults with disabled/4g/empty overrides. Module-option validation then resolves provider/software/benchmark defaults into canonical domains. Keep raw declarations separate from normalized facts; missing legacy cfg values do not inherit these defaults. |
+| Defaults | Schema validation fills run booleans with false, current registry_refresh with missing, nonzero-count VM specs with 1 core/1 GiB/quota 1, storage limits with zero, and network defaults with disabled/4g/empty overrides. Module-option validation then resolves provider/software/benchmark defaults into canonical domains. Keep raw declarations separate from normalized facts; missing legacy cfg values do not inherit these defaults. |
 | Clusters | Experiments declare cluster IDs, tiers and VM counts/specs. VM IDs are derived in sorted cluster-ID order. Runtime projection aggregates by tier and rejects inconsistent specs within a tier (`input/configuration/legacy_projection.py`); this is not arbitrary heterogeneous multi-cluster runtime support. |
 | Selectors | Exact-match predicates within a clause are ANDed; the allowed software any_of form unions clauses. Canonical selector IDs, sorted VM IDs and scope identities are derived/reconciled. Empty or invalid assignments fail; profiles using cloud-1/endpoint-1 are not universally composable with renamed clusters. Benchmark assignment retains the supported single match form. See `input/configuration/selector_scope.py` and `input/configuration/selector_assignment_validation.py`. |
 | Run targets | Runtime order is infrastructure → software → application, independent of list order. Fresh infrastructure plus application requires software. Skipping infrastructure is QEMU-only and requires compatible retained state and SSH reachability. Infrastructure-only prepare_for_resume is explicit intent, not blanket future-phase certification. See `input/configuration/runtime_phase_targets.py` and `continuum.py`. |
@@ -24,10 +24,11 @@ requires merging or adding documents.
 | Host placement | All seven shipped environment profiles use QEMU and declare no external physical machines. The normal runner can supply node3 and a physical-core limit; capacity/CPU pinning determine placement. The exact OpenFaaS input requests 26 vCPUs; its distinct 20-vCPU local variant is not a substitute for the required multi-host run. |
 | Cache, retention and resume | The QEMU cache is single-slot; delete_on_exit requests VM teardown, not blanket artifact deletion. A fresh same-user QEMU workflow may replace retained same-user domains across base paths. Resume v1 remains same revision/base path/topology/software; revision equality is an operator precondition, not Git-tracking machinery. Changed-parameter sweeps remain candidate-only; fresh runtime/manual acceptance is open. |
 
-The approved registry_refresh missing/all hard cut is a separate atomic packet.
-At this checkpoint the schema still uses image_prefetch off/on. The common
-base-install fingerprint gap found during cache review is also separate;
-inventory completion does not repair it.
+The frozen b22cadc input snapshot below records the former image_prefetch off/on
+schema. The subsequent atomic hard cut accepts registry_refresh missing/all,
+default missing, without aliases; the frozen per-file facts have not yet been
+refreshed and must not be treated as current input hashes. The common base-install
+fingerprint gap found during cache review is separate; inventory does not repair it.
 
 ## Frozen file coverage
 

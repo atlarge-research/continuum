@@ -27,20 +27,21 @@ directory unless a runner override is used.
 
 A Docker registry is created only when required image pulls exist for the
 selected run targets. Continuum resolves required images from software/benchmark
-intent, then prefetches into the local registry using `run.image_prefetch`:
+intent, then prefetches into the local registry using `run.registry_refresh`:
 
-- `off` (default): pull/push only required images missing from the local registry cache.
-- `on`: force refresh pull/push for all required images.
+- `missing` (default): pull/push only required images missing or invalid in the local registry cache.
+- `all`: force refresh pull/push for all required images.
 
 All VMs get images from this registry when applicable. This avoids repeated
 pulls across many VMs and helps prevent remote registry rate limits.
 
-For `image_prefetch: "off"` suites, runtime does not need host-side Docker
+For `registry_refresh: missing` suites, runtime does not need host-side Docker
 when required images are already in the local registry cache. Prime as the
 Docker-capable normal user through the repo runner. Use the explicit retained
 root/venv exports in `docs/smoke_runner_isolation.md`; no installed helper or
-separate account is used. Registry refresh terminology is approved but has not
-yet replaced the current schema.
+separate account is used. Registry refresh does not itself invoke the priming
+tool or change guest-preload requirements; the removed image_prefetch key is
+not accepted as an alias.
 
 ## Useful Commands
 
@@ -50,7 +51,7 @@ yet replaced the current schema.
 | `python3 continuum.py configs/experiments/infra_only.yaml` | Run a minimal YAML experiment |
 | `python3 scripts/test/run_tests.py --list-suites` | Inspect configured suites and prerequisites |
 | `python3 scripts/test/run_tests.py --suite smoke --check-prereqs` | Check host readiness without provisioning |
-| `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity` | Prime the local registry cache for an `image_prefetch: "off"` image suite as a Docker-capable user |
+| `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity` | Prime the local registry cache for a `registry_refresh: missing` image suite as a Docker-capable user |
 | `python3 scripts/test/prime_local_registry_cache.py --suite qemu_kubeedge_image_parity --check-only` | Verify that the local registry cache is ready without Docker access |
 | `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite qemu_openfaas_image_parity` | Prime the full OpenFaaS image parity cache as the Docker-capable normal user |
 | `scripts/test/run_cloud_static_audit.sh` | Run cloud-safe compile, tests, docs, lint, and suite metadata checks |

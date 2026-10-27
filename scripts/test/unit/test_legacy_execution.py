@@ -342,7 +342,7 @@ class LegacyBenchmarkExecutionEnvelopeTests(unittest.TestCase):
                 "resource_manager": None,
             },
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {

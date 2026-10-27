@@ -79,7 +79,7 @@ def _config(resource_manager=None, endpoint_nodes=0, modules=None, run_targets=N
         "module": {"resource_manager": resource_manager},
         "infrastructure": {"endpoint_nodes": endpoint_nodes, "provider": "qemu"},
         "domains": {
-            "run": {"targets": run_targets, "image_prefetch": "off"},
+            "run": {"targets": run_targets, "registry_refresh": "missing"},
             "software": {"modules": modules},
             "benchmark": {"pipeline": pipeline or []},
         },

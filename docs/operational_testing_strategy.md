@@ -357,30 +357,30 @@ human-readable docs. The active suite contract is now:
 5. `qemu_k8s_nobench_parity` preflights the local QEMU/libvirt commands plus `tc` for the old-main Kubernetes no-benchmark row,
 6. `qemu_k8s_image_parity` preflights local-registry cache readiness in
    addition to the QEMU/libvirt and network commands because the full
-   Kubernetes application row uses `image_prefetch: "off"` with cached
+   Kubernetes application row uses `registry_refresh: missing` with cached
    application images,
 7. `qemu_kubeedge_software_parity` preflights the local QEMU/libvirt runner
    commands for KubeEdge software-only certification,
 8. `qemu_kubeedge_image_parity` preflights local-registry cache readiness in
    addition to the QEMU/libvirt commands because the full KubeEdge application
-   row uses `image_prefetch: "off"` with cached application images,
+   row uses `registry_refresh: missing` with cached application images,
 9. `qemu_mist_software_parity` preflights the local QEMU/libvirt runner
    commands for Mist software-only certification,
 10. `qemu_mist_image_parity` preflights local-registry cache readiness in
    addition to the QEMU/libvirt commands because the ported full Mist
-   application row uses `image_prefetch: "off"` with cached application images,
+   application row uses `registry_refresh: missing` with cached application images,
 11. `qemu_endpoint_software_parity` preflights the local QEMU/libvirt runner
    commands plus `tc` for endpoint-runtime software-only certification,
 12. `qemu_endpoint_image_parity` preflights local-registry cache readiness in
    addition to the QEMU/libvirt and network commands because the full
-   endpoint-only application row uses `image_prefetch: "off"` with cached
+   endpoint-only application row uses `registry_refresh: missing` with cached
    application images,
 13. `qemu_openfaas_software_parity` preflights the local QEMU/libvirt runner
    commands for OpenFaaS software-only certification on a single-host CPU-capped
    variant of the legacy node counts,
 14. `qemu_openfaas_image_parity` preflights local-registry cache readiness in
    addition to the QEMU/libvirt commands because the full OpenFaaS application
-   row uses `image_prefetch: "off"` with cached application images,
+   row uses `registry_refresh: missing` with cached application images,
 15. missing prerequisites fail before config discovery or VM provisioning starts,
 16. operators can inspect the configured suite contract with
    `python3 scripts/test/run_tests.py --list-suites`,

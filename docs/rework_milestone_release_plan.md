@@ -66,13 +66,13 @@ static or runtime success.
    support. Inventory legacy `.cfg` inputs and test-only fixtures separately.
    Each tracked file needs one classification/disposition and zero unaccounted
    rows before the configuration gate closes.
-8. **Registry terminology.** The approved future hard cut is
+8. **Registry terminology.** The implemented approved hard cut is
    `run.registry_refresh: missing|all`, default `missing`, without aliases.
-   Current `run.image_prefetch: "off"` fetches missing required registry
-   images; `"on"` refreshes all required registry images. Keep the current
-   schema until the bounded terminology packet updates parser, schema,
-   examples, tests and docs atomically. Cache priming and guest preload are
-   separate operations, not synonyms for this setting.
+   Missing refreshes missing/invalid required registry images; all refreshes
+   every required image. Parser, schema, runtime accessors, examples, tests
+   and active docs change together; the removed image_prefetch key is rejected.
+   Cache priming and guest preload are separate operations, not synonyms for
+   this setting. Historical evidence is not migrated or renewed by the cutover.
 9. **Retained inspection.** Permanently keep ordinary logs, raw stdout/stderr,
    metadata, state/lock, benchmark/network artifacts, storage/pruning controls,
    `latest-result-summary`, and narrowly indexed/full `latest-result-tail`.

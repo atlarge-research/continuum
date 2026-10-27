@@ -193,7 +193,7 @@ class ConfigAccessTests(unittest.TestCase):
             "domains": {
                 "run": {
                     "targets": ["infrastructure", "software"],
-                    "image_prefetch": "off",
+                    "registry_refresh": "missing",
                     "prepare_for_resume": False,
                 }
             }
@@ -203,8 +203,8 @@ class ConfigAccessTests(unittest.TestCase):
         self.assertTrue(config_access.runs_software(cfg))
         self.assertFalse(config_access.runs_application(cfg))
         self.assertFalse(config_access.infra_only(cfg))
-        self.assertEqual(config_access.image_prefetch_mode(cfg), "off")
-        self.assertFalse(config_access.image_prefetch_enabled(cfg))
+        self.assertEqual(config_access.registry_refresh_mode(cfg), "missing")
+        self.assertFalse(config_access.registry_refresh_all(cfg))
         self.assertFalse(config_access.prepare_for_resume_enabled(cfg))
 
     def test_run_helpers_require_domain_targets(self):
@@ -212,20 +212,31 @@ class ConfigAccessTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             config_access.run_targets(cfg)
 
-    def test_image_prefetch_helpers(self):
-        cfg = {"domains": {"run": {"targets": ["software"], "image_prefetch": "on"}}}
-        self.assertEqual(config_access.image_prefetch_mode(cfg), "on")
-        self.assertTrue(config_access.image_prefetch_enabled(cfg))
+    def test_registry_refresh_helpers(self):
+        cfg = {"domains": {"run": {"targets": ["software"], "registry_refresh": "all"}}}
+        self.assertEqual(config_access.registry_refresh_mode(cfg), "all")
+        self.assertTrue(config_access.registry_refresh_all(cfg))
 
-    def test_image_prefetch_requires_domain_path(self):
+    def test_registry_refresh_requires_domain_path(self):
         cfg = {"domains": {"run": {"targets": ["software"]}}}
         with self.assertRaises(ValueError):
-            config_access.image_prefetch_mode(cfg)
+            config_access.registry_refresh_mode(cfg)
 
-    def test_image_prefetch_rejects_invalid_mode(self):
-        cfg = {"domains": {"run": {"targets": ["software"], "image_prefetch": "always"}}}
+    def test_registry_refresh_rejects_invalid_mode(self):
+        cfg = {"domains": {"run": {"targets": ["software"], "registry_refresh": "always"}}}
         with self.assertRaises(ValueError):
-            config_access.image_prefetch_mode(cfg)
+            config_access.registry_refresh_mode(cfg)
+
+    def test_registry_refresh_does_not_read_removed_domain_path(self):
+        cfg = {"domains": {"run": {"image_prefetch": "off"}}}
+        with self.assertRaisesRegex(ValueError, "domains.run.registry_refresh"):
+            config_access.registry_refresh_mode(cfg)
+
+        for mode in ("off", "on", True, False, 0, [], {}):
+            with self.subTest(mode=mode):
+                cfg = {"domains": {"run": {"registry_refresh": mode}}}
+                with self.assertRaisesRegex(ValueError, "domains.run.registry_refresh"):
+                    config_access.registry_refresh_mode(cfg)
 
     def test_prepare_for_resume_helpers(self):
         cfg = {

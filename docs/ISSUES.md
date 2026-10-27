@@ -70,8 +70,8 @@ registry is being contacted over HTTP without an insecure-registry entry. Check
 Docker daemon configuration on the involved VM and restart Docker after changes.
 
 The local registry is now internal runtime behavior. User intent is only
-`run.image_prefetch` in YAML; do not add `infrastructure.image_prefetch` to new
-configs.
+`run.registry_refresh: missing|all` in YAML. Both infrastructure-level registry
+settings and the removed run.image_prefetch key are rejected; there is no alias.
 
 ## Ansible
 

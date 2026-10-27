@@ -12,8 +12,9 @@ resume, arbitrary software replacement and concurrent shared-base-path runs are
 unsupported. Sequential same-application changed-parameter sweeps remain
 candidate-only until cleanup/idempotence is demonstrated.
 
-The future `run.registry_refresh: missing|all` hard cut is approved but not yet
-implemented. The current accepted schema remains `run.image_prefetch` below.
+The accepted registry setting is `run.registry_refresh: missing|all`, default
+`missing`. The removed `run.image_prefetch` key and off/on values have no aliases;
+old-format locks must be regenerated from current source inputs, not replayed.
 
 This is the user-facing reference for Continuum's YAML input model.
 
@@ -74,7 +75,7 @@ Top-level keys for `ContinuumExperiment`:
 | Key | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
 | `targets` | list of strings | yes | none | Non-empty, no duplicates |
-| `image_prefetch` | string | no | `"off"` | Allowed: `"off"`, `"on"` |
+| `registry_refresh` | string | no | `missing` | Allowed: `missing`, `all`; refresh missing/invalid required registry images or all required images |
 | `prepare_for_resume` | boolean | no | `false` | Only valid with `targets: [infrastructure]`; prepares retained infra for later resume |
 | `dry_run` | boolean | no | `false` | Parser-owned default |
 | `clean` | boolean | no | `false` | Parser-owned default |
@@ -105,7 +106,9 @@ still exist or are currently reachable.
 
 `prepare_for_resume: true` keeps selected later-phase software prerequisites available during an infrastructure-only retained run. Use it only for retained-resume workflows such as the benchmark smoke infrastructure leg; generic infrastructure-only runs should leave it omitted or `false`.
 
-Use quotes for `image_prefetch` values in YAML examples. Plain `off`/`on` can be loaded as booleans by YAML parsers.
+`registry_refresh: missing` preserves valid cached required registry images;
+`registry_refresh: all` refreshes every required image. Cache priming and guest
+preload are separate operations, not alternate meanings of this setting.
 
 ## Infrastructure Schema
 

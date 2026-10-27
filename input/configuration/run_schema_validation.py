@@ -42,7 +42,7 @@ def validate_run(
     path: Path,
     prefix: str,
     allowed_targets: set[str],
-    allowed_image_prefetch_modes: set[str],
+    allowed_registry_refresh_modes: set[str],
 ) -> list[str]:
     if not isinstance(run, dict):
         _fail(path, prefix, "must be a mapping")
@@ -50,7 +50,7 @@ def validate_run(
         path,
         prefix,
         run,
-        {"targets", "dry_run", "clean", "image_prefetch", "prepare_for_resume"},
+        {"targets", "dry_run", "clean", "registry_refresh", "prepare_for_resume"},
     )
 
     targets = run.get("targets")
@@ -81,15 +81,15 @@ def validate_run(
             "is only valid when run.targets is exactly [infrastructure]",
         )
 
-    image_prefetch = run.get("image_prefetch", "off")
-    if not isinstance(image_prefetch, str):
-        _fail(path, "%s.image_prefetch" % (prefix), "must be one of off, on")
-    image_prefetch = image_prefetch.strip().lower()
-    if image_prefetch not in allowed_image_prefetch_modes:
+    registry_refresh = run.get("registry_refresh", "missing")
+    if not isinstance(registry_refresh, str):
+        _fail(path, "%s.registry_refresh" % (prefix), "must be one of all, missing")
+    registry_refresh = registry_refresh.strip().lower()
+    if registry_refresh not in allowed_registry_refresh_modes:
         _fail(
             path,
-            "%s.image_prefetch" % (prefix),
-            "must be one of %s" % (", ".join(sorted(allowed_image_prefetch_modes))),
+            "%s.registry_refresh" % (prefix),
+            "must be one of %s" % (", ".join(sorted(allowed_registry_refresh_modes))),
         )
-    run["image_prefetch"] = image_prefetch
+    run["registry_refresh"] = registry_refresh
     return normalized_targets

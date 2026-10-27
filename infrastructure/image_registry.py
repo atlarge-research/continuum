@@ -406,7 +406,7 @@ def _registry_has_required_image(config, machines, requirement, repos, tags_cach
 
 
 def _requirements_to_pull(config, machines, requirements, repos):
-    if config_access.image_prefetch_enabled(config):
+    if config_access.registry_refresh_all(config):
         return list(requirements)
 
     tags_cache = {}
@@ -447,7 +447,7 @@ def docker_registry(config, machines):
 
     repos = _ensure_registry_running(config, machines)
     to_pull = _requirements_to_pull(config, machines, requirements, repos)
-    mode = config_access.image_prefetch_mode(config)
+    mode = config_access.registry_refresh_mode(config)
     if not to_pull:
         logging.info(
             "Skip remote image prefetch: all required images already cached in local registry (mode=%s)",

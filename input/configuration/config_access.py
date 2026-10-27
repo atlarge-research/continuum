@@ -8,7 +8,7 @@ from copy import deepcopy
 from . import module_registry, selector_resolution
 
 _ALLOWED_RUN_TARGETS = ("infrastructure", "software", "application")
-_ALLOWED_IMAGE_PREFETCH_MODES = ("off", "on")
+_ALLOWED_REGISTRY_REFRESH_MODES = ("missing", "all")
 _ORCHESTRATOR_MODULE_TYPES = module_registry.ORCHESTRATOR_MODULE_TYPES
 _ADDON_MODULE_TYPES = module_registry.ADDON_MODULE_TYPES
 
@@ -62,25 +62,25 @@ def run_targets(config):
     return normalized
 
 
-def image_prefetch_mode(config):
-    mode = _nested_value(config, "domains", "run", "image_prefetch", default=None)
+def registry_refresh_mode(config):
+    mode = _nested_value(config, "domains", "run", "registry_refresh", default=None)
     if mode is None:
-        raise ValueError("Missing required config path domains.run.image_prefetch")
+        raise ValueError("Missing required config path domains.run.registry_refresh")
     if not isinstance(mode, str):
         raise ValueError(
-            "Invalid image prefetch mode type in domains.run.image_prefetch: %r" % (mode,)
+            "Invalid registry refresh mode type in domains.run.registry_refresh: %r" % (mode,)
         )
     normalized_mode = mode.strip().lower()
-    if normalized_mode not in _ALLOWED_IMAGE_PREFETCH_MODES:
+    if normalized_mode not in _ALLOWED_REGISTRY_REFRESH_MODES:
         raise ValueError(
-            "Invalid image prefetch mode '%s' in domains.run.image_prefetch (allowed: %s)"
-            % (normalized_mode, ", ".join(_ALLOWED_IMAGE_PREFETCH_MODES))
+            "Invalid registry refresh mode '%s' in domains.run.registry_refresh (allowed: %s)"
+            % (normalized_mode, ", ".join(_ALLOWED_REGISTRY_REFRESH_MODES))
         )
     return normalized_mode
 
 
-def image_prefetch_enabled(config):
-    return image_prefetch_mode(config) == "on"
+def registry_refresh_all(config):
+    return registry_refresh_mode(config) == "all"
 
 
 def prepare_for_resume_enabled(config):

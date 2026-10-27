@@ -69,7 +69,8 @@ and the retirement packet performed no VM operation or benchmark rerun.
    per-file evidence is bound to b22cadc. Final historical dispositions, required
    equivalents and fresh runtime acceptance remain open; refresh affected rows
    after later schema/example/test changes.
-2. Implement the approved registry_refresh hard cut and address demonstrated
+2. The approved registry_refresh missing/all hard cut replaces image_prefetch
+   without aliases; historical locks/evidence are not renewed. Address demonstrated
    cache-recipe gaps through bounded reviewed packets; validate the narrow
    same-revision QEMU resume contract. Sweeps remain candidate-only.
 3. Complete approved slimming, including temporary debug-playbook removal,

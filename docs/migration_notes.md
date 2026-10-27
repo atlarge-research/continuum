@@ -5,9 +5,8 @@ It replaces full old-main parity as the release gate with approved reproduction
 scope and complete bounded inventories; legacy inputs are preserved until final
 scope confirmation. Normal-user host migration and current commands are in
 `docs/smoke_runner_isolation.md`. Historical matrix rows/evidence below are not
-renewed by migration. The future `run.registry_refresh: missing|all` terminology
-hard cut is approved but not yet implemented; current examples still use
-`run.image_prefetch`.
+renewed by migration. The registry terminology hard cut is implemented as
+`run.registry_refresh: missing|all`, default `missing`, without aliases.
 
 This note covers the hard-cut migration from legacy config paths to the canonical YAML model.
 
@@ -123,28 +122,36 @@ Important rules:
 - benchmark-stage placement remains match-only
 - module-local `config` is required even when empty
 
-### 3. `infrastructure.image_prefetch` -> `run.image_prefetch`
+### 3. Removed image_prefetch settings -> `run.registry_refresh`
 
 Removed:
 
 ```yaml
 infrastructure:
   image_prefetch: on
+# Also removed from the run domain:
+run:
+  image_prefetch: "on"
 ```
 
 Replacement:
 
 ```yaml
 run:
-  image_prefetch: "on"
+  registry_refresh: all
 ```
 
 Allowed values:
 
-- `off`
-- `on`
+- `missing` (default): refresh only missing/invalid required registry images.
+- `all`: refresh every required registry image.
 
-Quote those values in YAML. Plain `off`/`on` may be parsed as booleans instead of strings.
+The semantic migration is old off → missing and old on → all. This is operator
+guidance, not an automatic conversion or compatibility path: old keys are
+rejected, even alongside the new key, and off/on/boolean values are invalid for
+registry_refresh. Both infrastructure-level spellings are rejected. Old-format
+normalized locks are not replayable; regenerate locks from current experiment
+inputs. Priming the registry cache and preloading guests remain separate actions.
 
 ### 4. Legacy benchmark sizing helper surface
 

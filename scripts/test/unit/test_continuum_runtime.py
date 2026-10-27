@@ -2294,7 +2294,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_defaults_to_empty(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2315,7 +2315,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_rejects_missing_resolved_vm_ids(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2353,7 +2353,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_rejects_unknown_resolved_vm_id(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2392,7 +2392,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_rejects_unknown_module_type(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2420,7 +2420,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_rejects_malformed_resource_record(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2442,7 +2442,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_kubecontrol_control_plane_images(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2478,7 +2478,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_rejects_unsupported_kube_version(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2506,7 +2506,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_rejects_missing_kube_version(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2534,7 +2534,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_is_deduplicated_and_deterministic(self):
         config = {
             "domains": {
-                "run": {"targets": ["software"], "image_prefetch": "off"},
+                "run": {"targets": ["software"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2591,7 +2591,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_ignores_software_when_not_targeted(self):
         config = {
             "domains": {
-                "run": {"targets": ["infrastructure"], "image_prefetch": "on"},
+                "run": {"targets": ["infrastructure"], "registry_refresh": "all"},
                 "software": {
                     "modules": [
                         {
@@ -2629,7 +2629,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_unknown_stage_type_fails_fast(self):
         config = {
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": self._none_software_domain(),
                 "benchmark": {
                     "pipeline": [
@@ -2657,7 +2657,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_application_target_requires_pipeline(self):
         config = {
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": self._none_software_domain(),
             },
             "normalized": {"infrastructure": {"resources": []}},
@@ -2668,7 +2668,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_builtin_empty_stage_mapping(self):
         config = {
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": self._none_software_domain(),
                 "benchmark": {
                     "pipeline": [
@@ -2699,7 +2699,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_builtin_image_classification_stage_mapping(self):
         config = {
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": self._none_software_domain(),
                 "benchmark": {
                     "pipeline": [
@@ -2750,7 +2750,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_image_classification_with_openfaas(self):
         config = {
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2804,7 +2804,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_includes_stage_images_when_mapped(self):
         config = {
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": self._none_software_domain(),
                 "benchmark": {
                     "pipeline": [
@@ -2845,7 +2845,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_resolve_prefetch_requirements_dedupes_shared_module_and_stage_images(self):
         config = {
             "domains": {
-                "run": {"targets": ["application"], "image_prefetch": "off"},
+                "run": {"targets": ["application"], "registry_refresh": "missing"},
                 "software": {
                     "modules": [
                         {
@@ -2915,7 +2915,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         machine = mock.Mock()
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["software"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [],
         }
         requirements = image_registry_module.docker_registry(config, [machine])
@@ -2935,7 +2935,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                 )
                 config = {
                     "registry": "127.0.0.1:5000",
-                    "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+                    "domains": {"run": {"targets": ["application"], "registry_refresh": "missing"}},
                     "prefetch_image_requirements": [
                         self._digest_requirement(source_ref, local_name)
                     ],
@@ -2964,7 +2964,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                 )
                 config = {
                     "registry": "127.0.0.1:5000",
-                    "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+                    "domains": {"run": {"targets": ["application"], "registry_refresh": "missing"}},
                     "prefetch_image_requirements": [
                         self._digest_requirement(source_ref, local_name)
                     ],
@@ -3120,7 +3120,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         }
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["application"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
         }
         for label, response in cases.items():
@@ -3224,7 +3224,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         machine = self._local_registry_machine(local_name, [manifest])
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["application"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
         }
 
@@ -3239,7 +3239,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         incomplete_matching_manifest["config"].pop("size")
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["application"], "image_prefetch": "on"}},
+            "domains": {"run": {"targets": ["application"], "registry_refresh": "all"}},
             "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
         }
         responses = {
@@ -3263,7 +3263,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         machine = self._local_registry_machine(local_name.split(":", 1)[0], [])
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["software"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
         }
 
@@ -3279,7 +3279,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         machine = self._local_registry_machine(local_name, [])
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["application"], "image_prefetch": "on"}},
+            "domains": {"run": {"targets": ["application"], "registry_refresh": "all"}},
             "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
         }
         with mock.patch.dict(
@@ -3305,7 +3305,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         }
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["application"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["application"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [self._digest_requirement(source_ref, local_name)],
         }
         for label, cached_response in cases.items():
@@ -3325,7 +3325,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
 
                 self.assertEqual(bool(missing), pulled)
 
-    def test_docker_registry_mode_off_pulls_only_missing(self):
+    def test_docker_registry_mode_missing_pulls_only_missing(self):
         machine = mock.Mock()
         machine.process.side_effect = [
             self._process_result(['{"repositories":["cached-repo"]}']),
@@ -3336,7 +3336,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         ]
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["software"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [
                 {
                     "source_ref": "registry.example/cached-repo:latest",
@@ -3360,7 +3360,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         self.assertIn(["docker", "pull", "registry.example/missing-repo:latest"], commands)
         self.assertNotIn(["docker", "pull", "registry.example/cached-repo:latest"], commands)
 
-    def test_docker_registry_mode_off_pulls_when_required_tag_missing(self):
+    def test_docker_registry_mode_missing_pulls_when_required_tag_missing(self):
         machine = mock.Mock()
         machine.process.side_effect = [
             self._process_result(['{"repositories":["cached-repo"]}']),
@@ -3371,7 +3371,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         ]
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["software"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [
                 {
                     "source_ref": "registry.example/cached-repo:latest",
@@ -3386,7 +3386,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         commands = [call.args[1] for call in machine.process.call_args_list]
         self.assertIn(["docker", "pull", "registry.example/cached-repo:latest"], commands)
 
-    def test_docker_registry_mode_on_forces_pull(self):
+    def test_docker_registry_mode_all_forces_pull(self):
         machine = mock.Mock()
         machine.process.side_effect = [
             self._process_result(['{"repositories":["cached-repo","missing-repo"]}']),
@@ -3399,7 +3399,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         ]
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["software"], "image_prefetch": "on"}},
+            "domains": {"run": {"targets": ["software"], "registry_refresh": "all"}},
             "prefetch_image_requirements": [
                 {
                     "source_ref": "registry.example/cached-repo:latest",
@@ -3429,7 +3429,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         )
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["software"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [
                 {
                     "source_ref": "registry.example/missing-repo:latest",
@@ -3456,7 +3456,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
         ]
         config = {
             "registry": "127.0.0.1:5000",
-            "domains": {"run": {"targets": ["software"], "image_prefetch": "off"}},
+            "domains": {"run": {"targets": ["software"], "registry_refresh": "missing"}},
             "prefetch_image_requirements": [
                 {
                     "source_ref": "registry.example/cached-repo:latest",
@@ -3903,7 +3903,7 @@ class ResumeStateTests(unittest.TestCase):
             "targets": ["infrastructure", "software"],
             "dry_run": False,
             "clean": False,
-            "image_prefetch": "off",
+            "registry_refresh": "missing",
             "prepare_for_resume": False,
         }
         provider = {

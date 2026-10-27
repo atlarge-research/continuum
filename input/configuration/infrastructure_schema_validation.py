@@ -202,12 +202,13 @@ def validate_infrastructure(
 ):
     if not isinstance(infrastructure, dict):
         _fail(path, prefix, "must be a mapping")
-    if "image_prefetch" in infrastructure:
-        _fail(
-            path,
-            "%s.image_prefetch" % (prefix),
-            "is not supported in infrastructure domain; use run.image_prefetch",
-        )
+    for misplaced_key in ("image_prefetch", "registry_refresh"):
+        if misplaced_key in infrastructure:
+            _fail(
+                path,
+                "%s.%s" % (prefix, misplaced_key),
+                "is not supported in infrastructure domain; use run.registry_refresh",
+            )
     allowed = {"clusters", "network"}
     if allow_derived:
         allowed.add("resources")
