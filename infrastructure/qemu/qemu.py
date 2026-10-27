@@ -990,9 +990,14 @@ def base_image(config, machines, runner=None):
             "base VM shutdown on %s" % (machine.name,),
         )
         expected = "Domain %s is being shutdown" % (raw_base_name,)
-        if output != [expected]:
+        shutdown_output = (
+            [line for line in output if line.strip()]
+            if all(isinstance(line, str) for line in output)
+            else []
+        )
+        if shutdown_output != [expected]:
             raise RuntimeError(
-                "Base VM shutdown on %s returned an invalid response" % (machine.name,)
+                "Base VM shutdown on %s returned an invalid response: %r" % (machine.name, output)
             )
 
     _confirm_base_vms_stopped(config, selected_entries)
