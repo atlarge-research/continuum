@@ -874,13 +874,19 @@ def base_image(config, machines, runner=None):
             _owner_process(machine, config, command),
             "base VM launch on %s" % (machine.name,),
         )
+        # virsh adds presentation blank lines; cache-helper responses remain strict.
+        launch_output = (
+            [line for line in output if line.strip()]
+            if all(isinstance(line, str) for line in output)
+            else []
+        )
         if (
-            len(output) != 1
-            or not output[0].startswith("Domain ")
-            or " created from " not in output[0]
+            len(launch_output) != 1
+            or not launch_output[0].startswith("Domain ")
+            or " created from " not in launch_output[0]
         ):
             raise RuntimeError(
-                "Base VM launch on %s returned an invalid response" % (machine.name,)
+                "Base VM launch on %s returned an invalid response: %r" % (machine.name, output)
             )
         base_ips.append(base_ip)
 

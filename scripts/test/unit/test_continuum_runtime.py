@@ -4645,6 +4645,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             [(["not-json"], [])],
             [([json.dumps({"protocol": qemu_module._CACHE_PROTOCOL, "status": "ok"})], [])],
             [(["one", "two"], [])],
+            [([json.dumps({"protocol": qemu_module._CACHE_PROTOCOL, "status": "ok"}), ""], [])],
         )
         with tempfile.TemporaryDirectory() as tempdir:
             config = self._config(tempdir)
@@ -4936,7 +4937,8 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
             runner.run_playbook.assert_not_called()
 
-    def _successful_rebuild_process(self, machine, published_operations, fail_operation=None):
+    def _successful_rebuild_process(self, machine, published_operations, fail_operation=None,
+                                    create_response=None):
         synthetic = "Command exited with non-zero return code 9: injected"
 
         def process(_config, command, **kwargs):
@@ -4963,6 +4965,8 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                 if fail_operation == operation:
                     return [(["partial"], [synthetic])]
                 if operation == "create":
+                    if create_response is not None:
+                        return create_response
                     message = "Domain %s created from %s" % (
                         machine.base_names[0],
                         decoded_command[4],
@@ -4995,6 +4999,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         runner_failure=None,
         prefetch_failure=False,
         readiness_failure=False,
+        create_response=None,
     ):
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
@@ -5002,7 +5007,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         machine = self._machine(is_local=False)
         published = []
         machine.process.side_effect = self._successful_rebuild_process(
-            machine, published, fail_operation=fail_operation
+            machine, published, fail_operation=fail_operation, create_response=create_response
         )
         runner = mock.Mock()
         self._last_rebuild = (machine, runner, published)
@@ -5041,6 +5046,35 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         with patches[0], patches[1], patches[2], patches[3], patches[4], install_patch:
             qemu_module.base_image(config, [machine], runner=runner)
         return machine, runner, published
+
+    def test_base_launch_accepts_virsh_presentation_blank_lines(self):
+        message = "Domain base_test created from /exact/domain.xml"
+        response = Machine("local", True).process(
+            {}, [sys.executable, "-c", "print(%r)" % (message + "\n",)]
+        )
+        self.assertEqual(response, [[[message, ""], []]])
+        for output in ([message], response[0][0], ["", " \t", message, "", "\t"]):
+            with self.subTest(output=output):
+                _machine, _runner, published = self._run_rebuild(create_response=[[output, []]])
+                self.assertEqual(published, ["publish"])
+
+    def test_base_launch_rejects_invalid_records_and_preserves_raw_output(self):
+        message = "Domain base_test created from /exact/domain.xml"
+        for output in ([], ["", " \t"], [message, "unexpected"], ["wrong"],
+                       [None, message], [0, message], [" " + message]):
+            with self.subTest(output=output):
+                with self.assertRaises(RuntimeError) as raised:
+                    self._run_rebuild(create_response=[[output, []]])
+                self.assertIn(repr(output), str(raised.exception))
+                self.assertEqual(self._last_rebuild[2], [])
+
+    def test_base_launch_stderr_and_nonzero_are_not_blank_normalized(self):
+        message = "Domain base_test created from /exact/domain.xml"
+        for error in (["warning"], [qemu_module._SYNTHETIC_NONZERO_MARKER + ": create"]):
+            with self.subTest(error=error):
+                with self.assertRaises(RuntimeError):
+                    self._run_rebuild(create_response=[[[message, ""], error]])
+                self.assertEqual(self._last_rebuild[2], [])
 
     def test_successful_build_confirms_shutdown_then_publishes_atomically(self):
         machine, _runner, published = self._run_rebuild()
