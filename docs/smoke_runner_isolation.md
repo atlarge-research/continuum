@@ -104,6 +104,15 @@ Run only the exact scenario authorized by the active packet. Before host
 execution, record clean HEAD/status and verify prerequisites. No concurrent
 runs may share one base path. A cache belongs to one stable runner identity.
 
+For raw Ansible task and recap evidence, optionally export the standard
+`ANSIBLE_LOG_PATH` to an absolute path outside the checkout before a suite or
+single-config run. Use a private pre-existing `0700` evidence directory and a
+precreated `0600` log file. The runner forwards only a nonempty value through
+its otherwise unchanged cleared environment; unset/empty values are omitted.
+Ansible logs can contain secrets: never commit them. Verify the log is nonempty
+and contains the expected play recaps before recording its hash as evidence;
+an empty file proves no host outcome. Default logging behavior is unchanged.
+
 QEMU validates each owning host/profile slot and decides reuse or rebuilding.
 The runner does not delete guessed base images: `--rebuild-base-images`,
 `--use-cache`, and the root/suite test-config keys `base_image_rebuild_frequency`,

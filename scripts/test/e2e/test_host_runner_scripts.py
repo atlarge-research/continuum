@@ -44,6 +44,96 @@ class HostRunnerScriptTests(unittest.TestCase):
             cwd=self.repo_root,
         )
 
+    def _run_ansible_evidence_fixture(self, scenario, log_setting):
+        ansible = Path(sys.executable).with_name("ansible-playbook")
+        if not ansible.is_file():
+            executable = shutil.which("ansible-playbook")
+            if not executable:
+                self.skipTest("ansible-playbook is required for real log transport evidence")
+            ansible = Path(executable)
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            home = root / "home"
+            home.mkdir()
+            repo = root / "repo"
+            (repo / "scripts/test").mkdir(parents=True)
+            (repo / "continuum.py").touch()
+            (repo / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8")
+            play = repo / "play.yml"
+            play.write_text(
+                "- hosts: localhost\n  connection: local\n  gather_facts: false\n"
+                "  become: false\n  tasks:\n    - ansible.builtin.debug:\n"
+                "        msg: continuum-log-transport-marker\n", encoding="utf-8",
+            )
+            runner = repo / "scripts/test/run_tests.py"
+            runner.write_text(
+                "import json, os, subprocess, sys\n"
+                "print(json.dumps({'argv': sys.argv[1:], 'env': {key: os.environ.get(key) "
+                "for key in ['ANSIBLE_LOG_PATH', 'CONTINUUM_AMBIENT_SENTINEL', "
+                "'ANSIBLE_FORCE_COLOR']}}), flush=True)\n"
+                "sys.exit(subprocess.run(%r, check=False).returncode)\n"
+                % [str(ansible), "-i", "localhost,", str(play)], encoding="utf-8",
+            )
+            venv_bin = root / "venv/bin"
+            venv_bin.mkdir(parents=True)
+            python = venv_bin / "python3"
+            python.symlink_to(sys.executable)
+            evidence = root / "private evidence"
+            evidence.mkdir(mode=0o700)
+            log = evidence / "ansible $(touch INJECTED); 'quoted' [literal].log"
+            log.touch(mode=0o600)
+            env = dict(os.environ)
+            env.pop("ANSIBLE_LOG_PATH", None)
+            env.update({
+                "HOME": str(home), "CONTINUUM_REPO_ROOT": str(repo),
+                "CONTINUUM_SMOKE_PYTHON": str(python),
+                "CONTINUUM_SMOKE_BASE_ROOT": str(root / "retained"),
+                "CONTINUUM_AMBIENT_SENTINEL": "must-not-leak",
+                "ANSIBLE_FORCE_COLOR": "1",
+            })
+            if log_setting is not None:
+                env["ANSIBLE_LOG_PATH"] = str(log) if log_setting else ""
+            result = subprocess.run(
+                ["sh", str(self.run_smoke_script), scenario], env=env, cwd=repo,
+                check=False, capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads(result.stdout.splitlines()[0])
+            self.assertIsNone(report["env"]["CONTINUUM_AMBIENT_SENTINEL"])
+            self.assertIsNone(report["env"]["ANSIBLE_FORCE_COLOR"])
+            self.assertFalse((repo / "INJECTED").exists())
+            expected = {
+                "infra_one_vm": ["--config", "configs/experiments/smoke/infra_one_vm.yaml"],
+                "qemu_openfaas_image_parity": ["--suite", "qemu_openfaas_image_parity"],
+            }
+            self.assertEqual(report["argv"], expected[scenario] + [
+                "--base-path", str(root / "retained" / scenario),
+            ])
+            return report["env"]["ANSIBLE_LOG_PATH"], str(log), log.read_text(encoding="utf-8")
+
+    def test_run_smoke_suite_and_config_retain_real_ansible_log(self):
+        for scenario in ("infra_one_vm", "qemu_openfaas_image_parity"):
+            with self.subTest(scenario=scenario):
+                actual, expected, content = self._run_ansible_evidence_fixture(scenario, True)
+                self.assertEqual(actual, expected)
+                self.assertIn("continuum-log-transport-marker", content)
+                self.assertIn("PLAY RECAP", content)
+                self.assertRegex(content, r"unreachable=0\s+failed=0")
+
+    def test_run_smoke_suite_and_config_omit_unset_ansible_log(self):
+        for scenario in ("infra_one_vm", "qemu_openfaas_image_parity"):
+            with self.subTest(scenario=scenario):
+                actual, _, content = self._run_ansible_evidence_fixture(scenario, None)
+                self.assertIsNone(actual)
+                self.assertEqual(content, "")
+
+    def test_run_smoke_suite_and_config_omit_empty_ansible_log(self):
+        for scenario in ("infra_one_vm", "qemu_openfaas_image_parity"):
+            with self.subTest(scenario=scenario):
+                actual, _, content = self._run_ansible_evidence_fixture(scenario, False)
+                self.assertIsNone(actual)
+                self.assertEqual(content, "")
+
     def test_setup_show_config_uses_invoking_user_paths(self):
         with tempfile.TemporaryDirectory() as tempdir:
             result = self._run_setup_script("show-config", extra_env={"HOME": tempdir})
