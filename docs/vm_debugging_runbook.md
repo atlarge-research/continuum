@@ -172,8 +172,9 @@ Retained benchmark smoke failure:
 
 1. keep the retained base path intact,
 2. inspect benchmark stdout/stderr and `<base_path>/.continuum/logs/benchmark/`,
-3. use the repo runner's temporary bounded `debug-playbook` scenario from `docs/smoke_runner_isolation.md` only when approved Ansible replay is needed; it is removed after the current diagnosis and multi-host verification,
-4. rerun only the smallest relevant wrapper scenario after applying a fix.
+3. use `latest-result-summary` to select the exact result index, then `latest-result-tail` with `--full` for stdout, stderr and metadata as documented in `docs/smoke_runner_isolation.md`,
+4. inspect state/lock and use standard SSH, systemctl, journalctl or kubectl on the exact affected host; no framework-owned diagnostic replay is provided,
+5. rerun only the smallest relevant reviewed scenario after applying a fix.
 
 ## 8. Suggested Debugging Discipline
 

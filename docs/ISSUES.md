@@ -42,7 +42,7 @@ ip addr
 
 See `docs/NETWORK.md` for the current bridge guidance. The QEMU smoke wrapper
 also supports explicit bridge overrides through `CONTINUUM_QEMU_BRIDGE_NAME` and
-`CONTINUUM_QEMU_BRIDGE_GATEWAY` when the installed host setup forwards them.
+`CONTINUUM_QEMU_BRIDGE_GATEWAY`; the repository runner forwards explicit values.
 
 ### Permission denied for QEMU or libvirt storage
 
@@ -54,8 +54,8 @@ groups
 ls -ld <base_path> <base_path>/.continuum
 ```
 
-For agent-run smoke work, prefer the dedicated-user model in
-`docs/smoke_runner_isolation.md` instead of broad root shell access.
+For agent-run smoke work, use the normal-user repository-script workflow in
+`docs/smoke_runner_isolation.md`. Never run the framework or Ansible as root.
 
 ### CPU pinning fails
 
@@ -88,8 +88,10 @@ Continuum now pins controller and guest Ansible temp directories for the active
 runner paths. Permission failures are usually host setup, base-path ownership, or
 VM reachability problems rather than a request to run Continuum with `sudo`.
 
-For retained benchmark smoke debugging, use the installed wrapper's bounded
-`debug-playbook` entrypoint documented in `docs/smoke_runner_isolation.md`.
+For retained benchmark failures, use the repository runner's `latest-result-summary`
+and indexed/full `latest-result-tail`, then inspect the retained state, lock and
+logs. Use standard SSH, systemctl and journalctl against the exact affected host;
+see `docs/smoke_runner_isolation.md`. Preserve evidence before a reviewed rerun.
 
 ## Resume-State Problems
 

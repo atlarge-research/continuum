@@ -134,15 +134,19 @@ sh scripts/test/run_smoke_host.sh prune-scenario benchmark_k8s_resume --yes-dele
 This removes that child's retained state, including disks, not an aggregate
 suite. Evidence excluded from a snapshot cannot be claimed as preserved.
 
-## Temporary diagnostics and retirement
+## Direct diagnostics and completed retirement
 
-`debug-playbook` remains temporary through the current QEMU diagnosis and
-multi-host verification. Use it only for bounded approved diagnostics; see
-`docs/vm_debugging_runbook.md`. It is removed later, not expanded.
+The temporary framework-owned diagnostic replay command and its dedicated
+playbook are removed after the completed QEMU diagnosis and exact multi-host
+verification. Use the summary/indexed-full tail above, retained logs/state/lock,
+and ordinary SSH/operator tools against the exact affected host. See
+`docs/vm_debugging_runbook.md`; no replacement command runner is provided.
 
 Historical evidence documents retain their original account and commands.
-Their runs are not renewed by this migration. The installed old helpers,
-old homes and accounts remain inactive during verification; remove them only
-after real normal-user local/external validation, verified private snapshots,
-and an exact old UID/GID/named/default ACL retirement audit. Never use runtime
+Their runs are not renewed by this migration. Both old accounts/private groups
+and installed helpers are retired after verified normal-user local/external
+validation, private snapshots and exact UID/GID/ACL auditing. Old data/helpers
+remain recoverable in root-private /var/lib/continuum-retired-20261027-node4 and
+the node3 counterpart; normal identities and preexisting grants are unchanged.
+See `docs/rework_release_handoff.md` for the evidence checkpoint. Never use runtime
 recursive chown, broad permission repair or an automatic fallback to sudo.

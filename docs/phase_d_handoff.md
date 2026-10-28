@@ -114,7 +114,7 @@ Read after:
    - The helper is intentionally separate from `run-continuum-smoke`, so root
      maintenance actions and runner-user execution stay distinct.
 10. Retained benchmark debugging now requires fewer ad hoc host commands.
-   - `playbooks/debug/run_command.yml` exists for allowlisted replay/debug.
+   - `224dd1badb7bbad64372e2dc186d5ff2ea3af7a6:playbooks/debug/run_command.yml` exists for allowlisted replay/debug.
    - It accepts `debug_hosts` and the compatibility alias `debug_host_pattern`.
    - `infrastructure/ansible.py` now logs useful stdout/stderr tails for failed
      playbooks instead of only surfacing the synthetic nonzero-return line.
@@ -195,7 +195,7 @@ Read after:
 37. `scripts/test/unit/test_application_runtime_helpers.py`
 38. `scripts/test/unit/test_config_access.py`
 39. `scripts/test/unit/test_yaml_parser.py`
-40. `playbooks/debug/run_command.yml`
+40. `224dd1badb7bbad64372e2dc186d5ff2ea3af7a6:playbooks/debug/run_command.yml`
 41. `roles/resource_manager/docker_setup/tasks/main.yml`
 42. `roles/resource_manager/docker_setup/defaults/main.yml`
 43. `roles/resource_manager/k8s_prereqs/tasks/main.yml`

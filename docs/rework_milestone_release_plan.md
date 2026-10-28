@@ -76,9 +76,9 @@ static or runtime success.
 9. **Retained inspection.** Permanently keep ordinary logs, raw stdout/stderr,
    metadata, state/lock, benchmark/network artifacts, storage/pruning controls,
    `latest-result-summary`, and narrowly indexed/full `latest-result-tail`.
-   Keep `debug-playbook` temporary through current diagnosis and multi-host
-   verification, then remove its dedicated surface in a reviewed slimming
-   packet. Do not replace it with a generalized command runner.
+   The temporary diagnostic replay surface is removed after completed diagnosis
+   and exact multi-host verification. Its dedicated playbook/tests are removed;
+   do not replace it with a generalized command runner.
 10. **Evidence checks.** Provisionally preserve current checkers. In the
     slimming review, retain only mechanisms preventing a demonstrated false
     claim; consolidate proven duplication atomically with audit gates, tests,

@@ -206,114 +206,36 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("HOME", result.stderr)
 
-    def test_debug_run_command_playbook_accepts_debug_host_pattern_alias(self):
-        playbook_content = (
-            self.repo_root / "playbooks/debug/run_command.yml"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn(
-            'hosts: "{{ debug_hosts | default(debug_host_pattern | default(\'all\')) }}"',
-            playbook_content,
-        )
-
-    def test_run_smoke_debug_playbook_uses_runner_ansible_env(self):
+    def test_run_smoke_rejects_retired_debug_playbook_before_execution(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            temp_root = Path(tempdir)
-            runner_home = temp_root / "runner-home"
+            root = Path(tempdir)
+            runner_home = root / "runner-home"
             runner_home.mkdir()
-            venv_bin = temp_root / "venv" / "bin"
+            venv_bin = root / "venv/bin"
             venv_bin.mkdir(parents=True)
-            fake_python = venv_bin / "python3"
-            fake_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-            fake_python.chmod(0o755)
-            fake_ansible = venv_bin / "ansible-playbook"
-            fake_ansible.write_text(
-                "#!/bin/sh\n"
-                "printf 'ANSIBLE_CONFIG=%s\\n' \"$ANSIBLE_CONFIG\"\n"
-                "printf 'ANSIBLE_LOCAL_TEMP=%s\\n' \"$ANSIBLE_LOCAL_TEMP\"\n"
-                "printf 'ANSIBLE_REMOTE_TMP=%s\\n' \"$ANSIBLE_REMOTE_TMP\"\n"
-                "printf 'ARGS:%s\\n' \"$*\"\n",
-                encoding="utf-8",
-            )
-            fake_ansible.chmod(0o755)
-            smoke_base_root = temp_root / "smoke-base"
-
+            python = venv_bin / "python3"
+            python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            python.chmod(0o755)
+            sentinel = root / "ansible-was-invoked"
+            ansible = venv_bin / "ansible-playbook"
+            ansible.write_text("#!/bin/sh\ntouch '%s'\n" % sentinel, encoding="utf-8")
+            ansible.chmod(0o755)
+            base = root / "retained-state"
             result = self._run_smoke_script(
-                "debug-playbook",
-                "benchmark_k8s_resume_software",
+                "debug-playbook", "benchmark_k8s_resume_software",
                 "playbooks/resource_manager/k8s_cluster.yml",
-                "--limit",
-                "cloud_controller_continuum-smoke",
                 extra_env={
                     "HOME": str(runner_home),
                     "CONTINUUM_REPO_ROOT": str(self.repo_root),
-                    "CONTINUUM_SMOKE_PYTHON": str(fake_python),
-                    "CONTINUUM_SMOKE_ANSIBLE_PLAYBOOK": str(fake_ansible),
-                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
+                    "CONTINUUM_SMOKE_PYTHON": str(python),
+                    "CONTINUUM_SMOKE_ANSIBLE_PLAYBOOK": str(ansible),
+                    "CONTINUUM_SMOKE_BASE_ROOT": str(base),
                 },
             )
-
-            expected_base = smoke_base_root / "benchmark_k8s_resume" / ".continuum"
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(f"ANSIBLE_CONFIG={self.repo_root / 'ansible.cfg'}", result.stdout)
-            self.assertIn(
-                f"ANSIBLE_LOCAL_TEMP={expected_base / 'ansible' / 'tmp'}",
-                result.stdout,
-            )
-            self.assertIn("ANSIBLE_REMOTE_TMP=~/.continuum-ansible-runner-home/tmp", result.stdout)
-            self.assertIn(
-                "ARGS:-i %s %s -vvv --limit cloud_controller_continuum-smoke"
-                % (
-                    expected_base / "inventory_vms",
-                    self.repo_root / "playbooks/resource_manager/k8s_cluster.yml",
-                ),
-                result.stdout,
-            )
-
-    def test_run_smoke_debug_playbook_preserves_suite_scenario_base_path(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            temp_root = Path(tempdir)
-            runner_home = temp_root / "runner-home"
-            runner_home.mkdir()
-            venv_bin = temp_root / "venv" / "bin"
-            venv_bin.mkdir(parents=True)
-            fake_python = venv_bin / "python3"
-            fake_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-            fake_python.chmod(0o755)
-            fake_ansible = venv_bin / "ansible-playbook"
-            fake_ansible.write_text(
-                "#!/bin/sh\n"
-                "printf 'ARGS:%s\\n' \"$*\"\n",
-                encoding="utf-8",
-            )
-            fake_ansible.chmod(0o755)
-            smoke_base_root = temp_root / "smoke-base"
-
-            result = self._run_smoke_script(
-                "debug-playbook",
-                "qemu_kubeedge_software_parity",
-                "playbooks/debug/run_command.yml",
-                "-e",
-                "debug_hosts=cloudcontroller",
-                extra_env={
-                    "HOME": str(runner_home),
-                    "CONTINUUM_REPO_ROOT": str(self.repo_root),
-                    "CONTINUUM_SMOKE_PYTHON": str(fake_python),
-                    "CONTINUUM_SMOKE_ANSIBLE_PLAYBOOK": str(fake_ansible),
-                    "CONTINUUM_SMOKE_BASE_ROOT": str(smoke_base_root),
-                },
-            )
-
-            expected_base = smoke_base_root / "qemu_kubeedge_software_parity" / ".continuum"
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(
-                "ARGS:-i %s %s -vvv -e debug_hosts=cloudcontroller"
-                % (
-                    expected_base / "inventory_vms",
-                    self.repo_root / "playbooks/debug/run_command.yml",
-                ),
-                result.stdout,
-            )
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("Unsupported smoke scenario: debug-playbook", result.stderr)
+            self.assertFalse(sentinel.exists())
+            self.assertFalse(base.exists())
 
     def test_run_smoke_operational_regression_chains_smoke_matrix_and_benchmark(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -465,17 +387,6 @@ class HostRunnerScriptTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("Invalid smoke scenario name", result.stderr)
-
-    def test_run_smoke_debug_playbook_rejects_absolute_path(self):
-        result = self._run_smoke_script(
-            "debug-playbook",
-            "benchmark_k8s_resume_software",
-            "/tmp/evil.yml",
-            extra_env={"CONTINUUM_REPO_ROOT": str(self.repo_root)},
-        )
-
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Debug playbook must be a repo-relative playbook path", result.stderr)
 
     def test_run_smoke_prime_registry_cache_runs_as_runner_mode(self):
         with tempfile.TemporaryDirectory() as tempdir:

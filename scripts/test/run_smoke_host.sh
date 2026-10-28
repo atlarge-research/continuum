@@ -44,13 +44,11 @@ for path in "$BASE_ROOT" "$(dirname -- "$PYTHON_BIN")"; do
   fi
 done
 VENV_BIN=$(dirname -- "$PYTHON_BIN")
-ANSIBLE_PLAYBOOK_BIN="${CONTINUUM_SMOKE_ANSIBLE_PLAYBOOK:-$VENV_BIN/ansible-playbook}"
 LIBVIRT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}"
 QEMU_BRIDGE_NAME="${CONTINUUM_QEMU_BRIDGE_NAME:-}"
 QEMU_BRIDGE_GATEWAY="${CONTINUUM_QEMU_BRIDGE_GATEWAY:-}"
 RUN_MODE="config"
 REMOTE_TMP_TAG="${CONTINUUM_SMOKE_REMOTE_TMP_TAG:-$(basename -- "$HOME")}"
-DEBUG_PLAYBOOK=""
 
 invalid_name_pattern() {
   case "$1" in
@@ -67,28 +65,6 @@ validate_scenario_name() {
   scenario=$1
   if invalid_name_pattern "$scenario"; then
     echo "Invalid smoke scenario name: $scenario" >&2
-    return 2
-  fi
-}
-
-validate_debug_playbook_path() {
-  playbook=$1
-  case "$playbook" in
-    playbooks/*.yml|playbooks/*.yaml)
-      ;;
-    *)
-      echo "Debug playbook must be a repo-relative playbook path under playbooks/: $playbook" >&2
-      return 2
-      ;;
-  esac
-  case "$playbook" in
-    /*|*..*|*';'*|*'&'*|*'|'*|*'`'*|*'$'*|*'\'*|*'<'*|*'>'*|*'('*|*')'*|*'{'*|*'}'*|*'['*|*']'*|*'!'*|*' '*|*'	'*)
-      echo "Unsafe debug playbook path: $playbook" >&2
-      return 2
-      ;;
-  esac
-  if [ ! -f "$REPO_ROOT/$playbook" ]; then
-    echo "Debug playbook does not exist: $playbook" >&2
     return 2
   fi
 }
@@ -274,19 +250,6 @@ prune_scenario() {
   echo "Deleted retained state for scenario: $scenario"
   echo "Path: $scenario_path"
 }
-
-if [ "$SCENARIO" = "debug-playbook" ]; then
-  if [ "$#" -lt 3 ]; then
-    echo "Usage: $0 debug-playbook <scenario> <playbook> [ansible args...]" >&2
-    exit 2
-  fi
-  RUN_MODE="debug_playbook"
-  SCENARIO=$2
-  DEBUG_PLAYBOOK=$3
-  validate_scenario_name "$SCENARIO"
-  validate_debug_playbook_path "$DEBUG_PLAYBOOK"
-  shift 3
-fi
 
 validate_scenario_name "$SCENARIO"
 
@@ -477,12 +440,6 @@ if [ ! -x "$PYTHON_BIN" ]; then
   exit 2
 fi
 
-if [ "$RUN_MODE" = "debug_playbook" ] && [ ! -x "$ANSIBLE_PLAYBOOK_BIN" ]; then
-  echo "Could not find ansible-playbook in the runner venv: $ANSIBLE_PLAYBOOK_BIN" >&2
-  echo "Create or refresh the normal-user runner venv first." >&2
-  exit 2
-fi
-
 run_child_scenarios() {
   for child_scenario in "$@"; do
     printf '\n=== Running smoke scenario: %s ===\n' "$child_scenario"
@@ -493,10 +450,8 @@ run_child_scenarios() {
 set_suite_scenario() {
   suite_name=$1
   scenario_path=$2
-  if [ "$RUN_MODE" != "debug_playbook" ]; then
-    RUN_MODE="suite"
-    SUITE="$suite_name"
-  fi
+  RUN_MODE="suite"
+  SUITE="$suite_name"
   BASE_PATH="$BASE_ROOT/$scenario_path"
 }
 
@@ -678,7 +633,7 @@ case "$SCENARIO" in
     ;;
   *)
     echo "Unsupported smoke scenario: $SCENARIO" >&2
-    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, qemu_openfaas_image_local_parity, qemu_kubecontrol_empty_parity, qemu_kubecontrol_empty_trace_parity, qemu_kube_kata_empty_startup_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, release-artifact-audit, check-prereqs, list-suites, prime-registry-cache, debug-playbook, storage-report, latest-result-summary, latest-result-tail, prune-scenario" >&2
+    echo "Allowed values: phase_smoke_matrix, operational_regression, infra_one_vm, software_k8s_two_vm, network_netperf_two_vm, network_validation, qemu_infra_parity, qemu_k8s_nobench_parity, qemu_k8s_image_parity, qemu_kubeedge_software_parity, qemu_kubeedge_image_parity, qemu_mist_software_parity, qemu_mist_image_parity, qemu_endpoint_software_parity, qemu_endpoint_image_parity, qemu_openfaas_software_parity, qemu_openfaas_image_parity, qemu_openfaas_image_local_parity, qemu_kubecontrol_empty_parity, qemu_kubecontrol_empty_trace_parity, qemu_kube_kata_empty_startup_parity, benchmark_k8s_resume_infra, benchmark_k8s_resume_software, benchmark_k8s_resume_application, benchmark_k8s_resume, release-artifact-audit, check-prereqs, list-suites, prime-registry-cache, storage-report, latest-result-summary, latest-result-tail, prune-scenario" >&2
     exit 2
     ;;
 esac
@@ -694,29 +649,6 @@ chmod 0755 "$BASE_PATH" "$CONTINUUM_HOME" "$TEST_RESULTS_DIR" "$MPLCONFIGDIR_PAT
   "$CONTINUUM_HOME/ansible" "$ANSIBLE_LOCAL_TEMP_PATH"
 
 cd "$REPO_ROOT"
-if [ "$RUN_MODE" = "debug_playbook" ]; then
-  PLAYBOOK_PATH="$REPO_ROOT/$DEBUG_PLAYBOOK"
-
-  exec env -i \
-    HOME="$HOME" \
-    PATH="$VENV_BIN:$SAFE_PATH" \
-    PYTHONPATH=. \
-    PYTHONDONTWRITEBYTECODE=1 \
-    XDG_CACHE_HOME="$BASE_ROOT/.cache" \
-    MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \
-    ANSIBLE_CONFIG="$REPO_ROOT/ansible.cfg" \
-    ANSIBLE_LOCAL_TEMP="$ANSIBLE_LOCAL_TEMP_PATH" \
-    ANSIBLE_REMOTE_TMP="$ANSIBLE_REMOTE_TMP_PATH" \
-    LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \
-    ${QEMU_BRIDGE_NAME:+CONTINUUM_QEMU_BRIDGE_NAME="$QEMU_BRIDGE_NAME"} \
-    ${QEMU_BRIDGE_GATEWAY:+CONTINUUM_QEMU_BRIDGE_GATEWAY="$QEMU_BRIDGE_GATEWAY"} \
-    "$ANSIBLE_PLAYBOOK_BIN" \
-      -i "$CONTINUUM_HOME/inventory_vms" \
-      "$PLAYBOOK_PATH" \
-      -vvv \
-      "$@"
-fi
-
 if [ "$RUN_MODE" = "suite" ]; then
   exec env -i \
     HOME="$HOME" \

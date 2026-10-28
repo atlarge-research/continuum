@@ -74,8 +74,10 @@ and the retirement packet performed no VM operation or benchmark rerun.
    repair covers baked recipe inputs and actual preload identities, with limits
    in `docs/qemu_cache_contract.md`; it does not renew runtime evidence. Validate the narrow
    same-revision QEMU resume contract. Sweeps remain candidate-only.
-3. Complete approved slimming, including temporary debug-playbook removal,
-   without deleting required provenance or weakening freshness checks.
+3. The temporary diagnostic replay command/playbook and their dedicated tests
+   are removed; narrow result interfaces and direct operator diagnostics remain.
+   Complete the remaining branch-wide slimming audit without deleting required
+   provenance or weakening freshness checks.
 4. Create a clean final candidate and complete static/runtime/manual acceptance:
    two clean post-fix operational runs, at least one on that exact candidate;
    exact final-candidate multi-host OpenFaaS and every approved reproduction;

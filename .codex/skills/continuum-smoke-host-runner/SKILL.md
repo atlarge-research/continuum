@@ -1,6 +1,6 @@
 ---
 name: continuum-smoke-host-runner
-description: Use when preparing or running Continuum QEMU/libvirt host suites, normal-user setup_agent_host.sh or run_smoke_host.sh, retained benchmark runs, or temporary debug-playbook diagnostics.
+description: Use when preparing or running Continuum QEMU/libvirt host suites, normal-user setup_agent_host.sh or run_smoke_host.sh, or inspecting retained benchmark runs.
 ---
 
 # Continuum Physical-Host Runner
@@ -47,10 +47,12 @@ the benchmark root. Keep failure artifacts before diagnosis; no blind retries.
 Prune only an explicitly approved exact child after evidence preservation and
 disk-exclusion disclosure, using `--yes-delete-retained-state`.
 
-`debug-playbook` is temporary through current diagnosis and multi-host
-verification, then removed in a reviewed packet. Do not expand it into a
-general inspector. Historical evidence keeps its original runner commands and
-does not certify the current candidate.
+Use the result summary to choose the exact entry, then indexed/full tail for
+stdout, stderr and metadata. Inspect retained logs/state/lock and use standard
+SSH/operator tools on the exact affected host. The temporary diagnostic replay
+command/playbook is removed; no replacement command runner or inspector exists.
+Historical evidence keeps its original runner commands and does not certify
+the current candidate.
 
 For cloud-safe validation use continuum-test-workflows and
 continuum-cloud-static-audit; this skill does not authorize VM execution from
