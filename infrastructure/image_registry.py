@@ -320,7 +320,7 @@ def _registry_manifest_identity(config, machines, repo_name, tag_name, ssh=None)
     if error or not output:
         return None
     try:
-        payload = json.loads(output[0])
+        payload = json.loads("\n".join(output))
     except (ValueError, TypeError):
         return None
     if not isinstance(payload, dict):

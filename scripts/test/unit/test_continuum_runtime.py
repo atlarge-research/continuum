@@ -2149,7 +2149,10 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                     return self._process_result([])
                 if not isinstance(response, str):
                     response = json.dumps(response)
-                return self._process_result([response])
+                output = response.split("\n")
+                if output and output[-1] == "":
+                    output = output[:-1]
+                return self._process_result(output)
             self.fail("Unexpected local registry command: %r" % (command,))
 
         machine.process.side_effect = process
@@ -2986,6 +2989,99 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                     "127.0.0.1:5000/%s@sha256:%s"
                     % (local_name, "b" * 64),
                 )
+
+    def test_qemu_preload_accepts_multiline_manifest_from_machine_output(self):
+        """Keep real Machine line splitting at the QEMU preload identity boundary."""
+        manifest_digest = "sha256:" + "b" * 64
+        config_digest = "sha256:" + "a" * 64
+        families = {
+            "application/vnd.oci.image.manifest.v1+json": (
+                "application/vnd.oci.image.layer.v1.tar+gzip"
+            ),
+            "application/vnd.docker.distribution.manifest.v2+json": (
+                "application/vnd.docker.image.rootfs.diff.tar.gzip"
+            ),
+        }
+        config = {
+            "registry": "127.0.0.1:5000",
+            "domains": {"software": self._none_software_domain()},
+            "prefetch_image_requirements": [
+                self._digest_requirement("example/image:mutable", "image:mutable")
+            ],
+        }
+        accept = (
+            "Accept: application/vnd.docker.distribution.manifest.v2+json, "
+            "application/vnd.oci.image.manifest.v1+json"
+        )
+        for media_type, layer_type in families.items():
+            with self.subTest(media_type=media_type):
+                manifest = self._manifest_payload(config_digest, media_type)
+                manifest["layers"] = [{
+                    "mediaType": layer_type, "digest": "sha256:" + "c" * 64, "size": 2,
+                }]
+                children = [mock.Mock(returncode=0), mock.Mock(returncode=0)]
+                children[0].communicate.return_value = (
+                    ("Docker-Content-Digest: %s\n" % manifest_digest).encode("utf-8"), b""
+                )
+                children[1].communicate.return_value = (
+                    (json.dumps(manifest, indent=2) + "\n").encode("utf-8"), b""
+                )
+                with mock.patch.object(machine_module.subprocess, "Popen",
+                                       side_effect=children) as popen:
+                    identities = image_registry_module.qemu_base_preload_identities(
+                        config, [Machine("local", True)],
+                        "base_endpoint_none_np1_mm0_0_matthijs",
+                    )
+                self.assertEqual(identities, [{
+                    "image": "127.0.0.1:5000/image:mutable",
+                    "manifest_digest": manifest_digest, "config_digest": config_digest,
+                }])
+                self.assertEqual([call.args[0] for call in popen.call_args_list], [
+                    ["curl", "-fsS", "-I", "-H", accept,
+                     "127.0.0.1:5000/v2/image/manifests/mutable"],
+                    ["curl", "-fsS", "-H", accept,
+                     "127.0.0.1:5000/v2/image/manifests/" + manifest_digest],
+                ])
+
+    def test_manifest_identity_consumes_complete_json_body(self):
+        """Accept full valid bodies and reject malformed or additional JSON data."""
+        # pylint: disable=protected-access
+        config = {"registry": "127.0.0.1:5000"}
+        config_digest = "sha256:" + "a" * 64
+        manifest_digest = "sha256:" + "b" * 64
+        media_types = (
+            "application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.docker.distribution.manifest.v2+json",
+        )
+        for media_type in media_types:
+            manifest = self._manifest_payload(config_digest, media_type)
+            compact = json.dumps(manifest)
+            cases = {
+                "empty": ("", None),
+                "whitespace": (" \n\t\n", None),
+                "truncated": ('{\n  "schemaVersion": 2,\n', None),
+                "malformed": ('{\n  invalid\n}', None),
+                "trailing-garbage": (compact + "\ninvalid", None),
+                "second-json-value": (compact + '\n{"extra": true}', None),
+                "compact": (compact, (manifest_digest, config_digest)),
+                "trailing-whitespace": (compact + "\n \t\n", (manifest_digest, config_digest)),
+                "multiline": (json.dumps(manifest, indent=2) + "\n",
+                              (manifest_digest, config_digest)),
+            }
+            for label, (body, expected) in cases.items():
+                with self.subTest(media_type=media_type, case=label):
+                    machine = self._local_registry_machine("image", [body])
+                    self.assertEqual(image_registry_module._registry_manifest_identity(
+                        config, [machine], "image", "mutable"
+                    ), expected)
+        machine = mock.Mock()
+        machine.process.side_effect = [
+            self._process_result(["Docker-Content-Digest: %s" % manifest_digest]),
+            self._process_result([compact], ["curl: transfer failed"]),
+        ]
+        self.assertIsNone(image_registry_module._registry_manifest_identity(
+            config, [machine], "image", "mutable"
+        ))
 
     def test_incomplete_digest_cache_manifests_are_missing(self):
         source_ref, local_name, expected_digest = self._text_translation_digest_requirements()[0]
