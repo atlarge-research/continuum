@@ -18,8 +18,10 @@ outcome-bounded execution plan. It targets a review-ready core and the selected
 local-QEMU modules, not completion of every historical reproduction or a
 merge-ready release. Start one new coordinator task, with fresh-context
 implementation agents and independent read-only reviewers. Keep one checkout
-writer and one physical-host workflow at a time. Additional-node concurrency
-has only been discussed; it is not enabled or authorized by that discussion.
+writer. The bounded node4/node5 setup and cold/warm isolation pilot is explicitly
+approved under the linked amendment below. Keep one physical-host workflow until
+that pilot receives independent acceptance; development concurrency is not yet
+enabled. Final acceptance and OpenFaaS workflows remain serial.
 
 Policy/current-runner synchronization, indexed/full retained-result inspection
 and the minimal host-owned QEMU cache repair were independently reviewed,
@@ -147,13 +149,12 @@ processing and image completion do not certify one-way timing. This is functiona
 development evidence, not final-candidate acceptance or an exact Kubernetes patch
 pin. No failed state was pruned and no updater/lock was killed or removed.
 
-Packet B's reviewed source checkpoint is recorded below; its sequential 1 → 2 → 2
-runtime proof is next, followed by the remaining approved packets. Serial execution
-remains authorized independently of the pending parallel-pilot approval. Historical
+Packet B's sequential 1 → 2 → 2 development proof is recorded below. Historical
 scope, final dispositions and frozen-candidate acceptance remain open; the original
-pre-main goal is not complete.
+pre-main goal is not complete. Further packets and the approved parallel pilot
+wait for coordinator workflow release after B's evidence and handoff review.
 
-## Packet B source checkpoint — runtime pending
+## Packet B — sequential development proof
 
 The bounded Kubernetes image-classification Job-reuse repair is independently
 reviewed and committed locally at
@@ -172,29 +173,77 @@ manifest. The complete combined static suite passed 1,120 tests on separately
 attributed Python 3.12.7. YAML/Ansible lint passed; Python lint adds no findings
 relative to the inspected baseline. The older static pylint/astroid combination
 cannot inspect Python 3.12 typealias nodes; that tool failure is not a passing
-lint claim. These checks supply source evidence, not a new physical runtime pass.
+lint claim. The physical evidence below is separately attributed.
 
 New configuration inventory v7 is bound to clean
 `4b1878e28cd07a44b4ad8f267c3a69506f3214b3`, which contains this unchanged repair.
 It accounts for 358 rows, including the new test carrier, and verifies every
 source hash; all v2–v6 evidence remains unchanged. See
-`docs/configuration_inventory.md`. No packet-B application run has occurred yet.
-Next, on a reviewed clean committed revision and one base path, execute actual
-1 → 2 → 2 Hz application runs of 30 seconds, retain separate 30 → 60 → 60 outcomes
-and verify final teardown. This establishes only the tested sequential reuse;
-generic sweeps and multi-stage execution remain unsupported claims.
+`docs/configuration_inventory.md`.
+
+The reviewed five-invocation serial proof passed on clean
+`a6846eb82d183e5e1f044a7deae470d4df6ce380`, as matthijs using pinned Python
+3.8.10/Ansible 2.13.2 and one unchanged base,
+`/mnt/sdc/continuum_smoke/packet_b_sequential_a6846eb82d18_attempt2`.
+Infrastructure and software were followed by three 30-second application runs:
+
+| Frequency | Images sent / processed / returned | Fresh Job UID |
+| --- | --- | --- |
+| 1 Hz | 30 / 30 / 30 | `6c53c71f-69c7-4056-bc93-4fa855ca2e72` |
+| 2 Hz | 60 / 60 / 60 | `abe94436-5be8-4b49-8c39-5af6ef89c84b` |
+| 2 Hz | 60 / 60 / 60 | `c011fc7c-2d44-49f8-9f96-8a23da530e77` |
+
+Each run had a distinct execution label and pod UID, with a fresh Running
+subscriber observed before publication. Both prior terminal Jobs/pods and their
+individual 30/60-image logs were archived before replacement. All five result
+JSONs record success, zero exit codes and no timeouts; their full result and
+command stderr streams are empty. Eleven Ansible recaps/12 host rows have zero
+failed/unreachable hosts.
+Final teardown is verified. All 836 prior local compact files and nine remote
+files, eight unrelated shutoff domains and three prior running node3 domains,
+including inactive XMLs, remain unchanged. Full stdout/stderr/metadata, all five
+state/lock pairs, raw logs, six metric tables and 96 captures were manually
+inspected and independently reviewed.
+
+Evidence is under `development-packet-b-a6846eb82d18-attempt2` in the private
+durable root below. `finished.json` lists all five result paths;
+`accepted-development-manual.json` records the assessment and limitations
+(SHA-256 `51391d7426626bccd16a5d250eb0580b5ee8c38de0c9ef7af0601fd920d18fd5`).
+The first attempt remains intact under `development-packet-b-a6846eb82d18`:
+infrastructure failed before any application because the temporary raw-runner
+harness created its base ancestor with mode0700. Independently reviewed harness
+preparation created only fresh attempt2 traversal directories with wrapper-equivalent
+0755 modes; no failed path or production source was repaired. All 216 first-attempt
+evidence files and its failed QCOW2 remain unchanged.
+
+The first application retains two parser diagnostics from interleaved data-size
+and preprocessing log lines, omitting one sample from each of those summaries.
+Its 30 worker ML records and 30 endpoint result receipts still match the complete
+image counts; required RTT/processing summaries are finite. Printed one-way delay
+has no synchronization validation. This proves the tested sequential reuse only,
+not generic sweeps, multi-stage execution, exact Kubernetes patch pinning or
+final-candidate acceptance. Compact archives exclude disks, private SSH keys,
+Ansible temporary trees and full host journals.
 
 The separately reviewed
 [development-only two-host pilot amendment](superpowers/plans/2026-10-28-development-parallel-validation.md)
-is a pending-approval proposal, not launch authority. Read-only host surveys are
-complete; no allocation reservation, own-directory setup, venv/dependency
-preparation or concurrent pilot has occurred. Explicit user approval of the
-allocation, bounded setup and concurrent pilot is still required; elapsed time
-does not supply approval. Durable proposal/survey evidence is under
+now has explicit user approval for the bounded node4/node5 allocation, setup and
+cold/warm isolation pilot. Read-only host surveys are complete; no allocation
+reservation, own-directory setup, venv/dependency preparation or concurrent pilot
+has occurred. Physical pilot work remains held until B's final teardown and
+coordinator evidence/workflow release. Approval receipt
+`development-parallel-pilot-approved-20261028.json` has SHA-256
+`7c7ea4a3d5a14f2cc9c77945268dfe30e097a35611dbfb04cfcbbf79c060bbfd`.
+Durable proposal/survey evidence is under
 `development-parallel-pilot-proposal-20261028` in the private evidence root below;
 its SHA256SUMS SHA-256 is
 `e690168b73fa7623d3b19946a5704d1b32a36a9e25583ee3151ec4b0484e87df`.
-Continue the authorized serial packet-B sequence while that approval is pending.
+
+Next, after B closure, the coordinator releases packet C's independently reviewed
+bounded core/schema/documentation gap pass under the existing closure plan.
+The approved pilot must use separate immutable source snapshots and a reserved
+physical window; development concurrency stays disabled until its independent
+acceptance. These are separate coordinator releases under the existing plans.
 
 ## Archived completed planning records
 
