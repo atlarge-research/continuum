@@ -28,13 +28,14 @@ The refreshed checkpoint below records registry_refresh missing/all, default
 missing, without aliases. The separate bounded cache repair covers common/active
 included roles, copied inputs, consumed values and actual preload identities;
 see `docs/qemu_cache_contract.md`. Neither static inventory nor cache source tests
-prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6 inventories remain preserved
+prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6/v7 inventories remain preserved
 unchanged as historical evidence, not current source-hash claims.
 
 ## Frozen file coverage
 
 Private evidence freezes input content at clean source
-`4b1878e28cd07a44b4ad8f267c3a69506f3214b3`, containing the reviewed packet-B Job-reuse
+`31d62c044d1cf073c3f942700a99c28476a91c9a`, containing the reviewed packet-C schema-envelope
+checks and module-contract documentation corrections, plus packet B's unchanged Job-reuse
 repair at `aa7a438ee914cc60a0902ec1908be9c57b89982f`. Each row records source SHA, historical
 workflow, provider/hosts, resources, multi-host triggers, phases, software,
 benchmark, cache/cleanup/retention/resume, outputs, support, one classification
@@ -50,7 +51,7 @@ key presence and raw-text empty/nonempty status remain, not credential validity.
 | Test/support carriers | 45 | Every non-__init__ Python file under scripts/test/unit, e2e and support, conservatively included. Literal config markers detected in 26; this heuristic neither resolves all dynamic fixtures nor claims every carrier contains configuration. |
 | Test metadata | 3 | `scripts/test/test_config.json`, `scripts/test/coverage_manifest.json`, `scripts/test/test_manifest.json.example`; catalog/coverage/manifest metadata, not standalone experiments. |
 | Total inventory rows | 358 | 310 inputs plus 48 fixture/support/metadata sources; no duplicate or unaccounted eligible path. |
-| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. The Job-role defaults/tasks hashes changed since v6; the exclusion path set is unchanged. v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
+| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. All exclusion hashes are unchanged since v7; that snapshot recorded the Job-role defaults/tasks changes since v6. v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
 
 The four templates are experiment, environment, software and legacy cfg.
 Each allowed classification has exactly one current disposition:
@@ -75,14 +76,19 @@ cloud execution/spending was authorized.
 The generated inventory, summary, extractor, four focused extractor checks and
 reviewed plan are private, outside Git, under the existing migration evidence root
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`, in
-configuration-inventory-v7. Manifest SHA-256:
-`fe066662cee2f9a5f17d542b35ff976e45bd0ad5e85a5baabf88d5b7505d2d6f`.
-The 2,127,869-byte inventory JSON SHA-256 is
-`9c78f11c97b7b616584209b9fa0e47ec23ac7706bd0d8d055ea87dbc366dbf76`.
+configuration-inventory-v8. Manifest SHA-256:
+`bdc1f2a0747ef7c4fc8c436b0693ee25b279d916786fceb301d58ba7cc42abc0`.
+The 2,128,231-byte inventory JSON SHA-256 is
+`9559b83be067917dfa82c9a83aeb2f08fbab924aca32207ff7eb09760edd3ebd`.
 The manifest binds inventory/summary; tooling/plan are alongside them. All six
 copied files were verified byte-for-byte with private 0700/0600 permissions.
-The unchanged extractor and its four focused checks are byte-identical to v2/v3/v4/v5/v6.
-All five complete previous directories remain unchanged. The v6 manifest is
+The unchanged extractor and its four focused checks are byte-identical to v2–v7.
+All six complete previous directories and their receipts remain unchanged: 40 files
+were hash-verified before and after preservation. The v7 manifest is
+`fe066662cee2f9a5f17d542b35ff976e45bd0ad5e85a5baabf88d5b7505d2d6f`;
+its preserved 2,127,869-byte inventory JSON SHA-256 is
+`9c78f11c97b7b616584209b9fa0e47ec23ac7706bd0d8d055ea87dbc366dbf76`.
+The v6 manifest is
 `18e4faa11ab9a420f0920f1924c9be7d1c825e252e848177a8061031f932c437`;
 its preserved 2,122,856-byte inventory JSON SHA-256 is
 `9fa1ddf7738f8981a358defa65d024bfad02c4bea056ad2559f2754d774dbf21`.
@@ -95,15 +101,20 @@ The v4 manifest is
 v3's manifest SHA-256 is
 `17e49b35396245be0006f5c9ad99de4bb67dc02f1b3578d12f7b7497b0503edb`, and v2's is
 `be7c5ab2c5fc2904b79ef4560623f48bce68e066e66bbf1828b23a3d11972a68`.
-Since v6, the new inventory row is `scripts/test/unit/test_kubernetes_job_reuse.py`;
-the changed existing rows are `scripts/test/unit/test_application_runtime_helpers.py`
-and `scripts/test/unit/test_role_contracts.py`. The two changed exclusions are
+The historical v7 refresh added `scripts/test/unit/test_kubernetes_job_reuse.py`;
+the changed existing rows were `scripts/test/unit/test_application_runtime_helpers.py`
+and `scripts/test/unit/test_role_contracts.py`. The two changed exclusions were
 `roles/application/k8s_job_deploy/defaults/main.yml` and
 `roles/application/k8s_job_deploy/tasks/main.yml`. No row or exclusion was removed.
-These bind the reviewed bounded Kubernetes Job-reuse repair and its regressions;
-all user input bytes and other rows/exclusions remain unchanged. The Docker-role
-hash remains as recorded in v6. A separate private
-configuration-inventory-v7-generation.json receipt records isolated Python 3.12.7
+Those changes bind the reviewed Kubernetes Job-reuse repair and its regressions.
+Since v7, exactly five existing rows changed: `scripts/test/e2e/test_e2e_test_utils.py`,
+`scripts/test/support/e2e_utils.py`, `scripts/test/unit/test_continuum_runtime.py`,
+`scripts/test/unit/test_resume_contract.py` and `scripts/test/unit/test_yaml_parser.py`.
+Their current AST fixture facts include the five new negative-schema regression methods;
+the classifier and its heuristic limits are unchanged. No row was added or removed,
+and all user-input bytes and exclusion hashes are unchanged. The Docker-role hash
+remains as recorded in v6. A separate private
+configuration-inventory-v8-generation.json receipt records isolated Python 3.12.7
 with optimization disabled, the clean source revision and complete verification,
 preserving the extractor's built-in assertions.
 
@@ -117,6 +128,6 @@ outputs are experiment_lock.yaml, phase state.json, logs and the configured
 benchmark/network artifacts; profiles alone produce none.
 
 Refresh affected rows and the exact source/evidence binding after schema, example
-or test changes. This refresh adds one test carrier; the user input set is unchanged.
+or test changes. This refresh updates five existing carriers; the user input set is unchanged.
 The checkpoint must not be relabelled as a later final candidate
 without rechecking those hashes and the exact source/evidence binding.

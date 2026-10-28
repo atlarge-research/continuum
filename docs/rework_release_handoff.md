@@ -149,10 +149,12 @@ processing and image completion do not certify one-way timing. This is functiona
 development evidence, not final-candidate acceptance or an exact Kubernetes patch
 pin. No failed state was pruned and no updater/lock was killed or removed.
 
-Packet B's sequential 1 → 2 → 2 development proof is recorded below. Historical
+Packet B's sequential 1 → 2 → 2 development proof and packet C's later static
+core-contract closure are recorded below. Historical
 scope, final dispositions and frozen-candidate acceptance remain open; the original
-pre-main goal is not complete. Further packets and the approved parallel pilot
-wait for coordinator workflow release after B's evidence and handoff review.
+pre-main goal is not complete. Packet D foundation/Kubernetes/endpoint/observability
+is next, subject to coordinator release. The separately released pilot preparation
+does not enable development concurrency or replace final serial acceptance.
 
 ## Packet B — sequential development proof
 
@@ -228,10 +230,10 @@ Ansible temporary trees and full host journals.
 The separately reviewed
 [development-only two-host pilot amendment](superpowers/plans/2026-10-28-development-parallel-validation.md)
 now has explicit user approval for the bounded node4/node5 allocation, setup and
-cold/warm isolation pilot. Read-only host surveys are complete; no allocation
-reservation, own-directory setup, venv/dependency preparation or concurrent pilot
-has occurred. Physical pilot work remains held until B's final teardown and
-coordinator evidence/workflow release. Approval receipt
+cold/warm isolation pilot. Following B closure, the coordinator released the separate
+physical preparation window using immutable source snapshots. Preparation is ongoing;
+the pilot has not received independent runtime acceptance and development concurrency
+remains disabled. Approval receipt
 `development-parallel-pilot-approved-20261028.json` has SHA-256
 `7c7ea4a3d5a14f2cc9c77945268dfe30e097a35611dbfb04cfcbbf79c060bbfd`.
 Durable proposal/survey evidence is under
@@ -239,11 +241,49 @@ Durable proposal/survey evidence is under
 its SHA256SUMS SHA-256 is
 `e690168b73fa7623d3b19946a5704d1b32a36a9e25583ee3151ec4b0484e87df`.
 
-Next, after B closure, the coordinator releases packet C's independently reviewed
-bounded core/schema/documentation gap pass under the existing closure plan.
-The approved pilot must use separate immutable source snapshots and a reserved
-physical window; development concurrency stays disabled until its independent
-acceptance. These are separate coordinator releases under the existing plans.
+The approved pilot uses separate immutable source snapshots and its reserved physical
+window; no packet-C source/static evidence is a substitute for pilot acceptance.
+
+## Packet C — static core-contract closure
+
+The independently reviewed bounded core repair is committed locally at
+`31d62c044d1cf073c3f942700a99c28476a91c9a`. Lock replay now rejects missing or invalid
+normalized kind/schema metadata. Persisted resume contracts, state and E2E lock/state/
+metric envelopes reject boolean or float schema versions, preserving valid integer
+versions. Selector documentation consistently describes software-only `any_of` unions
+and single-`match` benchmark assignment; module documentation distinguishes the current
+`PlanEntry` execution adapter from proposed graph/module APIs. Execution authorization,
+resume hashes, phases, supported QEMU resume and artifact retention are unchanged.
+
+Five new test methods first produced 17 expected malformed-input assertion failures,
+then passed with the repair. Focused regressions passed 223/223 and complete combined
+unit/local-e2e discovery passed 1,125/1,125 on separately attributed Python 3.12.7.
+Docs paths and whitespace checks passed. Per-file Python lint comparison adds no
+findings to the existing baseline; static Python 3.12 lint covered the two test carriers
+whose existing syntax the pinned Python 3.8 linter cannot parse. Root independently
+reran the five new methods successfully and verified the complete twelve-file review.
+The pinned physical-runner environment was not changed or used for runtime validation.
+
+Primary saved source/test/lint logs, the reviewed diff/hash manifest, report and v8
+generation checks are preserved in `development-packet-c-31d62c044d1c-static` under the
+private evidence root below: 91 files, 0700/0600 directories/files, with SHA256SUMS
+SHA-256 `80805caacd51331711d345656b7b85ce12a542466c00fb6171f4cff026c837c2`.
+The independent rerun/review attribution is in the coordinator transcript, not an
+invented saved stdout artifact. Both complete packet-B evidence directories, 590 files,
+were hash-verified unchanged before/after the new preservation copy.
+
+Configuration inventory v8 is bound to clean `31d62c0`: 358 rows/135 exclusions,
+all source hashes and raw declarations checked. Exactly five existing fixture/support
+rows changed; their current static fixture facts include the five new methods.
+No input or exclusion changed, no path was added/removed, and all forty v2–v7 snapshot/
+receipt files remain unchanged. See `docs/configuration_inventory.md` for exact hashes.
+
+This is a reviewed source/static checkpoint, not VM-backed core or final-candidate
+acceptance. C performed no VM/remote/host workflow. Next is packet D's existing
+foundation/Kubernetes/endpoint/observability integration slice after coordinator release,
+followed by the selected module order in the approved closure plan. Individual broader
+static gates and the final frozen-candidate runtime sequence remain required at their
+designated checkpoints; B's earlier development evidence is not renewed for this source.
 
 ## Archived completed planning records
 
