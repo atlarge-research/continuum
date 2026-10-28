@@ -28,13 +28,13 @@ The refreshed checkpoint below records registry_refresh missing/all, default
 missing, without aliases. The separate bounded cache repair covers common/active
 included roles, copied inputs, consumed values and actual preload identities;
 see `docs/qemu_cache_contract.md`. Neither static inventory nor cache source tests
-prove fresh runtime acceptance. The previous v2/v3 inventories remain preserved
+prove fresh runtime acceptance. The previous v2/v3/v4 inventories remain preserved
 unchanged as historical evidence, not current source-hash claims.
 
 ## Frozen file coverage
 
 Private evidence freezes input content at clean source
-`a3fdaa87a4fd67476750c80e0f1bb03ceeda455d`. Each row records source SHA, historical
+`fb2e8f8810784507ae42d226d89ede8bf10ce8eb`. Each row records source SHA, historical
 workflow, provider/hosts, resources, multi-host triggers, phases, software,
 benchmark, cache/cleanup/retention/resume, outputs, support, one classification
 and one current disposition. Credential-sensitive derived values are redacted;
@@ -49,7 +49,7 @@ key presence and raw-text empty/nonempty status remain, not credential validity.
 | Test/support carriers | 44 | Every non-__init__ Python file under scripts/test/unit, e2e and support, conservatively included. Literal config markers detected in 25; this heuristic neither resolves all dynamic fixtures nor claims every carrier contains configuration. |
 | Test metadata | 3 | `scripts/test/test_config.json`, `scripts/test/coverage_manifest.json`, `scripts/test/test_manifest.json.example`; catalog/coverage/manifest metadata, not standalone experiments. |
 | Total inventory rows | 357 | 310 inputs plus 47 fixture/support/metadata sources; no duplicate or unaccounted eligible path. |
-| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. No delta from v3; v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
+| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. No delta from v4; v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
 
 The four templates are experiment, environment, software and legacy cfg.
 Each allowed classification has exactly one current disposition:
@@ -74,19 +74,21 @@ cloud execution/spending was authorized.
 The generated inventory, summary, extractor, four focused extractor checks and
 reviewed plan are private, outside Git, under the existing migration evidence root
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`, in
-configuration-inventory-v4. Manifest SHA-256:
-`ef1de711d67df03846ed8d10024fb73e947da856eb6fc5aa67e9ef1baa127bf0`.
-The 2,122,364-byte inventory JSON SHA-256 is
-`fa5d5958d1d6e1c168c9fc24fdaea23b1ff2f3f054720f8e64880b8685a1720a`.
+configuration-inventory-v5. Manifest SHA-256:
+`b037c3c1144f84c3161a450daf214d144b9e0d526aec4988e9350f3da5ea4f20`.
+The 2,122,643-byte inventory JSON SHA-256 is
+`0d11ea6fcda0cc9eaa8e169a7eb509b087424b3db26922e20ec0952538da88fb`.
 The manifest binds inventory/summary; tooling/plan are alongside them. All six
 copied files were verified byte-for-byte with private 0700/0600 permissions.
-The unchanged extractor and its four focused checks are byte-identical to v2/v3.
-Both complete previous directories remain unchanged: v3's manifest SHA-256 is
+The unchanged extractor and its four focused checks are byte-identical to v2/v3/v4.
+All three complete previous directories remain unchanged. The v4 manifest is
+`ef1de711d67df03846ed8d10024fb73e947da856eb6fc5aa67e9ef1baa127bf0`;
+v3's manifest SHA-256 is
 `17e49b35396245be0006f5c9ad99de4bb67dc02f1b3578d12f7b7497b0503edb`, and v2's is
 `be7c5ab2c5fc2904b79ef4560623f48bce68e066e66bbf1828b23a3d11972a68`.
-The sole changed inventory row since v3 is the host-runner regression test carrier;
+The sole changed inventory row since v4 is the Kubernetes readiness regression test carrier;
 all input and exclusion source bytes remain unchanged. A separate private
-configuration-inventory-v4-generation.json receipt records isolated Python 3.12.7
+configuration-inventory-v5-generation.json receipt records isolated Python 3.12.7
 with optimization disabled, preserving the extractor's built-in assertions.
 
 Source hashes were checked for all 357 rows and 135 exclusions; raw-declaration

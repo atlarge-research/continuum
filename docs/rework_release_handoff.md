@@ -46,9 +46,25 @@ recoverable under root-private
 Normal matthijs identities, groups and preexisting ALL sudo grants are unchanged.
 Exact old-principal metadata/ACL deltas, normal setup/prerequisites/results
 access, three Ready Kubernetes nodes and ready OpenFaaS/function containers
-passed. All seven workload VMs and eight unrelated shutoff domains were
+passed. At retirement, all seven workload VMs and eight unrelated shutoff domains were
 unchanged. Container-store numeric IDs/copied ACLs remain deliberately
 untouched behind the inspected protective ancestors; no global zero-ID claim.
+
+The later clean `6bc0d86145890917680811ea9cbfeb85ef8bd5e2` candidate completed
+two manually inspected functional operational runs. Cross-guest one-way timing
+was invalid in those runs; finite endpoint RTT, processing and image completion
+do not certify synchronized one-way delay. Evidence remains under
+final-candidate-6bc0d86 in the private evidence root below.
+
+Its separate changed-parameter sweep completed 30 images once, but the repeat
+sent 60 and received none: the old completed Kubernetes Job was reused without
+a new subscriber. The repeat was safely stopped and assessed accepted:false;
+sweeps remain candidate-only, not supported. Strict Columbo then failed before
+the benchmark because the readiness classifier rejected the actual instrumented
+return trace. The reviewed narrow correction is committed at
+`fb2e8f8810784507ae42d226d89ede8bf10ce8eb`. It accepts only that full return form,
+not arbitrary stderr, and requires a new clean candidate and complete runtime
+sequence reset. Neither older operational pass counts for that new candidate.
 
 ## Archived completed planning records
 
@@ -89,8 +105,8 @@ and the retirement packet performed no VM operation or benchmark rerun.
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 47 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   a3fdaa87a4fd67476750c80e0f1bb03ceeda455d, after the bounded runner-verification
-   correction; both earlier snapshots remain unchanged. Final historical
+   fb2e8f8810784507ae42d226d89ede8bf10ce8eb, after the observed return-trace
+   correction; all three earlier snapshots remain unchanged. Final historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
    after later schema/example/test changes.
@@ -108,7 +124,7 @@ and the retirement packet performed no VM operation or benchmark rerun.
    are removed. Completed-ledger provenance consolidation is preserved above;
    active navigation replaces the superseded execution queues.
 4. Create a clean final candidate and complete static/runtime/manual acceptance:
-   two clean post-fix operational runs, at least one on that exact candidate;
+   two new clean post-fix operational runs on that exact candidate;
    exact final-candidate multi-host OpenFaaS and every approved reproduction;
    bounded support matrix and zero unaccounted inventory rows.
 5. Present the final package and await explicit publication approval.
