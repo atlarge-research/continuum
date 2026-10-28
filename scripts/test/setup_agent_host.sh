@@ -64,7 +64,7 @@ case "$COMMAND" in
       echo "Python interpreter missing or not executable: $PYTHON_BIN" >&2
       exit 2
     fi
-    "$PYTHON_BIN" -c 'import sys; assert sys.prefix != sys.base_prefix, "Python must be a venv"'
+    "$PYTHON_BIN" -I -B -c 'import sys; sys.exit(0 if sys.prefix != sys.base_prefix else "Python must be a venv")'
     [ -r /dev/kvm ] && [ -w /dev/kvm ] || {
       echo "Normal user needs read/write access to /dev/kvm; ask the host operator." >&2
       exit 1

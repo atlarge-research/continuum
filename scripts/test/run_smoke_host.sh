@@ -191,6 +191,20 @@ prereqs
 EOF
 }
 
+inspection_results_directory() {
+  inspection_expected="$1/.continuum/test_results"
+  if [ ! -d "$inspection_expected" ]; then
+    echo "No test-results directory at: $inspection_expected" >&2
+    return 1
+  fi
+  inspection_actual=$(realpath -e -- "$inspection_expected") || return 1
+  if [ "$inspection_actual" != "$inspection_expected" ]; then
+    echo "Refusing results outside the canonical selected scenario: $inspection_expected" >&2
+    return 1
+  fi
+  printf '%s\n' "$inspection_expected"
+}
+
 storage_report() {
   printf 'SMOKE_BASE_ROOT=%s\n' "$BASE_ROOT"
   if [ ! -d "$BASE_ROOT" ]; then
@@ -273,10 +287,7 @@ if [ "$SCENARIO" = "latest-result-summary" ]; then
     print_retained_scenarios >&2
     exit 2
   fi
-  results_dir="$scenario_path/.continuum/test_results"
-  if [ ! -d "$results_dir" ]; then
-    echo "No test-results directory for scenario: $target_scenario" >&2
-    echo "Path: $results_dir" >&2
+  if ! results_dir=$(inspection_results_directory "$scenario_path"); then
     exit 1
   fi
   latest_result=$(
@@ -342,7 +353,9 @@ if [ "$SCENARIO" = "latest-result-tail" ]; then
     echo "Could not find Continuum smoke Python interpreter: $PYTHON_BIN" >&2
     exit 2
   fi
-  results_dir="$scenario_path/.continuum/test_results"
+  if ! results_dir=$(inspection_results_directory "$scenario_path"); then
+    exit 1
+  fi
   shift 2
   exec "$PYTHON_BIN" - "$results_dir" "$@" <<'PY'
 from collections import deque
@@ -367,7 +380,10 @@ full = bool(args)
 
 try:
     result_index = int(index_text)
-    results_dir = Path(sys.argv[1]).resolve(strict=True)
+    expected_results_dir = Path(sys.argv[1])
+    results_dir = expected_results_dir.resolve(strict=True)
+    if results_dir != expected_results_dir:
+        raise ValueError("Result directory escapes the selected retained scenario")
     if not results_dir.is_dir():
         raise ValueError("Not a test-results directory: %s" % results_dir)
     candidates = [

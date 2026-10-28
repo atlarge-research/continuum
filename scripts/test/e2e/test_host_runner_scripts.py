@@ -184,6 +184,22 @@ class HostRunnerScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Python", result.stderr)
 
+    def test_setup_verify_rejects_nonvenv_with_python_optimization(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            python = root / "not-a-venv/bin/python3"
+            python.parent.mkdir(parents=True)
+            python.symlink_to("/usr/bin/python3")
+            result = self._run_setup_script("verify", extra_env={
+                "HOME": tempdir,
+                "CONTINUUM_SMOKE_PYTHON": str(python),
+                "CONTINUUM_SMOKE_BASE_ROOT": str(root / "retained"),
+                "PYTHONOPTIMIZE": "1",
+            })
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Python must be a venv", result.stderr)
+            self.assertFalse((root / "retained").exists())
+
     def test_setup_create_venv_creates_only_requested_new_environment(self):
         with tempfile.TemporaryDirectory() as tempdir:
             venv = Path(tempdir) / "venvs/continuum"
@@ -1106,13 +1122,40 @@ class RetainedResultTailTests(unittest.TestCase):
             payload = {"results": self.entries}
         self.summary.write_text(json.dumps(payload), encoding="utf-8")
 
-    def _tail(self, *args):
+    def _inspect(self, command, *args):
         env = os.environ.copy()
         env.update({"HOME": str(self.root), "CONTINUUM_SMOKE_BASE_ROOT": str(self.base),
                     "CONTINUUM_SMOKE_PYTHON": sys.executable})
         return subprocess.run(
-            ["sh", str(self.repo / "scripts/test/run_smoke_host.sh"), "latest-result-tail", *args],
+            ["sh", str(self.repo / "scripts/test/run_smoke_host.sh"), command, *args],
             check=False, capture_output=True, env=env, cwd=self.repo)
+
+    def _tail(self, *args):
+        return self._inspect("latest-result-tail", *args)
+
+    def _assert_directory_redirect_rejected(self, directory):
+        marker = b"redirected-scenario-evidence"
+        Path(self.entries[0]["stdout_artifact"]).write_bytes(marker)
+        self._save({"timestamp": marker.decode(), "results": self.entries})
+        outside = self.root / "outside-selected-scenario"
+        directory.rename(outside)
+        directory.symlink_to(outside, target_is_directory=True)
+        for command, args in (("latest-result-summary", ()),
+                              ("latest-result-tail", ("--full",))):
+            with self.subTest(command=command):
+                result = self._inspect(command, self.scenario, *args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b"")
+                self.assertNotIn(marker, result.stdout)
+
+    def test_summary_and_tail_reject_redirected_scenario(self):
+        self._assert_directory_redirect_rejected(self.base / self.scenario)
+
+    def test_summary_and_tail_reject_redirected_continuum_directory(self):
+        self._assert_directory_redirect_rejected(self.results.parent)
+
+    def test_summary_and_tail_reject_redirected_results_directory(self):
+        self._assert_directory_redirect_rejected(self.results)
 
     def _content(self, result):
         self.assertEqual(result.returncode, 0, result.stderr)
