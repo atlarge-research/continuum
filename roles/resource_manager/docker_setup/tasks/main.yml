@@ -25,6 +25,16 @@
     name: "{{ rm_docker_setup_engine_packages }}"
     state: present
     update_cache: true
+  register: rm_docker_setup_install_result
+  until: >-
+    rm_docker_setup_install_result is succeeded or
+    (rm_docker_setup_install_result.rc | default(-1)) != 100 or
+    not ((rm_docker_setup_install_result.stderr | default('')) is match(
+      '^E: Could not get lock /var/lib/dpkg/lock-frontend[.] It is held by process [1-9][0-9]* [(]unattended-upgr[)]\n'
+      'E: Unable to acquire the dpkg frontend lock [(]/var/lib/dpkg/lock-frontend[)], is another process using it[?]\n?\\Z'
+    ))
+  retries: 30
+  delay: 10
 
 - name: Add user to docker group
   ansible.builtin.user:

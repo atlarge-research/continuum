@@ -167,6 +167,110 @@ if tool != "setfacl":
 
 
 class DockerSetupRoleTests(unittest.TestCase):
+    def _run_install_policy(self, root, scenario):
+        """Run the real task retry policy with an inert apt-action boundary."""
+        task_path = (Path(__file__).resolve().parents[3]
+                     / "roles/resource_manager/docker_setup/tasks/main.yml")
+        task = next(task for task in yaml.safe_load(task_path.read_text(encoding="utf-8"))
+                    if task.get("name") == "Install docker engine package")
+        production_retries = task.get("retries", 0)
+        production_delay = task.get("delay", 0)
+        task.pop("ansible.builtin.apt")
+        calls = root / "calls"
+        boundary = root / "inert_apt.py"
+        boundary.write_text(r'''import sys
+from pathlib import Path
+
+calls = Path(sys.argv[1])
+scenario = sys.argv[2]
+attempt = int(calls.read_text()) + 1 if calls.exists() else 1
+calls.write_text(str(attempt))
+lock = ("E: Could not get lock /var/lib/dpkg/lock-frontend. "
+        "It is held by process 2513 (unattended-upgr)\n"
+        "E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), "
+        "is another process using it?")
+if scenario == "success" or (scenario == "lock_once" and attempt > 1):
+    print("inert installation succeeded")
+    raise SystemExit(0)
+errors = {
+    "lock_once": (100, lock),
+    "persistent_lock": (100, lock),
+    "unrelated": (100, "E: Unable to locate package missing-docker"),
+    "wrong_rc": (1, lock),
+    "mixed_error": (100, lock + "\nE: Permission denied"),
+    "other_holder": (100, lock.replace("unattended-upgr", "apt-get")),
+    "other_path": (100, lock.replace("/var/lib/dpkg/lock-frontend", "/var/lib/apt/lists/lock")),
+}
+code, message = errors[scenario]
+sys.stderr.write(message + "\n")
+raise SystemExit(code)
+''', encoding="utf-8")
+        task["ansible.builtin.command"] = {
+            "argv": [sys.executable, str(boundary), str(calls), scenario],
+        }
+        # Accelerate only timing/budget; retain the actual register/until policy.
+        task["retries"] = min(production_retries, 2)
+        task["delay"] = 0
+        play = root / "play.yml"
+        play.write_text(yaml.safe_dump([{
+            "hosts": "localhost", "connection": "local", "gather_facts": False,
+            "become": False, "vars": {"ansible_python_interpreter": sys.executable},
+            "tasks": [task],
+        }]), encoding="utf-8")
+        config = root / "ansible.cfg"
+        config.write_text("[defaults]\n", encoding="utf-8")
+        env = dict(os.environ)
+        env.pop("ANSIBLE_LOG_PATH", None)
+        env.update({
+            "ANSIBLE_CONFIG": str(config), "ANSIBLE_BECOME": "False",
+            "ANSIBLE_LOCAL_TEMP": str(root / "ansible-local"),
+            "ANSIBLE_REMOTE_TMP": str(root / "ansible-remote"),
+            "ANSIBLE_STDOUT_CALLBACK": "default", "ANSIBLE_NOCOLOR": "1",
+        })
+        result = subprocess.run(
+            [shutil.which("ansible-playbook"), "-i", "localhost,", str(play)],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            timeout=60, check=False,
+        )
+        return result, int(calls.read_text()), production_retries, production_delay
+
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook is required")
+    def test_docker_install_retries_observed_updater_lock_then_succeeds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, calls, retries, delay = self._run_install_policy(Path(temporary), "lock_once")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(calls, 2)
+            self.assertGreater(retries, 0)
+            self.assertLessEqual(retries, 30)
+            self.assertGreater(delay, 0)
+            self.assertLessEqual(delay, 10)
+
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook is required")
+    def test_docker_install_success_does_not_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, calls, _retries, _delay = self._run_install_policy(Path(temporary), "success")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(calls, 1)
+
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook is required")
+    def test_docker_install_preserves_fatal_errors_and_bounds_lock_retries(self):
+        cases = (
+            ("persistent_lock", 3, 100, "Could not get lock"),
+            ("unrelated", 1, 100, "Unable to locate package"),
+            ("wrong_rc", 1, 1, "Could not get lock"),
+            ("mixed_error", 1, 100, "Permission denied"),
+            ("other_holder", 1, 100, "apt-get"),
+            ("other_path", 1, 100, "/var/lib/apt/lists/lock"),
+        )
+        for scenario, expected_calls, rc, diagnostic in cases:
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                result, calls, _retries, _delay = self._run_install_policy(
+                    Path(temporary), scenario)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(calls, expected_calls, result.stdout)
+                self.assertIn(diagnostic, result.stdout)
+                self.assertRegex(result.stdout, r'(?:"rc"\s*:\s*|rc:\s*)' + str(rc) + r'\b')
+
     def test_docker_setup_selects_engine_family_from_package_state(self):
         repo_root = Path(__file__).resolve().parents[3]
         task_path = repo_root / "roles/resource_manager/docker_setup/tasks/main.yml"
