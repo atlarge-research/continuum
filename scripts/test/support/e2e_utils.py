@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import yaml
 
 from infrastructure.machine import Machine
-from input.configuration import resume_contract, yaml_parser
+from input.configuration import resume_contract, validation_utils, yaml_parser
 
 _ORCHESTRATOR_MODULE_TYPES = ("none", "kubernetes", "kubeedge", "kubecontrol", "kube_kata", "mist")
 _VERIFY_NETWORK_PROFILES = None
@@ -564,7 +564,10 @@ def verify_benchmark_metric_artifacts(
 
     if not isinstance(manifest, dict):
         return False, "Benchmark metric artifact invalid: manifest must be a mapping"
-    if manifest.get("schema_version") != 1:
+    if (
+        not validation_utils.is_int(manifest.get("schema_version"))
+        or manifest["schema_version"] != 1
+    ):
         return False, "Benchmark metric artifact invalid: unsupported schema_version %r" % (
             manifest.get("schema_version"),
         )
@@ -847,7 +850,10 @@ def detect_success(
             return False, "Experiment lock schema mismatch: unexpected kind %r" % (
                 lock_payload.get("kind"),
             )
-        if lock_payload.get("schema_version") != 1:
+        if (
+            not validation_utils.is_int(lock_payload.get("schema_version"))
+            or lock_payload["schema_version"] != 1
+        ):
             return False, "Experiment lock schema mismatch: expected schema_version 1"
 
     state_payload = None
@@ -984,7 +990,10 @@ def _validate_state_artifact_schema(state_payload: Dict) -> Tuple[bool, str]:
     """Validate the e2e-visible state artifact schema."""
     if not isinstance(state_payload, dict):
         return False, "State schema mismatch: expected top-level mapping"
-    if state_payload.get("schema_version") != 2:
+    if (
+        not validation_utils.is_int(state_payload.get("schema_version"))
+        or state_payload["schema_version"] != 2
+    ):
         return False, "State schema mismatch: expected schema_version 2 but found %r" % (
             state_payload.get("schema_version"),
         )

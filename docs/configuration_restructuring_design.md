@@ -233,15 +233,17 @@ Cluster-level infra intent is normalized to concrete resource records with base 
 1. `software.modules[]` must be a list of objects.
 2. `id` unique within document.
 3. `type` must resolve in module registry.
-4. `assign_to.match` must be valid exact-match selector mapping (`{k: v}` equality predicates).
+4. `assign_to` accepts exactly one of `match` or software-only `any_of`; each clause is an
+   exact-match AND, and `any_of` is their set union. The governing selector and authorization
+   semantics are in `docs/software_module_architecture_plan.md` §6. Benchmark stages remain
+   single-`match` only.
 5. module-local `config` is required and must be a mapping, validated by module validator.
 6. addon module config keys are registry-validated (unknown keys fail fast).
 
 Selector canonicalization contract:
 
-1. normalize selector to canonical object form: `{"match":[["k1","v1"], ...]}`.
-2. sort selector pairs lexicographically by key, then value.
-3. derive deterministic `selector_id` from canonical serialized representation.
+Canonical selector forms, sorting and `selector_id` derivation are defined in
+`docs/software_module_architecture_plan.md` §6 for both single clauses and software unions.
 
 ## 6.6 Cross-Domain Consistency
 

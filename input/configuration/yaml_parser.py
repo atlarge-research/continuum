@@ -76,12 +76,13 @@ _child_key_path = validation_utils.child_key_path
 _is_int = validation_utils.is_int
 
 
-def _validate_schema_version(data: dict, path: Path):
+def _validate_schema_version(data: dict, path: Path, prefix: str = ""):
     schema_version = data.get("schema_version")
+    key_path = _child_key_path(prefix, "schema_version")
     if not _is_int(schema_version):
-        _fail(path, "schema_version", "must be integer 1")
+        _fail(path, key_path, "must be integer 1")
     if schema_version != 1:
-        _fail(path, "schema_version", "unsupported value %s (expected 1)" % (schema_version))
+        _fail(path, key_path, "unsupported value %s (expected 1)" % (schema_version))
 
 
 def _validate_experiment_lock(lock: dict, path: Path):
@@ -254,6 +255,9 @@ def _normalize(experiment: dict, environment: dict, software: dict) -> dict:
 def _validate_normalized(normalized: dict, path: Path, prefix: str, require_derived: bool = False):
     if not isinstance(normalized, dict):
         _fail(path, prefix, "must be a mapping")
+    _validate_schema_version(normalized, path, prefix)
+    if normalized.get("kind") != "ContinuumNormalizedConfig":
+        _fail(path, _child_key_path(prefix, "kind"), "must be ContinuumNormalizedConfig")
     _fail_unknown_keys(
         path,
         prefix,

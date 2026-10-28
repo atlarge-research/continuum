@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from infrastructure import machine as machine_utils
 from infrastructure.machine import Machine
-from input.configuration import config_access, resume_contract
+from input.configuration import config_access, resume_contract, validation_utils
 
 _MACHINE_FIELDS = [
     "name",
@@ -195,7 +195,8 @@ def _validate_state_schema(state):
     """Validate the persisted state envelope and return it."""
     if not isinstance(state, dict):
         raise ValueError("Invalid state file: expected top-level mapping")
-    if state.get("schema_version") != _STATE_SCHEMA_VERSION:
+    schema_version = state.get("schema_version")
+    if not validation_utils.is_int(schema_version) or schema_version != _STATE_SCHEMA_VERSION:
         raise ValueError(
             "State schema mismatch: expected schema_version %s but found %r"
             % (_STATE_SCHEMA_VERSION, state.get("schema_version"))

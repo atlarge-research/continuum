@@ -1960,6 +1960,39 @@ class YamlParserTests(unittest.TestCase):
                 stderr,
             )
 
+    def test_lock_replay_rejects_invalid_normalized_envelope(self):
+        """Reject malformed nested envelopes while retaining valid lock replay."""
+        cases = [
+            ("schema_version", "missing", None, "must be integer 1"),
+            ("schema_version", "null", None, "must be integer 1"),
+            ("schema_version", "boolean", True, "must be integer 1"),
+            ("schema_version", "float", 1.0, "must be integer 1"),
+            ("schema_version", "string", "1", "must be integer 1"),
+            ("schema_version", "unsupported", 99, "unsupported value 99"),
+            ("kind", "missing", None, "ContinuumNormalizedConfig"),
+            ("kind", "null", None, "ContinuumNormalizedConfig"),
+            ("kind", "wrong", "ContinuumExperiment", "ContinuumNormalizedConfig"),
+        ]
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = self._write_valid_lock(Path(tempdir))
+            original = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            valid = input_module.start(argparse.ArgumentParser(), str(lock_path))
+            self.assertEqual(valid["normalized"]["kind"], "ContinuumNormalizedConfig")
+            self.assertIs(type(valid["normalized"]["schema_version"]), int)
+
+            for field, label, value, message in cases:
+                with self.subTest(field=field, case=label):
+                    payload = copy.deepcopy(original)
+                    if label == "missing":
+                        del payload["normalized_config"][field]
+                    else:
+                        payload["normalized_config"][field] = value
+                    self._write(lock_path, payload)
+
+                    stderr = self._parse_error(lock_path)
+                    self.assertIn("normalized_config." + field, stderr)
+                    self.assertIn(message, stderr)
+
     def test_lock_replay_rejects_missing_schema_version(self):
         with tempfile.TemporaryDirectory() as tempdir:
             lock_path = self._write_valid_lock(Path(tempdir))

@@ -164,6 +164,11 @@ the centralized software planner boundary.
 4. run resource-manager post-phase hooks,
 5. persist software-phase resume state.
 
+The implemented hooks are resource-manager `build_phase_plan(config)` and optional
+`post_phase_hook(runner)`, with centralized addon entries and shared `PlanEntry` dispatch.
+See `docs/software_module_architecture_plan.md` §7–§9 for the current adapter contract,
+its fixed execution order and snapshot fields, distinguished from proposed module APIs.
+
 ### Outputs
 
 1. installed orchestrator/addon software,

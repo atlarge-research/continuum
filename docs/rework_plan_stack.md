@@ -42,7 +42,8 @@ confirmation and the separate configuration/fixture inventory remain open gates.
   explicit user approval. The complete old-main parity inventory remains
   historical candidate coverage, not the replacement release scope.
 - Existing hard-cut schema, cluster-first `infrastructure.clusters[]`,
-  `software.modules[]`, exact-match AND selectors, structured scope
+  `software.modules[]`, exact-match AND selector clauses with software-only `any_of`
+  unions and single-`match` benchmark selectors (module authority §6), structured scope
   identities, explicit-only dependencies, deterministic planning and
   reserved-tag collision errors remain. Benchmark tags cannot overwrite
   `role`; use namespaced keys such as `benchmark.role`.

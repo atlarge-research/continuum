@@ -6,7 +6,7 @@ import copy
 import hashlib
 import json
 
-from . import config_access
+from . import config_access, validation_utils
 
 CONTRACT_SCHEMA_VERSION = 1
 HASH_PREFIX = "sha256:"
@@ -115,7 +115,7 @@ def validate_persisted_resume_contract(section, path="resume_contract"):
     """Validate a persisted resume_contract section and return its hash/details."""
     section = _require_mapping(section, path)
     schema_version = section.get("schema_version")
-    if schema_version != CONTRACT_SCHEMA_VERSION:
+    if not validation_utils.is_int(schema_version) or schema_version != CONTRACT_SCHEMA_VERSION:
         raise ValueError(
             "%s.schema_version must be %s" % (path, CONTRACT_SCHEMA_VERSION)
         )

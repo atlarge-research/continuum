@@ -509,6 +509,53 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             self.assertIn("state_phase=software", reason)
             self.assertIn("resume_contract_match", reason)
 
+    def test_detect_success_requires_integer_lock_and_state_versions(self):
+        """Reject malformed artifact versions with all lock/state checks enabled."""
+        for artifact, valid_version in (("experiment_lock.yaml", 1), ("state.json", 2)):
+            for label, version in (
+                ("missing", None), ("null", None), ("string", str(valid_version)),
+                ("boolean", True), ("float", float(valid_version)), ("unsupported", 99),
+            ):
+                with self.subTest(artifact=artifact, case=label):
+                    with tempfile.TemporaryDirectory() as tempdir:
+                        root = Path(tempdir)
+                        _write_success_artifacts(root, "software")
+                        config = {
+                            "infrastructure": {"base_path": tempdir, "infra_only": False},
+                            "benchmark": {"resource_manager_only": True},
+                        }
+                        criteria = {
+                            "require_experiment_lock": True,
+                            "require_state_file": True,
+                            "require_state_phase": True,
+                            "require_resume_contract": True,
+                        }
+                        args = {
+                            "stdout": "ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                            "stderr": "", "exit_code": 0,
+                            "config": config, "success_config": criteria,
+                        }
+                        self.assertTrue(test_utils.detect_success(**args)[0])
+                        path = root / ".continuum" / artifact
+                        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+                        if label == "missing":
+                            del payload["schema_version"]
+                        else:
+                            payload["schema_version"] = version
+                        if artifact.endswith(".json"):
+                            path.write_text(json.dumps(payload), encoding="utf-8")
+                        else:
+                            self._write_yaml(path, payload)
+                        success, reason = test_utils.detect_success(**args)
+                        self.assertFalse(success)
+                        self.assertIn("schema mismatch", reason)
+                        self.assertEqual(
+                            test_utils.classify_test_failure({
+                                "success": False, "success_reason": reason,
+                            }),
+                            "state_schema_mismatch",
+                        )
+
     def test_detect_success_accepts_application_phase(self):
         with tempfile.TemporaryDirectory() as tempdir:
             _write_success_artifacts(Path(tempdir), "application")
@@ -730,6 +777,51 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
 
             self.assertTrue(success)
             self.assertIn("benchmark_metric_artifacts=%s" % (manifest_path,), reason)
+
+    def test_detect_success_requires_integer_metric_manifest_version(self):
+        """Reject wrong version types in otherwise successful benchmark evidence."""
+        for label, version in (
+            ("missing", None), ("null", None), ("string", "1"),
+            ("boolean", True), ("float", 1.0), ("unsupported", 2),
+        ):
+            with self.subTest(case=label):
+                with tempfile.TemporaryDirectory() as tempdir:
+                    root = Path(tempdir)
+                    _write_success_artifacts(root, "application")
+                    path = _write_benchmark_metrics(root)
+                    args = {
+                        "stdout": "ssh cloud0@192.168.0.10 -i /tmp/test_key\n",
+                        "stderr": "", "exit_code": 0,
+                        "config": {
+                            "timestamp": "2026-05-21_15:30:42",
+                            "infrastructure": {"base_path": tempdir, "infra_only": False},
+                            "benchmark": {"resource_manager_only": False},
+                        },
+                        "success_config": {
+                            "required_benchmark_metric_artifacts": [{
+                                "label": "ENDPOINT OUTPUT",
+                                "columns": ["latency_avg (ms)"],
+                                "numeric_columns": ["latency_avg (ms)"],
+                                "min_rows": 1,
+                            }],
+                        },
+                    }
+                    self.assertTrue(test_utils.detect_success(**args)[0])
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    if label == "missing":
+                        del payload["schema_version"]
+                    else:
+                        payload["schema_version"] = version
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    success, reason = test_utils.detect_success(**args)
+                    self.assertFalse(success)
+                    self.assertIn("unsupported schema_version", reason)
+                    self.assertEqual(
+                        test_utils.classify_test_failure({
+                            "success": False, "success_reason": reason,
+                        }),
+                        "invalid_benchmark_metric_artifact",
+                    )
 
     def test_detect_success_rejects_invalid_benchmark_metric_artifact_value(self):
         with tempfile.TemporaryDirectory() as tempdir:

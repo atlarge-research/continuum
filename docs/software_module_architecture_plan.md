@@ -177,9 +177,26 @@ Violation diagnostics must include:
 2. canonical scope identity object,
 3. violated capability/constraint.
 
-## 7. Module Runtime Contract
+## 7. Module Runtime Contract: Implemented Adapter and Proposed API
 
-Expected module interface:
+The implemented software execution interface is:
+
+1. `resource_manager.start(runner)` owns centralized software dispatch.
+2. Resource-manager modules expose `build_phase_plan(config) -> list[PlanEntry]` and
+   `base_install_playbook(config, tier)` for software and base-image preparation.
+3. `plans.build_software_phase_entries(config)` combines the selected orchestrator's plan
+   with centrally planned addons and validates each owner's execution envelope.
+4. `plans.execute_entries(runner, entries)` dispatches entries through the shared runner.
+5. The optional resource-manager `post_phase_hook(runner)` verifies the deployed software.
+
+`PlanEntry` records execution kind, playbook/command, runner options, owner and immutable
+legacy target-group metadata. The current software adapter accepts proven `vms` playbook
+targets and rejects command entries whose resource mutation scope cannot be proven.
+Module configuration validation/defaulting happens at parser/bootstrap boundaries using
+registry contracts and existing module option hooks.
+
+The following is a proposed future module API, not an implemented interface or a current
+module authoring requirement:
 
 1. `validate_config(instance.config)`
 2. `place(ctx, instance, candidate_vms) -> PlacementResult` (optional)
@@ -194,7 +211,15 @@ Expected module interface:
 
 ## 8. Planner Semantics
 
-Planner flow:
+Current planning validates declared module capabilities and overlapping assignment scopes;
+it does not auto-inject dependencies. The execution adapter permits exactly one
+orchestrator and orders its entries first, followed by centrally planned OpenFaaS and
+endpoint-runtime entries when selected. Observability is included in the orchestrator's
+plan. Registry checks and this fixed adapter order do not constitute a generic graph
+executor or expose arbitrary placement hooks.
+
+The target planner flow below describes proposed graph/API behavior beyond the implemented
+adapter; it is not an implementation queue for the current closure:
 
 1. parse `software.modules[]`,
 2. validate IDs/types/config shape,
@@ -221,7 +246,14 @@ Determinism requirements:
 
 ## 9. Lockfile
 
-Persist resolved software artifact with:
+The implemented `planner_snapshot` contains `software_execution_order`,
+`software_plan_entries`, `software_module_assignments` and `benchmark_stage_assignments`.
+Assignment records include selectors' identities, resolved VM ids/resources and scopes;
+normalized configuration retains canonical selectors and resource tags. Replay validates
+the snapshot against the current deterministic adapter plan. The current lock does not
+claim to serialize a generic dependency graph or arbitrary module-exported facts.
+
+The target resolved software artifact would include:
 
 1. final VM tags,
 2. resolved module instances,
@@ -272,7 +304,8 @@ E2E smoke tests:
 3. Explicit-only dependency strategy (no auto-injection).
 4. Cluster-first base tagging from infrastructure (`cluster=<id>` for all resources in cluster).
 5. Benchmark stages must support selector/tag assignment and software-tag handoff.
-6. Selector language is exact-match only (`match: {k:v}` with implicit AND).
+6. Selector clauses are exact-match AND; software supports `match` or `any_of` unions,
+   while benchmark stages accept a single `match`. Section 6 owns these semantics.
 7. Selector identity uses canonical normalized JSON + `selector_id` hash.
 8. Scope identity is structured (`vm`, `cluster`, `selector` objects).
 9. Hard-fail reserved tag collisions.

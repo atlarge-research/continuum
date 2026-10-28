@@ -3987,6 +3987,60 @@ class ResumeStateTests(unittest.TestCase):
             self.assertTrue(payload["resume_contract"]["hash"].startswith("sha256:"))
             self.assertFalse(list((pathlib.Path(tempdir) / ".continuum").glob(".state.*.tmp")))
 
+    def test_resume_rejects_non_integer_state_version_before_guest_access(self):
+        """Reject malformed saved versions before rehydration or guest probing."""
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = self._resume_config(tempdir)
+            config["domains"]["run"]["targets"] = ["software"]
+            path = pathlib.Path(
+                infra_state.save_state(config, "infrastructure", [Machine("local", True)])
+            )
+            original = json.loads(path.read_text(encoding="utf-8"))
+            with (
+                mock.patch.object(infra_state.machine_utils, "gather_ssh"),
+                mock.patch.object(infra_state.machine_utils, "gather_ips"),
+            ):
+                self.assertEqual(
+                    infra_state.load_resume_state(config, "infrastructure")[0]["schema_version"],
+                    2,
+                )
+            for label, version in (
+                ("missing", None), ("null", None), ("string", "2"),
+                ("boolean", True), ("float", 2.0), ("unsupported", 3),
+            ):
+                with self.subTest(case=label):
+                    malformed = dict(original)
+                    if label == "missing":
+                        del malformed["schema_version"]
+                    else:
+                        malformed["schema_version"] = version
+                    path.write_text(json.dumps(malformed), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "State schema mismatch"):
+                        infra_state.load_resume_state(config, "infrastructure")
+                    with (
+                        mock.patch.object(continuum_module.yaml_parser, "write_experiment_lock"),
+                        mock.patch.object(infra_state.machine_utils, "gather_ssh") as gather_ssh,
+                        mock.patch.object(infra_state.machine_utils, "gather_ips") as gather_ips,
+                        mock.patch.object(
+                            continuum_module.machine_utils, "validate_resume_ssh_reachability"
+                        ) as probe,
+                        mock.patch.object(
+                            continuum_module.image_registry, "prepare_runtime_images"
+                        ),
+                        mock.patch.object(continuum_module.ansible, "AnsibleRunner"),
+                        mock.patch.object(continuum_module.resource_manager, "start"),
+                        mock.patch.object(infra_state, "save_state"),
+                        self.assertLogs(level="ERROR") as logs,
+                    ):
+                        with self.assertRaises(SystemExit) as exc:
+                            continuum_module.main(argparse.Namespace(config=config))
+                    self.assertEqual(exc.exception.code, 1)
+                    self.assertIn("State schema mismatch", "\n".join(logs.output))
+                    gather_ssh.assert_not_called()
+                    gather_ips.assert_not_called()
+                    probe.assert_not_called()
+                    self.assertEqual(json.loads(path.read_text(encoding="utf-8")), malformed)
+
     def test_load_resume_state_rejects_legacy_state_without_schema(self):
         with tempfile.TemporaryDirectory() as tempdir:
             config = self._resume_config(tempdir)

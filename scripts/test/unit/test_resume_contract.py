@@ -82,6 +82,26 @@ class ResumeContractTests(unittest.TestCase):
 
         self.assertEqual(original, changed)
 
+    def test_persisted_contract_requires_integer_schema_version(self):
+        """Reject wrong version types even when contract details and hash are valid."""
+        section = resume_contract.persisted_resume_contract_from_details({"test": "contract"})
+        self.assertEqual(
+            resume_contract.validate_persisted_resume_contract(section)[1],
+            {"test": "contract"},
+        )
+        for label, version in (
+            ("missing", None), ("null", None), ("string", "1"),
+            ("boolean", True), ("float", 1.0), ("unsupported", 2),
+        ):
+            with self.subTest(case=label):
+                malformed = dict(section)
+                if label == "missing":
+                    del malformed["schema_version"]
+                else:
+                    malformed["schema_version"] = version
+                with self.assertRaisesRegex(ValueError, r"resume_contract.schema_version"):
+                    resume_contract.validate_persisted_resume_contract(malformed)
+
 
 if __name__ == "__main__":
     unittest.main()
