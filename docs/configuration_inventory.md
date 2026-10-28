@@ -28,14 +28,15 @@ The refreshed checkpoint below records registry_refresh missing/all, default
 missing, without aliases. The separate bounded cache repair covers common/active
 included roles, copied inputs, consumed values and actual preload identities;
 see `docs/qemu_cache_contract.md`. Neither static inventory nor cache source tests
-prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6/v7/v8 inventories remain preserved
+prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6/v7/v8/v9 inventories remain preserved
 unchanged as historical evidence, not current source-hash claims.
 
 ## Frozen file coverage
 
 Private evidence freezes input content at clean source
-`2f969bb34de37060dc19bba7cc50d9b06e16136e`, containing the reviewed foundation
-observability-readiness repair, packet C's schema-envelope/documentation corrections
+`ba5e50f05c22a5118a83ea1412aaf7141c15df60`, containing the reviewed full-body
+registry-manifest parser repair and regressions, foundation observability-readiness
+repair, packet C's schema-envelope/documentation corrections
 and packet B's unchanged Job-reuse
 repair at `aa7a438ee914cc60a0902ec1908be9c57b89982f`. Each row records source SHA, historical
 workflow, provider/hosts, resources, multi-host triggers, phases, software,
@@ -52,7 +53,7 @@ key presence and raw-text empty/nonempty status remain, not credential validity.
 | Test/support carriers | 45 | Every non-__init__ Python file under scripts/test/unit, e2e and support, conservatively included. Literal config markers detected in 26; this heuristic neither resolves all dynamic fixtures nor claims every carrier contains configuration. |
 | Test metadata | 3 | `scripts/test/test_config.json`, `scripts/test/coverage_manifest.json`, `scripts/test/test_manifest.json.example`; catalog/coverage/manifest metadata, not standalone experiments. |
 | Total inventory rows | 358 | 310 inputs plus 48 fixture/support/metadata sources; no duplicate or unaccounted eligible path. |
-| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. Since v8, only the observability-role tasks hash changed. v7 recorded the Job-role defaults/tasks changes since v6. v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
+| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. No exclusion hash changed since v9. v9 recorded the observability-role tasks change since v8; v7 recorded the Job-role defaults/tasks changes since v6. v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
 
 The four templates are experiment, environment, software and legacy cfg.
 Each allowed classification has exactly one current disposition:
@@ -77,15 +78,23 @@ cloud execution/spending was authorized.
 The generated inventory, summary, extractor, four focused extractor checks and
 reviewed plan are private, outside Git, under the existing migration evidence root
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`, in
-configuration-inventory-v9. Manifest SHA-256:
-`0df51b8a426dee605342064b5ab26f5ed3fb1a211da74e7fefa6ee774e3bd59c`.
-The 2,128,743-byte inventory JSON SHA-256 is
-`39bd030f55439dba7d549bf8d6b29164860f5885e44575852be625c30e3607c1`.
+configuration-inventory-v10. Manifest SHA-256:
+`cb95a2daeee50b00295d2a728d150d002b56ad40d660e2a6dd2028c08f8e2304`.
+The 2,128,885-byte inventory JSON SHA-256 is
+`6ae68286372c3ef731bef8607116c4d756e44aa3c707ddabe24debc82ad03834`.
 The manifest binds inventory/summary; tooling/plan are alongside them. All six
 copied files were verified byte-for-byte with private 0700/0600 permissions.
-The unchanged extractor and its four focused checks are byte-identical to v2–v8.
-All seven complete previous directories and their receipts remain unchanged: 47 files
-were hash-verified before and after preservation. The v8 manifest is
+The unchanged extractor and its four focused checks are byte-identical to v2–v9.
+All eight complete previous directories and their receipts remain unchanged:
+54 files were hash-verified before/after generation and preservation, with every
+historical manifest's members checked against exact bytes and sizes.
+Historical v9 remains bound to clean
+`2f969bb34de37060dc19bba7cc50d9b06e16136e`, containing the foundation
+observability-readiness repair. Its manifest SHA-256 is
+`0df51b8a426dee605342064b5ab26f5ed3fb1a211da74e7fefa6ee774e3bd59c`.
+Its 2,128,743-byte inventory JSON SHA-256 is
+`39bd030f55439dba7d549bf8d6b29164860f5885e44575852be625c30e3607c1`.
+The v8 manifest is
 `bdc1f2a0747ef7c4fc8c436b0693ee25b279d916786fceb301d58ba7cc42abc0`;
 its preserved 2,128,231-byte inventory JSON SHA-256 is
 `9559b83be067917dfa82c9a83aeb2f08fbab924aca32207ff7eb09760edd3ebd`.
@@ -118,28 +127,38 @@ The v8 refresh changed five existing rows: `scripts/test/e2e/test_e2e_test_utils
 Their AST fixture facts include the five new negative-schema regression methods;
 the classifier and its heuristic limits are unchanged. That refresh added or removed
 no row and changed no user-input bytes or exclusion hashes. The Docker-role hash
-remains as recorded in v6. Since v8, exactly one existing carrier row changed,
+remains as recorded in v6. The historical v9 refresh changed one existing carrier row,
 `scripts/test/unit/test_role_contracts.py`, adding seven inert observability-policy
 test methods. Its current AST fixture facts and those of all 45 carriers were
 verified. Only `roles/resource_manager/k8s_observability/tasks/main.yml` changed
 among exclusions; no input, row or exclusion path was added or removed. This
-records the reviewed source repair, not actual service readiness or a runtime pass.
-A separate private configuration-inventory-v9-generation.json receipt records
-isolated Python 3.12.7
-with optimization disabled, the clean source revision and complete verification,
-preserving the extractor's built-in assertions.
+recorded the reviewed source repair, not actual service readiness or a runtime pass.
+The v10 refresh changes only the existing
+`scripts/test/unit/test_continuum_runtime.py` carrier row. Its source hash and static
+fixture facts include two new manifest regressions:
+`test_qemu_preload_accepts_multiline_manifest_from_machine_output` and
+`test_manifest_identity_consumes_complete_json_body`. No row/input/exclusion path
+was added or removed; no input bytes, exclusion hash, classification or disposition
+changed. The product parser's hash is separately bound in the generation receipt
+and reviewed source commit; product Python is not an inventory carrier/exclusion.
+The private configuration-inventory-v10-generation.json receipt (SHA-256
+`c813e61a74f79b334fd9990eabebf29737e2031c809898073ed8dbe8c61c8e92`)
+records isolated Python 3.12.7 with optimization disabled, the clean source revision
+and complete verification, preserving the extractor's built-in assertions. The
+historical configuration-inventory-v9-generation.json receipt remains unchanged.
 
 Source hashes were checked for all 358 rows and 135 exclusions; raw-declaration
 equality covered all 259 cfg and 51 YAML inputs after redaction. All 30 experiment
 normalizations use registry_refresh missing/all without the retired run key.
-All four extractor checks passed.
+Their normalized facts remain equal to v9; all 45 carriers' AST fixture facts were
+verified. All four extractor checks passed.
 Generation used the existing cloud-safe mocked-socket parser pattern, not VM,
 research-script or runtime-entry-point execution. Expected successful runtime
 outputs are experiment_lock.yaml, phase state.json, logs and the configured
 benchmark/network artifacts; profiles alone produce none.
 
 Refresh affected rows and the exact source/evidence binding after schema, example
-or test changes. This refresh updates one existing carrier and one exclusion;
+or test changes. This refresh updates one existing carrier and no exclusion;
 the user input set is unchanged.
 The checkpoint must not be relabelled as a later final candidate
 without rechecking those hashes and the exact source/evidence binding.

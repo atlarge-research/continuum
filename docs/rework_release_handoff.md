@@ -153,8 +153,10 @@ pin. No failed state was pruned and no updater/lock was killed or removed.
 Packet B's sequential 1 → 2 → 2 development proof and packet C's later static
 core-contract closure are recorded below. Historical
 scope, final dispositions and frozen-candidate acceptance remain open; the original
-pre-main goal is not complete. Packet D foundation/Kubernetes/endpoint/observability
-is next, subject to coordinator release. The independently accepted pilot enables
+pre-main goal is not complete. Packet D has five accepted foundation development
+cases on clean `73a30b7`; its failed endpoint case and reviewed source repair are
+recorded below. Fresh endpoint recovery remains next, subject to separate review
+and coordinator release. The independently accepted pilot enables
 only its fixed node4/node5 development allocation below; it does not replace final
 serial acceptance.
 
@@ -332,7 +334,7 @@ followed by the selected module order in the approved closure plan. Individual b
 static gates and the final frozen-candidate runtime sequence remain required at their
 designated checkpoints; B's earlier development evidence is not renewed for this source.
 
-## Packet D foundation — source checkpoint, runtime pending
+## Packet D foundation — source checkpoint, endpoint recovery pending
 
 The independently reviewed three-file observability repair is committed locally at
 `2f969bb34de37060dc19bba7cc50d9b06e16136e`. Existing YAML suites and planner wiring
@@ -360,25 +362,96 @@ frozen reports and drivers are preserved under
 32 files with 0700/0600 directory/file modes; SHA256SUMS SHA-256
 `b78504719893b2091a4f15293a9361def5df1005646094ad40ee96a2bfdf3ca8`.
 All 681 files in the two complete packet-B evidence directories and packet-C static
-directory were hash-verified unchanged before/after preservation. New inventory v9
+directory were hash-verified unchanged before/after preservation. Historical inventory v9
 is bound to clean `2f969bb`: 358 rows/135 exclusions, unchanged input set and
 classifications/dispositions, all source hashes/raw declarations/normalizations and
 45 carrier AST facts verified. Exactly the role-test carrier and observability-task
 exclusion changed. All 47 previous inventory snapshot/receipt files remain unchanged;
 see `docs/configuration_inventory.md` for exact inventory hashes.
 
-No foundation VM/remote/host validation has run on this source. The separate pilot is
-independently accepted and its physical window returned; it does not release foundation
-execution. This static checkpoint does not certify a frozen candidate. After the
-coordinator separately releases the serial node4 foundation physical window, first validate
-actual observability readiness with exact
-`qemu_k8s_nobench_parity`, then the approved serial foundation development suites:
-`operational_regression`, `qemu_infra_parity`, `network_validation`,
-`qemu_k8s_image_parity` and `qemu_endpoint_image_parity`. Preserve failures before
-diagnosis; require real image outcomes and complete artifacts, not software-only
-success. Two operational passes and all exact suite checks on the later frozen
-candidate remain separate obligations before broader review. KubeEdge follows only
-after this first family's closure under the approved module order.
+Five subsequent whole-suite foundation cases have independent/root DEVELOPMENT
+acceptance on clean `73a30b72aae67267adaf5b979bf3b1a1a9f78061`:
+`qemu_k8s_nobench_parity`, `operational_regression`, `qemu_infra_parity`,
+`network_validation` and `qemu_k8s_image_parity`. They ran serially on node4 as
+matthijs with pinned Python 3.8.10/Ansible 2.13.2 and an explicit empty external-host
+override. Their separate `accepted-development-manual.json`/`finished.json` receipts
+and complete results are under `development-foundation-73a30b72aae6-<suite>` in the
+private evidence root below. The no-benchmark case includes an immutable sibling
+version-attribution correction; operational includes an immutable source-binding
+addendum. Original seals/reports remain unchanged. Do not repeat these five cases
+or the completed normal-account retirement to renew this checkpoint.
+
+These are bounded development results. Observed Kubernetes API server v1.27.0
+differs from client/kubelet/proxy v1.27.16; endpoint Docker versions varied.
+Operational's late publisher-image query missed teardown, and the pinned-edge
+live XML query missed its window. For expected rates above 100 Mbps, network
+verification requires finite positive throughput, not configured 1000-Mbps fidelity. Point-in-time
+observability health and functional image outcomes do not establish complete
+scraping, sustained frequency or synchronized one-way timing. The case5 accepted
+review provenance records one accidental read/hash of the failed-B disk, matching
+unchanged bytes without mutation; no repeat is needed. Compact evidence excludes
+disks/private keys; retained-backing existence/current sizes are not live-byte
+invariance. Retention and startup-replacement dispositions remain case-specific.
+
+The sixth `qemu_endpoint_image_parity` case failed on the same `73a30b7` source before
+new base/guest/application launch: entry exit 1 without timeout after 40.833s,
+driver exit 2. Its failed `finished.json` SHA-256 is
+`4905c28b62791e6caca433db071273816a9329569a4ca5f699bde6e347de6ce7`;
+the 247-file failure/diagnostic SHA256SUMS SHA-256 is
+`2dfa174279806d9f9cfd6d9efdc2017b56aab6774366d51c551b5ec876550bcf`.
+This packet is accepted for preservation/diagnosis only, not runtime success.
+Normal startup had removed the four authorized own case5 guests; no new own node4
+guests remained and the physical window returned. No endpoint image outcomes,
+current metrics or final application teardown were demonstrated.
+
+Bounded later HEAD/GET requests for the same immutable digest returned a valid
+2,392-byte, 66-line OCI manifest. `Machine.process` splits stdout into lines;
+the registry consumer parsed only its first line. That reproduces a source defect
+against the current same-digest response, not the unavailable original HTTP bytes.
+The independently reviewed two-file repair is committed locally at
+`ba5e50f05c22a5118a83ea1412aaf7141c15df60`. Its only product change joins all
+manifest output lines before JSON parsing; immutable-digest lookup and every
+strict schema/media/config/layer/digest/size validator are unchanged. The existing
+test helper now models the real line-list transport. Two new methods cover real
+Machine processing with mocked subprocess bytes for both OCI/Docker families and
+complete-body acceptance/rejection, including trailing garbage or a second JSON
+value. No network, VM or cache bypass is part of those tests.
+
+The two methods first reproduced six assertion failures and two production
+RuntimeErrors on old source, then passed. Focused registry/QEMU-cache checks passed
+138/138; 961 unit, 173 local-e2e and final combined 1,134 tests all passed on separately
+attributed static Python 3.12.7. The final combined run binds the exact reviewed
+source hashes after the scoped test-lint comment. Changed-file pylint retained
+6/6 product and 419/419 test findings with no added finding identities; existing
+module/class size diagnostics changed numerically. Product lint used pinned
+Python 3.8.10, the large test carrier used static Python 3.12.7 due the documented
+pinned-tool limitation. Raw RED/GREEN, focused/full-suite, lint and complete review
+records are saved in `.superpowers/sdd/2026-10-28-local-module-closure/` as the
+`endpoint-manifest-*` artifacts. Static tests do not establish a physical endpoint
+pass or recover the failed request's original response.
+
+Fresh configuration inventory v10 is bound to clean `ba5e50f`: 358 rows/135 exclusions,
+all 493 source hashes, 259 cfg/51 YAML raw declarations, 30 normalizations and 45 carrier
+AST facts verified. Only the existing runtime-test carrier changed, including the
+two new methods; no input, exclusion hash, classification or disposition changed.
+All 54 v2–v9 snapshot/receipt files and historical manifest bytes remain unchanged.
+The v10 manifest SHA-256 is
+`cb95a2daeee50b00295d2a728d150d002b56ad40d660e2a6dd2028c08f8e2304`;
+the 2,128,885-byte inventory SHA-256 is
+`6ae68286372c3ef731bef8607116c4d756e44aa3c707ddabe24debc82ad03834`.
+See `docs/configuration_inventory.md` for the new receipt and preserved histories.
+
+Fresh endpoint recovery is PENDING. It requires an independently reviewed harness/
+observer bound to the actual repaired clean source and v10, the preserved failed
+predecessor, fresh base/evidence paths, current preservation guards and a separate
+physical release. Never reuse/warm the failed base or invent an accepted runtime
+predecessor. Foundation closure and KubeEdge progression remain held until actual
+recovery is independently/root accepted and the physical window returned.
+Packet E's demonstrated CLI tunnel-hint defect remains open: the printed forward
+destination uses the worker IP although the service binds the controller; fix and
+regress it before freeze. No final candidate is frozen. Two complete operational
+passes, all exact suite checks and the reuse proof on that later candidate, the
+twelve canonical static gates and final human review package remain required.
 
 ## Archived completed planning records
 
@@ -419,8 +492,9 @@ and the retirement packet performed no VM operation or benchmark rerun.
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 48 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   2f969bb34de37060dc19bba7cc50d9b06e16136e, after the reviewed foundation
-   observability source repair; all seven earlier snapshots remain unchanged. Final
+   ba5e50f05c22a5118a83ea1412aaf7141c15df60, after the reviewed full-body
+   registry-manifest parser repair; all eight earlier snapshots, including v9 at
+   source `2f969bb`, remain unchanged. Final
    historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
