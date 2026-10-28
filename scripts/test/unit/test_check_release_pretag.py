@@ -3,6 +3,7 @@
 # pylint: disable=missing-class-docstring,missing-function-docstring,protected-access
 # pylint: disable=too-many-public-methods
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,7 +50,7 @@ class CheckReleasePretagTests(unittest.TestCase):
     def _write_release_notes(self, root: Path, omitted_command=None, extra_evidence_docs=None):
         commands = [
             command
-            for command in check_release_pretag.REQUIRED_PRETAG_COMMANDS
+            for command in check_release_matrix.REQUIRED_M1_PRE_TAG_COMMANDS
             if command != omitted_command
         ]
         evidence_docs = [
@@ -196,11 +197,18 @@ class CheckReleasePretagTests(unittest.TestCase):
                 ],
             )
 
-    def test_required_commands_match_matrix_checker(self):
-        self.assertEqual(
-            check_release_pretag.REQUIRED_PRETAG_COMMANDS,
-            check_release_matrix.REQUIRED_M1_PRE_TAG_COMMANDS,
-        )
+    def test_command_policy_has_required_matrix_owner_not_pretag_duplicate(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            omitted = "python3 scripts/test/check_release_pretag.py"
+            self._write_release_notes(root, omitted_command=omitted)
+            self._write_evidence(root)
+            self.assertEqual(self._find_pretag_issues(root), [])
+            matrix_issues = check_release_matrix._release_notes_issues(root, "")
+            self.assertTrue(any(
+                issue.kind == "release-notes-pretag-command-missing" and omitted in issue.detail
+                for issue in matrix_issues
+            ))
 
     def test_extract_paths_ignores_relative_paths(self):
         self.assertEqual(
@@ -210,97 +218,6 @@ class CheckReleasePretagTests(unittest.TestCase):
             ),
             ["/tmp/cloud_static_audit_2026-05-24T000000Z.md"],
         )
-
-    def test_missing_pretag_command_is_reported(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            omitted = "python3 scripts/test/check_release_pretag.py"
-            self._write_release_notes(root, omitted_command=omitted)
-            self._write_evidence(root)
-
-            self.assertEqual(
-                self._find_pretag_issues(root),
-                [
-                    check_release_pretag.PretagIssue(
-                        "pretag-command-missing",
-                        "section 7 is missing '%s'" % (omitted,),
-                    )
-                ],
-            )
-
-    def test_missing_vm_wrapper_command_is_reported(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            omitted = (
-                "sh scripts/test/run_smoke_host.sh "
-                "qemu_openfaas_software_parity"
-            )
-            self._write_release_notes(root, omitted_command=omitted)
-            self._write_evidence(root)
-
-            self.assertEqual(
-                self._find_pretag_issues(root),
-                [
-                    check_release_pretag.PretagIssue(
-                        "pretag-command-missing",
-                        "section 7 is missing '%s'" % (omitted,),
-                    )
-                ],
-            )
-
-    def test_pretag_commands_must_remain_in_documented_order(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            self._write_release_notes(root)
-            self._write_evidence(root)
-            notes_path = root / "docs" / "release_notes_m1_draft.md"
-            notes_path.write_text(
-                notes_path.read_text(encoding="utf-8").replace(
-                    "git diff --check\n"
-                    "sh scripts/test/setup_agent_host.sh verify\n",
-                    "sh scripts/test/setup_agent_host.sh verify\n"
-                    "git diff --check\n",
-                ),
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                self._find_pretag_issues(root),
-                [
-                    check_release_pretag.PretagIssue(
-                        "pretag-command-order",
-                        "section 7 lists 'sh scripts/test/setup_agent_host.sh verify' "
-                        "before 'git diff --check'; "
-                        "keep pre-tag commands in documented order",
-                    )
-                ],
-            )
-
-    def test_pretag_commands_must_not_be_duplicated(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            self._write_release_notes(root)
-            self._write_evidence(root)
-            notes_path = root / "docs" / "release_notes_m1_draft.md"
-            duplicate = "python3 scripts/test/check_release_matrix.py"
-            notes_path.write_text(
-                notes_path.read_text(encoding="utf-8").replace(
-                    "%s\n" % (duplicate,),
-                    "%s\n%s\n" % (duplicate, duplicate),
-                ),
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                self._find_pretag_issues(root),
-                [
-                    check_release_pretag.PretagIssue(
-                        "pretag-command-duplicate",
-                        "section 7 lists '%s' 2 times; keep one canonical "
-                        "pre-tag command" % (duplicate,),
-                    )
-                ],
-            )
 
     def test_host_helper_failure_is_reported(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -628,6 +545,64 @@ class CheckReleasePretagTests(unittest.TestCase):
                 ],
             )
 
+    def _real_git_source_delta(self, before, after):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+
+        def git(*args):
+            result = subprocess.run(
+                ["git", "-C", str(root), "-c", "core.hooksPath=/dev/null",
+                 "-c", "commit.gpgsign=false", "-c", "user.name=Continuum test",
+                 "-c", "user.email=continuum-test@example.invalid", *args],
+                check=True, capture_output=True, text=True,
+            )
+            return result.stdout.strip()
+
+        git("init", "--quiet")
+        commits = []
+        for contents in (before, after):
+            for relative, text in contents.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+            git("add", "--all")
+            git("commit", "--quiet", "-m", "local source fixture")
+            commits.append(git("rev-parse", "HEAD"))
+        self.assertEqual(git("status", "--porcelain"), "")
+        return root, commits[0], commits[1]
+
+    def test_real_git_shared_runtime_helper_change_invalidates_non_kata_evidence(self):
+        path = "application/runtime_helpers.py"
+        root, base, head = self._real_git_source_delta(
+            {path: "# original shared runtime\n"},
+            {path: "# changed shared benchmark runtime\n"},
+        )
+        issue = check_release_pretag._source_commit_mismatch_issue(
+            root, "docs/release_evidence_m1_2026-07-08.md", base, head
+        )
+        self.assertIsNotNone(issue, "Shared runtime changes cannot renew old non-Kata evidence")
+        self.assertEqual(issue.kind, "pretag-source-commit-mismatch")
+        self.assertIn(path, issue.detail)
+
+    def test_real_git_historical_wrapper_literal_delta_invalidates_evidence(self):
+        runner = "scripts/test/run_smoke_host.sh"
+        setup = "scripts/test/setup_agent_host.sh"
+        root, base, head = self._real_git_source_delta(
+            {runner: '#!/bin/sh\ncase "$SCENARIO" in\nesac\n',
+             setup: 'HOSTCTL_INTERFACE_VERSION="2026-05-31-sudo-hardening"\n'},
+            {runner: '#!/bin/sh\ncase "$SCENARIO" in\n  release-artifact-audit)\n'
+                     '    BASE_PATH="$BASE_ROOT/prereqs"\n    ;;\nesac\n',
+             setup: 'HOSTCTL_INTERFACE_VERSION="2026-06-01-release-artifact-audit-root"\n'},
+        )
+        issue = check_release_pretag._source_commit_mismatch_issue(
+            root, "docs/release_evidence_m1_2026-07-08.md", base, head
+        )
+        self.assertIsNotNone(issue, "Historical wrapper literals cannot bypass source freshness")
+        self.assertEqual(issue.kind, "pretag-source-commit-mismatch")
+        self.assertIn(runner, issue.detail)
+        self.assertIn(setup, issue.detail)
+
     def test_evidence_commit_may_precede_release_doc_only_head(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
@@ -651,30 +626,6 @@ class CheckReleasePretagTests(unittest.TestCase):
                     [],
                 )
 
-    def test_evidence_commit_may_precede_release_artifact_audit_wrapper_delta(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            self._write_release_notes(root)
-            self._write_evidence(root, git_commit="abcdef0")
-
-            with mock.patch.object(
-                check_release_pretag,
-                "_changed_paths_between_commits",
-                return_value=[
-                    "docs/release_notes_m1_draft.md",
-                    "scripts/test/run_smoke_host.sh",
-                    "scripts/test/setup_agent_host.sh",
-                ],
-            ), mock.patch.object(
-                check_release_pretag,
-                "_is_release_artifact_audit_only_wrapper_change",
-                return_value=True,
-            ):
-                self.assertEqual(
-                    self._find_pretag_issues(root, current_commit="1234567"),
-                    [],
-                )
-
     def test_evidence_commit_rejects_other_wrapper_delta(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
@@ -688,10 +639,6 @@ class CheckReleasePretagTests(unittest.TestCase):
                     "scripts/test/run_smoke_host.sh",
                     "scripts/test/setup_agent_host.sh",
                 ],
-            ), mock.patch.object(
-                check_release_pretag,
-                "_is_release_artifact_audit_only_wrapper_change",
-                return_value=False,
             ):
                 self.assertEqual(
                     self._find_pretag_issues(root, current_commit="1234567"),
@@ -706,49 +653,12 @@ class CheckReleasePretagTests(unittest.TestCase):
                     ],
                 )
 
-    def test_existing_evidence_may_precede_separate_kata_certification_delta(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            root = Path(tempdir)
-            self._write_release_notes(root)
-            self._write_evidence(root, git_commit="abcdef0")
-
-            with mock.patch.object(
-                check_release_pretag,
-                "_changed_paths_between_commits",
-                return_value=[
-                    "docs/release_certification_matrix.md",
-                    "application/empty_kata/empty_kata.py",
-                    "application/runtime_helpers.py",
-                    "configs/experiments/parity/qemu_kube_kata_empty_startup/"
-                    "01_kube_kata_empty_pod.yaml",
-                    "configs/profiles/software/kube-kata.yaml",
-                    "input/configuration/benchmark_stage_contract.py",
-                    "input/configuration/image_requirements.py",
-                    "input/configuration/module_registry.py",
-                    "playbooks/resource_manager/kata_setup.yml",
-                    "resource_manager/kube_kata/kube_kata.py",
-                    "roles/resource_manager/kata_containers/tasks/main.yml",
-                    "scripts/test/check_kata_host_prereqs.py",
-                    "scripts/test/run_smoke_host.sh",
-                    "scripts/test/setup_agent_host.sh",
-                    "scripts/test/test_config.json",
-                    "scripts/test/unit/test_application_runtime_helpers.py",
-                    "scripts/test/unit/test_module_registry.py",
-                    "scripts/test/unit/test_resource_manager_plans.py",
-                    "scripts/test/unit/test_role_contracts.py",
-                ],
-            ):
-                self.assertEqual(
-                    self._find_pretag_issues(root, current_commit="1234567"),
-                    [],
-                )
-
     def test_kata_evidence_must_not_precede_its_own_certification_delta(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
-            kata_doc = check_release_pretag.KATA_CERTIFICATION_EVIDENCE_PATH
+            kata_doc = "docs/release_evidence_qemu_kube_kata_empty_2026-07-09.md"
             self._write_release_notes(root, extra_evidence_docs=[kata_doc])
-            self._write_evidence(root)
+            self._write_evidence(root, git_commit="1234567")
             self._write_extra_evidence(root, kata_doc, git_commit="abcdef0")
 
             changed_paths = [

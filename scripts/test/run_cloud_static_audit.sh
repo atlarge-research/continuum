@@ -105,6 +105,7 @@ compile_files=(
     application/runtime_helpers.py
     scripts/test/run_tests.py
     scripts/test/check_docs_paths.py
+    # Retained release guards: claims, row inventory, artifacts, and source freshness.
     scripts/test/check_release_claims.py
     scripts/test/check_release_evidence_artifacts.py
     scripts/test/check_release_matrix.py
@@ -140,6 +141,8 @@ run_capture release_matrix "release certification matrix check" required \
 run_capture suites "configured suite catalog" required \
     "$PYTHON" -B scripts/test/run_tests.py --list-suites
 
+# Historical artifact/source findings are informational here, not renewed runtime evidence.
+# Pre-tag freshness has no historical wrapper/Kata runtime-source exceptions.
 run_capture release_evidence_artifacts "release evidence artifact audit" optional \
     "$PYTHON" -B scripts/test/check_release_evidence_artifacts.py
 run_capture release_pretag "M1 pre-tag readiness check" optional \

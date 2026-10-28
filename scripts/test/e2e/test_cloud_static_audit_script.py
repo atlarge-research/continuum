@@ -62,6 +62,13 @@ class CloudStaticAuditScriptTests(unittest.TestCase):
         self.assertIn("sh -n scripts/test/run_smoke_host.sh", script_text)
         self.assertIn("sh -n scripts/test/setup_agent_host.sh", script_text)
 
+    def test_retained_release_checkers_remain_in_compile_sweep(self):
+        script_text = self.audit_script.read_text(encoding="utf-8")
+        compile_files = script_text.split("compile_files=(", 1)[1].split("\n)", 1)[0]
+        for name in ("claims", "matrix", "evidence_artifacts", "pretag"):
+            with self.subTest(checker=name):
+                self.assertIn("scripts/test/check_release_%s.py" % name, compile_files)
+
     def test_required_gate_titles_match_release_matrix_contract(self):
         script_text = self.audit_script.read_text(encoding="utf-8")
 

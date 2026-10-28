@@ -182,6 +182,9 @@ the current worktree to be clean and every listed release-evidence document to
 name a clean VM-evidence source commit. Final release-documentation and release
 checker commits may follow that source commit; runtime-affecting changes may
 not.
+Historical wrapper additions and Kata/shared-runtime changes have no source
+freshness exemption. Command-list policy is checked once by the required matrix
+gate; pre-tag readiness checks source/tree/report evidence separately.
 
 ## 8. Suggested Next Milestones
 

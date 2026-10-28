@@ -10,20 +10,10 @@ from pathlib import Path
 
 try:
     from scripts.test.check_release_evidence_artifacts import check_cloud_static_audit_report
-    from scripts.test.check_release_matrix import (
-        REQUIRED_M1_PRE_TAG_COMMANDS,
-        pretag_command_duplicate_messages,
-        pretag_command_order_messages,
-        section_text,
-    )
+    from scripts.test.check_release_matrix import section_text
 except ModuleNotFoundError:  # pragma: no cover - used when run as a script path
     from check_release_evidence_artifacts import check_cloud_static_audit_report
-    from check_release_matrix import (
-        REQUIRED_M1_PRE_TAG_COMMANDS,
-        pretag_command_duplicate_messages,
-        pretag_command_order_messages,
-        section_text,
-    )
+    from check_release_matrix import section_text
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -37,7 +27,6 @@ CLOUD_AUDIT_HEADING_RE = re.compile(
     r"^# Cloud Static Audit Report - (?P<timestamp>\d{4}-\d{2}-\d{2}T\d{6}Z)$",
     re.MULTILINE,
 )
-REQUIRED_PRETAG_COMMANDS = REQUIRED_M1_PRE_TAG_COMMANDS
 EXPECTED_M1_EVIDENCE_FIELDS = {
     "Required gates": "PASS",
     "Result": "TOTAL_RELEASE_EVIDENCE_ARTIFACT_ISSUES=0",
@@ -52,74 +41,6 @@ POST_EVIDENCE_ALLOWED_PATH_PREFIXES = (
     "scripts/test/e2e/test_",
     "scripts/test/unit/test_check_release_",
 )
-RELEASE_ARTIFACT_AUDIT_WRAPPER_PATHS = {
-    "scripts/test/run_smoke_host.sh",
-    "scripts/test/setup_agent_host.sh",
-}
-KATA_CERTIFICATION_EVIDENCE_PATH = (
-    "docs/release_evidence_qemu_kube_kata_empty_2026-07-09.md"
-)
-KATA_CERTIFICATION_SOURCE_PATHS = (
-    "application/empty_kata/",
-    "application/runtime_helpers.py",
-    "configs/experiments/parity/qemu_kube_kata_empty_startup/",
-    "configs/profiles/software/kube-kata.yaml",
-    "input/configuration/benchmark_stage_contract.py",
-    "input/configuration/image_requirements.py",
-    "input/configuration/module_registry.py",
-    "playbooks/resource_manager/kata_setup.yml",
-    "resource_manager/kube_kata/",
-    "roles/resource_manager/kata_containers/",
-    "scripts/test/check_kata_host_prereqs.py",
-    "scripts/test/run_smoke_host.sh",
-    "scripts/test/setup_agent_host.sh",
-    "scripts/test/test_config.json",
-    "scripts/test/unit/test_application_runtime_helpers.py",
-    "scripts/test/unit/test_module_registry.py",
-    "scripts/test/unit/test_resource_manager_plans.py",
-    "scripts/test/unit/test_role_contracts.py",
-)
-KATA_CERTIFICATION_REQUIRED_PATHS = (
-    "application/empty_kata/",
-    "application/runtime_helpers.py",
-    "configs/experiments/parity/qemu_kube_kata_empty_startup/",
-    "configs/profiles/software/kube-kata.yaml",
-    "input/configuration/benchmark_stage_contract.py",
-    "input/configuration/image_requirements.py",
-    "input/configuration/module_registry.py",
-    "playbooks/resource_manager/kata_setup.yml",
-    "resource_manager/kube_kata/",
-    "roles/resource_manager/kata_containers/",
-)
-RELEASE_ARTIFACT_AUDIT_ADDED_LINES = {
-    '  release-artifact-audit)',
-    '    BASE_PATH="$BASE_ROOT/prereqs"',
-    '    CONTINUUM_HOME="$BASE_PATH/.continuum"',
-    '    MPLCONFIGDIR_PATH="$CONTINUUM_HOME/mplconfig"',
-    '    XDG_CACHE_HOME_PATH="$BASE_ROOT/.cache"',
-    '    mkdir -p "$BASE_PATH" "$CONTINUUM_HOME" "$MPLCONFIGDIR_PATH" "$XDG_CACHE_HOME_PATH"',
-    '    chmod 0750 "$BASE_PATH" "$CONTINUUM_HOME" "$MPLCONFIGDIR_PATH" "$XDG_CACHE_HOME_PATH"',
-    '    cd "$REPO_ROOT"',
-    '    exec env -i \\',
-    '      HOME="${HOME:-/home/continuum-smoke}" \\',
-    '      PATH="$VENV_BIN:$SAFE_PATH" \\',
-    '      PYTHONPATH=. \\',
-    '      PYTHONDONTWRITEBYTECODE=1 \\',
-    '      XDG_CACHE_HOME="$XDG_CACHE_HOME_PATH" \\',
-    '      MPLCONFIGDIR="$MPLCONFIGDIR_PATH" \\',
-    '      CONTINUUM_RELEASE_AUDIT_ROOT="${CONTINUUM_RELEASE_AUDIT_ROOT:-$REPO_ROOT}" \\',
-    '      CONTINUUM_SMOKE_BASE_ROOT="$BASE_ROOT" \\',
-    '      CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \\',
-    '      LIBVIRT_DEFAULT_URI="$LIBVIRT_URI" \\',
-    '      "$PYTHON_BIN" scripts/test/check_release_evidence_artifacts.py',
-    "    ;;",
-    'HOSTCTL_INTERFACE_VERSION="2026-06-01-release-artifact-audit-root"',
-    '  CONTINUUM_RELEASE_AUDIT_ROOT="$LIVE_REPO_ROOT" \\\\',
-    '  CONTINUUM_RELEASE_AUDIT_ROOT="\\$LIVE_REPO_ROOT" \\\\',
-}
-RELEASE_ARTIFACT_AUDIT_REMOVED_LINES = {
-    'HOSTCTL_INTERFACE_VERSION="2026-05-31-sudo-hardening"',
-}
 STALE_HOST_HELPER_FINDING_RE = re.compile(
     r"\b("
     r"does not declare|does not expose|fail(?:ed|ure)?|missing|not ready|stale|"
@@ -262,34 +183,6 @@ def _changed_paths_between_commits(
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def _diff_lines_between_commits(
-    root: Path,
-    base_commit: str,
-    current_commit: str,
-    paths: list[str],
-) -> list[str] | None:
-    """Return zero-context diff lines for selected paths."""
-    result = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(root),
-            "diff",
-            "--unified=0",
-            base_commit,
-            current_commit,
-            "--",
-            *paths,
-        ],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.splitlines()
-
-
 def _is_allowed_post_evidence_path(path: str) -> bool:
     """Return whether a path may change after VM evidence without rerunning VMs."""
     normalized = path.replace("\\", "/")
@@ -298,89 +191,13 @@ def _is_allowed_post_evidence_path(path: str) -> bool:
     )
 
 
-def _is_allowed_release_artifact_audit_diff_line(line: str) -> bool:
-    """Return whether one diff line belongs to the wrapper-only audit addition."""
-    if not line or line.startswith(("diff ", "index ", "@@", "+++", "---")):
-        return True
-    if line.startswith("+"):
-        content = line[1:]
-        return (
-            content in RELEASE_ARTIFACT_AUDIT_ADDED_LINES
-            or (
-                content.startswith('    echo "Allowed values:')
-                and "release-artifact-audit" in content
-            )
-        )
-    if line.startswith("-"):
-        content = line[1:]
-        return (
-            content in RELEASE_ARTIFACT_AUDIT_REMOVED_LINES
-            or (
-                content.startswith('    echo "Allowed values:')
-                and "release-artifact-audit" not in content
-            )
-        )
-    return True
-
-
-def _is_release_artifact_audit_only_wrapper_change(
-    root: Path,
-    evidence_commit: str,
-    current_commit: str,
-    disallowed_paths: list[str],
-) -> bool:
-    """Return whether disallowed paths are exactly the guarded audit wrapper delta."""
-    normalized_paths = {path.replace("\\", "/") for path in disallowed_paths}
-    if normalized_paths != RELEASE_ARTIFACT_AUDIT_WRAPPER_PATHS:
-        return False
-    diff_lines = _diff_lines_between_commits(
-        root,
-        evidence_commit,
-        current_commit,
-        sorted(RELEASE_ARTIFACT_AUDIT_WRAPPER_PATHS),
-    )
-    if diff_lines is None:
-        return False
-    return all(_is_allowed_release_artifact_audit_diff_line(line) for line in diff_lines)
-
-
-def _is_kata_certification_source_path(path: str) -> bool:
-    """Return whether a source path belongs to the certified Kata row delta."""
-    normalized = path.replace("\\", "/")
-    return any(
-        normalized == allowed_path or normalized.startswith(allowed_path)
-        for allowed_path in KATA_CERTIFICATION_SOURCE_PATHS
-    )
-
-
-def _is_kata_certification_required_path(path: str) -> bool:
-    """Return whether a path is a core Kata source/config path, not wrapper-only."""
-    normalized = path.replace("\\", "/")
-    return any(
-        normalized == allowed_path or normalized.startswith(allowed_path)
-        for allowed_path in KATA_CERTIFICATION_REQUIRED_PATHS
-    )
-
-
-def _is_kata_certification_only_source_change(
-    evidence_doc: str,
-    disallowed_paths: list[str],
-) -> bool:
-    """Return whether source changes only add the separate Kata certification row."""
-    if evidence_doc == KATA_CERTIFICATION_EVIDENCE_PATH:
-        return False
-    if not any(_is_kata_certification_required_path(path) for path in disallowed_paths):
-        return False
-    return all(_is_kata_certification_source_path(path) for path in disallowed_paths)
-
-
 def _source_commit_mismatch_issue(
     root: Path,
     evidence_doc: str,
     evidence_commit: str,
     current_commit: str,
 ) -> PretagIssue | None:
-    """Return a source-commit issue unless only release guardrails changed."""
+    """Reject changed runtime sources; only documentation/checker paths are exempt."""
     changed_paths = _changed_paths_between_commits(root, evidence_commit, current_commit)
     if changed_paths is None:
         return PretagIssue(
@@ -394,16 +211,6 @@ def _source_commit_mismatch_issue(
     ]
     if not disallowed_paths:
         return None
-    if _is_release_artifact_audit_only_wrapper_change(
-        root,
-        evidence_commit,
-        current_commit,
-        disallowed_paths,
-    ):
-        return None
-    if _is_kata_certification_only_source_change(evidence_doc, disallowed_paths):
-        return None
-
     sample_paths = ", ".join(disallowed_paths[:5])
     return PretagIssue(
         "pretag-source-commit-mismatch",
@@ -496,41 +303,6 @@ def _release_note_evidence_docs(root: Path) -> list[str]:
     notes_text = notes_path.read_text(encoding="utf-8")
     evidence_section = section_text(notes_text, "## 2. Primary Evidence")
     return sorted(set(RELEASE_EVIDENCE_DOC_RE.findall(evidence_section)))
-
-
-def _release_notes_issues(root: Path) -> list[PretagIssue]:
-    notes_path = root / RELEASE_NOTES_PATH
-    if not notes_path.exists():
-        return [PretagIssue("pretag-release-notes-missing", RELEASE_NOTES_PATH.as_posix())]
-
-    notes_text = notes_path.read_text(encoding="utf-8")
-    pretag_section = section_text(notes_text, "## 7. Pre-Tag Gate")
-    issues = []
-    for command in REQUIRED_PRETAG_COMMANDS:
-        if command in pretag_section:
-            continue
-        issues.append(
-            PretagIssue(
-                "pretag-command-missing",
-                "section 7 is missing '%s'" % (command,),
-            )
-        )
-
-    for detail in pretag_command_order_messages(pretag_section, REQUIRED_PRETAG_COMMANDS):
-        issues.append(
-            PretagIssue(
-                "pretag-command-order",
-                detail,
-            )
-        )
-    for detail in pretag_command_duplicate_messages(pretag_section, REQUIRED_PRETAG_COMMANDS):
-        issues.append(
-            PretagIssue(
-                "pretag-command-duplicate",
-                detail,
-            )
-        )
-    return issues
 
 
 def _m1_evidence_doc_issues(root: Path) -> list[PretagIssue]:
@@ -779,7 +551,6 @@ def find_pretag_issues(root: Path = ROOT) -> list[PretagIssue]:
     """Return M1 pre-tag readiness issues from committed evidence docs."""
     root = root.resolve()
     issues = []
-    issues.extend(_release_notes_issues(root))
     issues.extend(_m1_evidence_doc_issues(root))
     issues.extend(_evidence_source_issues(root))
     return issues

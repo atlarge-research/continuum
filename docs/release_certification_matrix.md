@@ -56,6 +56,12 @@ point only at ready matrix rows, and that
 `docs/old_main_parity_issue_seed.md` mirrors every non-ready `P-*` row with a
 matching status and a concrete issue seed.
 
+Source freshness is not waived for historical wrapper additions or Kata/shared
+runtime changes. The required matrix check owns release-command presence/order/
+duplication; informational pre-tag readiness keeps source/tree/report/artifact
+checks without repeating that policy pass. See `docs/branch_slimming_audit.md`.
+This integration change does not renew any historical status or evidence below.
+
 ## 3. M1 Certified Module-Set Rows
 
 M1 is the first intermediate rework milestone. It should prove the structured

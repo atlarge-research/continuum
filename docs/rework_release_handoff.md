@@ -78,6 +78,9 @@ and the retirement packet performed no VM operation or benchmark rerun.
    are removed; narrow result interfaces and direct operator diagnostics remain.
    Complete the remaining branch-wide slimming audit without deleting required
    provenance or weakening freshness checks.
+   `docs/branch_slimming_audit.md` maps the major additions and checker rationale;
+   historical runtime-source waivers and duplicate pretag command-policy checks
+   are removed. Completed-ledger provenance consolidation remains open.
 4. Create a clean final candidate and complete static/runtime/manual acceptance:
    two clean post-fix operational runs, at least one on that exact candidate;
    exact final-candidate multi-host OpenFaaS and every approved reproduction;

@@ -23,6 +23,9 @@ Assess findings against changed scope; applicable changed-file lint still
 needs explicit validation. Historical evidence may be stale for pre-tagging
 without failing required cloud-safe gates. Never weaken freshness checks to
 make old evidence certify a new candidate.
+The required matrix gate owns release-command policy; informational pre-tag
+readiness owns source/tree/report checks without historical wrapper/Kata runtime
+waivers. See docs/branch_slimming_audit.md for retained checker responsibilities.
 
 Read the newest report under ignored `logs/cloud_static_audit/`; do not commit
 generated reports. Negative-path tests may intentionally log errors: inspect

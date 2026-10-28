@@ -28,6 +28,9 @@ prerequisite checks are informational in the canonical audit, not silently
 required or runtime evidence. Run applicable changed-file lint explicitly.
 Use a Python version supported by the static checker/test code; the historical
 physical-runner venv may be older and must not be silently upgraded.
+The required matrix gate owns release-command policy. Informational pre-tag
+readiness retains source/tree/report checks without historical wrapper/Kata
+runtime waivers; neither check renews old evidence for a later candidate.
 
 ## VM-backed work
 
