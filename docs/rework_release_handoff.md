@@ -50,6 +50,28 @@ passed. All seven workload VMs and eight unrelated shutoff domains were
 unchanged. Container-store numeric IDs/copied ACLs remain deliberately
 untouched behind the inspected protective ancestors; no global zero-ID claim.
 
+## Archived completed planning records
+
+The completed dispatcher, Phase-C/Phase-D records and frozen implementation
+ledger are preserved verbatim at clean source
+`b484f120f81c437f29d61b19ff5fec4e3790c58e`. Current files provide archive/current
+navigation, not another execution queue. Use `git show <commit>:<path>` to read
+the originals. Complete independent copies were byte/hash-verified before edits
+under the private migration evidence root, in planning-records-b484f120f81c
+(0700 directory, 0600 files). The plan-stack authority prefix and Sections12–14
+remain byte-for-byte unchanged.
+
+| Original path at that commit | Lines | Original SHA-256 |
+| --- | ---: | --- |
+| `.codex/OVERHAUL_EXECUTION_PLAN.md` | 974 | `93600b5823d6c90374cbefddbbc236a3155d6f922801361993b0da5b9e79b362` |
+| `docs/phase_c_implementation_plan.md` | 320 | `5104fc6dc44cc3626232acd0929c0157c3488ae7cb0abd4c5204e21e75cd4be2` |
+| `docs/phase_d_handoff.md` | 599 | `ae516e9e306838624ce13b187495793a352844c68d3591d11563b7e3116b6ba7` |
+| `docs/rework_plan_stack.md` | 248 | `6beb7b1df42b0d8d0f471403ca4f2321a0b0dec5026207e0c00629df104d0b3a` |
+
+Historical commands, counts, failures and source bindings remain recoverable;
+they are not rewritten into current certification. Dated release evidence and
+candidate research functionality/inputs remain untouched.
+
 ## Evidence and remaining work
 
 Private durable evidence is outside Git under
@@ -80,7 +102,8 @@ and the retirement packet performed no VM operation or benchmark rerun.
    provenance or weakening freshness checks.
    `docs/branch_slimming_audit.md` maps the major additions and checker rationale;
    historical runtime-source waivers and duplicate pretag command-policy checks
-   are removed. Completed-ledger provenance consolidation remains open.
+   are removed. Completed-ledger provenance consolidation is preserved above;
+   active navigation replaces the superseded execution queues.
 4. Create a clean final candidate and complete static/runtime/manual acceptance:
    two clean post-fix operational runs, at least one on that exact candidate;
    exact final-candidate multi-host OpenFaaS and every approved reproduction;

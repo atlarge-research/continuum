@@ -30,7 +30,7 @@ Categories are: 1 reproduction/runtime behavior; 2 correctness/safety;
 | Release claims/matrix/artifact/source-readiness checks and their active integration | 5 | Retain distinct demonstrated false-claim protection below; static success never renews runtime evidence. |
 | Dated release evidence and model/data/image provenance | 5 | Preserve exact historical runs and attribution needed to understand retained claims; no date, source or status renewal. |
 | Legacy cfg/DSL/role archives and research-script associations | 5 | Preserve historical workflow evidence pending the single final scope answer. Do not execute obsolete scripts or delete candidate functionality by assumption. |
-| Completed dispatcher, Phase-C/Phase-D execution ledgers and frozen implementation ledger | 6 | Consolidate separately into immutable Git references plus the active evidence record; historical provenance must remain recoverable before reducing active copies. |
+| Completed dispatcher, Phase-C/Phase-D execution ledgers and frozen implementation ledger | 6 | Consolidated into immutable b484f120f81c437f29d61b19ff5fec4e3790c58e Git references plus verified full private copies and the four-row binding in `docs/rework_release_handoff.md`. Current authority/closure boundaries remain unchanged. |
 | Old account/installed helpers and temporary diagnostic replay surface | 6 | Account/helpers are privately quarantined after verified migration. The debug command/playbook and four exclusive tests were removed in d93f890; Git preserves the source. Narrow result interfaces remain. |
 | Historical wrapper-literal and Kata runtime-source freshness exemptions | 7 | Remove: real temporary-Git regressions showed changed runtime code could remain compatible with old evidence. No runtime path gets a special waiver. |
 | Repeated pre-tag command-list policy pass | 7 | Remove from informational pretag readiness; the unchanged required matrix gate already owns identical presence/order/duplicate policy and its negative tests. |
@@ -55,7 +55,8 @@ owner; source freshness is stricter, not bypassed to make old evidence pass.
 
 ## Open boundaries
 
-Completed-ledger consolidation remains a separate reviewed provenance packet.
+Completed-ledger consolidation preserves full Git objects and independent private
+copies at the exact b484f12 source checkpoint; current files retain navigation.
 The historical reproduction-scope answer, final legacy dispositions, refreshed
 configuration hashes and fresh exact-candidate runtime/manual acceptance remain
 open. Same-application parameter sweeps remain candidate-only until collision-free
