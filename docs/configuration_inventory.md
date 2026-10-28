@@ -27,8 +27,10 @@ requires merging or adding documents.
 The frozen b22cadc input snapshot below records the former image_prefetch off/on
 schema. The subsequent atomic hard cut accepts registry_refresh missing/all,
 default missing, without aliases; the frozen per-file facts have not yet been
-refreshed and must not be treated as current input hashes. The common base-install
-fingerprint gap found during cache review is separate; inventory does not repair it.
+refreshed and must not be treated as current input hashes. The separate bounded
+cache repair covers common/active included roles, copied inputs, consumed values
+and actual preload identities; see `docs/qemu_cache_contract.md`. This inventory
+neither proves runtime cache acceptance nor refreshes the frozen fixture hashes.
 
 ## Frozen file coverage
 

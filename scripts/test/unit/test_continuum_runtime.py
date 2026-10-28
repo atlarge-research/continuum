@@ -4568,6 +4568,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             "guest_user",
             "base_install_playbooks",
             "base_install_fingerprints",
+            "base_recipe_inputs",
         )
         with tempfile.TemporaryDirectory() as tempdir:
             config = self._config(tempdir)
@@ -4986,10 +4987,6 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                 if operation == "list":
                     return [(running_names if running_names is not None else [], [])]
 
-            if decoded_command[0] == "ls":
-                if fail_operation == "timezone-discovery":
-                    return [(["partial"], [synthetic])]
-                return [(["/etc/localtime -> /usr/share/zoneinfo/Europe/Amsterdam"], [])]
             if decoded_command[:2] == ["sudo", "ln"]:
                 if fail_operation == "timezone":
                     return [([], [synthetic])]
@@ -5015,6 +5012,8 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         config = self._config(tempdir.name)
+        install_playbook = pathlib.Path(tempdir.name) / "install.yml"
+        install_playbook.write_text("---\n- hosts: base\n  tasks: []\n", encoding="utf-8")
         machine = self._machine(is_local=False)
         published = []
         machine.process.side_effect = self._successful_rebuild_process(
@@ -5054,7 +5053,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         install_patch = mock.patch.object(
             qemu_module,
             "_base_install_playbooks_for_base_names",
-            return_value=["install.yml"] if runner_failure == "install" else [],
+            return_value=[str(install_playbook)] if runner_failure == "install" else [],
         )
         with patches[0], patches[1], patches[2], patches[3], patches[4], install_patch:
             qemu_module.base_image(config, [machine], runner=runner)
@@ -5240,7 +5239,6 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
     def test_failed_machine_process_stages_prevent_publication(self):
         stages = (
             "create",
-            "timezone-discovery",
             "timezone",
             "cloud-init",
             "shutdown",
@@ -5252,17 +5250,32 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                     self._run_rebuild(fail_operation=stage)
                 self.assertEqual(self._last_rebuild[2], [])
 
+    def test_preflight_timezone_is_reused_for_build_and_publication(self):
+        timezone = "/usr/share/zoneinfo/UTC"
+        with mock.patch.object(qemu_module.os, "readlink", side_effect=[timezone, OSError("changed")]) as readlink:
+            machine, _runner, published = self._run_rebuild()
+        readlink.assert_called_once_with("/etc/localtime")
+        self.assertEqual(published, ["publish"])
+        timezone_calls = [call for call in machine.process.call_args_list
+                          if call.args[1][:2] == ["sudo", "ln"]]
+        self.assertEqual(timezone_calls[0].args[1], ["sudo", "ln", "-sf", timezone, "/etc/localtime"])
+        for call in machine.process.call_args_list:
+            command = shlex.split(" ".join(call.args[1]))
+            if command[:4] == ["python3", "-c", qemu_module._HOST_CACHE_HELPER_SOURCE, "publish"]:
+                payload = json.loads(base64.b64decode(command[5]))
+                self.assertEqual(payload["base_recipe_inputs"]["timezone"], timezone)
+
     def test_failed_readiness_and_software_stages_prevent_publication(self):
         cases = (
-            {"runner_failure": "prepare"},
-            {"readiness_failure": True},
-            {"runner_failure": "install"},
-            {"runner_failure": "common"},
-            {"prefetch_failure": True},
+            ({"runner_failure": "prepare"}, "prepare failed"),
+            ({"readiness_failure": True}, "SSH readiness failed"),
+            ({"runner_failure": "install"}, "install failed"),
+            ({"runner_failure": "common"}, "common failed"),
+            ({"prefetch_failure": True}, "prefetch failed"),
         )
-        for case in cases:
+        for case, message in cases:
             with self.subTest(case=case):
-                with self.assertRaises(RuntimeError):
+                with self.assertRaisesRegex(RuntimeError, message):
                     self._run_rebuild(**case)
                 self.assertEqual(self._last_rebuild[2], [])
 
@@ -5283,7 +5296,8 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
     def test_base_image_cache_invalid_without_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            config = {"infrastructure": {"base_path": tempdir}, "module": {}}
+            config = {"infrastructure": {"base_path": tempdir}, "module": {},
+                      "prefetch_image_requirements": []}
             raw_base_name = "base_cloud_kubernetes_np1_mm0_0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
@@ -5296,7 +5310,8 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
     def test_base_image_cache_valid_with_matching_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
-            config = {"infrastructure": {"base_path": tempdir}, "module": {}}
+            config = {"infrastructure": {"base_path": tempdir}, "module": {},
+                      "prefetch_image_requirements": []}
             raw_base_name = "base_cloud_kubernetes_np1_mm0_0_continuum-smoke"
             images_dir = pathlib.Path(tempdir) / ".continuum" / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
@@ -5346,7 +5361,15 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
     def test_base_image_cache_invalid_when_required_playbooks_change(self):
         with tempfile.TemporaryDirectory() as tempdir:
+            repo_root = pathlib.Path(tempdir)
+            for relative in ("playbooks/cloud_base.yml", "playbooks/edge_base.yml",
+                             "playbooks/infrastructure/common_base_install.yml"):
+                path = repo_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("---\n- hosts: base\n  tasks: []\n", encoding="utf-8")
             config = {
+                "base": tempdir,
+                "prefetch_image_requirements": [],
                 "mode": "cloud",
                 "module": {
                     "resource_manager": mock.Mock(
@@ -5408,6 +5431,17 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             )
             role_task_path.parent.mkdir(parents=True)
             role_task_path.write_text("---\n- debug:\n    msg: old\n", encoding="utf-8")
+            defaults = role_task_path.parents[1] / "defaults/main.yml"
+            defaults.parent.mkdir()
+            copied_config = repo_root / "config.toml"
+            copied_config.write_text("# copied containerd config\n", encoding="utf-8")
+            common = repo_root / "playbooks/infrastructure/common_base_install.yml"
+            common.parent.mkdir(parents=True)
+            common.write_text("---\n- hosts: base\n  tasks: []\n", encoding="utf-8")
+            defaults.write_text(
+                '---\nrm_containerd_setup_config_src: "%s"\n' % copied_config,
+                encoding="utf-8",
+            )
 
             config = {
                 "base": tempdir,
@@ -5420,7 +5454,11 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                     )
                 },
                 "infrastructure": {"base_path": tempdir},
+                "prefetch_image_requirements": [],
                 "domains": {
+                    "software": {"modules": [
+                        {"id": "rm", "type": "kubernetes", "config": {"kube_version": "v1.27.0"}}
+                    ]},
                     "run": {
                         "targets": ["infrastructure"],
                         "prepare_for_resume": True,
@@ -5477,6 +5515,386 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
             qemu_module._common_base_install_hosts_for_base_names(["base0_continuum-smoke"]),
             "base",
         )
+
+
+class QemuRecipeFingerprintTests(unittest.TestCase):
+    RAW_BASE = "base0_matthijs"
+
+    def _fixture(self, directory, mahimahi=False):
+        root = pathlib.Path(directory)
+        repo = root / "repo"
+        files = {
+            "playbooks/infrastructure/common_base_install.yml": (
+                "---\n- hosts: base\n  roles:\n    - role: netperf\n"
+                "    - role: mahimahi\n      when: continuum_enable_mahimahi\n"
+            ),
+            "roles/infrastructure/netperf/tasks/main.yml": "---\n- debug: {msg: netperf}\n",
+            "roles/infrastructure/netperf/defaults/main.yml": "---\nnetperf_src_url: version-2.7.0\n",
+            "roles/infrastructure/mahimahi/tasks/main.yml": "---\n- debug: {msg: mahimahi}\n",
+            "roles/infrastructure/mahimahi/defaults/main.yml": "---\nmahimahi_repo_version: master\n",
+        }
+        for relative, content in files.items():
+            path = repo / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        workspace = root / "workspace"
+        config = QemuBaseImageMetadataTests._config(str(workspace))
+        config["base"] = str(repo)
+        config["infrastructure"]["wireless_network_preset"] = (
+            "4g_us_verizon_mahimahi" if mahimahi else "4g"
+        )
+        images = workspace / ".continuum/images"
+        images.mkdir(parents=True)
+        (images / (self.RAW_BASE + ".qcow2")).write_bytes(b"unchanged qcow2")
+        return config, repo
+
+    def _publish(self, config, raw_name=None):
+        raw_name = raw_name or self.RAW_BASE
+        image = pathlib.Path(config["infrastructure"]["base_path"]) / ".continuum/images" / (raw_name + ".qcow2")
+        if not image.exists():
+            image.write_bytes(b"unchanged qcow2")
+        qemu_module._write_base_image_metadata(config, [], raw_name)
+
+    def _reason(self, config, raw_name=None):
+        return qemu_module._base_image_cache_invalid_reason(config, [], raw_name or self.RAW_BASE)
+
+    def _resource_manager(self, config, repo, name, roles):
+        playbook = "playbooks/resource_manager/%s_base_install.yml" % name
+        path = repo / playbook
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("---\n- hosts: base_cloud\n  roles:\n" + "".join(
+            "    - role: %s\n" % role for role in roles
+        ), encoding="utf-8")
+        for role in roles + ["containerd_setup", "docker_setup"]:
+            folder = repo / "roles/resource_manager" / role
+            (folder / "tasks").mkdir(parents=True, exist_ok=True)
+            (folder / "defaults").mkdir(exist_ok=True)
+            (folder / "tasks/main.yml").write_text("---\n- debug: {msg: original}\n", encoding="utf-8")
+            (folder / "defaults/main.yml").write_text("---\n", encoding="utf-8")
+        (repo / "roles/resource_manager/containerd_setup/defaults/main.yml").write_text(
+            '---\nrm_containerd_setup_config_src: "{{ continuum_repo_root }}/resource_manager/{{ continuum_resource_manager_type }}/cloud/config.toml"\n',
+            encoding="utf-8",
+        )
+        if name == "kubeedge":
+            (repo / "roles/resource_manager/kubeedge_prereqs/defaults/main.yml").write_text(
+                '---\nrm_kubeedge_prereqs_repo_major_minor: "{{ kubeversion_major }}"\n',
+                encoding="utf-8",
+            )
+            (repo / "roles/resource_manager/kubeedge_prereqs/tasks/main.yml").write_text(
+                '---\n- ansible.builtin.include_role:\n    name: containerd_setup\n'
+                '  vars:\n    rm_containerd_setup_config_src: "{{ continuum_repo_root }}/resource_manager/kubernetes/cloud/config.toml"\n'
+                '- ansible.builtin.include_role:\n    name: docker_setup\n', encoding="utf-8",
+            )
+        config_path = repo / "resource_manager" / ("kubernetes" if name == "kubeedge" else name) / "cloud/config.toml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text('registry = "REGISTRY-IP"\n', encoding="utf-8")
+        config["module"]["resource_manager"] = mock.Mock(
+            base_install_playbook=mock.Mock(return_value=playbook)
+        )
+        config["domains"] = {
+            "run": {"targets": ["infrastructure", "software"], "prepare_for_resume": False},
+            "software": {"modules": [
+                {"id": "rm", "type": name, "config": {"kube_version": "v1.27.0"}}
+            ]},
+        }
+        config["registry"] = "192.0.2.1:5000"
+        return "base_cloud_%s_np1_mm0_0_matthijs" % name, config_path
+
+    def test_included_kubeedge_container_role_changes_invalidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            raw_name, _source = self._resource_manager(config, repo, "kubeedge", ["kubeedge_prereqs"])
+            self._publish(config, raw_name)
+            task = repo / "roles/resource_manager/docker_setup/tasks/main.yml"
+            task.write_text("---\n- debug: {msg: changed}\n", encoding="utf-8")
+            self.assertEqual(self._reason(config, raw_name), "metadata base_install_fingerprints mismatch")
+
+    def test_actual_copied_containerd_config_changes_invalidate(self):
+        for name, roles in (("kubernetes", ["containerd_setup"]),
+                            ("kubeedge", ["kubeedge_prereqs"])):
+            with self.subTest(stack=name), tempfile.TemporaryDirectory() as directory:
+                config, repo = self._fixture(directory)
+                raw_name, source = self._resource_manager(config, repo, name, roles)
+                self._publish(config, raw_name)
+                source.write_text('registry = "changed"\n', encoding="utf-8")
+                self.assertEqual(self._reason(config, raw_name), "metadata base_install_fingerprints mismatch")
+
+    def test_baked_registry_endpoint_change_invalidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            raw_name, _source = self._resource_manager(config, repo, "kubernetes", ["containerd_setup"])
+            self._publish(config, raw_name)
+            config["registry"] = "192.0.2.2:5000"
+            self.assertEqual(self._reason(config, raw_name), "metadata base_recipe_inputs mismatch")
+
+    def test_instrumented_binary_source_content_change_invalidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            raw_name, _source = self._resource_manager(config, repo, "kubecontrol", ["k8s_binary_override"])
+            source = pathlib.Path(directory) / "instrumented.tar.gz"
+            source.write_bytes(b"original instrumented binaries")
+            defaults = repo / "roles/resource_manager/k8s_binary_override/defaults/main.yml"
+            defaults.write_text('---\nrm_k8s_binary_override_tarball_path: "%s"\n' % source, encoding="utf-8")
+            self._publish(config, raw_name)
+            source.write_bytes(b"changed instrumented binaries")
+            self.assertEqual(self._reason(config, raw_name), "metadata base_install_fingerprints mismatch")
+
+    def test_instrumented_binary_version_selection_change_invalidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            raw_name, _source = self._resource_manager(config, repo, "kubecontrol", ["k8s_binary_override"])
+            for version in ("v1270", "v1260"):
+                (pathlib.Path(directory) / (version + ".tar.gz")).write_bytes(b"same binary content")
+            defaults = repo / "roles/resource_manager/k8s_binary_override/defaults/main.yml"
+            defaults.write_text('---\nrm_k8s_binary_override_tarball_path: "%s/{{ kubeversionstrp }}.tar.gz"\n' % directory, encoding="utf-8")
+            self._publish(config, raw_name)
+            config["domains"]["software"]["modules"][0]["config"]["kube_version"] = "v1.26.0"
+            self.assertIsNotNone(self._reason(config, raw_name))
+
+    def test_required_copied_input_failure_precedes_owner_cache_operations(self):
+        for role, key in (("containerd_setup", "rm_containerd_setup_config_src"),
+                          ("k8s_binary_override", "rm_k8s_binary_override_tarball_path")):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                config, repo = self._fixture(directory)
+                raw_name, _source = self._resource_manager(config, repo, "kubecontrol", [role])
+                missing = pathlib.Path(directory) / "missing-baked-input"
+                defaults = repo / "roles/resource_manager" / role / "defaults/main.yml"
+                defaults.write_text('---\n%s: "%s"\n' % (key, missing), encoding="utf-8")
+                machine = QemuBaseImageMetadataTests._machine(raw_base_name=raw_name)
+                machine.process.return_value = QemuBaseImageMetadataTests._protocol(
+                    {"status": "invalid", "reason": "image missing"}
+                )
+                with self.assertRaisesRegex(RuntimeError, "missing-baked-input"):
+                    qemu_module._select_base_image_rebuilds(config, [machine])
+                machine.process.assert_not_called()
+
+    def test_kubeedge_configured_repository_version_change_invalidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            raw_name, _source = self._resource_manager(config, repo, "kubeedge", ["kubeedge_prereqs"])
+            self._publish(config, raw_name)
+            config["domains"]["software"]["modules"][0]["config"]["kube_version"] = "v1.26.0"
+            self.assertEqual(self._reason(config, raw_name), "metadata base_recipe_inputs mismatch")
+
+    def test_regular_kubernetes_configured_version_is_not_a_baked_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            raw_name, _source = self._resource_manager(config, repo, "kubernetes", ["containerd_setup"])
+            self._publish(config, raw_name)
+            config["domains"]["software"]["modules"][0]["config"]["kube_version"] = "v1.26.0"
+            self.assertIsNone(self._reason(config, raw_name))
+
+    def test_generic_base_does_not_require_inactive_instrumented_tarball(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            self._resource_manager(config, repo, "kubecontrol", ["k8s_binary_override"])
+            config["domains"]["run"] = {"targets": ["infrastructure"], "prepare_for_resume": True}
+            machine = QemuBaseImageMetadataTests._machine(raw_base_name=self.RAW_BASE)
+            machine.cloud_controller, machine.clouds, machine.edges, machine.endpoints = 0, 1, 0, 0
+            metadata = qemu_module._expected_base_image_metadata(config, [machine], self.RAW_BASE)
+            self.assertFalse(any("k8s_binary_override" in item["path"]
+                                 for item in metadata["base_install_fingerprints"]))
+
+    def _preload(self, config, orchestrator="none", tier_targets=None):
+        config["module"]["resource_manager"] = mock.Mock(
+            base_install_playbook=mock.Mock(return_value=None)
+        )
+        config["domains"] = {
+            "run": {"targets": ["infrastructure", "software"], "prepare_for_resume": False},
+            "software": {"modules": [
+                {"id": "rm", "type": orchestrator, "config": {}}
+            ]},
+        }
+        config["registry"] = "192.0.2.1:5000"
+        config["prefetch_image_requirements"] = [{
+            "source_ref": "example/image:mutable", "local_name": "image:mutable",
+            "owners": ["app"], "tier_targets": tier_targets or ["endpoint"],
+        }]
+        return "base_endpoint_%s_np1_mm0_0_matthijs" % orchestrator
+
+    def test_selected_mutable_preload_identity_change_invalidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            raw_name = self._preload(config)
+            with mock.patch.object(image_registry_module, "_registry_manifest_identity",
+                                   return_value=("sha256:" + "1" * 64, "sha256:" + "2" * 64)):
+                self._publish(config, raw_name)
+            with mock.patch.object(image_registry_module, "_registry_manifest_identity",
+                                   return_value=("sha256:" + "3" * 64, "sha256:" + "2" * 64)):
+                self.assertEqual(self._reason(config, raw_name), "metadata base_recipe_inputs mismatch")
+
+    def test_unverifiable_preload_identity_fails_before_owner_cache_operations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            raw_name = self._preload(config)
+            machine = QemuBaseImageMetadataTests._machine(raw_base_name=raw_name)
+            with mock.patch.object(image_registry_module, "_registry_manifest_identity", return_value=None):
+                with self.assertRaisesRegex(RuntimeError, "image:mutable"):
+                    qemu_module._select_base_image_rebuilds(config, [machine])
+            machine.process.assert_not_called()
+
+    def test_only_actually_selected_preloads_affect_metadata(self):
+        for orchestrator in ("kubernetes", "kubeedge", "kubecontrol", "kube_kata", "none"):
+            for tier in ("cloud", "edge", "endpoint"):
+                with self.subTest(orchestrator=orchestrator, tier=tier), tempfile.TemporaryDirectory() as directory:
+                    config, _repo = self._fixture(directory)
+                    self._preload(config, orchestrator, tier_targets=["cloud", "edge", "endpoint"])
+                    raw_name = "base_%s_%s_np1_mm0_0_matthijs" % (tier, orchestrator)
+                    with mock.patch.object(image_registry_module, "_registry_manifest_identity",
+                                           return_value=("sha256:" + "1" * 64, "sha256:" + "2" * 64)) as lookup:
+                        metadata = qemu_module._expected_base_image_metadata(config, [], raw_name)
+                    selected = orchestrator == "none" or tier == "endpoint"
+                    self.assertEqual(lookup.call_count, int(selected))
+                    self.assertEqual(bool(metadata["base_recipe_inputs"].get("preloaded_images")), selected)
+
+    def test_unselected_preload_and_generic_targeted_base_do_not_query_registry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            self._preload(config)
+            with mock.patch.object(image_registry_module, "_registry_manifest_identity") as lookup:
+                metadata = qemu_module._expected_base_image_metadata(config, [], self.RAW_BASE)
+            lookup.assert_not_called()
+            self.assertFalse(metadata["base_recipe_inputs"].get("preloaded_images"))
+
+    def test_pinned_preload_requires_the_trusted_config_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            raw_name = self._preload(config)
+            source = ("redplanet00/continuum-text-translation-publisher"
+                      "@sha256:502142b93182c63f1225165f44d0308537aac95ee75a99b6f0ba19e668f6f6bf")
+            config["prefetch_image_requirements"][0]["source_ref"] = source
+            expected = image_requirements.expected_local_config_digest(source)
+            with mock.patch.object(image_registry_module, "_registry_manifest_identity",
+                                   return_value=("sha256:" + "1" * 64, expected)):
+                self._publish(config, raw_name)
+                self.assertIsNone(self._reason(config, raw_name))
+            with mock.patch.object(image_registry_module, "_registry_manifest_identity",
+                                   return_value=("sha256:" + "1" * 64, "sha256:" + "2" * 64)):
+                with self.assertRaisesRegex(RuntimeError, "pinned"):
+                    self._reason(config, raw_name)
+
+    def test_common_and_netperf_source_changes_invalidate(self):
+        for relative in (
+            "playbooks/infrastructure/common_base_install.yml",
+            "roles/infrastructure/netperf/tasks/main.yml",
+            "roles/infrastructure/netperf/defaults/main.yml",
+        ):
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as directory:
+                config, repo = self._fixture(directory)
+                self._publish(config)
+                path = repo / relative
+                path.write_text(path.read_text(encoding="utf-8") + "# recipe changed\n",
+                                encoding="utf-8")
+                self.assertEqual(self._reason(config), "metadata base_install_fingerprints mismatch")
+
+    def test_enabled_mahimahi_role_changes_invalidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory, mahimahi=True)
+            self._publish(config)
+            path = repo / "roles/infrastructure/mahimahi/defaults/main.yml"
+            path.write_text("---\nmahimahi_repo_version: changed\n", encoding="utf-8")
+            self.assertEqual(self._reason(config), "metadata base_install_fingerprints mismatch")
+
+    def test_disabled_mahimahi_changes_do_not_invalidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            self._publish(config)
+            path = repo / "roles/infrastructure/mahimahi/tasks/main.yml"
+            path.write_text("---\n- debug: {msg: changed}\n", encoding="utf-8")
+            self.assertIsNone(self._reason(config))
+
+    def test_generic_infra_base_mahimahi_toggle_invalidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            self._publish(config)
+            config["infrastructure"]["wireless_network_preset"] = "4g_us_verizon_mahimahi"
+            self.assertIsNotNone(self._reason(config))
+
+    def test_mahimahi_copied_source_changes_invalidate_but_git_metadata_does_not(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory, mahimahi=True)
+            source = pathlib.Path(config["infrastructure"]["base_path"]) / ".continuum/mahimahi/repo"
+            (source / ".git").mkdir(parents=True)
+            (source / "main.cc").write_text("original source", encoding="utf-8")
+            (source / ".git/HEAD").write_text("original Git metadata", encoding="utf-8")
+            self._publish(config)
+            (source / ".git/HEAD").write_text("changed Git metadata", encoding="utf-8")
+            self.assertIsNone(self._reason(config))
+            (source / "main.cc").write_text("changed source", encoding="utf-8")
+            self.assertIsNotNone(self._reason(config))
+
+    def test_controller_timezone_change_invalidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            with mock.patch.object(qemu_module.os, "readlink", return_value="/usr/share/zoneinfo/UTC"):
+                self._publish(config)
+            with mock.patch.object(qemu_module.os, "readlink", return_value="/usr/share/zoneinfo/Europe/Amsterdam"):
+                self.assertEqual(self._reason(config), "metadata base_recipe_inputs mismatch")
+
+    def test_mahimahi_git_file_is_not_copied_into_the_guest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory, mahimahi=True)
+            source = pathlib.Path(config["infrastructure"]["base_path"]) / ".continuum/mahimahi/repo"
+            source.mkdir(parents=True)
+            (source / ".git").write_text("gitdir: original", encoding="utf-8")
+            (source / "main.cc").write_text("source", encoding="utf-8")
+            self._publish(config)
+            (source / ".git").write_text("gitdir: changed", encoding="utf-8")
+            self.assertIsNone(self._reason(config))
+
+    def test_timezone_failure_precedes_any_owner_cache_operation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            machine = QemuBaseImageMetadataTests._machine(raw_base_name=self.RAW_BASE)
+            machine.process.return_value = QemuBaseImageMetadataTests._protocol(
+                {"status": "invalid", "reason": "image missing"}
+            )
+            with mock.patch.object(qemu_module.os, "readlink", side_effect=OSError("injected")):
+                with self.assertRaisesRegex(RuntimeError, "/etc/localtime"):
+                    qemu_module._select_base_image_rebuilds(config, [machine])
+            machine.process.assert_not_called()
+
+    def test_missing_mandatory_recipe_fails_before_any_owner_cache_operation(self):
+        for relative in ("playbooks/infrastructure/common_base_install.yml",
+                         "roles/infrastructure/netperf/tasks/main.yml",
+                         "roles/infrastructure/netperf/defaults/main.yml"):
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as directory:
+                config, repo = self._fixture(directory)
+                (repo / relative).unlink()
+                machine = QemuBaseImageMetadataTests._machine(raw_base_name=self.RAW_BASE)
+                with self.assertRaisesRegex(RuntimeError, relative):
+                    qemu_module._select_base_image_rebuilds(config, [machine])
+                machine.process.assert_not_called()
+
+    def test_malformed_mandatory_recipe_fails_before_any_owner_cache_operation(self):
+        for relative in ("playbooks/infrastructure/common_base_install.yml",
+                         "roles/infrastructure/netperf/tasks/main.yml",
+                         "roles/infrastructure/netperf/defaults/main.yml"):
+            for content in ("not a recipe\n", "---\n- invalid: [\n", "---\n- not-an-Ansible-task\n"):
+                with self.subTest(path=relative, content=content), tempfile.TemporaryDirectory() as directory:
+                    config, repo = self._fixture(directory)
+                    (repo / relative).write_text(content, encoding="utf-8")
+                    machine = QemuBaseImageMetadataTests._machine(raw_base_name=self.RAW_BASE)
+                    with self.assertRaisesRegex(RuntimeError, relative):
+                        qemu_module._select_base_image_rebuilds(config, [machine])
+                    machine.process.assert_not_called()
+
+    def test_unresolved_required_role_fails_before_any_owner_cache_operation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, repo = self._fixture(directory)
+            role = repo / "roles/infrastructure/netperf"
+            role.rename(repo / "netperf-not-on-role-path")
+            machine = QemuBaseImageMetadataTests._machine(raw_base_name=self.RAW_BASE)
+            with self.assertRaisesRegex(RuntimeError, "required QEMU base role: netperf"):
+                qemu_module._select_base_image_rebuilds(config, [machine])
+            machine.process.assert_not_called()
+
+    def test_unrelated_benchmark_parameters_do_not_invalidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _repo = self._fixture(directory)
+            self._publish(config)
+            config["benchmark"] = {"frequency": 50, "duration": 300}
+            self.assertIsNone(self._reason(config))
 
 
 class InfrastructureWorkspacePermissionTests(unittest.TestCase):

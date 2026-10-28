@@ -499,6 +499,54 @@ def docker_registry(config, machines):
     return requirements
 
 
+def qemu_preload_base_names(config, base_names):
+    """Return the existing QEMU preload scope (Kubernetes-family endpoints only)."""
+    if config_access.orchestrator_name(config) in (
+        "kubernetes", "kubeedge", "kubecontrol", "kube_kata"
+    ):
+        return [name for name in base_names if "endpoint" in name]
+    return list(base_names)
+
+
+def _base_preload_requirements(requirements, base_name):
+    """Apply the same actual tier selection to preload and cache validation."""
+    tier = orchestration_schema.tier_from_base_name(
+        orchestration_schema.normalized_base_name(base_name)
+    )
+    return [requirement for requirement in requirements
+            if not requirement["tier_targets"] or tier in requirement["tier_targets"]]
+
+
+def qemu_base_preload_identities(config, machines, base_name):
+    """Read only the registry identities actually preloaded into one QEMU base."""
+    requirements = get_prefetch_requirements(config)
+    if not requirements or not qemu_preload_base_names(config, [base_name]):
+        return []
+    identities = []
+    for requirement in _base_preload_requirements(requirements, base_name):
+        local_name = requirement["local_name"]
+        repo_name = _registry_repo_name(local_name)
+        tag_name = _registry_tag_name(local_name) or "latest"
+        if _registry_has_digest(local_name):
+            raise RuntimeError(
+                "Unsupported QEMU base preload local digest reference: %s" % local_name
+            )
+        identity = _registry_manifest_identity(config, machines, repo_name, tag_name)
+        if identity is None:
+            raise RuntimeError("Cannot verify QEMU base preload identity: %s" % local_name)
+        source = requirement["source_ref"]
+        if image_requirements.source_ref_is_digest_pinned(source):
+            expected = image_requirements.expected_local_config_digest(source)
+            if expected is None or identity[1] != expected:
+                raise RuntimeError("QEMU base preload does not match pinned source: %s" % source)
+        identities.append({
+            "image": os.path.join(config["registry"], local_name),
+            "manifest_digest": identity[0],
+            "config_digest": identity[1],
+        })
+    return sorted(identities, key=lambda item: item["image"])
+
+
 def docker_pull(config, machines, base_names):
     """Pull required prefetched images into selected base images."""
     requirements = get_prefetch_requirements(config)
@@ -515,11 +563,7 @@ def docker_pull(config, machines, base_names):
             if name_r not in base_names:
                 continue
 
-            tier = orchestration_schema.tier_from_base_name(name_r)
-            for requirement in requirements:
-                tier_targets = requirement["tier_targets"]
-                if tier_targets and tier not in tier_targets:
-                    continue
+            for requirement in _base_preload_requirements(requirements, name_r):
                 command = [
                     "docker",
                     "pull",

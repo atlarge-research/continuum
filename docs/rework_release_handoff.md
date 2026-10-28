@@ -70,8 +70,9 @@ and the retirement packet performed no VM operation or benchmark rerun.
    equivalents and fresh runtime acceptance remain open; refresh affected rows
    after later schema/example/test changes.
 2. The approved registry_refresh missing/all hard cut replaces image_prefetch
-   without aliases; historical locks/evidence are not renewed. Address demonstrated
-   cache-recipe gaps through bounded reviewed packets; validate the narrow
+   without aliases; historical locks/evidence are not renewed. The bounded cache
+   repair covers baked recipe inputs and actual preload identities, with limits
+   in `docs/qemu_cache_contract.md`; it does not renew runtime evidence. Validate the narrow
    same-revision QEMU resume contract. Sweeps remain candidate-only.
 3. Complete approved slimming, including temporary debug-playbook removal,
    without deleting required provenance or weakening freshness checks.

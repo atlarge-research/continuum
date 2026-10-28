@@ -13,6 +13,7 @@ import sys
 import time
 
 import yaml
+from jinja2 import Environment, StrictUndefined, TemplateError
 
 from infrastructure import ansible, image_registry, infrastructure
 from infrastructure import machine as m
@@ -209,22 +210,31 @@ def _confirm_base_vms_stopped(config, selected_entries):
             )
 
 
-def _select_base_image_rebuilds(config, machines):
+def _select_base_image_rebuilds(config, machines, timezone=None):
     """Validate owners, invalidate every participant, then clean invalid caches."""
+    timezone = _controller_timezone() if timezone is None else timezone
+    # Complete controller-side recipe validation before touching any owner marker.
+    recipes = [
+        (machine, raw_name, _expected_base_image_metadata(
+            config, machines, raw_name, timezone=timezone
+        ))
+        for machine in machines
+        for raw_name in machine.base_names
+    ]
     cache_entries = []
     rebuild_names = []
-    for machine in machines:
-        for raw_base_name in machine.base_names:
-            normalized_name = orchestration_schema.normalized_base_name(raw_base_name)
-            invalid_reason = _base_image_cache_invalid_reason(
-                config,
-                machines,
-                raw_base_name,
-                machine=machine,
-            )
-            cache_entries.append((machine, raw_base_name, normalized_name, invalid_reason))
-            if invalid_reason and normalized_name not in rebuild_names:
-                rebuild_names.append(normalized_name)
+    for machine, raw_base_name, expected in recipes:
+        normalized_name = orchestration_schema.normalized_base_name(raw_base_name)
+        invalid_reason = _base_image_cache_invalid_reason(
+            config,
+            machines,
+            raw_base_name,
+            machine=machine,
+            expected=expected,
+        )
+        cache_entries.append((machine, raw_base_name, normalized_name, invalid_reason))
+        if invalid_reason and normalized_name not in rebuild_names:
+            rebuild_names.append(normalized_name)
 
     selected_entries = [entry for entry in cache_entries if entry[2] in rebuild_names]
     for machine, raw_base_name, _normalized_name, _invalid_reason in selected_entries:
@@ -341,28 +351,22 @@ def _role_path(config, role_name):
 def _playbook_role_names(config, playbook):
     """Return role names referenced directly by an Ansible playbook."""
     playbook_path = _repo_path(config, playbook)
-    try:
-        with open(playbook_path, "r", encoding="utf-8") as filep:
-            data = yaml.safe_load(filep)
-    except (OSError, yaml.YAMLError):
-        return []
-
-    if not isinstance(data, list):
-        return []
+    data = _recipe_yaml(playbook_path)
+    if not isinstance(data, list) or not data or not all(isinstance(play, dict) for play in data):
+        raise RuntimeError("Invalid QEMU base playbook %s: expected plays" % playbook_path)
 
     role_names = []
     for play in data:
-        if not isinstance(play, dict):
-            continue
         roles = play.get("roles", [])
         if not isinstance(roles, list):
-            continue
+            raise RuntimeError("Invalid QEMU base playbook roles: %s" % playbook_path)
         for role in roles:
             role_name = role if isinstance(role, str) else None
             if isinstance(role, dict):
                 role_name = role.get("role")
-            if isinstance(role_name, str) and role_name:
-                role_names.append(role_name)
+            if not isinstance(role_name, str) or not role_name or "{{" in role_name:
+                raise RuntimeError("QEMU base playbook requires literal roles: %s" % playbook_path)
+            role_names.append(role_name)
     return role_names
 
 
@@ -378,30 +382,174 @@ def _file_digest(path):
     return hasher.hexdigest()
 
 
-def _files_under(path):
+def _files_under(path, exclude_git=False):
     """Return all regular files under one file or directory path."""
     if os.path.isfile(path):
         return [path]
     files = []
     for root, _dirs, filenames in os.walk(path):
+        if exclude_git:
+            _dirs[:] = [name for name in _dirs if name != ".git"]
         for filename in filenames:
+            if exclude_git and filename == ".git":
+                continue
             files.append(os.path.join(root, filename))
     return files
 
 
-def _base_install_fingerprints(config, playbooks):
-    """Return content fingerprints for base-install playbooks and direct roles."""
-    paths = set()
+def _recipe_yaml(path):
+    """Read one static recipe document without interpreting Ansible tasks."""
+    try:
+        with open(path, "r", encoding="utf-8") as filep:
+            return yaml.safe_load(filep)
+    except (OSError, yaml.YAMLError) as exc:
+        raise RuntimeError("Cannot read QEMU base recipe %s: %s" % (path, exc)) from exc
+
+
+def _literal_role_includes(value):
+    """Yield literal included roles and their explicit task vars, including blocks."""
+    if isinstance(value, list):
+        for item in value:
+            yield from _literal_role_includes(item)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if key in ("include_role", "import_role", "ansible.builtin.include_role",
+                       "ansible.builtin.import_role"):
+                name = item.get("name") if isinstance(item, dict) else item
+                if not isinstance(name, str) or not name or "{{" in name:
+                    raise RuntimeError("QEMU base cache requires literal included role names")
+                yield name, value.get("vars", {})
+            elif key in ("block", "rescue", "always"):
+                yield from _literal_role_includes(item)
+
+
+def _validate_base_role_sources(path):
+    """Reject damaged selected static role sources before cache mutation."""
+    # These shipped base roles consume variables supplied by their defaults.
+    # Defaults are optional for arbitrary Ansible roles, not for these recipes.
+    if os.path.basename(path) in {
+        "netperf", "mahimahi", "k8s_prereqs", "containerd_setup", "mosquitto",
+        "k8s_binary_override", "kubeedge_prereqs", "docker_setup",
+        "endpoint_prereqs", "endpoint_runtime",
+    }:
+        _recipe_yaml(os.path.join(path, "defaults", "main.yml"))
+    entrypoint = os.path.join(path, "tasks", "main.yml")
+    if not os.path.isfile(entrypoint) and os.path.isfile(entrypoint[:-3] + "yaml"):
+        entrypoint = entrypoint[:-3] + "yaml"
+    tasks = _recipe_yaml(entrypoint)
+    if not isinstance(tasks, list) or not all(isinstance(task, dict) for task in tasks):
+        raise RuntimeError("Invalid QEMU base role tasks: %s" % entrypoint)
+    for source in _files_under(path):
+        section = os.path.relpath(source, path).split(os.sep)[0]
+        if section not in ("tasks", "handlers", "defaults", "vars", "meta"):
+            continue
+        if source.endswith((".yml", ".yaml")):
+            value = _recipe_yaml(source)
+            expected = list if section in ("tasks", "handlers") else dict
+            if value is not None and not isinstance(value, expected):
+                raise RuntimeError("Invalid QEMU base role YAML shape: %s" % source)
+            if isinstance(value, list) and not all(isinstance(task, dict) for task in value):
+                raise RuntimeError("Invalid QEMU base role task shape: %s" % source)
+
+
+def _base_recipe_roles(config, playbooks, raw_base_name):
+    """Resolve the current recipes' literal role closure, not general Ansible logic."""
+    pending = [(name, {}) for playbook in playbooks
+               for name in _playbook_role_names(config, playbook)]
+    roles = []
+    visited = set()
+    while pending:
+        name, overrides = pending.pop(0)
+        if name in visited:
+            continue
+        visited.add(name)
+        if name == "mahimahi" and not _mahimahi_enabled(config):
+            continue
+        # This is the explicit hostname condition in k8s_base_install.yml.
+        if name == "k8s_binary_override" and not any(
+            token in raw_base_name for token in ("kubecontrol", "kube_kata")
+        ):
+            continue
+        path = _role_path(config, name)
+        if not path:
+            raise RuntimeError("Cannot resolve required QEMU base role: %s" % name)
+        _validate_base_role_sources(path)
+        roles.append((name, path, overrides))
+        for task_path in _files_under(os.path.join(path, "tasks")):
+            if task_path.endswith((".yml", ".yaml")):
+                pending.extend(_literal_role_includes(_recipe_yaml(task_path)))
+    return roles
+
+
+def _resolved_recipe_value(value, context, label):
+    """Render only a known copied-source/version field with inventory input values."""
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError("QEMU base recipe lacks %s" % label)
+    try:
+        return Environment(undefined=StrictUndefined).from_string(value).render(context).strip()
+    except TemplateError as exc:
+        raise RuntimeError("Cannot resolve QEMU base recipe %s: %s" % (label, exc)) from exc
+
+
+def _copied_base_recipe_inputs(config, roles):
+    """Return required copied files and values actually consumed by these roles."""
+    copied = []
+    inputs = {}
+    relevant = {name for name, _path, _overrides in roles}
+    if not relevant.intersection({"containerd_setup", "docker_setup", "k8s_binary_override",
+                                  "kubeedge_prereqs"}):
+        return copied, inputs
+    version = config_access.orchestrator_overrides(config, ["kube_version"]).get(
+        "kube_version", "v1.27.0"
+    )
+    context = {
+        "continuum_repo_root": os.path.abspath(config.get("base", ".")),
+        "continuum_resource_manager_type": config_access.orchestrator_name(config),
+        "kubeversionstrp": version.replace(".", ""),
+        "continuum_kubeversionstrp": version.replace(".", ""),
+        "kubeversion_major": version[:-2],
+        "continuum_kubeversion_major": version[:-2],
+    }
+    if relevant.intersection({"containerd_setup", "docker_setup"}):
+        inputs["registry"] = config.get("registry", "")
+    for name, path, overrides in roles:
+        key = {"containerd_setup": "rm_containerd_setup_config_src",
+               "k8s_binary_override": "rm_k8s_binary_override_tarball_path",
+               "kubeedge_prereqs": "rm_kubeedge_prereqs_repo_major_minor"}.get(name)
+        if key is None:
+            continue
+        defaults_path = os.path.join(path, "defaults", "main.yml")
+        defaults = _recipe_yaml(defaults_path) or {}
+        value = overrides.get(key, defaults.get(key))
+        resolved = _resolved_recipe_value(value, context, key)
+        if name == "kubeedge_prereqs":
+            inputs["kubeedge_repo_major_minor"] = resolved
+            continue
+        source = _repo_path(config, resolved)
+        try:
+            if not os.path.isfile(source):
+                raise OSError("not a regular file")
+            # Validate readability now, before ANY owner-cache operation.
+            with open(source, "rb") as filep:
+                filep.read(1)
+        except OSError as exc:
+            raise RuntimeError(
+                "Cannot read required QEMU base input %s: %s" % (source, exc)
+            ) from exc
+        copied.append(source)
+    return copied, inputs
+
+
+def _base_install_fingerprints(config, playbooks, additional_files=(), roles=()):
+    """Return content fingerprints for base-install playbooks and active role closure."""
+    paths = set(additional_files)
     for playbook in playbooks:
         playbook_path = _repo_path(config, playbook)
         if os.path.exists(playbook_path):
             paths.add(playbook_path)
 
-        for role_name in _playbook_role_names(config, playbook):
-            role_path = _role_path(config, role_name)
-            if not role_path:
-                continue
-            paths.update(_files_under(role_path))
+    for _name, role_path, _overrides in roles:
+        paths.update(_files_under(role_path))
 
     base = os.path.abspath(config.get("base", "."))
     fingerprints = []
@@ -411,7 +559,24 @@ def _base_install_fingerprints(config, playbooks):
     return fingerprints
 
 
-def _expected_base_image_metadata(config, machines, raw_base_name):
+def _mahimahi_enabled(config):
+    """Return the same optional common-install intent used by the base build."""
+    preset = config["infrastructure"].get("wireless_network_preset", "")
+    return isinstance(preset, str) and preset.endswith("_mahimahi")
+
+
+def _controller_timezone():
+    """Read the exact controller timezone before any cache invalidation."""
+    try:
+        target = os.readlink("/etc/localtime")
+    except OSError as exc:
+        raise RuntimeError("Cannot read controller timezone /etc/localtime: %s" % exc) from exc
+    if not isinstance(target, str) or not target.strip():
+        raise RuntimeError("Controller timezone /etc/localtime has an empty symlink target")
+    return target
+
+
+def _expected_base_image_metadata(config, machines, raw_base_name, timezone=None):
     """Return the expected ready-marker payload for one base image."""
     normalized_name = orchestration_schema.normalized_base_name(raw_base_name)
     playbooks = _base_install_playbooks_for_base_names(
@@ -419,17 +584,41 @@ def _expected_base_image_metadata(config, machines, raw_base_name):
         machines,
         [normalized_name],
     )
+    recipe_inputs = {
+        "timezone": _controller_timezone() if timezone is None else timezone,
+        "mahimahi_enabled": _mahimahi_enabled(config),
+    }
+    source_files = []
+    if recipe_inputs["mahimahi_enabled"]:
+        source = os.path.join(
+            config["infrastructure"]["base_path"], ".continuum", "mahimahi", "repo"
+        )
+        recipe_inputs["mahimahi_source"] = "available" if os.path.isdir(source) else "pending-fetch"
+        source_files = _files_under(source, exclude_git=True)
+    fingerprint_playbooks = playbooks + ["playbooks/infrastructure/common_base_install.yml"]
+    roles = _base_recipe_roles(config, fingerprint_playbooks, raw_base_name)
+    copied_files, copied_inputs = _copied_base_recipe_inputs(config, roles)
+    source_files.extend(copied_files)
+    recipe_inputs.update(copied_inputs)
+    recipe_inputs["preloaded_images"] = image_registry.qemu_base_preload_identities(
+        config, machines, raw_base_name
+    )
     return {
         "schema_version": 1,
         "status": "ready",
         "guest_user": orchestration_schema.guest_login_name(raw_base_name),
         "base_install_playbooks": playbooks,
-        "base_install_fingerprints": _base_install_fingerprints(config, playbooks),
+        "base_install_fingerprints": _base_install_fingerprints(
+            config, fingerprint_playbooks, additional_files=source_files, roles=roles
+        ),
+        "base_recipe_inputs": recipe_inputs,
     }
 
 
-def _base_image_cache_invalid_reason(config, machines, raw_base_name, machine=None):
+def _base_image_cache_invalid_reason(config, machines, raw_base_name, machine=None, expected=None):
     """Return an owner-proven cache validation reason, or None when valid."""
+    if expected is None:
+        expected = _expected_base_image_metadata(config, machines, raw_base_name)
     if machine is None:
         machine = m.Machine("localhost", True)
     paths = _base_image_paths(config, raw_base_name)
@@ -462,7 +651,6 @@ def _base_image_cache_invalid_reason(config, machines, raw_base_name, machine=No
     if not isinstance(payload, dict):
         return "metadata invalid"
 
-    expected = _expected_base_image_metadata(config, machines, raw_base_name)
     schema_version = payload.get("schema_version")
     if (
         type(schema_version) is not int  # pylint: disable=unidiomatic-typecheck
@@ -477,18 +665,18 @@ def _base_image_cache_invalid_reason(config, machines, raw_base_name, machine=No
     return None
 
 
-def _canonical_base_image_metadata(config, machines, raw_base_name):
+def _canonical_base_image_metadata(config, machines, raw_base_name, timezone=None):
     """Return deterministic canonical schema-v1 ready metadata bytes."""
-    payload = _expected_base_image_metadata(config, machines, raw_base_name)
+    payload = _expected_base_image_metadata(config, machines, raw_base_name, timezone=timezone)
     return (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
-def _write_base_image_metadata(config, machines, raw_base_name, machine=None):
+def _write_base_image_metadata(config, machines, raw_base_name, machine=None, timezone=None):
     """Atomically publish ready metadata on one owning physical host."""
     if machine is None:
         machine = m.Machine("localhost", True)
     encoded_payload = base64.b64encode(
-        _canonical_base_image_metadata(config, machines, raw_base_name)
+        _canonical_base_image_metadata(config, machines, raw_base_name, timezone=timezone)
     ).decode("ascii")
     response = _host_cache_operation(
         machine,
@@ -844,7 +1032,10 @@ def base_image(config, machines, runner=None):
 
     logging.info("Check if new base image(s) needs to be created")
 
-    rebuild_names, selected_entries = _select_base_image_rebuilds(config, machines)
+    timezone = _controller_timezone()
+    rebuild_names, selected_entries = _select_base_image_rebuilds(
+        config, machines, timezone=timezone
+    )
     if not rebuild_names:
         logging.info("Base image(s) are all already present")
         return
@@ -901,15 +1092,12 @@ def base_image(config, machines, runner=None):
         runner.run_playbooks(playbooks, inventory="vms")
 
     # Install common infrastructure software (netperf + optional Mahimahi)
-    wireless_preset = config["infrastructure"].get("wireless_network_preset", "")
     runner.run_playbook(
         "playbooks/infrastructure/common_base_install.yml",
         inventory="vms",
         extra_vars={
             "continuum_common_base_hosts": _common_base_install_hosts_for_base_names(rebuild_names),
-            "continuum_enable_mahimahi": (
-                isinstance(wireless_preset, str) and wireless_preset.endswith("_mahimahi")
-            ),
+            "continuum_enable_mahimahi": _mahimahi_enabled(config),
         },
     )
 
@@ -918,35 +1106,10 @@ def base_image(config, machines, runner=None):
         # Kubernetes/KubeEdge don't need docker images on the cloud/edge nodes
         # These RM will automatically pull images, so we can skip this here.
         # Only pull endpoint images instead
-        docker_base_names = rebuild_names
-        if config_access.orchestrator_name(config) in (
-            "kubernetes",
-            "kubeedge",
-            "kubecontrol",
-            "kube_kata",
-        ):
-            docker_base_names = [
-                base_name for base_name in docker_base_names if "endpoint" in base_name
-            ]
-
+        docker_base_names = image_registry.qemu_preload_base_names(config, rebuild_names)
         image_registry.docker_pull(config, machines, docker_base_names)
 
-    # Get host timezone
-    command = ["ls", "-alh", "/etc/localtime"]
-    output = _single_process_result(
-        machines[0].process(config, command),
-        "host timezone discovery",
-    )
-
-    if not output or "/etc/localtime" not in output[0]:
-        logging.error("Could not get host timezone: %s", "".join(output))
-        sys.exit(1)
-    timezone_parts = output[0].split("-> ", 1)
-    if len(timezone_parts) != 2 or not timezone_parts[1].strip():
-        raise RuntimeError("Host timezone discovery returned an invalid symlink")
-    timezone = timezone_parts[1].strip()
-
-    # Fix timezone on every base vm
+    # Reuse the exact timezone resolved before cache invalidation.
     command = ["sudo", "ln", "-sf", timezone, "/etc/localtime"]
     sshs = []
     for machine in machines:
@@ -1003,6 +1166,7 @@ def base_image(config, machines, runner=None):
             machines,
             raw_base_name,
             machine=machine,
+            timezone=timezone,
         )
 
 
