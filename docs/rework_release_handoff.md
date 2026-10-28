@@ -88,8 +88,10 @@ and the retirement packet performed no VM operation or benchmark rerun.
    remaining historical associations; obtain one final scope confirmation
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 47 fixture/support/metadata sources; its preserved
-   per-file evidence is bound to b22cadc. Final historical dispositions, required
-   equivalents and fresh runtime acceptance remain open; refresh affected rows
+   refreshed per-file evidence is bound to clean
+   e3af54dc2642ab50ce9e47365976108bdf2ff2ee, with the earlier b22cadc snapshot
+   preserved unchanged. Final historical dispositions, required equivalents and
+   fresh runtime acceptance remain open; recheck affected rows and exact binding
    after later schema/example/test changes.
 2. The approved registry_refresh missing/all hard cut replaces image_prefetch
    without aliases; historical locks/evidence are not renewed. The bounded cache

@@ -24,18 +24,17 @@ requires merging or adding documents.
 | Host placement | All seven shipped environment profiles use QEMU and declare no external physical machines. The normal runner can supply node3 and a physical-core limit; capacity/CPU pinning determine placement. The exact OpenFaaS input requests 26 vCPUs; its distinct 20-vCPU local variant is not a substitute for the required multi-host run. |
 | Cache, retention and resume | The QEMU cache is single-slot; delete_on_exit requests VM teardown, not blanket artifact deletion. A fresh same-user QEMU workflow may replace retained same-user domains across base paths. Resume v1 remains same revision/base path/topology/software; revision equality is an operator precondition, not Git-tracking machinery. Changed-parameter sweeps remain candidate-only; fresh runtime/manual acceptance is open. |
 
-The frozen b22cadc input snapshot below records the former image_prefetch off/on
-schema. The subsequent atomic hard cut accepts registry_refresh missing/all,
-default missing, without aliases; the frozen per-file facts have not yet been
-refreshed and must not be treated as current input hashes. The separate bounded
-cache repair covers common/active included roles, copied inputs, consumed values
-and actual preload identities; see `docs/qemu_cache_contract.md`. This inventory
-neither proves runtime cache acceptance nor refreshes the frozen fixture hashes.
+The refreshed checkpoint below records registry_refresh missing/all, default
+missing, without aliases. The separate bounded cache repair covers common/active
+included roles, copied inputs, consumed values and actual preload identities;
+see `docs/qemu_cache_contract.md`. Neither static inventory nor cache source tests
+prove fresh runtime acceptance. The previous b22cadc inventory remains preserved
+unchanged as historical evidence, not a current schema or source-hash claim.
 
 ## Frozen file coverage
 
 Private evidence freezes input content at clean source
-`b22cadc072d14ff24111189cc31cdc19890baf9b`. Each row records source SHA, historical
+`e3af54dc2642ab50ce9e47365976108bdf2ff2ee`. Each row records source SHA, historical
 workflow, provider/hosts, resources, multi-host triggers, phases, software,
 benchmark, cache/cleanup/retention/resume, outputs, support, one classification
 and one current disposition. Credential-sensitive derived values are redacted;
@@ -50,7 +49,7 @@ key presence and raw-text empty/nonempty status remain, not credential validity.
 | Test/support carriers | 44 | Every non-__init__ Python file under scripts/test/unit, e2e and support, conservatively included. Literal config markers detected in 25; this heuristic neither resolves all dynamic fixtures nor claims every carrier contains configuration. |
 | Test metadata | 3 | `scripts/test/test_config.json`, `scripts/test/coverage_manifest.json`, `scripts/test/test_manifest.json.example`; catalog/coverage/manifest metadata, not standalone experiments. |
 | Total inventory rows | 357 | 310 inputs plus 47 fixture/support/metadata sources; no duplicate or unaccounted eligible path. |
-| Explicit exclusions | 136 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. |
+| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. Only the reviewed diagnostic-playbook deletion changes the previous 136-path exclusion set. |
 
 The four templates are experiment, environment, software and legacy cfg.
 Each allowed classification has exactly one current disposition:
@@ -75,20 +74,26 @@ cloud execution/spending was authorized.
 The generated inventory, summary, extractor, four focused extractor checks and
 reviewed plan are private, outside Git, under the existing migration evidence root
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`, in
-configuration-inventory-v2. Manifest SHA-256:
-`be7c5ab2c5fc2904b79ef4560623f48bce68e066e66bbf1828b23a3d11972a68`.
-The 2,118,803-byte inventory JSON SHA-256 is
-`fe369d27d108433ba6b05b82a6bb57bf03bbe1828aa218c28d38b2f09de9b631`.
+configuration-inventory-v3. Manifest SHA-256:
+`17e49b35396245be0006f5c9ad99de4bb67dc02f1b3578d12f7b7497b0503edb`.
+The 2,122,086-byte inventory JSON SHA-256 is
+`2ce5843a36e3464834b0b1a40190bfd567a77bc0ef58b3c69aa2df6e6e416095`.
 The manifest binds inventory/summary; tooling/plan are alongside them. All six
 copied files were verified byte-for-byte with private 0700/0600 permissions.
+The unchanged extractor and its four focused checks are byte-identical to v2.
+The complete previous configuration-inventory-v2 remains unchanged; its manifest
+SHA-256 is `be7c5ab2c5fc2904b79ef4560623f48bce68e066e66bbf1828b23a3d11972a68`.
 
-Source hashes were checked for all 357 rows; raw-declaration equality covered all
-259 cfg and 51 YAML inputs after redaction. All four extractor checks passed.
+Source hashes were checked for all 357 rows and 135 exclusions; raw-declaration
+equality covered all 259 cfg and 51 YAML inputs after redaction. All 30 experiment
+normalizations use registry_refresh missing/all without the retired run key.
+All four extractor checks passed.
 Generation used the existing cloud-safe mocked-socket parser pattern, not VM,
 research-script or runtime-entry-point execution. Expected successful runtime
 outputs are experiment_lock.yaml, phase state.json, logs and the configured
 benchmark/network artifacts; profiles alone produce none.
 
 Refresh affected rows and the exact source/evidence binding after schema, example
-or test changes, including registry terminology. This checkpoint must not be
-relabelled as an inventory of a later final candidate.
+or test changes. This documentation-only refresh does not alter the enumerated
+source set; the checkpoint must not be relabelled as a later final candidate
+without rechecking those hashes and the exact source/evidence binding.
