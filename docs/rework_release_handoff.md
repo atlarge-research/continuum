@@ -8,9 +8,18 @@ Use `docs/rework_plan_stack.md`, `docs/rework_milestone_release_plan.md` and
 
 Branch `pr-23-curated`, checkout `/home/matthijs/continuum`.
 All fourteen policies, the exceptional baseline and the normal-user migration
-amendment are approved. Continue the same goal until 2026-10-28 10:00
-Europe/Amsterdam (09:00 UTC); midnight does not extend that deadline.
+amendment are approved. The prior execution window ended on 2026-10-28 at
+10:00 Europe/Amsterdam (09:00 UTC); it is not silently renewed.
 No merge/push/tag/release/publication is authorized.
+
+The approved continuation is
+`docs/superpowers/plans/2026-10-28-local-module-closure.md`, a subordinate,
+outcome-bounded execution plan. It targets a review-ready core and the selected
+local-QEMU modules, not completion of every historical reproduction or a
+merge-ready release. Start one new coordinator task, with fresh-context
+implementation agents and independent read-only reviewers. Keep one checkout
+writer and one physical-host workflow at a time. Additional-node concurrency
+has only been discussed; it is not enabled or authorized by that discussion.
 
 Policy/current-runner synchronization, indexed/full retained-result inspection
 and the minimal host-owned QEMU cache repair were independently reviewed,
@@ -65,6 +74,45 @@ return trace. The reviewed narrow correction is committed at
 `fb2e8f8810784507ae42d226d89ede8bf10ce8eb`. It accepts only that full return form,
 not arbitrary stderr, and requires a new clean candidate and complete runtime
 sequence reset. Neither older operational pass counts for that new candidate.
+
+## Continuation restart point and carried changes
+
+The pre-bootstrap committed checkpoint is
+`cca9feecd01b99cd7b40b12624532498051a12b4`. At bootstrap, exactly two carried
+source files are modified: `roles/resource_manager/docker_setup/tasks/main.yml`
+and `scripts/test/unit/test_role_contracts.py`. They add a bounded retry only
+for the observed complete apt frontend-lock error from unattended-upgr, plus
+inert actual-Ansible regression tests. These edits are not part of the
+documentation bootstrap commit and have not received VM-backed validation.
+The new coordinator must preserve them and close packet A first, not recreate
+the account migration, rerun retired executors or start a third unchanged retry.
+
+Two operational attempts on clean cca9fee, including its single fresh unchanged
+retry, failed during benchmark software installation with apt rc100. The
+benchmark application did not execute. Each produced four result summaries with
+five execution entries: four passed, one failed. Neither is an operational pass.
+Both complete failures and their accepted:false assessments are preserved under
+final-candidate-cca9fee/operational-1 and operational-1-retry in the private
+durable evidence root below. Local compact snapshots contain 427 and 452 files,
+respectively; no guest updater was killed, lock deleted or privilege widened.
+
+The latest pre-bootstrap static report is
+`logs/cloud_static_audit/cloud_static_audit_2026-10-28T064756Z.md`: all twelve
+required gates passed, with 934 unit and 171 local-e2e tests, 1,105 combined.
+It includes the carried dirty Docker/test changes; it is not a clean committed
+candidate or fresh runtime certification. The five focused Docker-role tests
+and all 38 role tests passed on the pinned runtime, relevant cache tests and
+changed-file lint passed, and the complete two-file change received an
+independent read-only review. Repeat applicable verification before committing.
+Retain Python 3.8.10/Ansible 2.13.2 physical-runner attribution and the separately
+attributed Python 3.12.7 static environment; do not silently upgrade either.
+
+The v5 configuration inventory remains bound to fb2e8f8 as described below.
+The carried source changes require a new affected-row/exclusion snapshot before
+that inventory can describe their committed successor. The later application
+reuse defect, module closure, interface polish and frozen-candidate acceptance
+follow the approved continuation plan. Historical scope and final dispositions
+remain open; do not mark the original pre-main goal complete at this checkpoint.
 
 ## Archived completed planning records
 
