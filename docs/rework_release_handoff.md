@@ -147,15 +147,54 @@ processing and image completion do not certify one-way timing. This is functiona
 development evidence, not final-candidate acceptance or an exact Kubernetes patch
 pin. No failed state was pruned and no updater/lock was killed or removed.
 
-Next is packet B's bounded Kubernetes Job-reuse repair and sequential 1 → 2 → 2
-proof, followed by the remaining approved packets. The separately requested pilot
-proposal is pending: survey node1/node2/node3/node5 read-only, propose fixed disjoint
-hosts/address pools and identical clean snapshots using existing runner/local
-settings, independently review the amendment, then obtain explicit allocation
-and concurrent-pilot approval before launch. Serial execution remains authorized;
-parallel workflows require a passing isolation pilot. Historical scope, final
-dispositions and frozen-candidate acceptance remain open; the original pre-main
-goal is not complete.
+Packet B's reviewed source checkpoint is recorded below; its sequential 1 → 2 → 2
+runtime proof is next, followed by the remaining approved packets. Serial execution
+remains authorized independently of the pending parallel-pilot approval. Historical
+scope, final dispositions and frozen-candidate acceptance remain open; the original
+pre-main goal is not complete.
+
+## Packet B source checkpoint — runtime pending
+
+The bounded Kubernetes image-classification Job-reuse repair is independently
+reviewed and committed locally at
+`aa7a438ee914cc60a0902ec1908be9c57b89982f`. It labels benchmark-owned Jobs/pods,
+archives terminal owned resources and individual logs before exact-name replacement,
+and waits for fresh Running subscribers. Readiness, completion and log queries use
+the current execution selector; individual command failures propagate. Unrelated
+or unlabeled same-name Jobs and active owned Jobs fail closed. Traced/short-lived
+benchmark and other orchestrator paths retain their existing behavior.
+
+The demonstrated regression failed on the original source with an unchanged
+completed Job UID, then passed with the repair. All 14 new lifecycle tests and
+nine launch tests passed on pinned Python 3.8.10/Ansible 2.13.2, including an inert
+actual-role test of ownership labels and exact-file application despite a stale
+manifest. The complete combined static suite passed 1,120 tests on separately
+attributed Python 3.12.7. YAML/Ansible lint passed; Python lint adds no findings
+relative to the inspected baseline. The older static pylint/astroid combination
+cannot inspect Python 3.12 typealias nodes; that tool failure is not a passing
+lint claim. These checks supply source evidence, not a new physical runtime pass.
+
+New configuration inventory v7 is bound to clean
+`4b1878e28cd07a44b4ad8f267c3a69506f3214b3`, which contains this unchanged repair.
+It accounts for 358 rows, including the new test carrier, and verifies every
+source hash; all v2–v6 evidence remains unchanged. See
+`docs/configuration_inventory.md`. No packet-B application run has occurred yet.
+Next, on a reviewed clean committed revision and one base path, execute actual
+1 → 2 → 2 Hz application runs of 30 seconds, retain separate 30 → 60 → 60 outcomes
+and verify final teardown. This establishes only the tested sequential reuse;
+generic sweeps and multi-stage execution remain unsupported claims.
+
+The separately reviewed
+[development-only two-host pilot amendment](superpowers/plans/2026-10-28-development-parallel-validation.md)
+is a pending-approval proposal, not launch authority. Read-only host surveys are
+complete; no allocation reservation, own-directory setup, venv/dependency
+preparation or concurrent pilot has occurred. Explicit user approval of the
+allocation, bounded setup and concurrent pilot is still required; elapsed time
+does not supply approval. Durable proposal/survey evidence is under
+`development-parallel-pilot-proposal-20261028` in the private evidence root below;
+its SHA256SUMS SHA-256 is
+`e690168b73fa7623d3b19946a5704d1b32a36a9e25583ee3151ec4b0484e87df`.
+Continue the authorized serial packet-B sequence while that approval is pending.
 
 ## Archived completed planning records
 
@@ -194,10 +233,10 @@ and the retirement packet performed no VM operation or benchmark rerun.
    `docs/reproduction_inventory.md` records the complete candidate survey and
    remaining historical associations; obtain one final scope confirmation
    before reproduction-driven deletions. `docs/configuration_inventory.md`
-   accounts for 310 inputs and 47 fixture/support/metadata sources; its preserved
+   accounts for 310 inputs and 48 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   1d0e9de1750f3378b5134e51462111246da6fbf8, after the reviewed Docker-install
-   repair; all four earlier snapshots remain unchanged. Final historical
+   4b1878e28cd07a44b4ad8f267c3a69506f3214b3, after the reviewed Kubernetes Job-reuse
+   repair; all five earlier snapshots remain unchanged. Final historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
    after later schema/example/test changes.

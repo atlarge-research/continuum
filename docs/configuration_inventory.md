@@ -28,13 +28,14 @@ The refreshed checkpoint below records registry_refresh missing/all, default
 missing, without aliases. The separate bounded cache repair covers common/active
 included roles, copied inputs, consumed values and actual preload identities;
 see `docs/qemu_cache_contract.md`. Neither static inventory nor cache source tests
-prove fresh runtime acceptance. The previous v2/v3/v4/v5 inventories remain preserved
+prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6 inventories remain preserved
 unchanged as historical evidence, not current source-hash claims.
 
 ## Frozen file coverage
 
 Private evidence freezes input content at clean source
-`1d0e9de1750f3378b5134e51462111246da6fbf8`. Each row records source SHA, historical
+`4b1878e28cd07a44b4ad8f267c3a69506f3214b3`, containing the reviewed packet-B Job-reuse
+repair at `aa7a438ee914cc60a0902ec1908be9c57b89982f`. Each row records source SHA, historical
 workflow, provider/hosts, resources, multi-host triggers, phases, software,
 benchmark, cache/cleanup/retention/resume, outputs, support, one classification
 and one current disposition. Credential-sensitive derived values are redacted;
@@ -46,10 +47,10 @@ key presence and raw-text empty/nonempty status remain, not credential validity.
 | Environment profiles | 7 | Standalone schema validation passes; topology/workflow require an experiment. |
 | Software profiles | 14 | Standalone schema validation passes; assignment/resource/module-option compatibility requires composition. |
 | Legacy cfg inputs | 259 | INI declarations inventoried; active entry point rejects cfg. The old converter emits a retired schema, not current clusters/modules/pipeline. |
-| Test/support carriers | 44 | Every non-__init__ Python file under scripts/test/unit, e2e and support, conservatively included. Literal config markers detected in 25; this heuristic neither resolves all dynamic fixtures nor claims every carrier contains configuration. |
+| Test/support carriers | 45 | Every non-__init__ Python file under scripts/test/unit, e2e and support, conservatively included. Literal config markers detected in 26; this heuristic neither resolves all dynamic fixtures nor claims every carrier contains configuration. |
 | Test metadata | 3 | `scripts/test/test_config.json`, `scripts/test/coverage_manifest.json`, `scripts/test/test_manifest.json.example`; catalog/coverage/manifest metadata, not standalone experiments. |
-| Total inventory rows | 357 | 310 inputs plus 47 fixture/support/metadata sources; no duplicate or unaccounted eligible path. |
-| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. The Docker-role source hash changed since v5; the path set is unchanged. v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
+| Total inventory rows | 358 | 310 inputs plus 48 fixture/support/metadata sources; no duplicate or unaccounted eligible path. |
+| Explicit exclusions | 135 | Per-path hashed ledger of other tracked YAML/YML/CFG: Ansible/runtime/tool implementation assets, including `ansible.cfg`, not user experiment/profile inputs. The Job-role defaults/tasks hashes changed since v6; the exclusion path set is unchanged. v2's 136 paths differ only by the reviewed diagnostic-playbook deletion. |
 
 The four templates are experiment, environment, software and legacy cfg.
 Each allowed classification has exactly one current disposition:
@@ -60,7 +61,7 @@ Each allowed classification has exactly one current disposition:
 | Reproduction path | 4 | Retain and validate exact R03/R04 YAML and historical cfg counterparts; no wider figure equivalence inferred. |
 | Template | 4 | Retain; validate at the applicable schema/composition level. |
 | Historical input | 235 | Preserve pending historical-scope confirmation. |
-| Test-only fixture | 90 | Retain test input/support carrier, including shipped smoke/parity inputs and historical provider tests. Shipped status is independent of classification. |
+| Test-only fixture | 91 | Retain test input/support carrier, including shipped smoke/parity inputs and historical provider tests. Shipped status is independent of classification. |
 
 All 257 legacy inputs other than the two nominated exact cfg counterparts retain
 final_disposition_pending=true, including historical templates and provider tests.
@@ -74,14 +75,18 @@ cloud execution/spending was authorized.
 The generated inventory, summary, extractor, four focused extractor checks and
 reviewed plan are private, outside Git, under the existing migration evidence root
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`, in
-configuration-inventory-v6. Manifest SHA-256:
-`18e4faa11ab9a420f0920f1924c9be7d1c825e252e848177a8061031f932c437`.
-The 2,122,856-byte inventory JSON SHA-256 is
-`9fa1ddf7738f8981a358defa65d024bfad02c4bea056ad2559f2754d774dbf21`.
+configuration-inventory-v7. Manifest SHA-256:
+`fe066662cee2f9a5f17d542b35ff976e45bd0ad5e85a5baabf88d5b7505d2d6f`.
+The 2,127,869-byte inventory JSON SHA-256 is
+`9c78f11c97b7b616584209b9fa0e47ec23ac7706bd0d8d055ea87dbc366dbf76`.
 The manifest binds inventory/summary; tooling/plan are alongside them. All six
 copied files were verified byte-for-byte with private 0700/0600 permissions.
-The unchanged extractor and its four focused checks are byte-identical to v2/v3/v4/v5.
-All four complete previous directories remain unchanged. The v5 manifest is
+The unchanged extractor and its four focused checks are byte-identical to v2/v3/v4/v5/v6.
+All five complete previous directories remain unchanged. The v6 manifest is
+`18e4faa11ab9a420f0920f1924c9be7d1c825e252e848177a8061031f932c437`;
+its preserved 2,122,856-byte inventory JSON SHA-256 is
+`9fa1ddf7738f8981a358defa65d024bfad02c4bea056ad2559f2754d774dbf21`.
+The v5 manifest is
 `b037c3c1144f84c3161a450daf214d144b9e0d526aec4988e9350f3da5ea4f20`;
 its preserved 2,122,643-byte inventory JSON SHA-256 is
 `0d11ea6fcda0cc9eaa8e169a7eb509b087424b3db26922e20ec0952538da88fb`.
@@ -90,15 +95,19 @@ The v4 manifest is
 v3's manifest SHA-256 is
 `17e49b35396245be0006f5c9ad99de4bb67dc02f1b3578d12f7b7497b0503edb`, and v2's is
 `be7c5ab2c5fc2904b79ef4560623f48bce68e066e66bbf1828b23a3d11972a68`.
-The sole changed inventory row since v5 is `scripts/test/unit/test_role_contracts.py`;
-the sole changed exclusion is `roles/resource_manager/docker_setup/tasks/main.yml`.
-These bind the reviewed bounded Docker updater-lock retry and its regressions;
-all user input bytes and other rows/exclusions remain unchanged. A separate private
-configuration-inventory-v6-generation.json receipt records isolated Python 3.12.7
+Since v6, the new inventory row is `scripts/test/unit/test_kubernetes_job_reuse.py`;
+the changed existing rows are `scripts/test/unit/test_application_runtime_helpers.py`
+and `scripts/test/unit/test_role_contracts.py`. The two changed exclusions are
+`roles/application/k8s_job_deploy/defaults/main.yml` and
+`roles/application/k8s_job_deploy/tasks/main.yml`. No row or exclusion was removed.
+These bind the reviewed bounded Kubernetes Job-reuse repair and its regressions;
+all user input bytes and other rows/exclusions remain unchanged. The Docker-role
+hash remains as recorded in v6. A separate private
+configuration-inventory-v7-generation.json receipt records isolated Python 3.12.7
 with optimization disabled, the clean source revision and complete verification,
 preserving the extractor's built-in assertions.
 
-Source hashes were checked for all 357 rows and 135 exclusions; raw-declaration
+Source hashes were checked for all 358 rows and 135 exclusions; raw-declaration
 equality covered all 259 cfg and 51 YAML inputs after redaction. All 30 experiment
 normalizations use registry_refresh missing/all without the retired run key.
 All four extractor checks passed.
@@ -108,6 +117,6 @@ outputs are experiment_lock.yaml, phase state.json, logs and the configured
 benchmark/network artifacts; profiles alone produce none.
 
 Refresh affected rows and the exact source/evidence binding after schema, example
-or test changes. This documentation-only refresh does not alter the enumerated
-source set; the checkpoint must not be relabelled as a later final candidate
+or test changes. This refresh adds one test carrier; the user input set is unchanged.
+The checkpoint must not be relabelled as a later final candidate
 without rechecking those hashes and the exact source/evidence binding.
