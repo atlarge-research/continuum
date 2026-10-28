@@ -75,7 +75,7 @@ return trace. The reviewed narrow correction is committed at
 not arbitrary stderr, and requires a new clean candidate and complete runtime
 sequence reset. Neither older operational pass counts for that new candidate.
 
-## Continuation restart point and carried changes
+## Packet A closure and continuation restart point
 
 The pre-bootstrap committed checkpoint is
 `cca9feecd01b99cd7b40b12624532498051a12b4`. At bootstrap, exactly two carried
@@ -85,8 +85,9 @@ for the observed complete apt frontend-lock error from unattended-upgr, plus
 inert actual-Ansible regression tests. These edits are not part of the
 documentation bootstrap commit. Packet A preserved these source bytes, independently
 reviewed the complete diff and committed them locally at
-`1d0e9de1750f3378b5134e51462111246da6fbf8`. They have not received VM-backed
-validation. Do not recreate the account migration, rerun retired executors or
+`1d0e9de1750f3378b5134e51462111246da6fbf8`. The development run below supplies
+their first post-fix VM-backed evidence. Do not recreate the account migration,
+rerun retired executors or
 start a third unchanged cca9fee retry.
 
 Two operational attempts on clean cca9fee, including its single fresh unchanged
@@ -105,7 +106,7 @@ It includes the carried dirty Docker/test changes; it is not a clean committed
 candidate or fresh runtime certification. The five focused Docker-role tests
 and all 38 role tests passed on the pinned runtime, relevant cache tests and
 changed-file lint passed, and the complete two-file change received an
-independent read-only review. Repeat applicable verification before committing.
+independent read-only review. Fresh committed-source checks are recorded below.
 Retain Python 3.8.10/Ansible 2.13.2 physical-runner attribution and the separately
 attributed Python 3.12.7 static environment; do not silently upgrade either.
 
@@ -122,16 +123,39 @@ deletion. None of these source checks proves a VM-backed rebuild or runtime pass
 The new v6 configuration inventory is bound to clean 1d0e9de. It refreshes the
 role-test carrier row and Docker-role hashed exclusion, verifies all source hashes
 and preserves v2/v3/v4/v5 unchanged; see `docs/configuration_inventory.md`.
-The next packet-A gate is one clean operational_regression development run as
-matthijs with the migrated root and pinned venv, after the documentation review
-and commit. Require four new child JSONs and six successful executions (three
-smoke singletons plus three benchmark entries), zero exit codes/timeouts and no
-failed or unreachable Ansible hosts. Preserve and inspect complete artifacts,
-state/locks and unrelated domains. This development run is not final-candidate
-acceptance; diagnose any failure before retrying. The later application
-reuse defect, module closure, interface polish and frozen-candidate acceptance
-follow the approved continuation plan. Historical scope and final dispositions
-remain open; do not mark the original pre-main goal complete at this checkpoint.
+Packet A's operational_regression development gate passed on clean
+`333e5afb0aaf36cd62f5a1e84aad448d1d23cadd`, as matthijs with migrated root and
+Python 3.8.10/Ansible 2.13.2. Four new child JSONs contain six successful executions:
+three smoke singletons and all three benchmark phases. All exit codes were zero,
+with no timeouts and no failed/unreachable hosts across 12 Ansible recaps/14 host
+rows. The benchmark sent, processed and returned 30 images, saved application
+state and completed teardown. Full stdout/stderr/metadata, state/locks, network
+records and metric artifacts were manually inspected and independently reviewed.
+Evidence is under `development-packet-a-333e5afb0aaf` in the private durable root
+below; `accepted-development-manual.json` binds the results and limitations.
+Its benchmark JSON is `test_results_2026-10-28_12-47-40.json`; `finished.json`
+lists all four. The 66 older JSONs, both cca9fee failure packets and eight
+unrelated shutoff domains' inactive XMLs remain unchanged. Compact snapshots
+contain 812 local and nine remote files; disks/private keys are excluded.
+
+Docker installation succeeded without an observed lock retry; retry behavior is
+covered by inert actual-Ansible tests. Source-driven cache invalidation was proved
+in a temporary fixture, not a physical rebuild. The publisher's measured span was
+30.31 seconds; the full application phase took 184.2 seconds. Printed one-way
+delay lacks synchronization validation. Finite RTT,
+processing and image completion do not certify one-way timing. This is functional
+development evidence, not final-candidate acceptance or an exact Kubernetes patch
+pin. No failed state was pruned and no updater/lock was killed or removed.
+
+Next is packet B's bounded Kubernetes Job-reuse repair and sequential 1 → 2 → 2
+proof, followed by the remaining approved packets. The separately requested pilot
+proposal is pending: survey node1/node2/node3/node5 read-only, propose fixed disjoint
+hosts/address pools and identical clean snapshots using existing runner/local
+settings, independently review the amendment, then obtain explicit allocation
+and concurrent-pilot approval before launch. Serial execution remains authorized;
+parallel workflows require a passing isolation pilot. Historical scope, final
+dispositions and frozen-candidate acceptance remain open; the original pre-main
+goal is not complete.
 
 ## Archived completed planning records
 
