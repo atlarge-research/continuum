@@ -399,6 +399,255 @@ class KubernetesObservabilityRoleTests(unittest.TestCase):
         self.assertIn("--server-side", tasks[1]["ansible.builtin.command"])
 
 
+@unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook is required")
+class KubernetesObservabilityExecutionTests(unittest.TestCase):
+    """Exercise the role policy without a cluster, sockets or shared Ansible state."""
+
+    def _run_policy(self, root, scenario="success", external="192.0.2.2"):
+        repo_root = Path(__file__).resolve().parents[3]
+        source = repo_root / "roles/resource_manager/k8s_observability/tasks/main.yml"
+        tasks = yaml.safe_load(source.read_text(encoding="utf-8"))[4:]
+        trace = root / "calls.jsonl"
+        binaries = root / "bin"
+        actions = root / "actions"
+        for path in (binaries, actions, root / "home", root / "tmp", root / "cp"):
+            path.mkdir()
+        boundary = r'''#!PYTHON
+import json
+import os
+from pathlib import Path
+import sys
+
+tool = Path(sys.argv[0]).name
+args = sys.argv[1:]
+trace = Path(os.environ["OBS_TRACE"])
+scenario = os.environ["OBS_SCENARIO"]
+events = [json.loads(line) for line in trace.read_text().splitlines()] if trace.exists() else []
+with trace.open("a") as out:
+    out.write(json.dumps([tool, args, os.getpid()]) + "\n")
+address = "192.0.2.2," + os.environ["OBS_EXTERNAL"]
+commands = {
+    "100": "kubectl port-forward --namespace=monitoring --address=" + address + " svc/grafana 3000:3000",
+    "200": "kubectl port-forward --namespace=monitoring --address=" + address + " svc/prometheus-k8s 9090:9090",
+}
+if tool == "kubectl":
+    if "wait" in args and "prometheus/k8s" in args and scenario in ("wait_failure", "diagnostic_failure"):
+        print("original Prometheus readiness permission denied", file=sys.stderr)
+        sys.exit(7)
+    if "get" in args and scenario == "diagnostic_failure":
+        print("diagnostic API unavailable", file=sys.stderr)
+        sys.exit(8)
+    print("condition met" if "wait" in args else "inert monitoring status")
+elif tool == "pgrep":
+    if scenario in ("spawn", "bind_failure"):
+        sys.exit(1)
+    print("100\n200" + ("\n300" if scenario == "duplicates" else ""))
+elif tool == "ps":
+    pid = args[args.index("-p") + 1]
+    command = commands.get(pid, commands["100"] if pid == "300" else "")
+    for event in events:
+        if event[0] == "nohup" and str(event[2]) == pid:
+            command = " ".join(event[1])
+    owner = os.getuid()
+    if scenario == "wrong_owner":
+        owner += 1
+    if scenario == "near_match":
+        command += " --not-the-same-command"
+    if scenario in ("vanished", "bind_failure") or not command:
+        sys.exit(1)
+    if "uid=" in args:
+        print(str(owner) + " " + command)
+    else:
+        print(command)
+elif tool == "nohup":
+    print("bind: address already in use" if scenario == "bind_failure" else "inert forwarding log", file=sys.stderr)
+elif tool == "tail":
+    if scenario == "diagnostic_failure":
+        print("diagnostic log unavailable", file=sys.stderr)
+        sys.exit(9)
+    path = Path(args[-1])
+    print(path.read_text() if path.exists() else "no earlier forwarding log")
+else:
+    raise AssertionError(tool)
+'''.replace("#!PYTHON", "#!" + sys.executable)
+        for name in ("kubectl", "pgrep", "ps", "nohup", "tail"):
+            path = binaries / name
+            path.write_text(boundary, encoding="utf-8")
+            path.chmod(0o700)
+        (actions / "inert_uri.py").write_text(r'''import json
+from pathlib import Path
+from ansible.plugins.action import ActionBase
+
+class ActionModule(ActionBase):
+    def run(self, tmp=None, task_vars=None):
+        variables = task_vars or {}
+        trace = Path(variables["obs_trace"])
+        args = self._task.args
+        scenario = variables["obs_scenario"]
+        events = [json.loads(line) for line in trace.read_text().splitlines()] if trace.exists() else []
+        previous = sum(event[0] == "uri" and event[1]["url"] == args["url"] for event in events)
+        with trace.open("a") as out:
+            out.write(json.dumps(["uri", args]) + "\n")
+        grafana = ":3000/" in args["url"]
+        status = 503 if ((scenario == "transient" and previous == 0)
+                         or (scenario == "prometheus_http" and not grafana)
+                         or (scenario == "grafana_http" and grafana)) else 200
+        database = "failing" if scenario == "grafana_database" else "ok"
+        return {"changed": False, "url": args["url"], "status": status,
+                "json": {"database": database},
+                "content": "inert health response", "msg": "inert HTTP status %s" % status,
+                "failed": status != 200}
+''', encoding="utf-8")
+
+        def isolate(entries):
+            for task in entries:
+                for section in ("block", "rescue", "always"):
+                    isolate(task.get(section, []))
+                if "ansible.builtin.uri" in task:
+                    self.assertEqual(task["ansible.builtin.uri"]["timeout"], 5)
+                    self.assertEqual(task["retries"], 12)
+                    self.assertEqual(task["delay"], 5)
+                    task["inert_uri"] = task.pop("ansible.builtin.uri")
+                    task["delay"] = 0
+
+        isolate(tasks)
+        # Redirect only the role's guest-local forwarding logs into the fixture.
+        tasks = yaml.safe_load(yaml.safe_dump(tasks).replace(
+            "/var/log/continuum-observability", str(root / "forward-logs")))
+        play = root / "play.yml"
+        play.write_text(yaml.safe_dump([{
+            "hosts": "localhost", "connection": "local", "gather_facts": False,
+            "become": False,
+            "vars": {
+                "ansible_python_interpreter": sys.executable,
+                "rm_k8s_observability_cloud_ip": "192.0.2.2",
+                "rm_k8s_observability_cloud_ip_external": external,
+                "obs_trace": str(trace), "obs_scenario": scenario,
+            },
+            "environment": {
+                "PATH": str(binaries) + os.pathsep + os.environ["PATH"],
+                "OBS_TRACE": str(trace), "OBS_SCENARIO": scenario, "OBS_EXTERNAL": external,
+            },
+            "tasks": tasks,
+        }]), encoding="utf-8")
+        config = root / "ansible.cfg"
+        config.write_text("[defaults]\n", encoding="utf-8")
+        env = {
+            "HOME": str(root / "home"), "TMPDIR": str(root / "tmp"),
+            "PATH": os.environ["PATH"], "PYTHONDONTWRITEBYTECODE": "1",
+            "XDG_CACHE_HOME": str(root / "cache"),
+            "ANSIBLE_CONFIG": str(config), "ANSIBLE_BECOME": "False",
+            "ANSIBLE_LOCAL_TEMP": str(root / "ansible-local"),
+            "ANSIBLE_REMOTE_TMP": str(root / "ansible-remote"),
+            "ANSIBLE_SSH_CONTROL_PATH_DIR": str(root / "cp"),
+            "ANSIBLE_ACTION_PLUGINS": str(actions),
+            "ANSIBLE_LOG_PATH": str(root / "ansible.log"),
+            "ANSIBLE_STDOUT_CALLBACK": "default", "ANSIBLE_NOCOLOR": "1",
+        }
+        ansible = Path(sys.executable).with_name("ansible-playbook")
+        result = subprocess.run(
+            [str(ansible) if ansible.exists() else shutil.which("ansible-playbook"),
+             "-i", "localhost,", str(play)],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            timeout=60, check=False,
+        )
+        self.assertTrue(trace.exists(), result.stdout)
+        events = [json.loads(line) for line in trace.read_text().splitlines()]
+        return result, events
+
+    def test_prometheus_wait_failure_cannot_report_success(self):
+        """Missing Prometheus readiness must fail before forwarding or HTTP checks."""
+        with tempfile.TemporaryDirectory() as temporary:
+            result, events = self._run_policy(Path(temporary), "wait_failure")
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("original Prometheus readiness permission denied", result.stdout)
+            self.assertFalse(any(event[0] in ("nohup", "uri") for event in events))
+
+    def test_readiness_checks_both_replicas_and_distinct_service_addresses(self):
+        """Success requires each workload and each advertised health address."""
+        for external, expected_urls in (("192.0.2.2", 2), ("192.0.2.3", 4)):
+            with self.subTest(external=external), tempfile.TemporaryDirectory() as temporary:
+                result, events = self._run_policy(Path(temporary), external=external)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                waits = [event[1] for event in events if event[0] == "kubectl"
+                         and "wait" in event[1]]
+                self.assertEqual(len(waits), 2)
+                self.assertIn("deployment/grafana", waits[0])
+                self.assertIn("prometheus/k8s", waits[1])
+                self.assertIn("--for=jsonpath={.status.availableReplicas}=2", waits[1])
+                self.assertIn("--timeout=20m", waits[1])
+                probes = [event[1] for event in events if event[0] == "uri"]
+                self.assertEqual(len(probes), expected_urls)
+                self.assertEqual(len({probe["url"] for probe in probes}), expected_urls)
+                for probe in probes:
+                    self.assertFalse(probe["use_proxy"])
+                    self.assertEqual(probe["follow_redirects"], "none")
+                self.assertFalse(any(event[0] == "nohup" for event in events))
+
+    def test_http_failures_exhaust_attempt_budget_and_preserve_diagnostics(self):
+        """HTTP success cannot substitute for a healthy Grafana database."""
+        for scenario in ("grafana_http", "grafana_database", "prometheus_http"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                result, events = self._run_policy(Path(temporary), scenario)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                probes = [event[1]["url"] for event in events if event[0] == "uri"]
+                self.assertEqual(max(probes.count(url) for url in set(probes)), 13)
+                self.assertIn("inert health response", result.stdout)
+                self.assertTrue(any(event[0] == "tail" for event in events))
+
+    def test_transient_health_failure_retries_then_succeeds(self):
+        """Each service's independent policy retries a transient 503 once."""
+        with tempfile.TemporaryDirectory() as temporary:
+            result, events = self._run_policy(Path(temporary), "transient")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(sum(event[0] == "uri" for event in events), 4)
+
+    def test_forward_identity_failures_cannot_be_hidden_by_healthy_http(self):
+        """Reject duplicates, other users, near matches and vanished processes."""
+        for scenario in ("duplicates", "wrong_owner", "near_match", "vanished"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                result, events = self._run_policy(Path(temporary), scenario)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                if scenario == "duplicates":
+                    self.assertFalse(any(event[0] == "uri" for event in events))
+                else:
+                    self.assertEqual(sum(event[0] == "uri" for event in events), 2)
+                if scenario in ("wrong_owner", "near_match"):
+                    self.assertEqual(sum(event[0] == "nohup" for event in events), 2)
+
+    def test_new_forward_logs_are_private_and_bind_failures_are_retained(self):
+        """Spawn only missing forwards and retain startup stderr for diagnosis."""
+        for scenario in ("spawn", "bind_failure"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                logs = root / "forward-logs"
+                logs.mkdir(mode=0o755)
+                for name in ("grafana", "prometheus"):
+                    (logs / (name + "-port-forward.log")).write_text("previous log\n")
+                result, events = self._run_policy(root, scenario)
+                if scenario == "spawn":
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertEqual(sum(event[0] == "nohup" for event in events), 2)
+                else:
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn("bind: address already in use", result.stdout)
+                self.assertEqual(logs.stat().st_mode & 0o777, 0o700)
+                self.assertEqual(len(list(logs.glob("*.log"))), 2)
+                for log in logs.glob("*.log"):
+                    self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+                    self.assertTrue(log.read_text().startswith("previous log\n"))
+                    self.assertGreater(len(log.read_text()), len("previous log\n"))
+
+    def test_diagnostic_failures_do_not_replace_original_error(self):
+        """Unavailable API/log diagnostics cannot erase the readiness failure."""
+        with tempfile.TemporaryDirectory() as temporary:
+            result, _events = self._run_policy(Path(temporary), "diagnostic_failure")
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("original Prometheus readiness permission denied", result.stdout)
+            self.assertIn("diagnostic API unavailable", result.stdout)
+            self.assertIn("diagnostic log unavailable", result.stdout)
+
+
 class KubernetesPrereqsRoleTests(unittest.TestCase):
     def test_k8s_prereqs_installs_python_client_for_ansible_modules(self):
         repo_root = Path(__file__).resolve().parents[3]

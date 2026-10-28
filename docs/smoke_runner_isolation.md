@@ -100,6 +100,43 @@ sh scripts/test/run_smoke_host.sh check-prereqs --suite qemu_openfaas_image_pari
 sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity
 ```
 
+For the foundation family, use the existing `qemu_infra_parity`,
+`network_validation`, `qemu_k8s_image_parity`, `qemu_endpoint_image_parity` and
+`qemu_k8s_nobench_parity` scenarios alongside `operational_regression`.
+Image scenarios require their checked local registry images; tc/netperf and the
+guest package/image repositories must be available where configured. The
+no-benchmark scenario installs Kubernetes, endpoint runtime and observability;
+it supplies no image-classification application evidence. Most profiles retain
+guests; endpoint image, all-tier infrastructure parity and the final benchmark
+resume phase request teardown. Scenario directories preserve files but guest
+names and QEMU startup cleanup are scoped to the Unix username. Preserve prior
+evidence and settle retained-guest disposition before starting another scenario.
+
+When observability is enabled, its software role waits up to 20 minutes each
+for Grafana deployment availability and both replicas of `Prometheus/k8s` in
+`monitoring`. It checks Grafana `/api/health` (HTTP 200 and database `ok`) and
+Prometheus `/-/ready` (HTTP 200) through their guest-local port-forwards on every
+distinct advertised controller address. Each HTTP check uses a five-second
+socket timeout and at most thirteen attempts with five-second retry delays.
+Response reads and overhead mean this is not a total HTTP elapsed-time deadline;
+the existing runner timeout and owned-process cleanup bound the workflow.
+Success records the health responses and verifies the selected forwarding PID's
+UID and exact command. This proves readiness at that point, not continued
+availability, complete scrape coverage or accurate cross-guest timing.
+
+Forwarding runs inside the cloudcontroller guest under the playbook's become
+identity. The role reuses one exact same-UID process or starts a missing forward;
+duplicates, identity changes and failed health checks fail without killing or
+restarting other processes. Guest logs append to
+`/var/log/continuum-observability/grafana-port-forward.log` and
+`/var/log/continuum-observability/prometheus-port-forward.log` with mode 0600
+inside a 0700 directory. Failure output preserves the original error and bounded
+resource/pod/PID diagnostics plus the final 80 log lines. Inspect and preserve
+those logs before diagnosing a retry; an older reused forward may have no earlier
+log because the previous role discarded its output. Record the actual installed
+kube-prometheus checkout and Kubernetes versions; historical evidence and the
+configured release branch do not establish their exact installed revisions.
+
 Run only the exact scenario authorized by the active packet. Before host
 execution, record clean HEAD/status and verify prerequisites. No concurrent
 runs may share one base path. A cache belongs to one stable runner identity.

@@ -27,32 +27,209 @@
     KUBECONFIG: /etc/kubernetes/admin.conf
   changed_when: false
 
-- name: Wait for Grafana deployment availability
-  ansible.builtin.command: kubectl -n monitoring wait --for=condition=Available deployment/grafana --timeout=20m
+- name: Verify Kubernetes observability readiness
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  changed_when: false
+  vars:
+    rm_k8s_observability_addresses: >-
+      {{ [rm_k8s_observability_cloud_ip, rm_k8s_observability_cloud_ip_external] | unique | list }}
+    rm_k8s_observability_forward_services:
+      - {name: grafana, service: grafana, port: 3000}
+      - {name: prometheus, service: prometheus-k8s, port: 9090}
+  block:
+    - name: Wait for Grafana deployment availability
+      ansible.builtin.command: kubectl -n monitoring wait --for=condition=Available deployment/grafana --timeout=20m
+      changed_when: false
 
-- name: Ensure Grafana port-forward is running
-  ansible.builtin.shell: |
-    cmd="kubectl port-forward --namespace=monitoring"
-    cmd="$cmd --address={{ rm_k8s_observability_cloud_ip }},{{ rm_k8s_observability_cloud_ip_external }}"
-    cmd="$cmd svc/grafana 3000:3000"
-    pgrep -f "$cmd" >/dev/null || nohup $cmd >/dev/null 2>&1 &
-  args:
-    executable: /bin/bash
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  changed_when: false
+    - name: Wait for both Prometheus replicas to be available
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - monitoring
+          - wait
+          - prometheus/k8s
+          - --for=jsonpath={.status.availableReplicas}=2
+          - --timeout=20m
+      changed_when: false
 
-- name: Ensure Prometheus port-forward is running
-  ansible.builtin.shell: |
-    cmd="kubectl port-forward --namespace=monitoring"
-    cmd="$cmd --address={{ rm_k8s_observability_cloud_ip }},{{ rm_k8s_observability_cloud_ip_external }}"
-    cmd="$cmd svc/prometheus-k8s 9090:9090"
-    pgrep -f "$cmd" >/dev/null || nohup $cmd >/dev/null 2>&1 &
-  args:
-    executable: /bin/bash
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  changed_when: false
+    - name: Create private observability forwarding log directory
+      ansible.builtin.file:
+        path: /var/log/continuum-observability
+        state: directory
+        mode: "0700"
+
+    - name: Preserve private observability forwarding logs
+      ansible.builtin.file:
+        path: "/var/log/continuum-observability/{{ item.name }}-port-forward.log"
+        state: touch
+        mode: "0600"
+        access_time: preserve
+        modification_time: preserve
+      loop: "{{ rm_k8s_observability_forward_services }}"
+
+    - name: Select or start the exact owned observability forwards
+      ansible.builtin.shell: |
+        command=(kubectl port-forward --namespace=monitoring
+          "--address={{ rm_k8s_observability_cloud_ip }},{{ rm_k8s_observability_cloud_ip_external }}"
+          "svc/{{ item.service }}" "{{ item.port }}:{{ item.port }}")
+        printf -v expected '%s ' "${command[@]}"
+        expected=${expected% }
+        uid=$(id -u)
+        candidates=$(pgrep -u "$uid" -f '^kubectl port-forward ')
+        status=$?
+        if [ "$status" -gt 1 ]; then
+          echo "Cannot inspect observability forward processes (pgrep rc=$status)" >&2
+          exit "$status"
+        fi
+        selected=
+        for pid in $candidates; do
+          details=$(ps -ww -p "$pid" -o uid= -o args=) || continue
+          read -r owner actual <<< "$details"
+          if [ "$owner" = "$uid" ] && [ "$actual" = "$expected" ]; then
+            if [ -n "$selected" ]; then
+              echo "Duplicate exact observability forwards: $selected $pid ($expected)" >&2
+              exit 1
+            fi
+            selected=$pid
+          fi
+        done
+        if [ -z "$selected" ]; then
+          nohup "${command[@]}" >>{{ ('/var/log/continuum-observability/' ~ item.name ~ '-port-forward.log') | quote }} 2>&1 </dev/null &
+          selected=$!
+        fi
+        printf '%s\n' "$selected"
+      args:
+        executable: /bin/bash
+      loop: "{{ rm_k8s_observability_forward_services }}"
+      register: rm_k8s_observability_forwards
+      changed_when: false
+
+    - name: Verify Grafana HTTP and database readiness on advertised addresses
+      ansible.builtin.uri:
+        url: "http://{{ item }}:3000/api/health"
+        method: GET
+        status_code: 200
+        return_content: true
+        use_proxy: false
+        follow_redirects: none
+        timeout: 5
+      loop: "{{ rm_k8s_observability_addresses }}"
+      register: rm_k8s_observability_grafana_health
+      until:
+        - rm_k8s_observability_grafana_health.status | default(0) == 200
+        - (rm_k8s_observability_grafana_health.json | default({})).get('database', '') == 'ok'
+      retries: 12
+      delay: 5
+      changed_when: false
+
+    - name: Verify Prometheus HTTP readiness on advertised addresses
+      ansible.builtin.uri:
+        url: "http://{{ item }}:9090/-/ready"
+        method: GET
+        status_code: 200
+        return_content: true
+        use_proxy: false
+        follow_redirects: none
+        timeout: 5
+      loop: "{{ rm_k8s_observability_addresses }}"
+      register: rm_k8s_observability_prometheus_health
+      until: rm_k8s_observability_prometheus_health.status | default(0) == 200
+      retries: 12
+      delay: 5
+      changed_when: false
+
+    - name: Verify selected forward identities after HTTP readiness
+      vars:
+        rm_k8s_observability_expected_command: >-
+          {{ 'kubectl port-forward --namespace=monitoring --address='
+             ~ rm_k8s_observability_cloud_ip ~ ',' ~ rm_k8s_observability_cloud_ip_external
+             ~ ' svc/' ~ item.item.service ~ ' ' ~ item.item.port ~ ':' ~ item.item.port }}
+      ansible.builtin.shell: |
+        pid={{ item.stdout | trim | quote }}
+        expected={{ rm_k8s_observability_expected_command | quote }}
+        details=$(ps -ww -p "$pid" -o uid= -o args=) || {
+          echo "Selected observability forward PID $pid is no longer running" >&2
+          exit 1
+        }
+        read -r owner actual <<< "$details"
+        if [ "$owner" != "$(id -u)" ] || [ "$actual" != "$expected" ]; then
+          echo "Selected observability forward PID $pid identity changed: $details" >&2
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      loop: "{{ rm_k8s_observability_forwards.results }}"
+      loop_control:
+        label: "{{ item.item.name }} PID {{ item.stdout | trim }}"
+      changed_when: false
+
+    - name: Record observability service readiness
+      ansible.builtin.debug:
+        msg: "{{ item.url }} status={{ item.status }} content={{ item.content }}"
+      loop: "{{ rm_k8s_observability_grafana_health.results + rm_k8s_observability_prometheus_health.results }}"
+      loop_control:
+        label: "{{ item.url }}"
+
+  rescue:
+    - name: Preserve original observability readiness failure
+      ansible.builtin.set_fact:
+        rm_k8s_observability_failed_task: "{{ ansible_failed_task.name }}"
+        rm_k8s_observability_failed_result: "{{ ansible_failed_result }}"
+
+    - name: Inspect exact observability resources
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --request-timeout=10s
+          - -n
+          - monitoring
+          - get
+          - deployment/grafana
+          - prometheus/k8s
+          - service/grafana
+          - service/prometheus-k8s
+          - endpoints/grafana
+          - endpoints/prometheus-k8s
+          - -o
+          - wide
+      register: rm_k8s_observability_resource_status
+      changed_when: false
+      failed_when: false
+
+    - name: Inspect observability pod status
+      ansible.builtin.command: >-
+        kubectl --request-timeout=10s -n monitoring get pods
+        -l app.kubernetes.io/part-of=kube-prometheus -o wide
+      register: rm_k8s_observability_pod_status
+      changed_when: false
+      failed_when: false
+
+    - name: Inspect selected observability forward PIDs
+      ansible.builtin.command:
+        argv: [ps, -ww, -p, "{{ item.stdout | trim }}", -o, uid=, -o, args=]
+      loop: "{{ (rm_k8s_observability_forwards | default({})).get('results', []) }}"
+      when: item.stdout is defined and item.stdout is match('^[0-9]+$')
+      register: rm_k8s_observability_process_status
+      changed_when: false
+      failed_when: false
+
+    - name: Inspect retained observability forwarding logs
+      ansible.builtin.command:
+        argv: [tail, -n, "80", "/var/log/continuum-observability/{{ item.name }}-port-forward.log"]
+      loop: "{{ rm_k8s_observability_forward_services }}"
+      register: rm_k8s_observability_log_status
+      changed_when: false
+      failed_when: false
+
+    - name: Report bounded observability diagnostics
+      ansible.builtin.debug:
+        msg:
+          resources: "{{ rm_k8s_observability_resource_status }}"
+          pods: "{{ rm_k8s_observability_pod_status }}"
+          processes: "{{ rm_k8s_observability_process_status }}"
+          forwarding_logs: "{{ rm_k8s_observability_log_status }}"
+
+    - name: Fail with original observability readiness error
+      ansible.builtin.fail:
+        msg: "{{ rm_k8s_observability_failed_task }}: {{ rm_k8s_observability_failed_result }}"
