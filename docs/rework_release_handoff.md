@@ -83,9 +83,11 @@ source files are modified: `roles/resource_manager/docker_setup/tasks/main.yml`
 and `scripts/test/unit/test_role_contracts.py`. They add a bounded retry only
 for the observed complete apt frontend-lock error from unattended-upgr, plus
 inert actual-Ansible regression tests. These edits are not part of the
-documentation bootstrap commit and have not received VM-backed validation.
-The new coordinator must preserve them and close packet A first, not recreate
-the account migration, rerun retired executors or start a third unchanged retry.
+documentation bootstrap commit. Packet A preserved these source bytes, independently
+reviewed the complete diff and committed them locally at
+`1d0e9de1750f3378b5134e51462111246da6fbf8`. They have not received VM-backed
+validation. Do not recreate the account migration, rerun retired executors or
+start a third unchanged cca9fee retry.
 
 Two operational attempts on clean cca9fee, including its single fresh unchanged
 retry, failed during benchmark software installation with apt rc100. The
@@ -107,9 +109,26 @@ independent read-only review. Repeat applicable verification before committing.
 Retain Python 3.8.10/Ansible 2.13.2 physical-runner attribution and the separately
 attributed Python 3.12.7 static environment; do not silently upgrade either.
 
-The v5 configuration inventory remains bound to fb2e8f8 as described below.
-The carried source changes require a new affected-row/exclusion snapshot before
-that inventory can describe their committed successor. The later application
+Fresh packet-A source checks passed: five focused Docker tests and all 38 role
+tests on Python 3.8.10/Ansible 2.13.2; 79 relevant QEMU cache tests on the separately
+attributed Python 3.12.7 static environment; YAML/Ansible lint and scoped Python
+lint. Unfiltered Python lint retains convention-only findings, including three
+new test-method docstring findings; no unrelated style rewrite was made. The
+cache test module uses newer syntax and cannot run under Python 3.8. An additional
+temporary-fixture check using the actual old/new Docker-role bytes confirmed
+recipe-fingerprint invalidation with unchanged image bytes, without manual disk
+deletion. None of these source checks proves a VM-backed rebuild or runtime pass.
+
+The new v6 configuration inventory is bound to clean 1d0e9de. It refreshes the
+role-test carrier row and Docker-role hashed exclusion, verifies all source hashes
+and preserves v2/v3/v4/v5 unchanged; see `docs/configuration_inventory.md`.
+The next packet-A gate is one clean operational_regression development run as
+matthijs with the migrated root and pinned venv, after the documentation review
+and commit. Require four new child JSONs and six successful executions (three
+smoke singletons plus three benchmark entries), zero exit codes/timeouts and no
+failed or unreachable Ansible hosts. Preserve and inspect complete artifacts,
+state/locks and unrelated domains. This development run is not final-candidate
+acceptance; diagnose any failure before retrying. The later application
 reuse defect, module closure, interface polish and frozen-candidate acceptance
 follow the approved continuation plan. Historical scope and final dispositions
 remain open; do not mark the original pre-main goal complete at this checkpoint.
@@ -153,8 +172,8 @@ and the retirement packet performed no VM operation or benchmark rerun.
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 47 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   fb2e8f8810784507ae42d226d89ede8bf10ce8eb, after the observed return-trace
-   correction; all three earlier snapshots remain unchanged. Final historical
+   1d0e9de1750f3378b5134e51462111246da6fbf8, after the reviewed Docker-install
+   repair; all four earlier snapshots remain unchanged. Final historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
    after later schema/example/test changes.
