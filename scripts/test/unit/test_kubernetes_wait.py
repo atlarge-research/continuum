@@ -97,6 +97,92 @@ class KubernetesWaitSemanticsTests(unittest.TestCase):
         )
         self.assertEqual(machine.calls[0]["ssh"], config["cloud_ssh"][0])
 
+    def test_observed_return_trace_is_benign_stderr(self):
+        """The actual instrumented kubectl return uses source line38, not32."""
+        traces = [
+            "I1028 05:56:29.421139    6110 kubectl.go:32] "
+            "%!s(int64=1793163389421104883) [CONTINUUM] 0400",
+            "I1028 05:56:29.665575    6110 kubectl.go:38] "
+            "%!s(int64=1793163389665544156) [CONTINUUM] 0402",
+        ]
+        self.assertFalse(
+            kubernetes._stderr_has_real_error(traces)  # pylint: disable=protected-access
+        )
+        self.assertTrue(
+            kubernetes._is_benign_continuum_trace(  # pylint: disable=protected-access
+                traces[1]
+            )
+        )
+
+    def test_observed_return_trace_preserves_positive_readiness(self):
+        """A genuine entry/return pair must not reject Ready nodes."""
+        traces = [
+            "I1028 05:56:29.421139    6110 kubectl.go:32] "
+            "%!s(int64=1793163389421104883) [CONTINUUM] 0400",
+            "I1028 05:56:29.665575    6110 kubectl.go:38] "
+            "%!s(int64=1793163389665544156) [CONTINUUM] 0402",
+        ]
+        machine = _FakeMachine(
+            [(["node/worker-0 condition met", "node/controller condition met"], traces)]
+        )
+        with mock.patch.object(kubernetes.time, "sleep") as mock_sleep:
+            kubernetes.verify_running_cluster(self._config(), [machine])
+        self.assertEqual(len(machine.calls), 1)
+        mock_sleep.assert_not_called()
+
+    def test_return_source_accepts_only_observed_full_return_form(self):
+        """Other line38 payloads, sources, prefixes and adjacent text fail closed."""
+        trace = (
+            "I1028 05:56:29.665575    6110 kubectl.go:38] "
+            "%!s(int64=1793163389665544156) [CONTINUUM] 0402"
+        )
+        rejected = [
+            trace.replace("0402", "0400"),
+            trace.replace("0402", "0401 job=a-b.c9"),
+            trace.replace("0402", "0499"),
+            trace.replace("kubectl.go:38", "kubectl.go:39"),
+            trace.replace("kubectl.go:38", "kubelet.go:38"),
+            trace.replace("I1028", "W1028"),
+            "I1028 kubectl.go:38] [CONTINUUM] 0402",
+            trace + " trailing text",
+            "leading text " + trace,
+            trace + " permission denied",
+        ]
+        for line in rejected:
+            with self.subTest(line=line):
+                self.assertFalse(
+                    kubernetes._is_benign_continuum_trace(  # pylint: disable=protected-access
+                        line
+                    )
+                )
+                self.assertTrue(
+                    kubernetes._stderr_has_real_error([line])  # pylint: disable=protected-access
+                )
+
+    def test_return_trace_does_not_override_real_errors_or_missing_readiness(self):
+        """A return trace alone cannot turn failures or absent Ready output into success."""
+        trace = (
+            "I1028 05:56:29.665575    6110 kubectl.go:38] "
+            "%!s(int64=1793163389665544156) [CONTINUUM] 0402"
+        )
+        for failure in (
+            "Command exited with non-zero return code 1: kubectl wait --all",
+            "error: timed out waiting for the condition",
+            "permission denied",
+            "unknown diagnostic",
+        ):
+            with self.subTest(failure=failure):
+                self.assertTrue(
+                    kubernetes._stderr_has_real_error(  # pylint: disable=protected-access
+                        [trace, failure]
+                    )
+                )
+        machine = _FakeMachine([(["node/worker-0 pending"], [trace])])
+        with self.assertLogs(level="WARNING"):
+            with mock.patch.object(kubernetes.time, "sleep"), self.assertRaises(SystemExit):
+                kubernetes.verify_running_cluster(self._config(), [machine])
+        self.assertEqual(len(machine.calls), 5)
+
     def test_missing_readiness_retries_then_succeeds(self):
         """Clean stderr cannot make non-readiness stdout satisfy the wait."""
         machine = _FakeMachine(

@@ -37,6 +37,10 @@ _PREFIXED_CONTINUUM_TRACE = re.compile(
     + _CONTINUUM_TRACE_PAYLOAD
     + r"$"
 )
+_PREFIXED_CONTINUUM_RETURN_TRACE = re.compile(
+    r"^I\d{4} \d{2}:\d{2}:\d{2}\.\d{6} +\d+ kubectl\.go:38\] "
+    r"%!s\(int64=\d+\) \[CONTINUUM\] 0402$"
+)
 
 
 def add_options(_config):
@@ -174,6 +178,8 @@ def _stderr_has_real_error(err_lines):
 
 def _is_benign_continuum_trace(line):
     """Return whether one stderr line exactly matches a verified kubectl trace form."""
+    if _PREFIXED_CONTINUUM_RETURN_TRACE.fullmatch(line):
+        return True
     match = _BARE_CONTINUUM_TRACE.fullmatch(line) or _PREFIXED_CONTINUUM_TRACE.fullmatch(line)
     if match is None:
         return False
