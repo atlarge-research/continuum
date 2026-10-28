@@ -19,9 +19,10 @@ local-QEMU modules, not completion of every historical reproduction or a
 merge-ready release. Start one new coordinator task, with fresh-context
 implementation agents and independent read-only reviewers. Keep one checkout
 writer. The bounded node4/node5 setup and cold/warm isolation pilot is explicitly
-approved under the linked amendment below. Keep one physical-host workflow until
-that pilot receives independent acceptance; development concurrency is not yet
-enabled. Final acceptance and OpenFaaS workflows remain serial.
+approved under the linked amendment below. Its two cold and two warm runs passed
+independent evidence review and coordinator adjudication. Only that fixed
+two-singleton-host development allocation is enabled, with one workflow per host
+and fresh per-task guards. Final acceptance and OpenFaaS workflows remain serial.
 
 Policy/current-runner synchronization, indexed/full retained-result inspection
 and the minimal host-owned QEMU cache repair were independently reviewed,
@@ -153,8 +154,9 @@ Packet B's sequential 1 → 2 → 2 development proof and packet C's later stati
 core-contract closure are recorded below. Historical
 scope, final dispositions and frozen-candidate acceptance remain open; the original
 pre-main goal is not complete. Packet D foundation/Kubernetes/endpoint/observability
-is next, subject to coordinator release. The separately released pilot preparation
-does not enable development concurrency or replace final serial acceptance.
+is next, subject to coordinator release. The independently accepted pilot enables
+only its fixed node4/node5 development allocation below; it does not replace final
+serial acceptance.
 
 ## Packet B — sequential development proof
 
@@ -229,25 +231,65 @@ Ansible temporary trees and full host journals.
 
 The separately reviewed
 [development-only two-host pilot amendment](superpowers/plans/2026-10-28-development-parallel-validation.md)
-now has explicit user approval for the bounded node4/node5 allocation, setup and
-cold/warm isolation pilot. Following B closure, the coordinator released the separate
-physical preparation window using immutable source snapshots. Preparation is complete
-and the exact v3 preparation/launch review is CLEAR. Zero pilot VMs have launched;
-launch remains held pending coordinator release and fresh prerequisite/preservation
-gates. The reviewed restart point is `slot-a/control/launch-handoff-v3.md` under the
-approved allocation root, SHA-256
-`88f6f33f8c0cfe0c9e8f9c0eb4716fa68e7341cfb528785c1ab0d8ec97eddd8a`.
-Development concurrency remains disabled until actual independent pilot acceptance.
-User approval is unchanged. Approval receipt
-`development-parallel-pilot-approved-20261028.json` has SHA-256
+has explicit user approval for the bounded node4/node5 allocation, preparation and
+cold/warm isolation pilot. Both cold and both warm infra-only runs completed with
+exit code zero without timeout; each result reports teardown verified and both overlap
+samplers passed. Independent evidence review verified all 402 indexed entries with no
+material unresolved isolation finding, and the coordinator accepted the bounded pilot.
+
+All four runs use immutable, detached clean snapshots of
+`445270eed59e3808a408c40f9826b74617937f44`, not packet-C or foundation source.
+Each singleton host runs one 2-vCPU/2-GiB workload guest with software:none and built-in
+`delete_on_exit`, reusing only its own root/pools for the warm round:
+
+| Slot / host | Canonical allocation root | Workload pool | Base-image pool |
+| --- | --- | --- | --- |
+| A / node4 | `/mnt/sdc/matthijs/continuum_parallel_pilot/slot-a` | 192.168.180.2–192.168.180.251 | 192.168.181.2–192.168.181.251 |
+| B / node5 | `/mnt/sdc/matthijs/continuum_parallel_pilot/slot-b` | 192.168.182.2–192.168.182.251 | 192.168.183.2–192.168.183.251 |
+
+Only .2 is used in each pool. Node4 uses its attributed
+`/home/matthijs/venvs/continuum/bin/python3`; node5 uses slot-b's new own `venv`.
+Both are Python 3.8.10/Ansible core2.13.2 with the identical 74-line freeze
+(SHA-256 `a00adebafbd6e1fd9e71b5f6800a3deed7f17e64623fbf376c21261f13ad9c50`).
+Native pkg-resources source/metadata bytes matched before installation; node5 used
+71 hash-recorded wheels. The preparation addendum distinguishes retrospective
+public-PyPI byte agreement from the unrecorded original download endpoint.
+
+Complete cold/warm results, streams, metadata, locks/state and overlap/preservation
+captures are sealed under slot-a's `evidence/cold-review` and `evidence/warm-review`
+(including their node5 subdirectories). The final assessment/index are in
+`evidence/final-addendum/{assessment.md,final-index.json}`; SHA256SUMS SHA-256 is
+`909ab2501eb8ab96e39289ef3b009b33d54477fd7ee6c6956beef21e48579e6b`.
+Cold overlap was observed during the temporary 1-vCPU/1-GiB base builds; warm overlap
+captured the live 2-vCPU/2-GiB workload XML. Cold rebuilt each base; warm reused it.
+Original disks remain in their own slot roots. Final surveys report unchanged
+protected node3/node4/node5 domains and HOME baselines, clean unchanged snapshots
+and freezes, and no active pilot domain; the physical window is returned.
+
+Cold workload live MACs and direct guest `ip -j addr` were not captured. Warm live
+XML, fixed inventory and host-neighbor MAC/address mapping corroborate the reserved
+addresses. Infrastructure-only workload readiness used SSH-keyscan, not authenticated
+workload login; cold base installation did demonstrate authenticated Ansible SSH.
+Node5's actual client/socket had exited before observation; configured private options
+are retained. The approved physical Ansible HOME temp exception remains explicit,
+with preexisting HOME baselines preserved. These limits are not repaired by extra runs.
+
+Acceptance enables only this fixed two-singleton-host development allocation, with
+one workflow per host. A new task still needs identical clean snapshots, fresh capacity and
+allocation/preservation guards, and separate coordinator release. It cannot enable
+shared-host or concurrent multi-host workflows, timing comparisons, final-candidate
+acceptance or concurrent OpenFaaS. Final acceptance stays serial; exact OpenFaaS stays
+last under its separate node3 approval. No core, wrapper or scheduler change was made.
+
+Approval receipt `development-parallel-pilot-approved-20261028.json` has SHA-256
 `7c7ea4a3d5a14f2cc9c77945268dfe30e097a35611dbfb04cfcbbf79c060bbfd`.
 Durable proposal/survey evidence is under
 `development-parallel-pilot-proposal-20261028` in the private evidence root below;
 its SHA256SUMS SHA-256 is
 `e690168b73fa7623d3b19946a5704d1b32a36a9e25583ee3151ec4b0484e87df`.
 
-The approved pilot uses separate immutable source snapshots and its reserved physical
-window; no packet-C source/static evidence is a substitute for pilot acceptance.
+The approved amendment remains unchanged; pilot results do not renew later source
+or static evidence.
 
 ## Packet C — static core-contract closure
 
@@ -325,11 +367,10 @@ classifications/dispositions, all source hashes/raw declarations/normalizations 
 exclusion changed. All 47 previous inventory snapshot/receipt files remain unchanged;
 see `docs/configuration_inventory.md` for exact inventory hashes.
 
-No foundation VM/remote/host validation has run on this source. Pilot preparation
-and exact v3 review are complete, but pilot launch remains held for coordinator
-release and fresh gates. No foundation physical release is implied; this static
-checkpoint does not enable concurrency or certify a frozen candidate. After the
-coordinator separately releases the foundation physical window, first validate
+No foundation VM/remote/host validation has run on this source. The separate pilot is
+independently accepted and its physical window returned; it does not release foundation
+execution. This static checkpoint does not certify a frozen candidate. After the
+coordinator separately releases the serial node4 foundation physical window, first validate
 actual observability readiness with exact
 `qemu_k8s_nobench_parity`, then the approved serial foundation development suites:
 `operational_regression`, `qemu_infra_parity`, `network_validation`,
