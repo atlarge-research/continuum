@@ -137,6 +137,27 @@ log because the previous role discarded its output. Record the actual installed
 kube-prometheus checkout and Kubernetes versions; historical evidence and the
 configured release branch do not establish their exact installed revisions.
 
+Inspect complete result JSONs, stdout/stderr/metadata and raw Ansible recaps;
+verify final state/lock source and resume bindings. For application cases, count
+actual per-publisher outcomes (or processing and latency records for combined
+endpoint containers) and inspect current CSVs/manifests. For enabled network checks,
+inspect timestamped NDJSON and the existing verifier result; for observability,
+retain point-in-time HTTP health and exact forwarding identity evidence. Whole
+suites overwrite intermediate state/lock bytes, so inspect final files together
+with each entry's detectors and full logs. Current development results, sources,
+receipts and guest-retention transitions are in `docs/rework_release_handoff.md`.
+
+Record observed versions: configured Kubernetes versions are not an exact patch
+pin, guest Docker versions can differ and Netperf version output does not pin its
+build commit. The network verifier's expected-rate rule above 100 Mbps requires
+finite positive throughput, so a pass alone does not prove configured 1000-Mbps
+fidelity. The foundation pinned-edge live XML query missed its window and no
+generated XML survives; there is no direct vcpupin/hardware-isolation proof.
+Compact evidence excludes disks, private keys, Ansible temporary trees and full
+journals. Backing existence/current sizes do not establish live-byte invariance.
+Functional counts and finite metrics do not certify sustained frequency or
+synchronized cross-guest timing.
+
 Run only the exact scenario authorized by the active packet. Before host
 execution, record clean HEAD/status and verify prerequisites. No concurrent
 runs may share one base path. A cache belongs to one stable runner identity.

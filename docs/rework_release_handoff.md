@@ -153,10 +153,12 @@ pin. No failed state was pruned and no updater/lock was killed or removed.
 Packet B's sequential 1 → 2 → 2 development proof and packet C's later static
 core-contract closure are recorded below. Historical
 scope, final dispositions and frozen-candidate acceptance remain open; the original
-pre-main goal is not complete. Packet D has five accepted foundation development
-cases on clean `73a30b7`; its failed endpoint case and reviewed source repair are
-recorded below. Fresh endpoint recovery remains next, subject to separate review
-and coordinator release. The independently accepted pilot enables
+pre-main goal is not complete. Packet D's foundation development checkpoint below
+combines five accepted cases on clean `73a30b7` with the accepted fresh endpoint
+recovery on clean `e3fcdf0`; the failed original endpoint case remains a failure.
+Next is the full KubeEdge image-classification parity packet, subject to bounded
+independent review, actual clean-source/harness binding, fresh guards and coordinator
+release. It has not launched. The independently accepted pilot enables
 only its fixed node4/node5 development allocation below; it does not replace final
 serial acceptance.
 
@@ -334,7 +336,7 @@ followed by the selected module order in the approved closure plan. Individual b
 static gates and the final frozen-candidate runtime sequence remain required at their
 designated checkpoints; B's earlier development evidence is not renewed for this source.
 
-## Packet D foundation — source checkpoint, endpoint recovery pending
+## Packet D foundation — development checkpoint
 
 The independently reviewed three-file observability repair is committed locally at
 `2f969bb34de37060dc19bba7cc50d9b06e16136e`. Existing YAML suites and planner wiring
@@ -381,10 +383,26 @@ version-attribution correction; operational includes an immutable source-binding
 addendum. Original seals/reports remain unchanged. Do not repeat these five cases
 or the completed normal-account retirement to renew this checkpoint.
 
+| Accepted case on `73a30b7` | Actual development result and disposition | `accepted-development-manual.json` SHA-256 |
+| --- | --- | --- |
+| `qemu_k8s_nobench_parity` | 1/1; Grafana deployment and both Prometheus replicas available, 13 monitoring/8 system pods and two nodes Ready; four guests retained, then explicitly replaced by operational startup after preservation. | `bb0e7057341e6ef2559dbb38a4714f70ab53e8d44fca5528f7b247a1307807c0` |
+| `operational_regression` | Four result JSONs/six successful entries; 30 sent/processed/returned image outcomes, finite RTT/processing tables and final teardown; one development operational pass. | `5a03a3ac073f077e2601d949e386a0b2f22ccdd5045cb0195ffba891c1682bad` |
+| `qemu_infra_parity` | All four ordered cloud/pinned-edge/four-endpoint/all-tier members passed; 11 healthy recaps and final teardown. | `6bc24548c74e86ea0d9220e1d46897d731f7ac21f6445e622640509b7737c1b8` |
+| `network_validation` | 1/1; current 13-row NDJSON covers 12 invocations/six directed pairs; existing verifier passed on attributed static Python 3.12.7. Three guests retained, then explicitly replaced by case5. | `958ed61530f607b1db8f39d5079503806f275b289ebbf80af5aec68a0977c9e7` |
+| `qemu_k8s_image_parity` | 1/1; each publisher sent/returned 150, worker processed 300; finite CLOUD1/ENDPOINT2 rows and current 21-row NDJSON/ten directed pairs passed the existing verifier. Four retained guests were replaced by the failed endpoint startup. | `94160ab8d8c0a1f82f5091c969abdb4ff0104d225caa73574024f8d0fa6ca3a9` |
+
+For each suite, its `finished.json` lists the exact result paths and UTC interval;
+its accepted receipt and sealed report retain commands, artifact hashes, raw recaps
+and preservation details. Acceptance provenance is the independent/root transcript
+record, not a newly invented reviewer log. Whole-suite intermediate state/lock bytes
+were overwritten; final files and per-entry detectors/full logs were inspected.
+
 These are bounded development results. Observed Kubernetes API server v1.27.0
 differs from client/kubelet/proxy v1.27.16; endpoint Docker versions varied.
 Operational's late publisher-image query missed teardown, and the pinned-edge
-live XML query missed its window. For expected rates above 100 Mbps, network
+live XML query missed its window; no generated pinned-edge XML survives, so there
+is no direct vcpupin or hardware-isolation proof. Observed Netperf 2.7.0 does not
+establish a fetched/build commit pin. For expected rates above 100 Mbps, network
 verification requires finite positive throughput, not configured 1000-Mbps fidelity. Point-in-time
 observability health and functional image outcomes do not establish complete
 scraping, sustained frequency or synchronized one-way timing. The case5 accepted
@@ -441,12 +459,72 @@ the 2,128,885-byte inventory SHA-256 is
 `6ae68286372c3ef731bef8607116c4d756e44aa3c707ddabe24debc82ad03834`.
 See `docs/configuration_inventory.md` for the new receipt and preserved histories.
 
-Fresh endpoint recovery is PENDING. It requires an independently reviewed harness/
-observer bound to the actual repaired clean source and v10, the preserved failed
-predecessor, fresh base/evidence paths, current preservation guards and a separate
-physical release. Never reuse/warm the failed base or invent an accepted runtime
-predecessor. Foundation closure and KubeEdge progression remain held until actual
-recovery is independently/root accepted and the physical window returned.
+The fresh whole-suite endpoint recovery has independent/root DEVELOPMENT acceptance
+on clean `e3fcdf05b832624416e4908a53170530668c9ce1`, containing the unchanged repair
+and v10 source checkpoint above. It ran as matthijs/UID1002 on singleton node4 with
+pinned Python 3.8.10/Ansible 2.13.2 and an explicit empty external-host override:
+
+```bash
+/home/matthijs/venvs/continuum/bin/python3 scripts/test/run_tests.py \
+  --suite qemu_endpoint_image_parity \
+  --base-path /mnt/sdc/continuum_smoke/foundation_e3fcdf05b832_qemu_endpoint_image_parity_recovery \
+  --external-physical-machines '' --stop-on-failure
+```
+
+This command used the attributed pinned physical-runner environment;
+`step-01/planned-command.json` in the recovery evidence preserves the exact argv
+and environment, including normal HOME and the explicit Ansible temporary path.
+The driver ran from 2026-10-28 21:35:40.358050Z to 21:58:05.859138Z. Result
+`test_results_2026-10-28_21-57-56.json` records 1/1 success, exit zero, no timeout
+and empty stderr; the entry took 1321.4976 seconds. Seven Ansible recaps/eight host
+rows have no failed/unreachable host. Each combined endpoint container has 1,500
+actual processing and 1,500 actual latency records, establishing 3,000 completed
+image outcomes independently of configured completion markers. Current ENDPOINT2
+CSV rows are finite, their manifest is current, final state/lock agree and actual
+final teardown left no own node4 guest. Eleven protected domains remain unchanged.
+Combined containers have no MQTT publisher/send/reply count contract.
+
+Evidence is under
+`development-foundation-e3fcdf05b832-qemu_endpoint_image_parity-recovery` in the
+private durable root below. Its separate `accepted-development-manual.json`
+SHA-256 is `c2a19ed7785e4ecf8a0d824432372738ebd0f3648601d941cba710925a0322b4`.
+It binds `finished.json` SHA-256
+`8ce7c221d8909e102e5d2643a5b80a9937b70b5151042c27c709d16c3deb8d10` and the
+241-file SHA256SUMS SHA-256
+`0e56551f11434edcf22a4c9dc9826d3dff278f8f8be4b76bf0036094cc99c5b9`.
+`manual-evidence-report.json`, `manual-assessment.md` and `evidence-index.json`
+retain the detailed counts, hashes and limits. Their earlier pending-assessment
+wording is immutable; the separate acceptance receipt records the later decision
+and is excluded from the prior seal. This recovery renews none of the five older
+cases for its source and does not turn the failed original endpoint case into a pass.
+
+Six bounded live captures ran once at 21:53:08–11Z: both containers were running
+without observed OOM, with Docker 26.1.3/containerd 1.7.24 and the same observed
+combined-image config `40eb5ff222362c90b338e6ddf959ee72a14dae867b18bccab99408a75d31d507`
+and manifest digest `03fe3d1382b6b140a2f2d6f5f909c696e6b35145e5f04472d7ffff44f19841b8`.
+These are executed-image identities, not fresh-source-build proof. The observations
+are point-in-time with non-atomic phase/deletion checks. Saved XML/current launch
+commands demonstrate the requested two VMs, each two vCPUs/3 GiB/quota 0.75; no
+independent live XML resource sampler was added. Raw spans were 309.695920 and
+308.924207 seconds with one and two cadence warnings respectively, so configured
+5 Hz/300 seconds does not establish sustained 5 Hz. Finite processing/latency
+does not establish synchronized timing or accurate one-way delay. `netperf:false`
+and no endpoint-pair shaping proof supply no network NDJSON/fidelity claim.
+
+Six compact archive maps verified before/current/after counts of 1160/9, 24/0 and
+1184/9 local/remote files; all 4,044 prior non-disk evidence files were preserved.
+Review preparation mechanically excluded disk/private-key paths before content
+reads/hashes; the inherited failed-B disk-content guard belongs solely to the
+reviewed runtime driver. The failed endpoint base was not reused or warmed and
+its metadata comparison is stat-only. Eight older case5 backing records establish
+recorded current existence/size, not live-byte or size invariance. Compact archives
+also exclude Ansible temporary trees and full journals. The physical window is
+returned. No new runtime workflow is released by this documentation checkpoint.
+
+Next is the full KubeEdge image-classification parity packet, then Mist, Columbo,
+Kata and OpenFaaS in approved order. KubeEdge still requires a bounded reviewed
+packet, actual clean HEAD/harness/prior-evidence binding, fresh guards and separate
+coordinator release; it has not launched.
 Packet E's demonstrated CLI tunnel-hint defect remains open: the printed forward
 destination uses the worker IP although the service binds the controller; fix and
 regress it before freeze. No final candidate is frozen. Two complete operational

@@ -7,6 +7,14 @@ The transitional legacy inventory remains complete pending final scope review.
 For current host commands and migrated-root exports use
 `docs/smoke_runner_isolation.md`. No merge/push/tag/release is authorized.
 
+The current foundation DEVELOPMENT checkpoint is recorded in
+`docs/rework_release_handoff.md`: five accepted cases on clean `73a30b7` plus
+fresh endpoint recovery on repaired clean `e3fcdf0`. The failed original endpoint
+case on `73a30b7` remains a failure. This mixed-source development evidence does
+not freeze a final candidate, replace certification or renew any historical row
+status/evidence. Its historical mapping is M1-QEMU-INFRA/K8S/NET-SMOKE/NET-SUITE/BENCH
+and P-QEMU-01–05/08/09; it does not certify all modules.
+
 ## 1. Purpose
 
 This is the working matrix for turning the milestone release plan into
