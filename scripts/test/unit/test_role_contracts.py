@@ -761,7 +761,78 @@ class BenchmarkLaunchPlaybookTests(unittest.TestCase):
             launch_task["environment"]["KUBECONFIG"],
             "{{ app_k8s_job_deploy_kubeconfig }}",
         )
-        self.assertEqual(launch_task["when"], "app_k8s_job_deploy_apply | bool")
+        self.assertEqual(launch_task["when"], [
+            "app_k8s_job_deploy_apply | bool", "app_k8s_job_deploy_labels | length == 0"
+        ])
+
+        owned_launch = next(task for task in tasks if task.get("name") ==
+                            "Launch exactly the current owned Kubernetes benchmark files")
+        self.assertEqual(owned_launch["ansible.builtin.command"]["argv"], [
+            "kubectl", "--namespace=default", "apply", "-f",
+            "{{ app_k8s_job_deploy_jobs_dir }}/job-{{ item }}.yaml",
+        ])
+        self.assertIn("app_k8s_job_deploy_labels | length > 0", owned_launch["when"])
+
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook is required")
+    def test_owned_job_role_applies_only_current_files_with_pod_labels(self):
+        """Run the actual role against inert kubectl, leaving a stale file untouched."""
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            jobs = root / "jobs"
+            jobs.mkdir()
+            stale = jobs / "job-99.yaml"
+            stale.write_text("unrelated retained manifest", encoding="utf-8")
+            binary = root / "kubectl"
+            calls = root / "calls.jsonl"
+            binary.write_text("#!%s\n" % sys.executable + '''import json
+import os
+import sys
+with open(os.environ["TEST_CALLS"], "a", encoding="utf-8") as output:
+    output.write(json.dumps(sys.argv[1:]) + "\\n")
+print("job.batch/test created")
+''', encoding="utf-8")
+            binary.chmod(0o700)
+            labels = {"continuum.io/benchmark-owner": "owner",
+                      "continuum.io/benchmark-execution": "execution"}
+            play = root / "play.yml"
+            play.write_text(yaml.safe_dump([{
+                "hosts": "localhost", "connection": "local", "gather_facts": False,
+                "become": False,
+                "vars": {"ansible_python_interpreter": sys.executable,
+                         "app_name": "image-classification", "image": "worker:subscriber",
+                         "replicas": 2, "app_k8s_job_deploy_layout": "one_file_per_job",
+                         "app_k8s_job_deploy_apply": True,
+                         "app_k8s_job_deploy_labels": labels,
+                         "app_k8s_job_deploy_jobs_dir": str(jobs),
+                         "app_k8s_job_deploy_job_template_path": str(root / "template.yaml")},
+                "environment": {"PATH": str(root) + os.pathsep + os.environ["PATH"],
+                                "TEST_CALLS": str(calls)},
+                "roles": ["k8s_job_deploy"],
+            }]), encoding="utf-8")
+            config = root / "ansible.cfg"
+            config.write_text("[defaults]\n", encoding="utf-8")
+            env = dict(os.environ)
+            env.pop("ANSIBLE_LOG_PATH", None)
+            env.update({"ANSIBLE_CONFIG": str(config), "ANSIBLE_BECOME": "False",
+                        "ANSIBLE_ROLES_PATH": str(Path(__file__).resolve().parents[3]
+                                                  / "roles/application"),
+                        "ANSIBLE_LOCAL_TEMP": str(root / "ansible-local"),
+                        "ANSIBLE_REMOTE_TMP": str(root / "ansible-remote")})
+            result = subprocess.run(
+                [shutil.which("ansible-playbook"), "-i", "localhost,", str(play)], env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                timeout=60, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual([json.loads(line) for line in calls.read_text().splitlines()], [
+                ["--namespace=default", "apply", "-f", str(jobs / "job-1.yaml")],
+                ["--namespace=default", "apply", "-f", str(jobs / "job-2.yaml")],
+            ])
+            for index in (1, 2):
+                job = yaml.safe_load((jobs / ("job-%d.yaml" % index)).read_text())
+                self.assertEqual(job["metadata"]["labels"], labels)
+                self.assertEqual(job["spec"]["template"]["metadata"]["labels"], labels)
+            self.assertEqual(stale.read_text(), "unrelated retained manifest")
 
     def test_image_classification_kubernetes_launch_uses_application_role(self):
         role = self._role_entry(

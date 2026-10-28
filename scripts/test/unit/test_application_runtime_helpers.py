@@ -1213,7 +1213,9 @@ class ApplicationRuntimeHelpersTests(unittest.TestCase):
     def test_start_kubernetes_workers_runs_playbook_with_shared_vars(self):
         config = self._planner_handoff_config()
         config["mode"] = "cloud"
+        config["cloud_ssh"] = ["cloudcontroller@10.0.0.1"]
         machine = mock.Mock()
+        machine.process.return_value = [(['{"items": []}'], [])]
 
         with mock.patch.object(
             runtime_helpers,

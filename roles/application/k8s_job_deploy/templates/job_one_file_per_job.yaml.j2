@@ -3,10 +3,22 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ app_k8s_job_deploy_app_name }}-%ITEM
+{% if app_k8s_job_deploy_labels | length > 0 %}
+  labels:
+{% for key, value in app_k8s_job_deploy_labels.items() %}
+    {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
 spec:
   template:
     metadata:
       name: {{ app_k8s_job_deploy_app_name }}{% if app_k8s_job_deploy_index_template_metadata | bool %}-%ITEM{% endif %}
+{% if app_k8s_job_deploy_labels | length > 0 %}
+      labels:
+{% for key, value in app_k8s_job_deploy_labels.items() %}
+        {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
     spec:
 {% if app_k8s_job_deploy_runtime | string | length > 0 %}
       runtimeClassName: {{ app_k8s_job_deploy_runtime }}

@@ -5,20 +5,25 @@ resource-manager modules can stay focused on platform installation and generic
 execution plumbing.
 """
 
+import hashlib
 import json
 import logging
 import os
 import re
 import sys
 import time
+import uuid
 
 import pandas as pd
 
 from input.configuration import config_access, image_requirements
+from resource_manager.kubernetes import kubernetes
 
 
 BENCHMARK_METRICS_KIND = "ContinuumBenchmarkMetrics"
 BENCHMARK_METRICS_SCHEMA_VERSION = 1
+_JOB_OWNER_LABEL = "continuum.io/benchmark-owner"
+_JOB_EXECUTION_LABEL = "continuum.io/benchmark-execution"
 
 
 def _docker_start_stderr_is_fatal(output, error):
@@ -421,6 +426,23 @@ def get_kubernetes_worker_output(config, machines, get_description=False):
     """Get Kubernetes worker output in the canonical application-runtime shape."""
     logging.info("Gather output from subscribers")
 
+    execution = config.get("_kubernetes_worker_execution")
+    if execution:
+        pods = _execution_pods(config, machines, execution["selector"])
+        result = []
+        for pod in pods:
+            name = pod["metadata"]["name"]
+            if get_description:
+                result.append(json.dumps(pod, indent=2).splitlines())
+            else:
+                output = _checked_kubectl(
+                    config, machines, ["logs", "--timestamps=true", name]
+                )
+                result.append([name, output])
+        if len(result) != execution["count"]:
+            raise RuntimeError("Missing current Kubernetes worker output")
+        return result
+
     command = [
         "kubectl",
         "get",
@@ -782,8 +804,116 @@ def cache_kubernetes_workers(config, machines, app_vars, runner=None):
     time.sleep(10)
 
 
+def _checked_kubectl(config, machines, arguments):
+    """Keep every scoped kubectl failure, including Machine's nonzero diagnostic."""
+    command = ["kubectl", "--namespace=default"] + arguments
+    output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
+    if kubernetes._stderr_has_real_error(error):  # pylint: disable=protected-access
+        raise RuntimeError("Kubernetes benchmark command failed: %s" % "\n".join(error))
+    return output
+
+
+def _kubectl_items(config, machines, arguments):
+    """Read a Kubernetes JSON list without treating empty/invalid output as success."""
+    output = _checked_kubectl(config, machines, arguments + ["-o", "json"])
+    payload = json.loads("\n".join(output))
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        raise RuntimeError("Invalid Kubernetes benchmark list response")
+    return payload["items"]
+
+
+def _execution_pods(config, machines, selector):
+    """List only the selected benchmark execution's pods."""
+    return _kubectl_items(config, machines, ["get", "pods", "-l", selector])
+
+
+def _prepare_kubernetes_execution(config, machines, worker_apps):
+    """Archive terminal owned Jobs before bounded replacement on the MQTT path."""
+    stage_id = config_access.benchmark_primary_stage(config)["id"]
+    base_path = os.path.realpath(config_access.infrastructure_base_path(config))
+    owner = hashlib.sha256((base_path + "\0" + stage_id).encode("utf-8")).hexdigest()[:40]
+    labels = {_JOB_OWNER_LABEL: owner, _JOB_EXECUTION_LABEL: uuid.uuid4().hex}
+    expected = {"image-classification-%d" % index for index in range(1, worker_apps + 1)}
+    jobs = _kubectl_items(config, machines, ["get", "jobs"])
+    owned = []
+    for job in jobs:
+        metadata = job["metadata"]
+        is_owned = metadata.get("labels", {}).get(_JOB_OWNER_LABEL) == owner
+        if metadata["name"] in expected and not is_owned:
+            raise RuntimeError("Refusing benchmark Job name with unverified ownership: %s" %
+                               metadata["name"])
+        if not is_owned:
+            continue
+        terminal = any(
+            condition.get("type") in ("Complete", "Failed") and condition.get("status") == "True"
+            for condition in job.get("status", {}).get("conditions", [])
+        )
+        if not terminal or job.get("status", {}).get("active", 0):
+            raise RuntimeError("Refusing nonterminal/active benchmark Job: %s" % metadata["name"])
+        owned.append(job)
+
+    if owned:
+        archive = os.path.join(config_access.benchmark_logs_dir(config),
+                               "kubernetes-before-" + labels[_JOB_EXECUTION_LABEL])
+        os.makedirs(archive, mode=0o700, exist_ok=False)
+        with open(os.path.join(archive, "jobs.json"), "x", encoding="utf-8") as filep:
+            json.dump(owned, filep, indent=2)
+        pods = _execution_pods(config, machines, _JOB_OWNER_LABEL + "=" + owner)
+        job_uids = {job["metadata"]["uid"] for job in owned}
+        for pod in pods:
+            if not any(ref.get("kind") == "Job" and ref.get("uid") in job_uids
+                       for ref in pod["metadata"].get("ownerReferences", [])):
+                continue
+            name = pod["metadata"]["name"]
+            with open(os.path.join(archive, name + ".json"), "x", encoding="utf-8") as filep:
+                json.dump(pod, filep, indent=2)
+            output = _checked_kubectl(config, machines, ["logs", "--timestamps=true", name])
+            with open(os.path.join(archive, name + ".log"), "x", encoding="utf-8") as filep:
+                filep.write("\n".join(output) + "\n")
+        logging.info("Preserved previous Kubernetes benchmark output in %s", archive)
+        for job in owned:
+            output = _checked_kubectl(config, machines, [
+                "delete", "job", job["metadata"]["name"], "--cascade=foreground", "--wait=true",
+                "--timeout=120s",
+            ])
+            if not any("deleted" in line for line in output):
+                raise RuntimeError("Kubernetes benchmark Job deletion was not confirmed")
+
+    config["_kubernetes_worker_execution"] = {
+        "selector": ",".join(key + "=" + value for key, value in labels.items()),
+        "count": worker_apps,
+    }
+    return labels
+
+
+def _wait_kubernetes_execution(config, machines, completion=False):
+    """Require the current subscribers to run, or finish, within a bounded wait."""
+    execution = config["_kubernetes_worker_execution"]
+    timeout = config_access.benchmark_primary_stage(config)["config"].get(
+        "worker_ready_timeout_seconds", 900
+    )
+    if timeout < 1:
+        raise ValueError("worker_ready_timeout_seconds must be >= 1")
+    deadline = time.monotonic() + timeout
+    while True:
+        pods = _execution_pods(config, machines, execution["selector"])
+        phases = [pod["status"]["phase"] for pod in pods]
+        bad_phases = ("Failed", "Unknown") if completion else ("Failed", "Unknown", "Succeeded")
+        if any(phase in bad_phases for phase in phases):
+            raise RuntimeError("Current Kubernetes subscriber has invalid status: %s" % phases)
+        wanted = "Succeeded" if completion else "Running"
+        if len(phases) == execution["count"] and all(phase == wanted for phase in phases):
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Timeout waiting for current Kubernetes subscribers to be " + wanted)
+        time.sleep(3)
+
+
 def wait_kubernetes_workers_ready(config, machines, get_starttime):
     """Wait for benchmark worker pods to reach Running/Succeeded after submission."""
+    if config.get("_kubernetes_worker_execution"):
+        _wait_kubernetes_execution(config, machines)
+        return None
     if kubernetes_deployment_mode(config) == "container":
         worker_apps = 1
     else:
@@ -881,6 +1011,9 @@ def wait_kubernetes_workers_ready(config, machines, get_starttime):
 def wait_kubernetes_worker_completion(config, machines):
     """Wait until Kubernetes benchmark worker pods have completed."""
     logging.info("Wait for pods on cloud/edge workers to finish")
+    if config.get("_kubernetes_worker_execution"):
+        _wait_kubernetes_execution(config, machines, completion=True)
+        return
     get_list = True
     index = 0
 
@@ -945,6 +1078,14 @@ def start_kubernetes_workers(config, machines, app_vars, get_starttime=False, ru
         pull_policy,
     )
     all_vars = {**global_vars, **app_vars}
+    config.pop("_kubernetes_worker_execution", None)
+    if (not get_starttime and config_access.orchestrator_name(config) == "kubernetes"
+            and config_access.benchmark_primary_stage_type(config) == "image_classification"
+            and not config_access.orchestrator_bool_optional(
+                config, "cache_worker", default=False)):
+        all_vars["app_k8s_job_deploy_labels"] = _prepare_kubernetes_execution(
+            config, machines, worker_apps
+        )
     run_kubernetes_benchmark_playbook(config, all_vars, runner=runner)
 
     if get_starttime:

@@ -6,6 +6,7 @@
       - app_k8s_job_deploy_image | length > 0
       - app_k8s_job_deploy_replicas | int >= 1
       - app_k8s_job_deploy_layout in ['single_parallel', 'one_file_per_job', 'per_file_direct', 'multi_container']
+      - app_k8s_job_deploy_labels | length == 0 or app_k8s_job_deploy_layout == 'one_file_per_job'
     fail_msg: "Invalid app_k8s_job_deploy role variables"
 
 - name: Create Kubernetes job directory
@@ -70,4 +71,23 @@
     'configured' in app_k8s_job_deploy_launch.stdout
   environment:
     KUBECONFIG: "{{ app_k8s_job_deploy_kubeconfig }}"
-  when: app_k8s_job_deploy_apply | bool
+  when:
+    - app_k8s_job_deploy_apply | bool
+    - app_k8s_job_deploy_labels | length == 0
+
+- name: Launch exactly the current owned Kubernetes benchmark files
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --namespace=default
+      - apply
+      - -f
+      - "{{ app_k8s_job_deploy_jobs_dir }}/job-{{ item }}.yaml"
+  loop: "{{ range(1, (app_k8s_job_deploy_replicas | int) + 1) | list }}"
+  register: app_k8s_job_deploy_owned_launch
+  changed_when: "'created' in app_k8s_job_deploy_owned_launch.stdout"
+  environment:
+    KUBECONFIG: "{{ app_k8s_job_deploy_kubeconfig }}"
+  when:
+    - app_k8s_job_deploy_apply | bool
+    - app_k8s_job_deploy_labels | length > 0

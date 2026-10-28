@@ -19,6 +19,7 @@ app_k8s_job_deploy_index_template_metadata: false
 app_k8s_job_deploy_index_container_name: false
 app_k8s_job_deploy_env: []
 app_k8s_job_deploy_ports: []
+app_k8s_job_deploy_labels: {}
 
 app_k8s_job_deploy_job_template_path: "/home/{{ app_k8s_job_deploy_username }}/job-template.yaml"
 app_k8s_job_deploy_jobs_dir: "/home/{{ app_k8s_job_deploy_username }}/jobs"
