@@ -231,9 +231,14 @@ The separately reviewed
 [development-only two-host pilot amendment](superpowers/plans/2026-10-28-development-parallel-validation.md)
 now has explicit user approval for the bounded node4/node5 allocation, setup and
 cold/warm isolation pilot. Following B closure, the coordinator released the separate
-physical preparation window using immutable source snapshots. Preparation is ongoing;
-the pilot has not received independent runtime acceptance and development concurrency
-remains disabled. Approval receipt
+physical preparation window using immutable source snapshots. Preparation is complete
+and the exact v3 preparation/launch review is CLEAR. Zero pilot VMs have launched;
+launch remains held pending coordinator release and fresh prerequisite/preservation
+gates. The reviewed restart point is `slot-a/control/launch-handoff-v3.md` under the
+approved allocation root, SHA-256
+`88f6f33f8c0cfe0c9e8f9c0eb4716fa68e7341cfb528785c1ab0d8ec97eddd8a`.
+Development concurrency remains disabled until actual independent pilot acceptance.
+User approval is unchanged. Approval receipt
 `development-parallel-pilot-approved-20261028.json` has SHA-256
 `7c7ea4a3d5a14f2cc9c77945268dfe30e097a35611dbfb04cfcbbf79c060bbfd`.
 Durable proposal/survey evidence is under
@@ -285,6 +290,55 @@ followed by the selected module order in the approved closure plan. Individual b
 static gates and the final frozen-candidate runtime sequence remain required at their
 designated checkpoints; B's earlier development evidence is not renewed for this source.
 
+## Packet D foundation — source checkpoint, runtime pending
+
+The independently reviewed three-file observability repair is committed locally at
+`2f969bb34de37060dc19bba7cc50d9b06e16136e`. Existing YAML suites and planner wiring
+were retained. The role now requires Grafana deployment availability, two available
+Prometheus replicas, healthy HTTP services on each distinct advertised controller
+address and the selected forwarding processes' exact UID/command identities.
+Private guest logs append without automatic process replacement; bounded diagnostics
+preserve the original readiness failure. Defaults, versions, configs, core/runner
+interfaces and the pinned runtime environment are unchanged.
+
+The actual original role returned success despite a simulated Prometheus readiness
+failure; the new regression first failed, then passed with the repair. Root separately
+saved the raw original-role RED reproduction and passed the distinct-address probe.
+Pinned Python 3.8.10/Ansible 2.13.2 checks passed seven new inert-policy methods and
+the complete 46-test role suite; stronger final assertions in those seven methods also
+passed. Planner tests passed 31/31 on pinned Python and separately attributed static
+Python 3.12.7. YAML/Ansible lint and whitespace passed; Python lint retained exactly
+the baseline's 72 findings, with no added symbol/message findings. The complete
+three-file uncommitted review was CLEAN and root verified the exact diff/file hashes
+before releasing the local commit.
+
+Primary static logs, root raw RED/probe artifacts, reviewed source diff/manifest,
+frozen reports and drivers are preserved under
+`development-packet-d-foundation-2f969bb34de3-static` in the private evidence root:
+32 files with 0700/0600 directory/file modes; SHA256SUMS SHA-256
+`b78504719893b2091a4f15293a9361def5df1005646094ad40ee96a2bfdf3ca8`.
+All 681 files in the two complete packet-B evidence directories and packet-C static
+directory were hash-verified unchanged before/after preservation. New inventory v9
+is bound to clean `2f969bb`: 358 rows/135 exclusions, unchanged input set and
+classifications/dispositions, all source hashes/raw declarations/normalizations and
+45 carrier AST facts verified. Exactly the role-test carrier and observability-task
+exclusion changed. All 47 previous inventory snapshot/receipt files remain unchanged;
+see `docs/configuration_inventory.md` for exact inventory hashes.
+
+No foundation VM/remote/host validation has run on this source. Pilot preparation
+and exact v3 review are complete, but pilot launch remains held for coordinator
+release and fresh gates. No foundation physical release is implied; this static
+checkpoint does not enable concurrency or certify a frozen candidate. After the
+coordinator separately releases the foundation physical window, first validate
+actual observability readiness with exact
+`qemu_k8s_nobench_parity`, then the approved serial foundation development suites:
+`operational_regression`, `qemu_infra_parity`, `network_validation`,
+`qemu_k8s_image_parity` and `qemu_endpoint_image_parity`. Preserve failures before
+diagnosis; require real image outcomes and complete artifacts, not software-only
+success. Two operational passes and all exact suite checks on the later frozen
+candidate remain separate obligations before broader review. KubeEdge follows only
+after this first family's closure under the approved module order.
+
 ## Archived completed planning records
 
 The completed dispatcher, Phase-C/Phase-D records and frozen implementation
@@ -324,8 +378,9 @@ and the retirement packet performed no VM operation or benchmark rerun.
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 48 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   4b1878e28cd07a44b4ad8f267c3a69506f3214b3, after the reviewed Kubernetes Job-reuse
-   repair; all five earlier snapshots remain unchanged. Final historical
+   2f969bb34de37060dc19bba7cc50d9b06e16136e, after the reviewed foundation
+   observability source repair; all seven earlier snapshots remain unchanged. Final
+   historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
    after later schema/example/test changes.
