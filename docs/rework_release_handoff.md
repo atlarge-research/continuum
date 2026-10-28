@@ -89,8 +89,9 @@ and the retirement packet performed no VM operation or benchmark rerun.
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 47 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   e3af54dc2642ab50ce9e47365976108bdf2ff2ee, with the earlier b22cadc snapshot
-   preserved unchanged. Final historical dispositions, required equivalents and
+   a3fdaa87a4fd67476750c80e0f1bb03ceeda455d, after the bounded runner-verification
+   correction; both earlier snapshots remain unchanged. Final historical
+   dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
    after later schema/example/test changes.
 2. The approved registry_refresh missing/all hard cut replaces image_prefetch
