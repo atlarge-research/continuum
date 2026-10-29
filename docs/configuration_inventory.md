@@ -28,15 +28,15 @@ The refreshed checkpoint below records registry_refresh missing/all, default
 missing, without aliases. The separate bounded cache repair covers common/active
 included roles, copied inputs, consumed values and actual preload identities;
 see `docs/qemu_cache_contract.md`. Neither static inventory nor cache source tests
-prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6/v7/v8/v9 inventories remain preserved
-unchanged as historical evidence, not current source-hash claims.
+prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6/v7/v8/v9/v10 inventories
+remain preserved unchanged as historical evidence, not current source-hash claims.
 
 ## Frozen file coverage
 
 Private evidence freezes input content at clean source
-`ba5e50f05c22a5118a83ea1412aaf7141c15df60`, containing the reviewed full-body
-registry-manifest parser repair and regressions, foundation observability-readiness
-repair, packet C's schema-envelope/documentation corrections
+`3812449c0d04a3b2c9fe189e2e9b5bff11bf9409`, containing the reviewed endpoint
+metric-field parser repair and regressions, full-body registry-manifest parser
+repair, foundation observability-readiness repair, packet C's schema-envelope/documentation corrections
 and packet B's unchanged Job-reuse
 repair at `aa7a438ee914cc60a0902ec1908be9c57b89982f`. Each row records source SHA, historical
 workflow, provider/hosts, resources, multi-host triggers, phases, software,
@@ -78,16 +78,22 @@ cloud execution/spending was authorized.
 The generated inventory, summary, extractor, four focused extractor checks and
 reviewed plan are private, outside Git, under the existing migration evidence root
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`, in
-configuration-inventory-v10. Manifest SHA-256:
-`cb95a2daeee50b00295d2a728d150d002b56ad40d660e2a6dd2028c08f8e2304`.
-The 2,128,885-byte inventory JSON SHA-256 is
-`6ae68286372c3ef731bef8607116c4d756e44aa3c707ddabe24debc82ad03834`.
+configuration-inventory-v11. Manifest SHA-256:
+`0631c0697efdba9af16332787ee7bfa0e218bf00c71369408c75605cf32449d6`.
+The 2,129,399-byte inventory JSON SHA-256 is
+`a99fde2043bbeb1fa4826e24fe583b80b217dceebe601d8186e9bde2ba5b2278`.
 The manifest binds inventory/summary; tooling/plan are alongside them. All six
 copied files were verified byte-for-byte with private 0700/0600 permissions.
-The unchanged extractor and its four focused checks are byte-identical to v2–v9.
-All eight complete previous directories and their receipts remain unchanged:
-54 files were hash-verified before/after generation and preservation, with every
+The unchanged extractor and its four focused checks are byte-identical to v2–v10.
+All nine complete previous directories and their receipts remain unchanged:
+61 files were hash-verified before/after generation and preservation, with every
 historical manifest's members checked against exact bytes and sizes.
+Historical v10 remains bound to clean
+`ba5e50f05c22a5118a83ea1412aaf7141c15df60`, containing the full-body registry-manifest
+parser repair. Its manifest SHA-256 is
+`cb95a2daeee50b00295d2a728d150d002b56ad40d660e2a6dd2028c08f8e2304`;
+its 2,128,885-byte inventory JSON SHA-256 is
+`6ae68286372c3ef731bef8607116c4d756e44aa3c707ddabe24debc82ad03834`.
 Historical v9 remains bound to clean
 `2f969bb34de37060dc19bba7cc50d9b06e16136e`, containing the foundation
 observability-readiness repair. Its manifest SHA-256 is
@@ -133,7 +139,7 @@ test methods. Its current AST fixture facts and those of all 45 carriers were
 verified. Only `roles/resource_manager/k8s_observability/tasks/main.yml` changed
 among exclusions; no input, row or exclusion path was added or removed. This
 recorded the reviewed source repair, not actual service readiness or a runtime pass.
-The v10 refresh changes only the existing
+The historical v10 refresh changed only the existing
 `scripts/test/unit/test_continuum_runtime.py` carrier row. Its source hash and static
 fixture facts include two new manifest regressions:
 `test_qemu_preload_accepts_multiline_manifest_from_machine_output` and
@@ -147,10 +153,21 @@ records isolated Python 3.12.7 with optimization disabled, the clean source revi
 and complete verification, preserving the extractor's built-in assertions. The
 historical configuration-inventory-v9-generation.json receipt remains unchanged.
 
+The v11 refresh changes only the existing
+`scripts/test/unit/test_application_publishers.py` carrier row: its source hash
+and AST fixture facts include seven new endpoint-metric tests; two new test
+helpers were also verified by AST comparison. No row/input/exclusion path, input
+bytes, exclusion hash, classification or disposition changed. The product parser
+is separately hash-bound in the reviewed source commit and generation receipt; it is not an inventory carrier
+or exclusion. The private configuration-inventory-v11-generation.json receipt
+SHA-256 is `7ba6171c48b7272017c5783982c866bdd548aa3cf17783b387ec5a5d69d81090`.
+It records clean source `3812449`, isolated Python 3.12.7 with optimization disabled
+and the complete verification. The v10 receipt and all older evidence are unchanged.
+
 Source hashes were checked for all 358 rows and 135 exclusions; raw-declaration
 equality covered all 259 cfg and 51 YAML inputs after redaction. All 30 experiment
 normalizations use registry_refresh missing/all without the retired run key.
-Their normalized facts remain equal to v9; all 45 carriers' AST fixture facts were
+Their normalized facts remain equal to v10; all 45 carriers' AST fixture facts were
 verified. All four extractor checks passed.
 Generation used the existing cloud-safe mocked-socket parser pattern, not VM,
 research-script or runtime-entry-point execution. Expected successful runtime

@@ -156,9 +156,9 @@ scope, final dispositions and frozen-candidate acceptance remain open; the origi
 pre-main goal is not complete. Packet D's foundation development checkpoint below
 combines five accepted cases on clean `73a30b7` with the accepted fresh endpoint
 recovery on clean `e3fcdf0`; the failed original endpoint case remains a failure.
-Next is the full KubeEdge image-classification parity packet, subject to bounded
-independent review, actual clean-source/harness binding, fresh guards and coordinator
-release. It has not launched. The independently accepted pilot enables
+The KubeEdge mixed-source development checkpoint is recorded below. Next is Mist,
+subject to bounded independent review, actual clean-source/harness/prior-evidence
+binding, fresh guards and coordinator release. The independently accepted pilot enables
 only its fixed node4/node5 development allocation below; it does not replace final
 serial acceptance.
 
@@ -521,15 +521,95 @@ recorded current existence/size, not live-byte or size invariance. Compact archi
 also exclude Ansible temporary trees and full journals. The physical window is
 returned. No new runtime workflow is released by this documentation checkpoint.
 
-Next is the full KubeEdge image-classification parity packet, then Mist, Columbo,
-Kata and OpenFaaS in approved order. KubeEdge still requires a bounded reviewed
-packet, actual clean HEAD/harness/prior-evidence binding, fresh guards and separate
-coordinator release; it has not launched.
+Next is the full Mist image-classification parity packet, then Columbo, Kata and
+OpenFaaS in approved order. The KubeEdge checkpoint below supplies mixed-source
+development evidence; Mist needs a reviewed composite prior-evidence contract
+that preserves its stopped original and accepted manual assessment, actual clean
+HEAD/harness binding, fresh guards and separate coordinator release.
 Packet E's demonstrated CLI tunnel-hint defect remains open: the printed forward
 destination uses the worker IP although the service binds the controller; fix and
 regress it before freeze. No final candidate is frozen. Two complete operational
 passes, all exact suite checks and the reuse proof on that later candidate, the
 twelve canonical static gates and final human review package remain required.
+
+## Packet D KubeEdge — mixed-source development checkpoint
+
+Independent evidence/source/replay reviews and root adjudication accepted only
+MIXED-SOURCE DEVELOPMENT: the full `qemu_kubeedge_image_parity` VM workflow ran
+on clean `07e2c4f02768b45db2bece3d91dd0ac90345f476`; corrected host-side metric
+parsing and offline replay ran on clean `3812449c0d04a3b2c9fe189e2e9b5bff11bf9409`.
+This is no VM pass on the repair revision or frozen-candidate acceptance. The
+original invocation used matthijs/UID1002, singleton node4, pinned Python
+3.8.10/Ansible 2.13.2 and the attributed environment in its immutable
+`planned-command.json`:
+
+```bash
+/home/matthijs/venvs/continuum/bin/python3 scripts/test/run_tests.py \
+  --suite qemu_kubeedge_image_parity \
+  --base-path /mnt/sdc/continuum_smoke/kubeedge_07e2c4f02768_image_parity \
+  --external-physical-machines '' --middle-ip 180 --middle-ip-base 181 --stop-on-failure
+```
+
+The product result records 1/1 success, exit zero and no timeout, with 3,000 actual
+completed image outcomes: each worker processed/replied to 1,500, and each
+publisher sent/received 1,500. Both publishers/subscribers exited zero, without observed
+publisher OOM. Three Kubernetes nodes/Flannel nodes were Ready and CloudCore had
+one available replica at observation. Requested resources were 12 vCPUs/16 GiB;
+five workload guests were intentionally retained, not finally torn down, and eleven
+protected domains were unchanged. The physical window returned. None of this
+releases a later runtime workflow.
+
+The original driver stopped after its Docker-version capture hit a guest socket
+permission error; its `finished.json` remains `accepted:false`. Original endpoint
+metrics were corrupt: two values silently merged and four warned/dropped. The
+257-file original seal and 577-file supplement remain immutable; the supplement's
+`capture-completion.json` also remains `capture-failed`, `accepted:false`. It
+contains 41 successful safe observations, one unsafe `edgecore --version` attempt
+that started a secondary process/initialized SQLite and MQTT code before panic,
+and one omitted unsafe query. Later observations found the original edgecore
+unit PIDs 4233/5259 active; guest filesystem/SQLite/MQTT effects remain UNKNOWN,
+with no global immutability or uninterrupted-health claim. Actual subscriber Pod
+specs were Always (CloudCore IfNotPresent), correcting the original sealed report's
+ARGV-to-rendered-policy inference; no cache-policy product change was made.
+
+The bounded parser repair separates each field's own integer/unit. Seven new
+regressions passed with all 10 focused tests on pinned Python 3.8.10; static
+Python 3.12.7 passed 968 unit/173 local-e2e/1,141 combined tests. Changed-file lint
+retained exactly six baseline findings and added none. The separately sealed
+offline replay recovered all six demonstrated anomalies, with 1,500 latency,
+preparation and sending records per publisher and zero new warnings; ordinary
+observations were unchanged, and the old parser reproduced the original CSV
+exactly. Corrected metrics exist only in the replay sibling; original logs, CSV,
+manifest, results, state/lock and failed driver records remain unchanged.
+
+All following directories are under the private durable evidence root below.
+The separate manual receipt records the later acceptance; it replaces neither
+failed record and invents no completed `finished.json`.
+
+| Evidence | Directory / exact binding |
+| --- | --- |
+| Mixed-source manual acceptance | `development-kubeedge-07e2c4f02768-development-assessment-3812449c0d04/accepted-development-manual.json`, SHA-256 `2db3666c4d3a614e1fc5cadb06a282eb4ab601b231633995aa4dac07ab7deee7`; one-member seal `5e8f214f9b16fd945ee0837432fe29ef155f83289993a08e6c5f0f5063fc7b8d`. Binds original `development-kubeedge-07e2c4f02768-qemu_kubeedge_image_parity` and its `-capture-completion` supplement. |
+| Corrected offline replay | Original directory plus `-metric-replay-3812449c0d04`; `replay.json` SHA-256 `28b9d8117a8eb7502e24488de689e02c26b7c1fbd51feb1746d298b83794227f`, five-member seal `e88e2e95888f566cf927e34f9b8b274ac389eaab8b492affaa174ca759ecaed8`. |
+| Source/static durability | `development-packet-d-endpoint-metrics-3812449c0d04-static/preservation-receipt.json`, SHA-256 `63280bd9a22ec0d05f1c6b2ebde85d1115994f0206903c3d372cc9b2fbc9c3d9`; 26 explicit source/review/diff/RED/GREEN/test/lint/baseline artifacts, exact copies with private 0700/0600 modes. Source-review adjudication is attributed to the coordinator transcript, not an invented report. |
+
+Fresh configuration inventory v11 is bound to clean `3812449`: 358 rows/135 exclusions,
+all 493 source hashes, 259 cfg/51 YAML raw declarations, 30 normalizations and 45 carrier
+AST facts verified. Only the existing publisher-test carrier changed, adding the
+seven tests/two helpers; no input, exclusion hash, classification or disposition
+changed. All 61 v2–v10 snapshot/receipt files remain unchanged. Exact v11 hashes,
+generation receipt and historical bindings are in `docs/configuration_inventory.md`.
+
+Readiness/version captures are point-in-time. Actual controller kubelet/client
+was v1.27.16, server v1.27.0, edge embedded kubelet v1.31.12-kubeedge-v1.22.0 and
+keadm v1.22.0; Docker/containerd versions differed between worker/controller and
+endpoint guests. This establishes no uniform patch pin or fresh-source image
+build. Configured 5 Hz/300 seconds and finite corrected averages establish neither
+sustained 5 Hz nor synchronized/accurate cross-host one-way timing; ten negative
+worker one-way values remain. Compact archives omit disks/keys, Ansible temporary
+trees and full journals; no backing-byte invariance, KubeEdge reuse, alternate
+topology, broad support or final teardown is established. Core Kata repair and
+validation, Packet E's CLI fix, the full final frozen matrix/twelve static gates,
+two operational passes, final-source reuse proof and human review remain OPEN.
 
 ## Archived completed planning records
 
@@ -570,9 +650,9 @@ and the retirement packet performed no VM operation or benchmark rerun.
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 48 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   ba5e50f05c22a5118a83ea1412aaf7141c15df60, after the reviewed full-body
-   registry-manifest parser repair; all eight earlier snapshots, including v9 at
-   source `2f969bb`, remain unchanged. Final
+   `3812449c0d04a3b2c9fe189e2e9b5bff11bf9409`, after the reviewed endpoint-metric
+   parser repair; all nine earlier snapshots, including v10 at source `ba5e50f`
+   and v9 at source `2f969bb`, remain unchanged. Final
    historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
