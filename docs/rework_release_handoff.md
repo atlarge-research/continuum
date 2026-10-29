@@ -4,7 +4,7 @@ This is a subordinate operational restart point, not policy or certification.
 Use `docs/rework_plan_stack.md`, `docs/rework_milestone_release_plan.md` and
 `docs/release_certification_matrix.md` for authority, policy and factual rows.
 
-## Current checkpoint — 2026-10-28
+## Current checkpoint — 2026-10-29
 
 Branch `pr-23-curated`, checkout `/home/matthijs/continuum`.
 All fourteen policies, the exceptional baseline and the normal-user migration
@@ -156,11 +156,12 @@ scope, final dispositions and frozen-candidate acceptance remain open; the origi
 pre-main goal is not complete. Packet D's foundation development checkpoint below
 combines five accepted cases on clean `73a30b7` with the accepted fresh endpoint
 recovery on clean `e3fcdf0`; the failed original endpoint case remains a failure.
-The KubeEdge mixed-source, Mist and Columbo development checkpoints and committed
-Kata source checkpoint are recorded below.
-Next is exact Kata runtime validation, then OpenFaaS last, serially, subject to
-actual future clean HEAD/source-diff and accepted Columbo normal-receipt binding, fresh guards,
-independent review and separate coordinator release. The independently accepted
+The KubeEdge mixed-source, Mist, Columbo and selected mixed-source Kata development
+checkpoints are recorded below, alongside the historical Kata retry/source proof.
+Current NEXT is exact OpenFaaS LAST and SERIAL, subject to an amended driver with
+actual source/node3 metadata, clean HEAD/source-diff and accepted Kata normal-receipt
+binding, fresh guards, independent review and separate coordinator physical release.
+This documentation checkpoint releases no workflow. The independently accepted
 pilot enables only its fixed node4/node5 development allocation below; it does
 not replace final serial acceptance.
 
@@ -523,14 +524,13 @@ recorded current existence/size, not live-byte or size invariance. Compact archi
 also exclude Ansible temporary trees and full journals. The physical window is
 returned. No new runtime workflow is released by this documentation checkpoint.
 
-Next is Kata, then OpenFaaS last, serially in approved order. The
-KubeEdge mixed-source, Mist and accepted Columbo development checkpoints below
-preserve their distinct source and acceptance bindings. Kata's approved two-file
-retry repair is committed at `b7c51977cd165820082f720624f8439a033b5f76`;
-exact runtime validation remains pending, requiring actual future
-clean HEAD/source-diff and accepted Columbo normal-receipt binding, fresh guards,
-independent review and separate coordinator release; this checkpoint releases
-no later runtime workflow.
+At that earlier checkpoint, Kata was next, then OpenFaaS last and serial.
+The KubeEdge mixed-source, Mist, Columbo and subsequent Kata development checkpoints
+below preserve their distinct source and acceptance bindings. The approved Kata
+retry repair at `b7c51977cd165820082f720624f8439a033b5f76` and its static proof remain
+historical. Current NEXT is OpenFaaS LAST and SERIAL under the amended-driver,
+source/receipt, fresh-guard, independent-review and coordinator-release requirements
+below; this documentation checkpoint releases no later runtime workflow.
 Packet E's demonstrated CLI tunnel-hint defect remains open: the printed forward
 destination uses the worker IP although the service binds the controller; fix and
 regress it before freeze. No final candidate is frozen. Two complete operational
@@ -613,8 +613,9 @@ build. Configured 5 Hz/300 seconds and finite corrected averages establish neith
 sustained 5 Hz nor synchronized/accurate cross-host one-way timing; ten negative
 worker one-way values remain. Compact archives omit disks/keys, Ansible temporary
 trees and full journals; no backing-byte invariance, KubeEdge reuse, alternate
-topology, broad support or final teardown is established. Exact Kata runtime
-validation, Packet E's CLI fix, the full final frozen matrix/twelve static gates,
+topology, broad support or final teardown is established. The subsequent selected
+Kata development checkpoint is below. Packet E's CLI fix, the full final frozen
+matrix/twelve static gates,
 two operational passes, final-source reuse proof and human review remain OPEN.
 
 ## Packet D Mist — development checkpoint
@@ -673,8 +674,9 @@ the existing parser turns preceding KubeEdge evidence into a VM pass on this sou
 | Product result | Original run base above: `.continuum/test_results/test_results_2026-10-29_01-29-58.json`, SHA-256 `510e6943f439ef447733bf585949c298b2ace20768d0eddfec2bffcc7eb1e22d`; detailed counts, metadata and limits remain in the packet's `manual-evidence-report.json` and receipt. |
 
 This establishes no sequential reuse, alternate topology, broad support or release
-certification and releases no later runtime. Packet E's CLI fix, exact Kata runtime
-validation, the full final frozen matrix, twelve canonical static gates, two
+certification and releases no later runtime. The subsequent selected Kata development
+checkpoint is below. Packet E's CLI fix, the full final frozen matrix, twelve
+canonical static gates, two
 complete operational passes, final-source reuse proof and human review remain OPEN.
 
 ## Packet D Columbo — development checkpoint
@@ -744,14 +746,15 @@ counts, metadata and limits remain in `manual-evidence-report.json` and the rece
 | Product result | Original base above: `.continuum/test_results/test_results_2026-10-29_02-12-58.json`, SHA-256 `c3e6d7b0d340d73113737e9eeadc00dd69a38099430e68b9877b476d5f8c3ed3`. |
 
 This establishes no sequential reuse, alternate topology/provider/mode, paper
-sweep, broad support or frozen-candidate/release acceptance. Kata's approved
-two-file retry repair is committed at `b7c51977cd165820082f720624f8439a033b5f76`;
-exact Kata runtime validation remains next, with OpenFaaS last and serial.
+sweep, broad support or frozen-candidate/release acceptance. Kata's historical
+two-file retry repair at `b7c51977cd165820082f720624f8439a033b5f76` and subsequently
+accepted mixed-source development checkpoint are below. OpenFaaS remains LAST and
+SERIAL under the current release requirements below.
 Packet E's CLI repair/presentation, final source freeze, the full
 final matrix, twelve canonical static gates, two complete operational passes,
 final-source reuse proof and human review remain OPEN.
 
-## Packet D Kata — committed source checkpoint, runtime pending
+## Packet D Kata — historical committed source checkpoint
 
 The independently reviewed two-file retry repair is committed locally at clean
 `b7c51977cd165820082f720624f8439a033b5f76`, parent/baseline
@@ -786,21 +789,127 @@ payloads named by the manifest were excluded. Original uncommitted receipts and
 reconstruction provenance remain unchanged; source-review/local-commit
 adjudication is attributed to the coordinator transcript.
 
-Current configuration inventory v12 is bound to clean b7c: 358 rows/135 exclusions,
+At that source checkpoint, configuration inventory v12 was bound to clean b7c:
+358 rows/135 exclusions,
 all 493 source hashes, 310 raw inputs, 30 normalizations and 45 carrier AST facts
 verified. Only `scripts/test/unit/test_resource_manager_plans.py` changed,
 adding five tests and `_kata_trace_config`; all 68 v2–v11 snapshot/receipt files
 remain unchanged. Exact new hashes/size/receipt and historical bindings are in
 `docs/configuration_inventory.md`.
 
-This is source/static proof; exact Kata runtime acceptance remains pending.
-Next is that exact workflow, then OpenFaaS LAST and SERIAL, requiring actual clean
-HEAD/source-diff, accepted Columbo normal-receipt binding, fresh guards,
-independent driver/evidence review and separate coordinator release. This
-checkpoint releases no runtime workflow and advances no runtime acceptance.
+This was source/static proof; exact Kata runtime acceptance remained pending at
+that checkpoint. The subsequent selected development acceptance is recorded below;
+the historical source proof does not advance runtime acceptance on its own.
 Packet E's CLI repair/presentation, final source freeze/full frozen matrix,
 twelve fresh final-candidate static gates, two complete operational passes,
 final-source reuse proof and final human review remain OPEN.
+
+## Packet D Kata — selected mixed-source development checkpoint
+
+Independent read-only evidence review and coordinator adjudication accepted the
+selected mixed-source `qemu_kube_kata_empty_startup_parity` development checkpoint.
+The actual VM workflow used clean `f6bf6b3d98692cbc4b5ddb33058b6eccd95ffc3d`;
+the later controller-label repair, offline replay and inventory v13 bind clean
+`036e6e046521a2c445db8af1e98cec4e1860ae5b`, its direct child. This is no VM pass on
+036e and no final-candidate/release acceptance.
+
+Original evidence is under the private durable evidence root below, in
+`development-kata-f6bf6b3d9869-qemu_kube_kata_empty_startup_parity`. The product
+result passed 1/1, exit0 without timeout, in 2,879.064 seconds. Preserved raw
+application output has 100 unique current Pods with 100 Start and 100 End markers;
+the saved CLOUD and KATA CSV tables each contain 100 rows. CLOUD was printed twice
+in stdout (200 rows, 100 unique identities); KATA has manifest/CSV evidence without
+a separate stdout table. Final owned-guest
+teardown reduced 13 domains to the same 11 protected domains. Generated XML requests
+two 8-vCPU/64-GiB guests at quota1.0; this is requested allocation, not independent
+live resource sampling. Runtime/version/CRI observations describe their capture windows.
+
+The original driver remains STOPPED/exit2/accepted=false after its prior-backing
+identity/size guard. Four live Columbo-backed paths changed owner/group and one
+overlay grew while device/inode/mode remained equal. Normal libvirt DAC restoration
+is an inference consistent with those metadata transitions, not verified host
+configuration or disk-byte invariance. A separate `-preservation-completion`
+supplement was independently accepted only for delayed preservation; the original
+finished record and failure disposition were not rewritten.
+
+The original-source offline assessment passed its product-runtime checks while
+leaving external label replay pending and unassessed within that component; its
+`accepted:false` and review-pending fields remain unchanged. The separate normal
+composite receipt accepts this selected development checkpoint by binding that
+assessment to the independently accepted 036e formatter replay, source/static proof,
+preservation supplement and inventory generation receipt. It does not rewrite any
+original or component record.
+
+The two actual corrected formatters replayed the same saved Kata inputs. Kubernetes
+exports are 342×13 with 13 unique headers and all 4,446 numeric cells exactly equal
+to the original positional values. OS exports contain 4,568 rows, 22,840 cells and
+9,136 blanks; the maximum old/new numeric difference is
+`1.1368683772161603e-13`. They are not byte-identical to the old OS output; corrected
+cross-formatter CSV bytes match. Running the empty formatter on Kata data is
+cross-formatter evidence, not a Columbo VM pass. The original colliding labels and
+ambiguous plots remain historical; corrected CSVs are separate replay artifacts.
+
+Sampling limits remain: Kubernetes resource samples end at 215.871 seconds, before
+the first application Start at 264.913 seconds. OS exports use the startup-readiness
+cutoff at 974.689 seconds, covering starts through 962.531 seconds, not bodies ending
+at 1142.576 seconds. Replay restores no observation coverage. The final Jaeger fetch
+reported 282 traces; after one cache candidate is excluded, 100 complete rows remain
+and 181 candidates are incomplete by difference. Final raw span JSON and trace-ID
+to Pod joins were not retained; the one saved raw trace is warmup only, with 144
+spans. Raw kubelet 0500/0514 events were not retained. This establishes neither
+independent timing reconstruction nor synchronized clocks/accurate one-way timing.
+The raw Start/End counts do not prove all 100 final Pods reached Succeeded; an earlier
+diagnostic snapshot had 44 Succeeded/18 Running/38 Pending and transient sandbox
+warnings. Event counts are not exact attempts.
+
+Evidence paths in the table are relative to the original evidence directory unless
+prefixed with a suffix: append that suffix to the directory name for the separate
+supplement. The product result is under the original run base
+`/mnt/sdc/continuum_smoke/kata_f6bf6b3d9869_empty_startup_parity`.
+
+| Evidence | Exact binding |
+| --- | --- |
+| Selected mixed-source development acceptance | `-offline-assessment/accepted-development-manual.json`, SHA-256 `c898e7cf8abc6fd0a645185c7e49aeb0e80d38aaee051c19cb81beedf5156b88`. |
+| Original completion, unchanged | `finished.json`, SHA-256 `e602d444cf96b2999f1b2ab93ba04eb9491b7c40955c663518eedde2815baf0b`. |
+| Product result | Original run base: `.continuum/test_results/test_results_2026-10-29_16-55-53.json`, SHA-256 `16e238fbb85a87d33b974f63c33ec3f2cab21b468bc3d050d5d9fd6b422196c9`. |
+| Delayed preservation only | `-preservation-completion/completion-receipt.json`, SHA-256 `f5170aebad4f2f653feffba36f941a03b64fbd356136571ca7b426eba342d9fc`. |
+| Original-source offline assessment | `-offline-assessment/manual-evidence-report.json`, 318,273 bytes, SHA-256 `dee04b8a585ab1a27c25eb80da0f73ae4e079c92668f02392b1045788017e77e`; external replay remains pending within this unchanged component. |
+| Corrected formatter replay | `-resource-label-replay/replay-receipt.json`, SHA-256 `44bab27f17eb9cffae6f824e7965e52f736c95579ddabc16a5265e72491ef582`. |
+
+The independently reviewed formatter repair is committed at 036e. It fixes the
+controller VM/component label collision in both `application/empty/empty.py` and
+`application/empty_kata/empty_kata.py`, with two inert regression tests. Original
+source/static executions used repaired uncommitted bytes on f6 that match 036e;
+they were not rerun after commit. Focused proof used Python 3.8.10 and 3.12.7.
+Python 3.12.7 proof passed all twelve canonical REQUIRED gates: 975 unit, 173
+local-e2e and 1,148 combined tests. The whole audit script was not run.
+
+Finite source/static preservation is in
+`development-resource-label-036e6e046521-static/preservation-receipt.json`, relative
+to the private durable evidence root, SHA-256
+`9d0bb91cd826a0a25618769728435040907462e615edf11bb542cf1d8f3258e3`.
+It verifies 105 copied files plus the receipt: 102 original proof members, the
+complete artifact manifest, actual commit receipt and reviewed plan. Files retain
+normal UID1002 and private 0700/0600 modes; private caches were excluded. This is
+source/static preservation, separate from runtime and replay acceptance.
+
+Current inventory v13 is bound to clean 036e: 359 rows/135 exclusions, 494 source
+hashes, 310 raw inputs, 30 normalizations and 46 carrier AST facts verified. Only
+`scripts/test/unit/test_empty_resource_metrics.py` was added; no existing row or
+exclusion changed. All 75 v2–v12 snapshot/receipt files remain unchanged. Exact
+hashes, size, generation receipt and historical bindings are in
+`docs/configuration_inventory.md`.
+
+Current NEXT is exact OpenFaaS LAST and SERIAL. Before any physical release, the
+amended driver must bind actual clean HEAD/source diff, actual node3 metadata and
+the accepted Kata normal receipt, with fresh guards, independent adapted-driver
+review and separate coordinator physical release. This documentation checkpoint
+releases no workflow. Packet E's CLI repair/presentation, final source freeze/full
+fresh frozen matrix, twelve fresh final-candidate static gates, two complete
+operational passes, final-source reuse proof and final human review remain OPEN.
+Historical dispositions, required configuration equivalents and approved
+reproduction scope also remain open; this development acceptance renews no dated
+matrix evidence or broader topology/provider/sweep claim.
 
 ## Archived completed planning records
 
@@ -839,11 +948,12 @@ and the retirement packet performed no VM operation or benchmark rerun.
    `docs/reproduction_inventory.md` records the complete candidate survey and
    remaining historical associations; obtain one final scope confirmation
    before reproduction-driven deletions. `docs/configuration_inventory.md`
-   accounts for 310 inputs and 48 fixture/support/metadata sources; its preserved
+   accounts for 310 inputs and 49 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   `b7c51977cd165820082f720624f8439a033b5f76` in inventory v12, after the reviewed
-   Kata retry repair; all ten earlier snapshots, including v11 at source `3812449`,
-   v10 at source `ba5e50f` and v9 at source `2f969bb`, remain unchanged. Final
+   `036e6e046521a2c445db8af1e98cec4e1860ae5b` in inventory v13, after the reviewed
+   formatter-label repair; all eleven earlier snapshots, including v12 at source
+   `b7c5197`, v11 at `3812449`, v10 at `ba5e50f` and v9 at `2f969bb`, remain
+   unchanged. Final
    historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
