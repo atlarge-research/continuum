@@ -7,13 +7,39 @@ The transitional legacy inventory remains complete pending final scope review.
 For current host commands and migrated-root exports use
 `docs/smoke_runner_isolation.md`. No merge/push/tag/release is authorized.
 
-The current foundation DEVELOPMENT checkpoint is recorded in
-`docs/rework_release_handoff.md`: five accepted cases on clean `73a30b7` plus
-fresh endpoint recovery on repaired clean `e3fcdf0`. The failed original endpoint
-case on `73a30b7` remains a failure. This mixed-source development evidence does
-not freeze a final candidate, replace certification or renew any historical row
-status/evidence. Its historical mapping is M1-QEMU-INFRA/K8S/NET-SMOKE/NET-SUITE/BENCH
-and P-QEMU-01–05/08/09; it does not certify all modules.
+## Current engineering DEVELOPMENT checkpoint — 2026-10-29
+
+All selected Packet D development families have independent read-only evidence
+review and coordinator acceptance. Their exact receipts, hashes, results and
+limitations are in the linked sections of the
+[release handoff](rework_release_handoff.md). These are distinct source-bound
+development observations, including two explicitly mixed-source assessments:
+
+| Selected workflow family | Accepted development source and evidence |
+| --- | --- |
+| Foundation: operational, infrastructure, network, Kubernetes image and no-benchmark/observability | Five cases on `73a30b72aae67267adaf5b979bf3b1a1a9f78061`; [foundation receipts](rework_release_handoff.md#packet-d-foundation--development-checkpoint). |
+| Endpoint image | Fresh recovery on `e3fcdf05b832624416e4908a53170530668c9ce1`; [endpoint receipt within foundation](rework_release_handoff.md#packet-d-foundation--development-checkpoint). The original `73a30b7` endpoint failure remains failed. |
+| KubeEdge image | VM source `07e2c4f02768b45db2bece3d91dd0ac90345f476`, metric-parser repair/replay `3812449c0d04a3b2c9fe189e2e9b5bff11bf9409`; [mixed-source receipt](rework_release_handoff.md#packet-d-kubeedge--mixed-source-development-checkpoint), not a VM pass on the repair source. |
+| Mist image | `46e7a29606c1ba4175b50b92964ac350b57ed587`; [development receipt](rework_release_handoff.md#packet-d-mist--development-checkpoint). |
+| Columbo strict `call_1` trace | `a1e5db24d9b68d28883398a715eebd60af556763`; [development receipt](rework_release_handoff.md#packet-d-columbo--development-checkpoint), exact strict trace only. |
+| Kata startup | VM source `f6bf6b3d98692cbc4b5ddb33058b6eccd95ffc3d`, formatter repair/replay `036e6e046521a2c445db8af1e98cec4e1860ae5b`; [selected mixed-source receipt](rework_release_handoff.md#packet-d-kata--selected-mixed-source-development-checkpoint), with preserved sampling/trace limits. |
+| Exact multi-host OpenFaaS image | `ab7a3285a2e7e33336cd526377f19442e525aaa5`; [development receipt](rework_release_handoff.md#packet-d-openfaas--accepted-development-checkpoint): 600 completed decoded outcomes, seven retained guests, no sustained 5-Hz or HTTP-status claim. |
+
+Current Packet E CLI base is `a0d28a071b4a85707cacb95f33d683d2d574d64c`;
+its two corrected observability access hints and one regression have focused,
+carrier and scoped lint proof only. It is not the source of the earlier VM runs.
+The final clean source freeze, refreshed source-bound inventory, all twelve
+canonical static gates and full fresh serial runtime/manual matrix remain
+**PENDING**. Finite metrics and complete workloads do not prove synchronized
+one-way timing, model accuracy, continuous health, live resource utilization or
+fresh image-build provenance. No provider, wider sweep or thesis equivalence is
+established. Columbo and Kata retain their exact documented slices.
+
+This checkpoint changes no July row ID, status, date, action-cell primary evidence
+or M1 release-notes coupling. It promotes neither software-only nor local OpenFaaS
+subset rows from broader application evidence and renews no historical
+certification. Final-candidate acceptance and publication readiness are separate
+from this development checkpoint.
 
 ## 1. Purpose
 

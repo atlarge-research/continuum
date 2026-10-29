@@ -28,14 +28,16 @@ The refreshed checkpoint below records registry_refresh missing/all, default
 missing, without aliases. The separate bounded cache repair covers common/active
 included roles, copied inputs, consumed values and actual preload identities;
 see `docs/qemu_cache_contract.md`. Neither static inventory nor cache source tests
-prove fresh runtime acceptance. The previous v2/v3/v4/v5/v6/v7/v8/v9/v10/v11/v12 inventories
-remain preserved unchanged as historical evidence, not current source-hash claims.
+prove fresh runtime acceptance. The previous v2–v13 inventories remain preserved
+unchanged as historical evidence. The latest closed D snapshot is v14 below;
+it does not cover the later Packet E CLI regression carrier.
 
 ## Frozen file coverage
 
-Private evidence freezes input content at clean source
-`036e6e046521a2c445db8af1e98cec4e1860ae5b`, containing the reviewed controller-label
-repair in both resource formatters and its regressions, Kata zero-complete-trace
+The latest closed Packet D inventory, v14, freezes input content at clean source
+`ab7a3285a2e7e33336cd526377f19442e525aaa5`, containing the reviewed managed-SSH
+acceptance-notice correction and its regressions, controller-label
+repair in both resource formatters, Kata zero-complete-trace
 retry repair and regressions, endpoint metric-field parser
 repair, full-body registry-manifest parser
 repair, foundation observability-readiness repair, packet C's schema-envelope/documentation corrections
@@ -78,8 +80,24 @@ cloud execution/spending was authorized.
 
 ## Preserved evidence and refresh requirement
 
+Latest closed D snapshot `configuration-inventory-v14` is private, outside Git,
+under `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`.
+Its 2,134,901-byte inventory JSON SHA-256 is
+`3aed106a40e52be018b25ef43945c3e39f0b0b2814e099de27cb668aef12ec95`;
+manifest SHA-256 is
+`c36ba6827dcaa3c934868ba5d363e055bdd896a68e4a7221c5ef24ad9a6d2f20`;
+summary JSON SHA-256 is
+`c116544c769e40dd3b746c7c6939523b7a1325a0b999b31739d5456ca1c3205d`.
+The sibling `configuration-inventory-v14-generation.json` receipt SHA-256 is
+`897e6b2b813f023558dd04f228a1e55408c7076969f195d8b480f9c36f1bdc36`.
+It binds clean `ab7a3285a2e7e33336cd526377f19442e525aaa5`, isolated Python
+3.12.7 with optimization disabled, six read-back-verified snapshot files and
+unchanged extractor/checks. All 82 v2–v13 historical snapshot/receipt files remain
+unchanged. This binding precedes Packet E and must not be relabelled as its final
+source inventory.
+
 The generated inventory, summary, extractor, four focused extractor checks and
-reviewed plan are private, outside Git, under the existing migration evidence root
+reviewed plan for historical v13 are preserved under the same migration evidence root
 `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4`, in
 configuration-inventory-v13. Manifest SHA-256:
 `796c56fe594d82ebdeb91be44ec5e76570cc7fd287dc8aec1f5ca63daa4fe902`.
@@ -196,7 +214,7 @@ It records clean source `b7c51977cd165820082f720624f8439a033b5f76`, isolated
 Python 3.12.7 with optimization disabled and the complete verification. The v11
 receipt and all older evidence remain unchanged.
 
-The v13 refresh adds only `scripts/test/unit/test_empty_resource_metrics.py`:
+The historical v13 refresh adds only `scripts/test/unit/test_empty_resource_metrics.py`:
 two formatter-label regressions and the `_check_resource_labels` helper were
 verified by AST comparison. No existing row, input bytes, exclusion hash,
 classification or disposition changed; literal-marker carriers remain 26.
@@ -208,18 +226,35 @@ It records clean source `036e6e046521a2c445db8af1e98cec4e1860ae5b`, isolated
 Python 3.12.7 with optimization disabled and complete verification. The v12
 receipt and all older evidence remain unchanged.
 
-Source hashes were checked for all 359 rows and 135 exclusions (494 hashes); raw-declaration
+The v13 source hashes were checked for all 359 rows and 135 exclusions (494 hashes); raw-declaration
 equality covered all 259 cfg and 51 YAML inputs after redaction. All 30 experiment
 normalizations use registry_refresh missing/all without the retired run key.
 Their normalized facts remain equal to v12; all 46 carriers' AST fixture facts were
 verified. All four extractor checks passed.
+
+The v14 refresh changes only the existing
+`scripts/test/unit/test_continuum_runtime.py` carrier's source hash and AST fixture
+facts: nine managed-SSH notice regression methods and three helpers. No row or
+exclusion path was added or removed; input bytes, exclusion hashes,
+classifications and dispositions are unchanged. Verification covers all 359 rows
+and 135 exclusions (494 source hashes), all 310 raw inputs (259 cfg/51 YAML),
+30 experiment normalizations equal to v13 and all 46 carriers' AST facts. Literal
+marker carriers remain 26, all four extractor checks pass and zero eligible
+paths are unaccounted. Product `infrastructure/machine.py` is separately
+hash-bound in the generation receipt and source/static proof, outside inventory
+carriers/exclusions. Inventory accounting does not establish runtime acceptance.
+
 Generation used the existing cloud-safe mocked-socket parser pattern, not VM,
 research-script or runtime-entry-point execution. Expected successful runtime
 outputs are experiment_lock.yaml, phase state.json, logs and the configured
 benchmark/network artifacts; profiles alone produce none.
 
 Refresh affected rows and the exact source/evidence binding after schema, example
-or test changes. This refresh adds one carrier and changes no existing row or exclusion;
-the user input set is unchanged.
-The checkpoint must not be relabelled as a later final candidate
-without rechecking those hashes and the exact source/evidence binding.
+or test changes. Packet E CLI base
+`a0d28a071b4a85707cacb95f33d683d2d574d64c` adds another regression to the same
+runtime carrier; v14 does not cover those new bytes. A new final inventory must
+be generated outside Git against the actual clean frozen source after all
+substantive E edits and independent review. That refresh and final source binding
+remain PENDING; no future SHA or result is asserted here. Historical final
+dispositions and required equivalents remain open independently of zero
+unaccounted paths.

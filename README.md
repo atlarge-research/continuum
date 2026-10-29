@@ -293,34 +293,99 @@ sudo sysctl -p /etc/sysctl.conf
 ```
 
 ### Part 2: Use the framework
-Continuum comes with canonical YAML experiment and profile files for the active
-parser/runtime model. The active examples live under `configs/experiments/`,
-with reusable profiles under `configs/profiles/`. Legacy `.cfg` files remain
-under `configuration/` for historical reproduction and migration only. Shipped
-YAML examples are parser-accepted examples; release support still depends on
-the certification matrix.
 
-For example:
-1. Go the the continuum framework: `cd continuum`
-2. Check how the framework can be used: `python3 continuum.py --help`
-3. For the smallest certified local infrastructure path, use the smoke config
-   `configs/experiments/smoke/infra_one_vm.yaml`. It provisions one local QEMU
-   VM and writes lock/state artifacts under the selected `base_path`:
-   `python3 continuum.py configs/experiments/smoke/infra_one_vm.yaml`.
-4. For benchmark/application evidence, use the dedicated smoke-runner suites
-   documented in `docs/smoke_runner_isolation.md` and
-   `docs/release_certification_matrix.md`; do not infer benchmark support from
-   a shipped YAML example alone.
+Start with three YAML documents: an [experiment](configs/experiments/template.yaml)
+owns topology, run targets and benchmark intent; an
+[environment profile](configs/profiles/environment/template.yaml) owns provider,
+host and base-path settings; a [software profile](configs/profiles/software/template.yaml)
+owns module instances and their assignments. Profile references select the first
+existing file in the documented search order; they do not merge layered overrides.
+Check the selected source paths and resolved experiment lock. Software selectors
+AND predicates within each `match`, and `any_of` unions clauses. Benchmark
+assignment uses one `match`; validation requires exactly one executable pipeline
+stage. See the [configuration reference](docs/configuration_reference.md) and
+[configuration inventory](docs/configuration_inventory.md) for the full contracts.
 
-For the active configuration model, see `docs/configuration_reference.md` for
-the canonical YAML schema and `docs/migration_notes.md` for legacy-to-YAML
-replacements. Template files are available at
-`configs/experiments/template.yaml`, `configs/profiles/environment/template.yaml`,
-and `configs/profiles/software/template.yaml`. Additional module families and
-historical cloud/serverless paths are tracked in the certification matrix before
-they should be described as release-supported. All components can be extended as
-modules or profiles; open a GitHub Issue or send us a mail at
-m.s.jansen@vu.nl if you have any questions.
+The entry point accepts `python3 continuum.py --help` and
+`python3 continuum.py -v <experiment>.yaml` (`--verbose` also works). A direct
+run uses its selected profile's base path and really provisions resources.
+For a retained QEMU infrastructure → software → application walkthrough, use the
+existing normal-user wrapper and [host runbook](docs/smoke_runner_isolation.md).
+On the reviewed node4 host, keep the pinned Python 3.8.10/Ansible 2.13.2 environment
+and migrated storage. Choose a fresh, traversable parent under the allocated
+runtime root; the example `mkdir` refuses an existing destination, so select a
+new name if this one has already been used. If it fails, stop before the exports
+and choose an unused path; keep that same path for all three phases:
+
+```bash
+cd /home/matthijs/continuum
+mkdir -m 755 /mnt/sdc/continuum_smoke/walkthrough-20261029-01
+export CONTINUUM_SMOKE_BASE_ROOT=/mnt/sdc/continuum_smoke/walkthrough-20261029-01
+export CONTINUUM_SMOKE_PYTHON=/home/matthijs/venvs/continuum/bin/python3
+"$CONTINUUM_SMOKE_PYTHON" continuum.py --help
+sh scripts/test/setup_agent_host.sh show-config
+sh scripts/test/setup_agent_host.sh verify
+sh scripts/test/run_smoke_host.sh check-prereqs --suite benchmark_smoke
+```
+
+These commands create or replace this Unix user's QEMU guests, including guests
+retained by earlier scenarios even when their base paths differ. Preserve prior
+results and settle their retained-guest disposition first. The wrapper selects
+its root through `CONTINUUM_SMOKE_BASE_ROOT`; it has no `--base-root` option.
+Run the following phases in order, inspecting and preserving each phase's result
+with the block below **before starting the next phase**:
+
+| Phase and input | Command |
+| --- | --- |
+| [Infrastructure, prepared for resume](configs/experiments/benchmark_smoke/01_infra_k8s_three_vm.yaml) | `sh scripts/test/run_smoke_host.sh benchmark_k8s_resume_infra` |
+| [Software on retained guests](configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml) | `sh scripts/test/run_smoke_host.sh benchmark_k8s_resume_software` |
+| [Image-classification application, then teardown](configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml) | `sh scripts/test/run_smoke_host.sh benchmark_k8s_resume_application` |
+
+Each alias shares `<CONTINUUM_SMOKE_BASE_ROOT>/benchmark_k8s_resume`, but writes
+its own latest **single-entry** result JSON. After each phase inspect index 1:
+
+```bash
+sh scripts/test/run_smoke_host.sh latest-result-summary benchmark_k8s_resume
+sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume stdout 1 --full
+sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume stderr 1 --full
+sh scripts/test/run_smoke_host.sh latest-result-tail benchmark_k8s_resume metadata 1 --full
+```
+
+Preserve the printed `LATEST_RESULT` JSON and its referenced streams before the
+next invocation changes the latest pointer. The aggregate alternative
+`sh scripts/test/run_smoke_host.sh benchmark_k8s_resume` runs all three phases
+and writes one three-entry summary; inspect indexes 1, 2 and 3 in that case.
+Do not request index 3 from an individual application invocation.
+
+Resume omits infrastructure from `run.targets` and requires unchanged revision,
+the same canonical base path/topology/software contract, compatible saved phase
+state and authenticated SSH preflight on every recorded guest. The final input
+requests teardown. The remaining `<base>/.continuum/state.json` is a last-known
+snapshot, not proof of live guests. Inspect `experiment_lock.yaml`, `logs/`,
+`test_results/`, actual benchmark outcomes and metric manifests/CSVs, any requested
+network NDJSON, and final owned-domain absence; a lock or success marker alone
+does not establish application success. The
+[runtime pipeline](docs/runtime_execution_pipeline.md) maps these artifacts to
+the parser, planner, provider, software hooks and application helpers.
+
+The historical `base_images_rebuilt` list does not report QEMU cache decisions;
+`[]` does not mean no rebuild. Inspect the owning host's actual cache-decision
+logs, completed preparation output and matching ready sidecars, preserving
+source/time and before/after provenance. A ready marker alone does not identify
+which run created it. See the [cache contract](docs/qemu_cache_contract.md).
+Host cache priming, guest preload and `registry_refresh: missing|all` are distinct.
+
+On failure, preserve results and state/lock first, then inspect the exact indexed
+full streams, logged SSH hints, `virsh list --all` and the affected guest using
+the [VM debugging runbook](docs/vm_debugging_runbook.md).
+Available module types and parser-accepted examples are separate from exact
+validated workflows: the [matrix](docs/release_certification_matrix.md) and
+[current handoff](docs/rework_release_handoff.md) distinguish selected development
+evidence from pending final-candidate acceptance and historical certification.
+Legacy `.cfg` files under `configuration/` remain for historical reproduction;
+use the [migration notes](docs/migration_notes.md) for YAML replacements.
+All components can be extended as modules or profiles; open a GitHub Issue or
+email m.s.jansen@vu.nl with questions.
 
 ### Appendix
 The Continuum framework is supposed to be run from an Ubuntu-like operating system.
