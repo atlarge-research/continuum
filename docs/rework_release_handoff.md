@@ -156,9 +156,10 @@ scope, final dispositions and frozen-candidate acceptance remain open; the origi
 pre-main goal is not complete. Packet D's foundation development checkpoint below
 combines five accepted cases on clean `73a30b7` with the accepted fresh endpoint
 recovery on clean `e3fcdf0`; the failed original endpoint case remains a failure.
-The KubeEdge mixed-source, Mist and Columbo development checkpoints are recorded below.
-Next is Kata, then OpenFaaS last, serially, subject to actual future
-clean HEAD/source-diff and accepted Columbo normal-receipt binding, fresh guards,
+The KubeEdge mixed-source, Mist and Columbo development checkpoints and committed
+Kata source checkpoint are recorded below.
+Next is exact Kata runtime validation, then OpenFaaS last, serially, subject to
+actual future clean HEAD/source-diff and accepted Columbo normal-receipt binding, fresh guards,
 independent review and separate coordinator release. The independently accepted
 pilot enables only its fixed node4/node5 development allocation below; it does
 not replace final serial acceptance.
@@ -525,7 +526,8 @@ returned. No new runtime workflow is released by this documentation checkpoint.
 Next is Kata, then OpenFaaS last, serially in approved order. The
 KubeEdge mixed-source, Mist and accepted Columbo development checkpoints below
 preserve their distinct source and acceptance bindings. Kata's approved two-file
-retry repair and exact runtime validation remain pending, requiring actual future
+retry repair is committed at `b7c51977cd165820082f720624f8439a033b5f76`;
+exact runtime validation remains pending, requiring actual future
 clean HEAD/source-diff and accepted Columbo normal-receipt binding, fresh guards,
 independent review and separate coordinator release; this checkpoint releases
 no later runtime workflow.
@@ -595,8 +597,9 @@ failed record and invents no completed `finished.json`.
 | Corrected offline replay | Original directory plus `-metric-replay-3812449c0d04`; `replay.json` SHA-256 `28b9d8117a8eb7502e24488de689e02c26b7c1fbd51feb1746d298b83794227f`, five-member seal `e88e2e95888f566cf927e34f9b8b274ac389eaab8b492affaa174ca759ecaed8`. |
 | Source/static durability | `development-packet-d-endpoint-metrics-3812449c0d04-static/preservation-receipt.json`, SHA-256 `63280bd9a22ec0d05f1c6b2ebde85d1115994f0206903c3d372cc9b2fbc9c3d9`; 26 explicit source/review/diff/RED/GREEN/test/lint/baseline artifacts, exact copies with private 0700/0600 modes. Source-review adjudication is attributed to the coordinator transcript, not an invented report. |
 
-Fresh configuration inventory v11 is bound to clean `3812449`: 358 rows/135 exclusions,
-all 493 source hashes, 259 cfg/51 YAML raw declarations, 30 normalizations and 45 carrier
+At that checkpoint, configuration inventory v11 was bound to clean `3812449`:
+358 rows/135 exclusions, all 493 source hashes, 259 cfg/51 YAML raw declarations,
+30 normalizations and 45 carrier
 AST facts verified. Only the existing publisher-test carrier changed, adding the
 seven tests/two helpers; no input, exclusion hash, classification or disposition
 changed. All 61 v2–v10 snapshot/receipt files remain unchanged. Exact v11 hashes,
@@ -610,7 +613,7 @@ build. Configured 5 Hz/300 seconds and finite corrected averages establish neith
 sustained 5 Hz nor synchronized/accurate cross-host one-way timing; ten negative
 worker one-way values remain. Compact archives omit disks/keys, Ansible temporary
 trees and full journals; no backing-byte invariance, KubeEdge reuse, alternate
-topology, broad support or final teardown is established. Core Kata repair and
+topology, broad support or final teardown is established. Exact Kata runtime
 validation, Packet E's CLI fix, the full final frozen matrix/twelve static gates,
 two operational passes, final-source reuse proof and human review remain OPEN.
 
@@ -670,8 +673,8 @@ the existing parser turns preceding KubeEdge evidence into a VM pass on this sou
 | Product result | Original run base above: `.continuum/test_results/test_results_2026-10-29_01-29-58.json`, SHA-256 `510e6943f439ef447733bf585949c298b2ace20768d0eddfec2bffcc7eb1e22d`; detailed counts, metadata and limits remain in the packet's `manual-evidence-report.json` and receipt. |
 
 This establishes no sequential reuse, alternate topology, broad support or release
-certification and releases no later runtime. Packet E's CLI fix, core Kata repair
-and validation, the full final frozen matrix, twelve canonical static gates, two
+certification and releases no later runtime. Packet E's CLI fix, exact Kata runtime
+validation, the full final frozen matrix, twelve canonical static gates, two
 complete operational passes, final-source reuse proof and human review remain OPEN.
 
 ## Packet D Columbo — development checkpoint
@@ -742,10 +745,62 @@ counts, metadata and limits remain in `manual-evidence-report.json` and the rece
 
 This establishes no sequential reuse, alternate topology/provider/mode, paper
 sweep, broad support or frozen-candidate/release acceptance. Kata's approved
-two-file retry repair and exact runtime validation remain pending, with OpenFaaS
-last and serial. Packet E's CLI repair/presentation, final source freeze, the full
+two-file retry repair is committed at `b7c51977cd165820082f720624f8439a033b5f76`;
+exact Kata runtime validation remains next, with OpenFaaS last and serial.
+Packet E's CLI repair/presentation, final source freeze, the full
 final matrix, twelve canonical static gates, two complete operational passes,
 final-source reuse proof and human review remain OPEN.
+
+## Packet D Kata — committed source checkpoint, runtime pending
+
+The independently reviewed two-file retry repair is committed locally at clean
+`b7c51977cd165820082f720624f8439a033b5f76`, parent/baseline
+`cb6e334c7054b63264a722f33f37c75dd83cfb04`. It adds an explicit `allow_empty`
+parser option, default false, used only inside the existing bounded fetch loop.
+Valid zero-complete responses can reach the next attempt; strict default/final
+parsing, the twelve-fetch/eleven-delay bounds, cache-trace exclusion and fatal malformed/
+transport behavior remain unchanged. No lifecycle, topology or runtime change
+was made beyond that bounded repair.
+
+Pinned Python 3.8.10 evidence records the original regression RED exit1 and
+GREEN 1/1, focused Kata 10/10 and whole carrier 36/36. The original RED test source
+was reconstructed after execution from exact reviewed patches and matched the
+execution receipt's source hash; it was not an original pre-execution copy.
+The RED run used unchanged baseline product code. GREEN/focused/carrier and
+required static runs used uncommitted repaired bytes on cb6 that match the
+now-committed b7c source. Separately attributed Python 3.12.7 proof passed all
+twelve canonical REQUIRED static gates: 973 unit, 173 local-e2e and 1,146 combined
+tests, all exit0. Optional/informational checks and the full audit script were
+not run. Scoped baseline/current lint added no symbol/object findings;
+the existing SoftwarePhasePlanTests too-many-public-methods warning changed
+21/20 to 26/20.
+
+Independent evidence review and root verification accepted the finite source/static
+preservation under the private durable evidence root below:
+`development-packet-d-kata-b7c51977cd16-static/preservation-receipt.json`, SHA-256
+`6a4c327d4ed99330bf3358addaac28f3bf60e283209d1c13d2392f776d85f71b`.
+Its 84 exact copied artifacts comprise 81 source/proof members, the complete
+artifact manifest as metadata and two reviewed plans, plus the new receipt
+(85 files total), with normal UID1002 and private 0700/0600 modes. The 26 font-cache
+payloads named by the manifest were excluded. Original uncommitted receipts and
+reconstruction provenance remain unchanged; source-review/local-commit
+adjudication is attributed to the coordinator transcript.
+
+Current configuration inventory v12 is bound to clean b7c: 358 rows/135 exclusions,
+all 493 source hashes, 310 raw inputs, 30 normalizations and 45 carrier AST facts
+verified. Only `scripts/test/unit/test_resource_manager_plans.py` changed,
+adding five tests and `_kata_trace_config`; all 68 v2–v11 snapshot/receipt files
+remain unchanged. Exact new hashes/size/receipt and historical bindings are in
+`docs/configuration_inventory.md`.
+
+This is source/static proof; exact Kata runtime acceptance remains pending.
+Next is that exact workflow, then OpenFaaS LAST and SERIAL, requiring actual clean
+HEAD/source-diff, accepted Columbo normal-receipt binding, fresh guards,
+independent driver/evidence review and separate coordinator release. This
+checkpoint releases no runtime workflow and advances no runtime acceptance.
+Packet E's CLI repair/presentation, final source freeze/full frozen matrix,
+twelve fresh final-candidate static gates, two complete operational passes,
+final-source reuse proof and final human review remain OPEN.
 
 ## Archived completed planning records
 
@@ -786,9 +841,9 @@ and the retirement packet performed no VM operation or benchmark rerun.
    before reproduction-driven deletions. `docs/configuration_inventory.md`
    accounts for 310 inputs and 48 fixture/support/metadata sources; its preserved
    refreshed per-file evidence is bound to clean
-   `3812449c0d04a3b2c9fe189e2e9b5bff11bf9409`, after the reviewed endpoint-metric
-   parser repair; all nine earlier snapshots, including v10 at source `ba5e50f`
-   and v9 at source `2f969bb`, remain unchanged. Final
+   `b7c51977cd165820082f720624f8439a033b5f76` in inventory v12, after the reviewed
+   Kata retry repair; all ten earlier snapshots, including v11 at source `3812449`,
+   v10 at source `ba5e50f` and v9 at source `2f969bb`, remain unchanged. Final
    historical
    dispositions, required equivalents and
    fresh runtime acceptance remain open; recheck affected rows and exact binding
