@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import re
 import sys
 
 import numpy as np
@@ -223,6 +224,33 @@ def gather_worker_metrics(_machines, _config, worker_output, _starttime):
     return sorted(worker_metrics, key=lambda x: x["worker_id"])
 
 
+def _endpoint_metric_fields(line):
+    """Read each named endpoint metric, including concurrent callback suffixes."""
+    fields = re.split(
+        r"(Preparation and preprocessing|Preparation, preprocessing and processing|"
+        r"Sending data|Latency)",
+        line,
+    )
+    for metric, value in zip(fields[1::2], fields[2::2]):
+        match = re.fullmatch(
+            r"\s*\(([^)]*)\):\s*([+-]?[0-9]+)\s*"
+            r"(?:(?:\[\s*16\s*\]\s+Received PUBLISH\b|Published data\b).*)?",
+            value,
+        )
+        if match is None:
+            # Preserve the existing suppression for malformed sending/MQTT output.
+            if not ("Sending data" in line and "Received PUBLISH" in line):
+                logging.warning(
+                    "Got an error while parsing line: %s. Exception: %s",
+                    line,
+                    "expected an integer metric value",
+                )
+            continue
+
+        unit, number = match.groups()
+        yield metric, unit, int(number)
+
+
 def gather_endpoint_metrics(config, endpoint_output, container_names):
     """Gather metrics from endpoints
 
@@ -273,28 +301,7 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
         latency = []
         data_size = []
         for line in out:
-            if any(
-                word in line
-                for word in [
-                    "Preparation and preprocessing",
-                    "Preparation, preprocessing and processing",
-                    "Sending data",
-                    "Latency",
-                ]
-            ):
-                try:
-                    unit = line[line.find("(") + 1 : line.find(")")]
-                    number = int(line.rstrip().split(":")[-1])
-                except ValueError as e:
-                    # Sometimes a sending and receiving line get appended in the docker log
-                    # We just ignore this for now - it happens very infrequently
-                    if not ("Sending data" in line and "Received PUBLISH" in line):
-                        logging.warning(
-                            "Got an error while parsing line: %s. Exception: %s", line, e
-                        )
-
-                    continue
-
+            for metric, unit, number in _endpoint_metric_fields(line):
                 units = ["ns", "bytes"]
                 if number < 0:
                     logging.warning("Time/Size < 0 should not be possible: %i", number)
@@ -304,13 +311,13 @@ def gather_endpoint_metrics(config, endpoint_output, container_names):
                     logging.warning("Unit should be one of [%s], got %s", ",".join(units), unit)
                     continue
 
-                if "Preparation, preprocessing and processing" in line:
+                if metric == "Preparation, preprocessing and processing":
                     processing.append(round(number / 10**6, 4))
-                elif "Preparation and preprocessing" in line:
+                elif metric == "Preparation and preprocessing":
                     processing.append(round(number / 10**6, 4))
-                elif "Latency" in line:
+                elif metric == "Latency":
                     latency.append(round(number / 10**6, 4))
-                elif "Sending data" in line:
+                elif metric == "Sending data":
                     data_size.append(round(number / 10**3, 4))
 
         processing.sort()
