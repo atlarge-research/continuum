@@ -263,6 +263,203 @@ class QemuInfrastructureResumeTopologyTests(unittest.TestCase):
 
 
 class MachineProcessDiagnosticsTests(unittest.TestCase):
+    SSH_NOTICE = (
+        "Warning: Permanently added 'node3,192.168.1.103' (ECDSA) "
+        "to the list of known hosts."
+    )
+    CACHE_RESPONSE = b'{"protocol":"continuum-qemu-cache-v1","status":"ok","metadata_b64":"e30="}\n'
+
+    @staticmethod
+    def _ssh_config():
+        """Use inert paths and prohibit retries in notice-only transport fixtures."""
+        return {
+            "ssh_known_hosts_file": "/inert-fixture/known_hosts",
+            "ssh_strict_host_key_checking": "accept-new",
+            "ssh_transient_retries": 0,
+            "ssh_hostkey_retries": 0,
+            "ssh_auth_retries": 0,
+        }
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _mock_process(stdout, stderr, returncode=0):
+        """Keep transport parsing real while prohibiting external fixture effects."""
+        process = mock.Mock(returncode=returncode)
+        process.communicate.return_value = (stdout, stderr)
+        with (
+            mock.patch.object(machine_module.subprocess, "Popen", return_value=process) as popen,
+            mock.patch.object(machine_module.subprocess, "run", side_effect=AssertionError),
+            mock.patch.object(machine_module.time, "sleep", side_effect=AssertionError),
+            mock.patch.object(machine_module, "_repair_known_hosts", side_effect=AssertionError),
+        ):
+            yield popen
+            popen.assert_called_once()
+
+    @staticmethod
+    def _cache_check(machine, config):
+        """Exercise the strict cache protocol through the real transport boundary."""
+        return qemu_module._host_cache_operation(  # pylint: disable=protected-access
+            machine,
+            config,
+            "check",
+            ["/inert-fixture/base.meta.json", "/inert-fixture/base.qcow2"],
+            ({"protocol", "status", "metadata_b64"},),
+        )
+
+    def test_managed_ssh_acceptance_notice_allows_cache_protocol_response(self):
+        """An accepted host must not prevent a valid remote cache response."""
+        machine = Machine("owner@node3", False)
+        with self._mock_process(
+            self.CACHE_RESPONSE, (self.SSH_NOTICE + "\r\n").encode("utf-8")
+        ) as popen, self.assertLogs(level="INFO") as logs:
+            response = self._cache_check(machine, self._ssh_config())
+
+        self.assertEqual(response, {
+            "protocol": "continuum-qemu-cache-v1", "status": "ok", "metadata_b64": "e30=",
+        })
+        self.assertIn(self.SSH_NOTICE, "\n".join(logs.output))
+        argv = popen.call_args.args[0]
+        destination_index = argv.index("owner@node3")
+        self.assertEqual(argv[0], "ssh")
+        for option in (
+            "BatchMode=yes", "UserKnownHostsFile=/inert-fixture/known_hosts",
+            "StrictHostKeyChecking=accept-new",
+        ):
+            self.assertLess(argv.index(option), destination_index)
+        self.assertFalse(any("LogLevel" in argument for argument in argv))
+        self.assertFalse(popen.call_args.kwargs["shell"])
+
+    def test_managed_ssh_acceptance_notice_is_logged_and_removed_from_stderr(self):
+        """Supported accepted-host notices leave stdout intact and remain logged."""
+        notices = (
+            self.SSH_NOTICE + "\r",
+            self.SSH_NOTICE,
+            "Warning: Permanently added 'node3' (ED25519) to the list of known hosts.",
+        )
+        for notice in notices:
+            with self.subTest(notice=notice), self._mock_process(
+                b"unchanged stdout\n", (notice + "\n").encode("utf-8")
+            ), self.assertLogs(level="INFO") as logs:
+                result = Machine("owner@node3", False).process(
+                    self._ssh_config(), ["fixture-command"], ssh="owner@node3", ssh_key=False
+                )
+                self.assertEqual(result, [[["unchanged stdout"], []]])
+                self.assertIn(notice.rstrip("\r"), "\n".join(logs.output))
+
+    def test_managed_ssh_notice_removes_only_accepted_lines_and_preserves_real_errors(self):
+        """Real stderr retains its content, order and duplicates and stays fatal."""
+        stderr = ("real error\r\n" + self.SSH_NOTICE + "\r\nreal error\r\n\n").encode("utf-8")
+        with self._mock_process(self.CACHE_RESPONSE, stderr):
+            result = Machine("owner@node3", False).process(
+                self._ssh_config(), ["fixture-command"], ssh="owner@node3", ssh_key=False
+            )
+        self.assertEqual(result[0][1], ["real error\r", "real error\r", ""])
+        with self._mock_process(self.CACHE_RESPONSE, stderr):
+            with self.assertRaisesRegex(RuntimeError, "failed: real error"):
+                self._cache_check(Machine("owner@node3", False), self._ssh_config())
+
+    def test_managed_ssh_preserves_unrelated_warnings_and_notice_lookalikes(self):
+        """Partial, foreign-target and unrelated warnings remain command errors."""
+        errors = (
+            "Warning: remote command warning",
+            "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
+            "Host key verification failed.",
+            self.SSH_NOTICE.replace("node3,", "node30,"),
+            self.SSH_NOTICE.replace("node3,", "different-node,"),
+            "prefix " + self.SSH_NOTICE,
+            self.SSH_NOTICE + " suffix",
+            self.SSH_NOTICE + "\r\r",
+            self.SSH_NOTICE.replace("192.168.1.103", ""),
+            self.SSH_NOTICE.replace(" (ECDSA)", " (ECDSA warning)"),
+            self.SSH_NOTICE.replace("known hosts.", "known hosts!"),
+            self.SSH_NOTICE.replace("Permanently added", "Permanently\nadded"),
+        )
+        for error in errors:
+            with self.subTest(error=error), self._mock_process(
+                self.CACHE_RESPONSE, (error + "\n").encode("utf-8")
+            ):
+                result = Machine("owner@node3", False).process(
+                    self._ssh_config(), ["fixture-command"], ssh="owner@node3", ssh_key=False
+                )
+                self.assertEqual(result[0][1], error.split("\n"))
+            with self.subTest(cache_error=error), self._mock_process(
+                self.CACHE_RESPONSE, (error + "\n").encode("utf-8")
+            ):
+                with self.assertRaisesRegex(RuntimeError, "QEMU cache check.*failed:"):
+                    self._cache_check(Machine("owner@node3", False), self._ssh_config())
+
+    def test_local_and_local_ssh_bypass_preserve_notice_stderr(self):
+        """Filtering applies only when this invocation actually used managed SSH."""
+        for ssh in (None, "owner@node3"):
+            with self.subTest(ssh=ssh), self._mock_process(
+                self.CACHE_RESPONSE, (self.SSH_NOTICE + "\r\n").encode("utf-8")
+            ) as popen:
+                result = Machine("owner@node3", True).process(
+                    self._ssh_config(), ["fixture-command"], ssh=ssh, ssh_key=False
+                )
+                self.assertEqual(result[0][1], [self.SSH_NOTICE + "\r"])
+                self.assertEqual(popen.call_args.args[0], ["fixture-command"])
+        with self._mock_process(self.CACHE_RESPONSE, (self.SSH_NOTICE + "\n").encode("utf-8")):
+            with self.assertRaisesRegex(RuntimeError, "failed: Warning: Permanently added"):
+                self._cache_check(Machine("owner@node3", True), self._ssh_config())
+
+    def test_nonzero_ssh_preserves_notice_and_nonzero_marker(self):
+        """Valid-looking stdout cannot hide an actual failed SSH return code."""
+        for returncode in (7, 255):
+            with self.subTest(returncode=returncode), self._mock_process(
+                self.CACHE_RESPONSE, (self.SSH_NOTICE + "\r\n").encode("utf-8"), returncode
+            ):
+                result = Machine("owner@node3", False).process(
+                    self._ssh_config(), ["fixture-command"], ssh="owner@node3", ssh_key=False
+                )
+                self.assertEqual(result[0][1][0], self.SSH_NOTICE + "\r")
+                self.assertEqual(len(result[0][1]), 2)
+                self.assertIn("non-zero return code %s:" % returncode, result[0][1][1])
+            with self.subTest(cache_returncode=returncode), self._mock_process(
+                self.CACHE_RESPONSE, (self.SSH_NOTICE + "\n").encode("utf-8"), returncode
+            ):
+                with self.assertRaisesRegex(RuntimeError, "command returned nonzero"):
+                    self._cache_check(Machine("owner@node3", False), self._ssh_config())
+
+    def test_nonzero_failed_stdout_keeps_existing_marker_exception_and_notice(self):
+        """The existing FAILED! marker exception must not hide nonzero notices."""
+        with self._mock_process(b"FAILED! fixture\n", self.SSH_NOTICE.encode("utf-8"), 7):
+            result = Machine("owner@node3", False).process(
+                self._ssh_config(), ["fixture-command"], ssh="owner@node3", ssh_key=False
+            )
+        self.assertEqual(result, [[["FAILED! fixture"], [self.SSH_NOTICE]]])
+
+    def test_managed_notice_does_not_relax_cache_protocol_validation(self):
+        """Removing a transport notice cannot validate a malformed helper response."""
+        cases = (
+            (b"", "expected one protocol response"),
+            (self.CACHE_RESPONSE * 2, "expected one protocol response"),
+            (b"not-json\n", "malformed protocol response"),
+            (b"[]\n", "malformed protocol mapping"),
+            (b'{"protocol":"continuum-qemu-cache-v1","status":"ok"}\n',
+             "malformed protocol mapping"),
+            (b'{"protocol":"wrong","status":"ok","metadata_b64":"e30="}\n',
+             "protocol mismatch"),
+        )
+        for stdout, message in cases:
+            with self.subTest(stdout=stdout), self._mock_process(
+                stdout, (self.SSH_NOTICE + "\r\n").encode("utf-8")
+            ):
+                with self.assertRaisesRegex(RuntimeError, message):
+                    self._cache_check(Machine("owner@node3", False), self._ssh_config())
+
+    def test_managed_ssh_keeps_configured_host_key_policy(self):
+        """The transport continues to use the caller's exact host-key policy."""
+        config = self._ssh_config()
+        config["ssh_strict_host_key_checking"] = "yes"
+        with self._mock_process(b"ok\n", b"") as popen:
+            result = Machine("owner@node3", False).process(
+                config, ["fixture-command"], ssh="owner@node3", ssh_key=False
+            )
+        self.assertEqual(result, [[["ok"], []]])
+        argv = popen.call_args.args[0]
+        self.assertLess(argv.index("StrictHostKeyChecking=yes"), argv.index("owner@node3"))
+
     def test_check_hardware_uses_local_lscpu_directly(self):
         machine = Machine("local", True)
         machine.process = mock.Mock(
@@ -4791,6 +4988,12 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
         synthetic = "Command exited with non-zero return code 7: python3"
         results = (
             [],
+            None,
+            [None],
+            [([],)],
+            [("not a line list", [])],
+            [([], "not an error list")],
+            [([], []), ([], [])],
             [(["partial"], [synthetic])],
             [([], [])],
             [(["not-json"], [])],

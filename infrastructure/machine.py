@@ -102,6 +102,19 @@ def _ssh_target_host(target):
     return target.split("@")[-1]
 
 
+def _is_accepted_ssh_host_notice(line, target):
+    """Recognize one complete OpenSSH acceptance notice for this managed target."""
+    host = _ssh_target_host(target)
+    if not host:
+        return False
+    pattern = (
+        r"Warning: Permanently added '" + re.escape(host)
+        + r"(?:,[^\s,']+)?' \([A-Za-z0-9][A-Za-z0-9@._+-]*\) "
+        r"to the list of known hosts\.\r?"
+    )
+    return re.fullmatch(pattern, line) is not None
+
+
 def _classify_ssh_error(stderr_lines, stdout_lines):
     """Classify SSH error type based primarily on stderr (fallback to stdout).
 
@@ -603,6 +616,15 @@ BASE_NAMES                  %s""" % (
         for idx in all_indices:
             out, err = outputs[idx]
             rc = rcs[idx]
+            if rc == 0 and ssh_targets[idx]:
+                command_errors = []
+                for line in err:
+                    if _is_accepted_ssh_host_notice(line, ssh_targets[idx]):
+                        logging.info("SSH host acceptance for %s: %s", ssh_targets[idx],
+                                     line.rstrip("\r"))
+                    else:
+                        command_errors.append(line)
+                outputs[idx] = [out, command_errors]
             if rc in (None, 0):
                 continue
 
