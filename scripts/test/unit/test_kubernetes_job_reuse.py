@@ -290,6 +290,40 @@ class KubernetesJobReuseTests(unittest.TestCase):
         output = runtime_helpers.get_worker_output(self.config, [self.machine])
         self.assertEqual([entry[0] for entry in output], ["image-classification-1-pod-1"])
 
+    def test_current_worker_output_preserves_node_order(self):
+        """Worker IDs follow node order even when the API returns reversed pods."""
+        self.config["infrastructure"]["cloud_nodes"] = 3
+        for assignments in self.config["planner_snapshot"].values():
+            assignments[0]["resolved_vm_ids"] = [1, 2]
+            assignments[0]["resolved_resources"] = [
+                {"vm_id": index, "cluster_id": "cloud-1", "tier": "cloud",
+                 "index_in_cluster": index - 1,
+                 "tags": {"tier": "cloud", "cluster": "cloud-1"}}
+                for index in (1, 2)
+            ]
+        self._start()
+        self.machine.pods["image-classification-1-pod-1"]["spec"]["nodeName"] = "cloud2"
+        self.machine.pods["image-classification-2-pod-2"]["spec"]["nodeName"] = "cloud1"
+        stale = copy.deepcopy(self.machine.pods["image-classification-1-pod-1"])
+        stale["metadata"]["name"] = "stale-pod"
+        stale["metadata"]["labels"]["continuum.io/benchmark-execution"] = "previous-execution"
+        self.machine.pods["stale-pod"] = stale
+
+        output = runtime_helpers.get_worker_output(self.config, [self.machine])
+        descriptions = runtime_helpers.get_worker_output(
+            self.config, [self.machine], get_description=True
+        )
+        self.assertEqual(output, [
+            ["image-classification-2-pod-2", ["retained output for image-classification-2-pod-2"]],
+            ["image-classification-1-pod-1", ["retained output for image-classification-1-pod-1"]],
+        ])
+        records = [json.loads("\n".join(lines)) for lines in descriptions]
+        self.assertEqual(
+            [(pod["metadata"]["name"], pod["spec"]["nodeName"]) for pod in records],
+            [("image-classification-2-pod-2", "cloud1"),
+             ("image-classification-1-pod-1", "cloud2")],
+        )
+
     def test_readiness_command_error_is_not_retried_as_pending(self):
         """API/transport failure must surface immediately, not become a timeout."""
         self._start()

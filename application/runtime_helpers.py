@@ -429,6 +429,7 @@ def get_kubernetes_worker_output(config, machines, get_description=False):
     execution = config.get("_kubernetes_worker_execution")
     if execution:
         pods = _execution_pods(config, machines, execution["selector"])
+        pods.sort(key=lambda pod: pod.get("spec", {}).get("nodeName", ""))
         result = []
         for pod in pods:
             name = pod["metadata"]["name"]
