@@ -156,11 +156,12 @@ scope, final dispositions and frozen-candidate acceptance remain open; the origi
 pre-main goal is not complete. Packet D's foundation development checkpoint below
 combines five accepted cases on clean `73a30b7` with the accepted fresh endpoint
 recovery on clean `e3fcdf0`; the failed original endpoint case remains a failure.
-The KubeEdge mixed-source development checkpoint is recorded below. Next is Mist,
-subject to bounded independent review, actual clean-source/harness/prior-evidence
-binding, fresh guards and coordinator release. The independently accepted pilot enables
-only its fixed node4/node5 development allocation below; it does not replace final
-serial acceptance.
+The KubeEdge mixed-source and Mist development checkpoints are recorded below.
+Next is Columbo, then Kata and OpenFaaS last, serially, subject to actual future
+clean HEAD/source-diff and accepted Mist normal-receipt binding, fresh guards,
+independent review and separate coordinator release. The independently accepted
+pilot enables only its fixed node4/node5 development allocation below; it does
+not replace final serial acceptance.
 
 ## Packet B — sequential development proof
 
@@ -521,11 +522,12 @@ recorded current existence/size, not live-byte or size invariance. Compact archi
 also exclude Ansible temporary trees and full journals. The physical window is
 returned. No new runtime workflow is released by this documentation checkpoint.
 
-Next is the full Mist image-classification parity packet, then Columbo, Kata and
-OpenFaaS in approved order. The KubeEdge checkpoint below supplies mixed-source
-development evidence; Mist needs a reviewed composite prior-evidence contract
-that preserves its stopped original and accepted manual assessment, actual clean
-HEAD/harness binding, fresh guards and separate coordinator release.
+Next is Columbo, then Kata and OpenFaaS last, serially in approved order. The
+KubeEdge mixed-source and Mist development checkpoints below preserve their
+distinct source and acceptance bindings. Columbo still requires actual future
+clean HEAD/source-diff and accepted Mist normal-receipt binding, fresh guards,
+independent review and separate coordinator release; this checkpoint releases
+no later runtime workflow.
 Packet E's demonstrated CLI tunnel-hint defect remains open: the printed forward
 destination uses the worker IP although the service binds the controller; fix and
 regress it before freeze. No final candidate is frozen. Two complete operational
@@ -610,6 +612,66 @@ trees and full journals; no backing-byte invariance, KubeEdge reuse, alternate
 topology, broad support or final teardown is established. Core Kata repair and
 validation, Packet E's CLI fix, the full final frozen matrix/twelve static gates,
 two operational passes, final-source reuse proof and human review remain OPEN.
+
+## Packet D Mist — development checkpoint
+
+Independent evidence review and coordinator adjudication accepted one development
+Docker/MQTT image-classification workflow: the full `qemu_mist_image_parity` suite
+ran on clean `46e7a29606c1ba4175b50b92964ac350b57ed587`. This is not frozen-candidate
+acceptance. It ran as normal matthijs on singleton node4 with inherited Python
+3.8.10/Ansible core 2.13.2 and the exact existing environment retained in its
+immutable `planned-command.json`:
+
+```bash
+/home/matthijs/venvs/continuum/bin/python3 scripts/test/run_tests.py \
+  --suite qemu_mist_image_parity \
+  --base-path /mnt/sdc/continuum_smoke/mist_46e7a29606c1_image_parity \
+  --external-physical-machines '' --middle-ip 180 --middle-ip-base 181 --stop-on-failure
+```
+
+The suite passed 1/1, wrapper exit zero without timeout, with 6,000 completed
+image outcomes: two workers each processed/replied to 3,000, and four publishers
+each sent/received 1,500. Two EDGE and four ENDPOINT metric rows are finite. The
+existing `3812449` parser handled all fifteen merged numeric records with zero
+parser warnings; no new repair or offline-replay substitute was needed. Nine
+Ansible recaps contain fourteen host rows, all zero failed/unreachable. Generated
+XML requests six workload VMs, eight vCPUs and 16 GiB, not independently sampled
+live resources. Delete-on-exit left zero owned workload/base domains; all eleven
+protected domains were unchanged and all 5,131 prior non-disk evidence files
+were preserved. The physical workflow returned.
+
+Configured 5 Hz/300 seconds remains nominal. Raw publisher spans were approximately
+314.76/314.42/324.41/324.37 seconds; the whole suite took 2165.264539 seconds.
+These measure different intervals, with no clock-cause diagnosis inferred.
+Finite summaries and no observed negative one-way values establish neither
+sustained 5 Hz nor synchronized/accurate cross-host one-way timing. No guest
+observer or edgecore invocation occurred. Actual workload Docker server,
+containerd, OS/package versions, image IDs/repo digests and OOM state were not
+independently inspected; saved pull/registry output is not runtime inspection.
+Saved worker status-command invocations precede publishers and reviewed source
+requires `Up`, but actual Docker response bytes are unavailable. Completed replies
+establish the application path. Final application state/lock are retained;
+overwritten intermediate infrastructure/software state bytes are unavailable.
+Compact evidence excludes disks/private keys, Ansible temporary trees and full
+journals; no backing-byte invariance is established.
+
+Under the private durable evidence root below, the accepted packet is
+`development-mist-46e7a29606c1-qemu_mist_image_parity`. The separate normal manual
+receipt records the later decision outside the original 249-member seal. Original
+`finished.json` remains `completed-unassessed`, `accepted:false`; it and the
+report's pending-assessment wording remain immutable. Neither this acceptance nor
+the existing parser turns preceding KubeEdge evidence into a VM pass on this source.
+
+| Evidence | Exact binding |
+| --- | --- |
+| Development acceptance | `accepted-development-manual.json`, SHA-256 `9889c2f2e6da954674fe5ef6a16c10a159171fea74025e784f478759ee2c5125`; original `SHA256SUMS` SHA-256 `d86ca3e3798e542e7cca12fe0f3ce614e413612c082ddeca88f8b79f863e32d7`. |
+| Original completion | `finished.json`, SHA-256 `ca5132b3aea7642f1a68b7a5cea8ca0c2c43c1dab66da89a51da03316d568a49`. |
+| Product result | Original run base above: `.continuum/test_results/test_results_2026-10-29_01-29-58.json`, SHA-256 `510e6943f439ef447733bf585949c298b2ace20768d0eddfec2bffcc7eb1e22d`; detailed counts, metadata and limits remain in the packet's `manual-evidence-report.json` and receipt. |
+
+This establishes no sequential reuse, alternate topology, broad support or release
+certification and releases no later runtime. Packet E's CLI fix, core Kata repair
+and validation, the full final frozen matrix, twelve canonical static gates, two
+complete operational passes, final-source reuse proof and human review remain OPEN.
 
 ## Archived completed planning records
 
