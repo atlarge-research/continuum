@@ -649,7 +649,8 @@ def print_resources(config, df):
 
     df_kube.columns = ["Time (s)" if c == "timestamp" else c for c in df_kube.columns]
     df_kube.columns = [
-        "controller_" + c.split("_")[-1] if "controller" in c else c for c in df_kube.columns
+        "controller_" + c.split("_")[-1] if c.startswith("cloudcontroller") else c
+        for c in df_kube.columns
     ]
     df_kube.columns = [
         c.replace(config["username"], "") if config["username"] in c else c for c in df_kube.columns
