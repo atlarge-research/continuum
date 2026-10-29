@@ -156,9 +156,9 @@ scope, final dispositions and frozen-candidate acceptance remain open; the origi
 pre-main goal is not complete. Packet D's foundation development checkpoint below
 combines five accepted cases on clean `73a30b7` with the accepted fresh endpoint
 recovery on clean `e3fcdf0`; the failed original endpoint case remains a failure.
-The KubeEdge mixed-source and Mist development checkpoints are recorded below.
-Next is Columbo, then Kata and OpenFaaS last, serially, subject to actual future
-clean HEAD/source-diff and accepted Mist normal-receipt binding, fresh guards,
+The KubeEdge mixed-source, Mist and Columbo development checkpoints are recorded below.
+Next is Kata, then OpenFaaS last, serially, subject to actual future
+clean HEAD/source-diff and accepted Columbo normal-receipt binding, fresh guards,
 independent review and separate coordinator release. The independently accepted
 pilot enables only its fixed node4/node5 development allocation below; it does
 not replace final serial acceptance.
@@ -522,10 +522,11 @@ recorded current existence/size, not live-byte or size invariance. Compact archi
 also exclude Ansible temporary trees and full journals. The physical window is
 returned. No new runtime workflow is released by this documentation checkpoint.
 
-Next is Columbo, then Kata and OpenFaaS last, serially in approved order. The
-KubeEdge mixed-source and Mist development checkpoints below preserve their
-distinct source and acceptance bindings. Columbo still requires actual future
-clean HEAD/source-diff and accepted Mist normal-receipt binding, fresh guards,
+Next is Kata, then OpenFaaS last, serially in approved order. The
+KubeEdge mixed-source, Mist and accepted Columbo development checkpoints below
+preserve their distinct source and acceptance bindings. Kata's approved two-file
+retry repair and exact runtime validation remain pending, requiring actual future
+clean HEAD/source-diff and accepted Columbo normal-receipt binding, fresh guards,
 independent review and separate coordinator release; this checkpoint releases
 no later runtime workflow.
 Packet E's demonstrated CLI tunnel-hint defect remains open: the printed forward
@@ -672,6 +673,79 @@ This establishes no sequential reuse, alternate topology, broad support or relea
 certification and releases no later runtime. Packet E's CLI fix, core Kata repair
 and validation, the full final frozen matrix, twelve canonical static gates, two
 complete operational passes, final-source reuse proof and human review remain OPEN.
+
+## Packet D Columbo — development checkpoint
+
+Independent evidence review and root adjudication accepted one strict `call_1`
+development workflow: the full `qemu_kubecontrol_empty_trace_parity` suite ran on
+clean `a1e5db24d9b68d28883398a715eebd60af556763`. It ran as normal matthijs on
+singleton node4 with inherited Python 3.8.10/Ansible core 2.13.2 and the custom
+local Kubernetes archive. Its immutable `planned-command.json` retains the exact
+environment and historical argv:
+
+```bash
+/home/matthijs/venvs/continuum/bin/python3 scripts/test/run_tests.py \
+  --suite qemu_kubecontrol_empty_trace_parity \
+  --base-path /mnt/sdc/continuum_smoke/columbo_a1e5db24d9b6_empty_trace_parity \
+  --external-physical-machines '' --stop-on-failure
+```
+
+The suite passed 1/1, wrapper exit zero without timeout, in 1576.7825138568878
+seconds. The single current Pod `empty-1-qslt7` Succeeded with exit zero and zero
+observed restarts; its actual pull policy was `Never`. All six current required
+trace columns are finite and agree across CSV/stdout, five raw instrumented
+markers and the unique current Pod application start modulo 3600, within the
+unchanged 0.00001-second tolerance. Deployment/resource/resource-OS CSVs contain
+1/18/58 rows. This agreement and the source's whole-hour adjustment establish
+neither synchronized clocks nor accurate cross-host one-way timing.
+
+All 26 saved bounded guest queries exited zero without timeout; both nodes were
+Ready at observation. No additional observer ran. Twelve Ansible recaps contain
+fifteen host rows, all failed/unreachable zero. XML requests two VMs, each eight
+vCPUs/32 GiB, rather than independently sampled live resources. Both workload
+domains remain running intentionally; all eleven protected domains were unchanged
+and all 5,382 prior non-disk evidence files were preserved. The physical workflow
+returned; no final teardown or later runtime release is implied.
+
+Point-in-time guest observations show Ubuntu 20.04.6, kernel 5.4.0-216-generic,
+containerd 1.7.27 and custom Kubernetes `v1.27.0-16+1b4ffff113e941` clients,
+kubelets and server, not stock v1.27.16. Archive SHA-256
+`bbae85b5c1c7a5bc288adcc0289d13b2a8923b000031dfac0e0e65e5b487786d` matches the
+copied-input fingerprint; no archive-member comparison to installed binaries or
+build-origin proof was performed. The detailed saved binary/image identities
+remain point-in-time observations in the report/receipt.
+
+The first offline assessment helper failed by choosing a cached same-name Job
+`0028` event as its anchor; its exact helper, traceback and command receipt remain
+preserved. Independently reviewed correction `93641e13...` selects the unique
+actual Pod application start with unchanged tolerance and passed on the same VM
+evidence. No VM retry or product-source repair occurred. One binary-journal match
+and five stop-after-required-Pod debug messages remain preserved; eight kubectl
+captures contain instrumented `0400/0402` stderr, so no blanket empty-stderr claim
+is made. Final application state/lock and complete compact evidence are retained;
+overwritten intermediate phase-state bytes are unavailable. Compact evidence
+excludes disks/private keys, Ansible temporary trees and full journals; backing
+stat metadata establishes no byte invariance.
+
+Under the private durable evidence root below, the packet is
+`development-columbo-a1e5db24d9b6-qemu_kubecontrol_empty_trace_parity`. Its separate
+normal manual receipt records later development acceptance outside the original
+320-member seal. Original `finished.json` remains `completed-unassessed`,
+`accepted:false`; it and the report's pending wording remain immutable. Detailed
+counts, metadata and limits remain in `manual-evidence-report.json` and the receipt.
+
+| Evidence | Exact binding |
+| --- | --- |
+| Development acceptance | `accepted-development-manual.json`, SHA-256 `f26745f0cadfd0853477596f81788a4b7ed163d445866b2ac89e502e3c49375c`; original `SHA256SUMS` SHA-256 `d20e0909e70c85c188a1ef7d68c17e20acc5fa452d3c04121dab6165d58f33b9`. |
+| Original completion | `finished.json`, SHA-256 `2738254547fa41083755475d3b571ef32c94e832f02bb74ab7466e4310990823`. |
+| Product result | Original base above: `.continuum/test_results/test_results_2026-10-29_02-12-58.json`, SHA-256 `c3e6d7b0d340d73113737e9eeadc00dd69a38099430e68b9877b476d5f8c3ed3`. |
+
+This establishes no sequential reuse, alternate topology/provider/mode, paper
+sweep, broad support or frozen-candidate/release acceptance. Kata's approved
+two-file retry repair and exact runtime validation remain pending, with OpenFaaS
+last and serial. Packet E's CLI repair/presentation, final source freeze, the full
+final matrix, twelve canonical static gates, two complete operational passes,
+final-source reuse proof and human review remain OPEN.
 
 ## Archived completed planning records
 
