@@ -120,6 +120,19 @@ def _software_assignment(module_id, module_type, resolved_vm_ids=None, resolved_
     }
 
 
+def _kata_trace_config():
+    """Return one cloud worker expecting one Kata timestamp row."""
+    return {
+        "mode": "cloud",
+        "cloud_ssh": ["ubuntu@10.0.0.1", "ubuntu@10.0.0.2"],
+        "infrastructure": {"cloud_nodes": 2, "edge_nodes": 0},
+        "domains": {"benchmark": {"pipeline": [{
+            "id": "empty-kata-pod", "type": "empty_kata",
+            "config": {"applications_per_worker": 1},
+        }]}},
+    }
+
+
 class ExecuteEntriesTests(unittest.TestCase):
     def test_execute_entries_dispatches_playbooks_and_commands(self):
         runner = mock.Mock()
@@ -688,6 +701,117 @@ class SoftwarePhasePlanTests(unittest.TestCase):
         )
         self.assertEqual(gather.call_count, 2)
         sleep.assert_called_once_with(15)
+
+    def test_kube_kata_timestamps_retry_after_zero_complete_first_fetch(self):
+        """A valid incomplete first fetch must reach the next bounded attempt."""
+        config = _kata_trace_config()
+        cache_trace = [{"operationName": "rootSpan", "startTime": 1, "duration": 1}]
+        incomplete_trace = [
+            {"operationName": "rootSpan", "startTime": 100, "duration": 1},
+            {"operationName": "StartVM", "startTime": 110, "duration": 20},
+        ]
+        complete_trace = incomplete_trace + [
+            {"operationName": "connect", "startTime": 140, "duration": 5},
+            {"operationName": "ttrpc.StartContainer", "startTime": 150, "duration": 2},
+            {"operationName": "ttrpc.StartContainer", "startTime": 160, "duration": 3},
+        ]
+        with mock.patch(
+            "resource_manager.kube_kata.kube_kata._gather_kata_traces",
+            side_effect=[[cache_trace, incomplete_trace], [cache_trace, complete_trace]],
+        ) as gather, mock.patch("resource_manager.kube_kata.kube_kata.time.sleep") as sleep:
+            timestamps = kube_kata.get_kata_timestamps(config, _worker_output=None)
+
+        self.assertEqual(timestamps, [[100, 110, 130, 145, 163]])
+        self.assertEqual(gather.call_args_list, [mock.call("10.0.0.2")] * 2)
+        sleep.assert_called_once_with(15)
+
+    def test_kube_kata_timestamps_exhaust_zero_complete_retries(self):
+        """Zero complete traces exhaust twelve fetches before strict final parsing."""
+        cache_trace = [{"operationName": "rootSpan", "startTime": 1, "duration": 1}]
+        incomplete_trace = [{"operationName": "rootSpan", "startTime": 100, "duration": 1}]
+        for remaining_traces in ([], [incomplete_trace]):
+            with self.subTest(remaining_traces=remaining_traces), mock.patch(
+                "resource_manager.kube_kata.kube_kata._gather_kata_traces",
+                return_value=[cache_trace] + remaining_traces,
+            ) as gather, mock.patch("resource_manager.kube_kata.kube_kata.time.sleep") as sleep:
+                with self.assertRaisesRegex(RuntimeError, "No complete Kata traces"):
+                    kube_kata.get_kata_timestamps(_kata_trace_config(), _worker_output=None)
+                self.assertEqual(gather.call_args_list, [mock.call("10.0.0.2")] * 12)
+                self.assertEqual(sleep.call_args_list, [mock.call(15)] * 11)
+
+    def test_kube_kata_parser_empty_results_require_explicit_opt_in(self):
+        """The default parser remains strict for empty and incomplete valid input."""
+        incomplete_trace = [{"operationName": "rootSpan", "startTime": 100, "duration": 1}]
+        for traces in ([], [incomplete_trace]):
+            with self.subTest(traces=traces):
+                with self.assertRaisesRegex(RuntimeError, "No complete Kata traces"):
+                    kube_kata.get_kata_period_timestamps(traces, log_incomplete=False)
+                self.assertEqual(kube_kata.get_kata_period_timestamps(
+                    traces, log_incomplete=False, allow_empty=True,
+                ), [])
+
+    def test_kube_kata_parser_opt_in_preserves_malformed_span_errors(self):
+        """Opting into empty results must not hide malformed span failures."""
+        for traces, error in (
+            ([[{"startTime": 100}]], KeyError),
+            ([[{"operationName": "rootSpan"}]], KeyError),
+            ([[None]], TypeError),
+            ([[{"operationName": "rootSpan", "startTime": 100},
+               {"operationName": "StartVM", "startTime": 110, "duration": None}]], TypeError),
+        ):
+            with self.subTest(traces=traces):
+                with self.assertRaises(error):
+                    kube_kata.get_kata_period_timestamps(traces, allow_empty=True)
+
+    def test_kube_kata_timestamps_keep_fetch_and_data_failures_fatal(self):
+        """Real gathering and parsing must stop immediately on fatal responses."""
+        cache_trace = {"spans": [{"operationName": "rootSpan", "startTime": 1}]}
+        cases = [
+            ("transport", None, RuntimeError, "Could not fetch Kata traces"),
+            ("http", None, RuntimeError, "Could not fetch Kata traces"),
+            ("json", None, RuntimeError, "invalid JSON"),
+            ("missing data", {}, RuntimeError, "did not contain data"),
+            ("malformed response", None, TypeError, ""),
+            ("malformed data", {"data": None}, TypeError, ""),
+            ("missing spans", {"data": [{}]}, KeyError, "spans"),
+            ("malformed trace", {"data": [None]}, TypeError, ""),
+            ("empty spans", {"data": [{"spans": []}]}, IndexError, ""),
+            ("malformed span", {"data": [{"spans": [None]}]}, TypeError, ""),
+            ("missing startTime", {"data": [{"spans": [{}]}]}, KeyError, "startTime"),
+            ("missing operationName", {"data": [cache_trace, {"spans": [
+                {"startTime": 100},
+            ]}]}, KeyError, "operationName"),
+            ("missing duration", {"data": [cache_trace, {"spans": [
+                {"operationName": "rootSpan", "startTime": 100},
+                {"operationName": "StartVM", "startTime": 110},
+            ]}]}, KeyError, "duration"),
+            ("malformed duration", {"data": [cache_trace, {"spans": [
+                {"operationName": "rootSpan", "startTime": 100},
+                {"operationName": "StartVM", "startTime": 110, "duration": None},
+            ]}]}, TypeError, ""),
+        ]
+        for name, payload, error, diagnostic in cases:
+            with self.subTest(name=name), mock.patch(
+                "resource_manager.kube_kata.kube_kata.requests.get",
+            ) as request, mock.patch("resource_manager.kube_kata.kube_kata.time.sleep") as sleep:
+                response = request.return_value
+                response.json.return_value = payload
+                if name == "transport":
+                    request.side_effect = kube_kata.requests.ConnectionError("connection refused")
+                elif name == "http":
+                    response.raise_for_status.side_effect = kube_kata.requests.HTTPError("HTTP 503")
+                elif name == "json":
+                    response.json.side_effect = ValueError("broken JSON")
+                with self.assertRaises(error) as exc:
+                    kube_kata.get_kata_timestamps(_kata_trace_config(), _worker_output=None)
+                self.assertIn(diagnostic, str(exc.exception))
+                if error is RuntimeError:
+                    self.assertIn("http://10.0.0.2:16686/api/traces", str(exc.exception))
+                request.assert_called_once_with(
+                    "http://10.0.0.2:16686/api/traces?service=kata&operation=rootSpan&limit=10000",
+                    timeout=600,
+                )
+                sleep.assert_not_called()
 
     def test_build_software_phase_entries_skips_endpoint_install_when_runtime_absent(self):
         config = _config(resource_manager=None, endpoint_nodes=0)

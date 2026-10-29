@@ -293,6 +293,7 @@ def _gather_kata_traces(ip: str, port: str = "16686") -> List[List[Dict]]:
 def get_kata_period_timestamps(
     traces: List[List[Dict]],
     log_incomplete: bool = True,
+    allow_empty: bool = False,
 ) -> List[List[int]]:
     """Extract kata period timestamps from Jaeger traces.
 
@@ -303,6 +304,8 @@ def get_kata_period_timestamps(
 
     Args:
         traces (List[List[Dict]]): Sorted Jaeger trace spans per deployment.
+        log_incomplete (bool): Log skipped incomplete traces.
+        allow_empty (bool): Return no rows while the collector awaits complete traces.
 
     Returns:
         List[List[int]]: Per-trace lists of [T0, T1, T2, T3, T4] timestamps.
@@ -353,7 +356,7 @@ def get_kata_period_timestamps(
             len(timestamps),
         )
 
-    if not timestamps:
+    if not timestamps and not allow_empty:
         raise RuntimeError("No complete Kata traces were available in Jaeger output")
 
     return timestamps
@@ -401,7 +404,7 @@ def get_kata_timestamps(config, _worker_output) -> List[List[int]]:
         traces = [_gather_kata_traces(ip)[1:] for ip in nodes_ips]
         # Flatten list of lists
         traces = [a for b in traces for a in b]
-        kata_ts = get_kata_period_timestamps(traces, log_incomplete=False)
+        kata_ts = get_kata_period_timestamps(traces, log_incomplete=False, allow_empty=True)
 
         if len(kata_ts) >= expected_rows:
             logging.info(
