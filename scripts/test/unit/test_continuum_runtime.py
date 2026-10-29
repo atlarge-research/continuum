@@ -1005,6 +1005,59 @@ class ContinuumMainApplicationPhaseTests(unittest.TestCase):
             },
         }
 
+    def test_main_observability_access_hints_use_controller_address(self):
+        """Retained observability tunnels use the controller external address."""
+        config = self._config(["infrastructure", "software"])
+        config["infrastructure"]["cloud_nodes"] = 2
+        config["domains"]["software"]["modules"].append(
+            {"id": "observability-main", "type": "observability", "config": {}}
+        )
+        config.update(
+            control_ips=["192.0.2.10"],
+            control_ips_internal=["10.0.0.10"],
+            cloud_ips=["192.0.2.11"],
+            cloud_ssh=["controller@192.0.2.10", "worker@192.0.2.11"],
+            ssh_key="/tmp/test_key",
+        )
+        args = argparse.Namespace(config=config)
+        machines = [mock.Mock()]
+
+        with (
+            mock.patch.object(
+                continuum_module.infrastructure, "start", return_value=machines
+            ),
+            mock.patch.object(continuum_module.resource_manager, "start"),
+            mock.patch.object(continuum_module.ansible, "AnsibleRunner"),
+            mock.patch.object(
+                continuum_module.yaml_parser, "write_experiment_lock", return_value=None
+            ),
+            mock.patch.object(
+                continuum_module.infra_state, "save_state", return_value="/tmp/state.json"
+            ),
+            mock.patch.object(continuum_module.application, "start") as application_start,
+            self.assertLogs(level="INFO") as logs,
+        ):
+            continuum_module.main(args)
+
+        tunnel_commands = [
+            record.getMessage()
+            for record in logs.records
+            if record.getMessage().startswith(("To access Grafana:", "To access Prometheus:"))
+        ]
+        self.assertEqual(
+            tunnel_commands,
+            [
+                "To access Grafana: ssh -L 3000:192.0.2.10:3000 "
+                "controller@192.0.2.10 -i /tmp/test_key",
+                "To access Prometheus: ssh -L 9090:192.0.2.10:9090 "
+                "controller@192.0.2.10 -i /tmp/test_key",
+            ],
+        )
+        for command in tunnel_commands:
+            self.assertNotIn("192.0.2.11", command)
+            self.assertNotIn("10.0.0.10", command)
+        application_start.assert_not_called()
+
     def test_main_rejects_fresh_application_without_software_before_side_effects(self):
         config = self._config(["infrastructure", "application"])
         args = argparse.Namespace(config=config)
