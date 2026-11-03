@@ -67,7 +67,15 @@ Current-execution MQTT subscribers must be `Running` with the pod condition `Rea
 
 Watch the changing pod conditions and init/container waiting reasons in the main log. Kubernetes performs its own image-pull retries; Continuum waits within the existing deadline without restarting deployments. On timeout or terminal pod failure, the log includes a best-effort event excerpt for up to three selected pod UIDs, at most ten events per pod and 500 message characters per event, with a five-second API request timeout. Event collection failure is secondary to the original error; absent pod UIDs produce no unscoped event query.
 
+Current-execution status queries also have a local subprocess budget of at most ten seconds, capped by the remaining polling budget. Event collection shares a 15-second budget across its selected pods, with each local query limited to five seconds or the remainder. A timed-out query can additionally use up to two seconds to terminate and reap its local process group; diagnostic overhead is separate from the readiness polling timeout. A primary status-query failure surfaces immediately without event collection. Other provisioning and legacy command paths retain their existing execution behavior.
+
 When image retrieval fails, inspect DNS, routes and registry reachability from the affected guest and read the actual container-runtime error. Successful host access does not establish guest access. Docker forwarding rules can interfere with connectivity, but inspect the actual path before changing them. Check advertised HTTP endpoints separately from pod health. Preserve failed state and logs before a reviewed rerun; avoid blanket retries or automatic firewall changes.
+
+### Publisher completion fails or times out
+
+Publisher completion requires one SSH target per expected container and matches the exact container name. A similarly named container cannot establish success. Missing/malformed status, transport errors and nonzero exits fail the benchmark. All selected containers share one monotonic completion budget of `max(900, duration + 300)` seconds, where `duration` is the configured benchmark duration in seconds; retries and sleeps consume that same budget. Each status subprocess is limited to ten seconds or the remaining budget, plus its bounded cleanup grace. The timeout reports the container, target, elapsed time and last status/error.
+
+The opt-in `Machine.process(timeout_seconds=...)` mode is for one waited command and performs no automatic retry or host-key repair. Existing callers without this argument retain their prior behavior. Timeouts preserve partial output and original stderr, and cancellation attempts bounded local cleanup before propagating. Killing a local SSH process does not prove the remote workload stopped: inspect the exact task-owned remote container/VM and preserve its evidence before cleanup. If a descendant escaped the owned process group and kept output pipes open, cleanup reports that failure instead of waiting indefinitely or claiming the descendant stopped.
 
 ## Ansible
 

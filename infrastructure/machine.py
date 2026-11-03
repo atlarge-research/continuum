@@ -6,10 +6,12 @@ The Machine object represents a physical machine used to run this benchmark
 import fcntl  # Linux-only, which is OK for Continuum deployments
 import getpass
 import logging
+import math
 import os
 import random
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import threading
@@ -17,6 +19,7 @@ import time
 
 _RESUME_SSH_MARKER = "CONTINUUM_RESUME_SSH_READY_V1"
 _SYNTHETIC_NONZERO_MARKER = "Command exited with non-zero return code"
+_PROCESS_CLEANUP_GRACE_SECONDS = 2
 
 # -----------------------------
 # Helper utilities
@@ -241,6 +244,61 @@ def _async_reap(process, desc=""):
     t.start()
 
 
+def _terminate_bounded_process(process):
+    """Kill the owned local session and reap its leader within a fixed cleanup grace."""
+    deadline = time.monotonic() + _PROCESS_CLEANUP_GRACE_SECONDS
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        return process.communicate(timeout=max(0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired as exc:
+        # An escaped descendant may hold capture pipes. Never wait indefinitely on it.
+        for pipe in (process.stdout, process.stderr):
+            if pipe is not None:
+                pipe.close()
+        process.wait(timeout=max(0, deadline - time.monotonic()))
+        raise RuntimeError("Timed-out command capture pipes did not close during cleanup") from exc
+
+
+def _run_bounded_command(command, shell, executable, env, timeout_seconds):
+    """Execute one command with a local process-group lifetime and bounded cleanup."""
+    deadline = time.monotonic() + timeout_seconds
+    # Explicit lifetime management avoids Popen.__exit__'s unbounded wait.
+    process = subprocess.Popen(  # pylint: disable=consider-using-with
+        command, shell=shell, executable=executable, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+    )
+    try:
+        timed_out = False
+        try:
+            stdout, stderr = process.communicate(timeout=max(0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            stdout, stderr = _terminate_bounded_process(process)
+        except BaseException:
+            try:
+                _terminate_bounded_process(process)
+            except Exception:  # pylint: disable=broad-except
+                logging.exception("Could not clean up cancelled command %s", process.pid)
+            raise
+        output = stdout.decode("utf-8", errors="replace").splitlines() if stdout else []
+        errors = stderr.decode("utf-8", errors="replace").splitlines() if stderr else []
+        if timed_out:
+            errors.append("Command timed out after %.3fs: %s" % (timeout_seconds, command))
+        elif process.returncode:
+            errors.append("Command exited with non-zero return code %s: %s" % (
+                process.returncode, command
+            ))
+        return [[output, errors]]
+    finally:
+        # Popen.__exit__ waits without a timeout; cleanup here must never do that.
+        for pipe in (process.stdout, process.stderr):
+            if pipe is not None:
+                pipe.close()
+
+
 def _backoff_seconds(attempt, cap=30.0):
     """Exponential backoff with jitter; attempt starts at 1.
 
@@ -374,6 +432,7 @@ BASE_NAMES                  %s""" % (
         ssh_key=True,
         retryonoutput=False,
         wait=True,
+        timeout_seconds=None,
     ):
         """Execute a process using subprocess, return the output/error of the process.
 
@@ -386,14 +445,26 @@ BASE_NAMES                  %s""" % (
             ssh_key (bool): Use the custom SSH key for VMs
             retryonoutput (bool): Retry on empty output
             wait (bool): If False, return immediately (used for nohup/& patterns)
+            timeout_seconds (float | None): Opt-in single waited command budget, no retries
+                or host-key repair; timeout/cancellation cleanup has a separate two-second grace.
 
         Returns:
             list([output_lines, error_lines]) one per command
         """
         executable = "/bin/bash" if shell else None
 
+        if timeout_seconds is not None:
+            if (isinstance(timeout_seconds, bool)
+                    or not isinstance(timeout_seconds, (int, float))
+                    or not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
+                raise ValueError("timeout_seconds must be finite and > 0")
+            if not wait:
+                raise ValueError("timeout_seconds requires wait=True")
+
         commands = _normalize_commands(command, shell=shell)
         if not commands:
+            if timeout_seconds is not None:
+                raise ValueError("timeout_seconds requires exactly one command")
             return [] if not wait else []
 
         # Expand ssh targets to per-command list
@@ -463,6 +534,21 @@ BASE_NAMES                  %s""" % (
                     commands[i] = ssh_argv + [s] + remote_argv
 
                 ssh_targets[i] = s
+
+        if timeout_seconds is not None:
+            if len(commands) != 1:
+                raise ValueError("timeout_seconds requires exactly one effective command")
+            result = _run_bounded_command(commands[0], shell, executable, env, timeout_seconds)
+            if ssh_targets[0] and not result[0][1]:
+                return result
+            # Preserve the same narrow accepted-host-notice filtering for successful SSH.
+            if ssh_targets[0] and all(
+                _is_accepted_ssh_host_notice(line, ssh_targets[0]) for line in result[0][1]
+            ):
+                for line in result[0][1]:
+                    logging.info("SSH host acceptance for %s: %s", ssh_targets[0], line)
+                result[0][1] = []
+            return result
 
         # Execute all commands, max 100 at a time
         batchsize = 100

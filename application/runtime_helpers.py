@@ -805,27 +805,32 @@ def cache_kubernetes_workers(config, machines, app_vars, runner=None):
     time.sleep(10)
 
 
-def _checked_kubectl(config, machines, arguments):
+def _checked_kubectl(config, machines, arguments, timeout_seconds=None):
     """Keep every scoped kubectl failure, including Machine's nonzero diagnostic."""
     command = ["kubectl", "--namespace=default"] + arguments
-    output, error = machines[0].process(config, command, ssh=config["cloud_ssh"][0])[0]
+    options = {} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}
+    output, error = machines[0].process(
+        config, command, ssh=config["cloud_ssh"][0], **options
+    )[0]
     if kubernetes._stderr_has_real_error(error):  # pylint: disable=protected-access
         raise RuntimeError("Kubernetes benchmark command failed: %s" % "\n".join(error))
     return output
 
 
-def _kubectl_items(config, machines, arguments):
+def _kubectl_items(config, machines, arguments, timeout_seconds=None):
     """Read a Kubernetes JSON list without treating empty/invalid output as success."""
-    output = _checked_kubectl(config, machines, arguments + ["-o", "json"])
+    options = {} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}
+    output = _checked_kubectl(config, machines, arguments + ["-o", "json"], **options)
     payload = json.loads("\n".join(output))
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise RuntimeError("Invalid Kubernetes benchmark list response")
     return payload["items"]
 
 
-def _execution_pods(config, machines, selector):
+def _execution_pods(config, machines, selector, timeout_seconds=None):
     """List only the selected benchmark execution's pods."""
-    return _kubectl_items(config, machines, ["get", "pods", "-l", selector])
+    options = {} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}
+    return _kubectl_items(config, machines, ["get", "pods", "-l", selector], **options)
 
 
 def _prepare_kubernetes_execution(config, machines, worker_apps):
@@ -911,17 +916,23 @@ def _log_kubernetes_pod_states(pods, previous):
 
 def _log_kubernetes_pod_events(config, machines, pods):
     """Collect a small, best-effort excerpt scoped to current pod UIDs only."""
-    # Bound both the number of requests and each API request, and cap logged text.
+    if not pods:
+        return
+    deadline = time.monotonic() + 15
+    # Each local subprocess may additionally need its bounded cleanup grace.
     for pod in pods[:3]:
         metadata = pod["metadata"]
         if not metadata.get("uid"):
             continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         try:
             events = _kubectl_items(config, machines, [
                 "--request-timeout=5s", "get", "events",
                 "--field-selector=involvedObject.uid=" + metadata["uid"],
                 "--sort-by=.metadata.creationTimestamp",
-            ])
+            ], timeout_seconds=min(5, remaining))
             for event in events[-10:]:
                 logging.warning("Kubernetes subscriber %s event %s: %s", metadata["name"],
                                 str(event.get("reason", ""))[:100],
@@ -940,15 +951,21 @@ def _wait_kubernetes_execution(config, machines, completion=False):
         raise ValueError("worker_ready_timeout_seconds must be >= 1")
     deadline = time.monotonic() + timeout
     previous = {}
+    pods = []
+    wanted = "Succeeded" if completion else "Running with Ready=True"
     while True:
-        pods = _execution_pods(config, machines, execution["selector"])
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _log_kubernetes_pod_events(config, machines, pods)
+            raise RuntimeError("Timeout waiting for current Kubernetes subscribers to be " + wanted)
+        pods = _execution_pods(config, machines, execution["selector"],
+                               timeout_seconds=min(10, remaining))
         previous = _log_kubernetes_pod_states(pods, previous)
         phases = [pod["status"]["phase"] for pod in pods]
         bad_phases = ("Failed", "Unknown") if completion else ("Failed", "Unknown", "Succeeded")
         if any(phase in bad_phases for phase in phases):
             _log_kubernetes_pod_events(config, machines, pods)
             raise RuntimeError("Current Kubernetes subscriber has invalid status: %s" % phases)
-        wanted = "Succeeded" if completion else "Running with Ready=True"
         ready = all(
             pod["status"]["phase"] == "Succeeded" if completion else (
                 pod["status"]["phase"] == "Running" and any(
@@ -959,10 +976,11 @@ def _wait_kubernetes_execution(config, machines, completion=False):
         )
         if len(pods) == execution["count"] and ready:
             return
-        if time.monotonic() >= deadline:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
             _log_kubernetes_pod_events(config, machines, pods)
             raise RuntimeError("Timeout waiting for current Kubernetes subscribers to be " + wanted)
-        time.sleep(3)
+        time.sleep(min(3, remaining))
 
 
 def wait_kubernetes_workers_ready(config, machines, get_starttime):

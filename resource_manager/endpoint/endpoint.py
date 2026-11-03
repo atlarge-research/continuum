@@ -370,25 +370,44 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
         sshs (list(str)): SSH addresses to edge or endpoint VMs
         container_names (list(str)): Names of docker containers launched
     """
+    if len(sshs) != len(container_names):
+        raise ValueError("Endpoint SSH targets and container names must have equal length")
+    if not container_names:
+        return
     logging.info("Wait on all endpoint or mist containers to finish")
-    time.sleep(10)
+    started = time.monotonic()
+    # Publishers run concurrently. All selected containers share this one budget.
+    budget = max(900, config_access.benchmark_param_int(config, "duration") + 300)
+    deadline = started + budget
+    time.sleep(min(10, budget))
 
     for ssh, cont_name in zip(sshs, container_names):
         logging.info("Wait for container to finish: %s on VM %s", cont_name, ssh.split("@")[0])
         finished = False
         transient_failures = 0
         empty_output_failures = 0
+        last_status = "No status returned"
 
         while not finished:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                message = "Timeout waiting for container %s on %s after %.1fs: %s" % (
+                    cont_name, ssh, time.monotonic() - started, last_status
+                )
+                logging.error(message)
+                raise RuntimeError(message)
             # Get list of docker containers
             command = _DOCKER_CONTAINER_STATUS_COMMAND
             ssh_entry = ssh
             if config["infrastructure"]["provider"] == "baremetal":
                 ssh_entry = None
 
-            output, error = machines[0].process(config, command, shell=True, ssh=ssh_entry)[0]
+            output, error = machines[0].process(
+                config, command, shell=True, ssh=ssh_entry, timeout_seconds=min(10, remaining)
+            )[0]
 
             if error:
+                last_status = " ".join(error)
                 if _is_transient_ssh_error(error) and transient_failures < 8:
                     transient_failures += 1
                     backoff = min(30, 2**transient_failures)
@@ -399,11 +418,12 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                         backoff,
                         " ".join(error),
                     )
-                    time.sleep(backoff)
+                    time.sleep(max(0, min(backoff, deadline - time.monotonic())))
                     continue
                 logging.error("".join(error))
                 sys.exit(1)
             elif not output:
+                last_status = "No output from docker container"
                 if empty_output_failures < 5:
                     empty_output_failures += 1
                     logging.warning(
@@ -411,7 +431,7 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                         ssh.split("@")[0],
                         empty_output_failures,
                     )
-                    time.sleep(5)
+                    time.sleep(max(0, min(5, deadline - time.monotonic())))
                     continue
                 logging.error("No output from docker container")
                 sys.exit(1)
@@ -422,7 +442,7 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
             # Get status of docker container
             status_line = None
             for line in output:
-                if cont_name in line:
+                if line.split() and line.split()[-1] == cont_name:
                     status_line = line
 
             if status_line is None:
@@ -434,11 +454,16 @@ def wait_endpoint_completion(config, machines, sshs, container_names):
                 )
                 sys.exit(1)
 
-            parsed = status_line.rstrip().split(" ")
+            last_status = status_line
+            parsed = status_line.split()
+            if len(parsed) < 3:
+                logging.error("Malformed Docker status for container %s: %s",
+                              cont_name, status_line)
+                sys.exit(1)
 
             # Check status
             if parsed[1] == "Up":
-                time.sleep(5)
+                time.sleep(max(0, min(5, deadline - time.monotonic())))
             elif parsed[1] == "Exited" and parsed[2] == "(0)":
                 finished = True
             else:

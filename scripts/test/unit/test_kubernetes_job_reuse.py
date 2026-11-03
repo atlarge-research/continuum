@@ -2,16 +2,22 @@
 
 import copy
 import json
+import itertools
 from pathlib import Path
 import shlex
 import tempfile
+import sys
+import time
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
 from jinja2 import Environment
 import yaml
 
-from application import runtime_helpers
+from application import application as application_module, runtime_helpers
+from infrastructure import machine as machine_module
+from resource_manager.endpoint import endpoint
 
 
 _ROLE = Path(__file__).resolve().parents[3] / "roles/application/k8s_job_deploy"
@@ -401,7 +407,8 @@ class KubernetesJobReuseTests(unittest.TestCase):  # pylint: disable=too-many-pu
                   for index in range(20)]
         with mock.patch.object(runtime_helpers, "_kubectl_items", return_value=events) as query, \
                 mock.patch.object(runtime_helpers, "_execution_pods", return_value=[pod]), \
-                mock.patch.object(runtime_helpers.time, "monotonic", side_effect=[0, 3]), \
+                mock.patch.object(runtime_helpers.time, "monotonic",
+                                  side_effect=itertools.chain([0, 0], itertools.repeat(3))), \
                 self.assertLogs(level="INFO") as logs:
             with self.assertRaisesRegex(RuntimeError, "Timeout"):
                 runtime_helpers.wait_kubernetes_workers_ready(self.config, [self.machine], False)
@@ -424,7 +431,9 @@ class KubernetesJobReuseTests(unittest.TestCase):  # pylint: disable=too-many-pu
                 with self.subTest(phase=phase, failure=failure), \
                         mock.patch.object(runtime_helpers, "_execution_pods", return_value=[pod]), \
                         mock.patch.object(runtime_helpers, "_kubectl_items", side_effect=failure), \
-                        mock.patch.object(runtime_helpers.time, "monotonic", side_effect=[0, 3]):
+                        mock.patch.object(runtime_helpers.time, "monotonic",
+                                          side_effect=itertools.chain([0, 0],
+                                                                      itertools.repeat(3))):
                     with self.assertRaisesRegex(RuntimeError, "invalid status|Timeout"):
                         runtime_helpers.wait_kubernetes_workers_ready(
                             self.config, [self.machine], False
@@ -472,6 +481,117 @@ class KubernetesJobReuseTests(unittest.TestCase):  # pylint: disable=too-many-pu
                 self.config, [self.machine], [pod]
             )
         query.assert_not_called()
+
+    def test_primary_query_timeout_uses_real_process_and_preserves_stderr(self):
+        """A stuck transport returns a primary error without starting event diagnostics."""
+        self._start()
+        self.config["domains"]["benchmark"]["pipeline"][0]["config"][
+            "worker_ready_timeout_seconds"
+        ] = 1
+        local = machine_module.Machine("local", True)
+
+        def blocked_query(_config, command, **kwargs):
+            self.assertNotIn("events", command)
+            self.assertGreater(kwargs.get("timeout_seconds", 0), 0)
+            self.assertLessEqual(kwargs["timeout_seconds"], 1)
+            return local.process({}, [sys.executable, "-u", "-c",
+                                     "import sys,time; print('transport detail',file=sys.stderr); "
+                                     "time.sleep(20)"],
+                                 timeout_seconds=kwargs["timeout_seconds"])
+
+        started = time.monotonic()
+        with mock.patch.object(self.machine, "process", side_effect=blocked_query):
+            with self.assertRaisesRegex(RuntimeError, "transport detail[\\s\\S]*timed out"):
+                runtime_helpers.wait_kubernetes_workers_ready(self.config, [self.machine], False)
+        self.assertLess(time.monotonic() - started, 4)
+
+    def test_exhausted_polling_budget_does_not_start_a_query(self):
+        """There is no subprocess launch after the polling deadline has expired."""
+        self._start()
+        with mock.patch.object(runtime_helpers.time, "monotonic", side_effect=[0, 3]), \
+                mock.patch.object(runtime_helpers, "_execution_pods", return_value=[]) as query:
+            with self.assertRaisesRegex(RuntimeError, "Timeout"):
+                runtime_helpers.wait_kubernetes_workers_ready(self.config, [self.machine], False)
+        query.assert_not_called()
+
+    def test_event_requests_share_one_diagnostic_budget(self):
+        """Later pods receive only the remaining diagnostic execution budget."""
+        self._start()
+        pod = next(iter(self.machine.pods.values()))
+        now = [0]
+        budgets = []
+
+        def events(_config, _machines, _arguments, timeout_seconds=None):
+            budgets.append(timeout_seconds)
+            now[0] += 6  # Five-second timeout plus one second of cleanup overhead.
+            return []
+
+        with mock.patch.object(runtime_helpers.time, "monotonic", side_effect=lambda: now[0]), \
+                mock.patch.object(runtime_helpers, "_kubectl_items", side_effect=events):
+            runtime_helpers._log_kubernetes_pod_events(  # pylint: disable=protected-access
+                self.config, [self.machine], [pod, pod, pod]
+            )
+        self.assertEqual(budgets, [5, 5, 3])
+
+    def test_public_kube_unready_or_terminal_worker_prevents_publisher_start(self):
+        """Actual start_worker/readiness composition gates the publisher boundary."""
+        for phase in ("Running", "Succeeded"):
+            with self.subTest(phase=phase):
+                self.machine.jobs = {}
+                self.machine.pods = {}
+                self.config["module"] = {"application": mock.Mock()}
+                self.config["module"]["application"].start_worker.return_value = {}
+                self.config["endpoint_ssh"] = ["endpoint0@192.0.2.1"]
+                now = SimpleNamespace(value=0)
+
+                def deploy(config, variables, runner=None, phase=phase):
+                    self.machine.deploy(config, variables, runner=runner)
+                    for pod in self.machine.pods.values():
+                        pod["status"] = {"phase": phase, "conditions": [
+                            {"type": "Ready", "status": "False"}
+                        ]}
+
+                def pause(seconds, clock=now):
+                    clock.value += seconds
+
+                with mock.patch.object(runtime_helpers, "run_kubernetes_benchmark_playbook",
+                                       side_effect=deploy), \
+                        mock.patch.object(endpoint, "start_endpoint", side_effect=AssertionError(
+                            "Publisher started before subscriber readiness"
+                        )) as publisher, \
+                        mock.patch.object(runtime_helpers.time, "monotonic",
+                                          side_effect=lambda clock=now: clock.value), \
+                        mock.patch.object(runtime_helpers.time, "sleep",
+                                          side_effect=pause):
+                    with self.assertRaisesRegex(RuntimeError, "Timeout|invalid status"):
+                        application_module.kube(self.config, [self.machine])
+                publisher.assert_not_called()
+                self.config["module"]["application"].gather_worker_metrics.assert_not_called()
+
+    def test_public_kube_publisher_failure_prevents_completion_and_metrics(self):
+        """A wrong publisher container cannot advance into worker results processing."""
+        self.config["module"] = {"application": mock.Mock()}
+        self.config["module"]["application"].start_worker.return_value = {}
+        self.config["endpoint_ssh"] = ["endpoint0@192.0.2.1"]
+        self.config["infrastructure"]["provider"] = "qemu"
+        self.config["domains"]["benchmark"]["pipeline"][0]["config"]["duration"] = 30
+        original_process = self.machine.process
+
+        def process(config, command, **options):
+            if isinstance(command, str) and command.startswith("docker container ls"):
+                return [(["abc: Exited (0) 1 second ago endpoint00"], [])]
+            return original_process(config, command, **options)
+
+        with mock.patch.object(self.machine, "process", side_effect=process), \
+                mock.patch.object(endpoint, "start_endpoint", return_value=["endpoint0"]), \
+                mock.patch.object(endpoint.time, "sleep"):
+            with self.assertRaises(SystemExit):
+                application_module.kube(self.config, [self.machine])
+        pod_queries = [command for command in self.machine.commands
+                       if isinstance(command, list) and "pods" in command]
+        self.assertEqual(len(pod_queries), 1)
+        self.config["module"]["application"].gather_worker_metrics.assert_not_called()
+        self.config["module"]["application"].gather_endpoint_metrics.assert_not_called()
 
 
 if __name__ == "__main__":

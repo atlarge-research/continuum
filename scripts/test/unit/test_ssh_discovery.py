@@ -1,8 +1,11 @@
 """Bound fresh-guest key discovery without changing shared process execution."""
 
 from pathlib import Path
+import os
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -118,6 +121,80 @@ class SshDiscoveryTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self._discover()
         self.assertEqual(self.probes, [])
+
+
+class SshDiscoveryProcessTests(unittest.TestCase):
+    """Verify discovery at the actual subprocess boundary with disposable executables."""
+
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.addCleanup(self.tempdir.cleanup)
+        self.root = Path(self.tempdir.name)
+        self.known_hosts = self.root / "known hosts"
+        self.config = {"home": str(self.root), "ssh_known_hosts_file": str(self.known_hosts)}
+        self.machine = mock.Mock()
+        self.machine.process.return_value = [([], [])]
+        self.scan = self.root / "ssh-keyscan"
+        self.pid_file = self.root / "scan.pid"
+        self.started = time.monotonic()
+        self.real_monotonic = time.monotonic
+        self.clock_calls = 0
+
+    def _short_budget(self):
+        self.clock_calls += 1
+        if self.clock_calls == 1:
+            return 0
+        return 599.7 + self.real_monotonic() - self.started
+
+    def _install_scan(self, source):
+        self.scan.write_text("#!" + sys.executable + "\n" + source, encoding="utf-8")
+        self.scan.chmod(0o700)
+        path = str(self.root) + os.pathsep + os.environ["PATH"]
+        patcher = mock.patch.dict(os.environ, {"PATH": path})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_real_sleeping_keyscan_is_killed_and_reaped(self):
+        """A real hung keyscan cannot outlive the remaining shared discovery budget."""
+        self._install_scan(
+            "import os,time\nfrom pathlib import Path\n"
+            "Path(%r).write_text(str(os.getpid()))\ntime.sleep(20)\n" % str(self.pid_file)
+        )
+        with mock.patch.object(infrastructure.time, "monotonic", side_effect=self._short_budget):
+            with self.assertRaisesRegex(RuntimeError, "timed out"):
+                infrastructure.add_ssh(self.config, [self.machine], base=["192.0.2.1"])
+        self.assertLess(self.real_monotonic() - self.started, 4)
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(int(self.pid_file.read_text()), os.WNOHANG)
+        self.assertEqual(self.known_hosts.read_text(), "")
+
+    def test_real_banner_only_output_exhausts_without_publishing_a_key(self):
+        """An actual banner-emitting executable does not satisfy discovery."""
+        self._install_scan("print('# 192.0.2.1:22 SSH-2.0-test')\n")
+        with mock.patch.object(infrastructure.time, "monotonic", side_effect=self._short_budget):
+            with self.assertRaisesRegex(RuntimeError, "No host keys returned"):
+                infrastructure.add_ssh(self.config, [self.machine], base=["192.0.2.1"])
+        self.assertEqual(self.known_hosts.read_text(), "")
+
+    def test_real_delayed_key_success_publishes_a_generated_host_key(self):
+        """A refused scan followed by an actual generated public key succeeds."""
+        key = self.root / "fixture-key"
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)],
+                       check=True, capture_output=True, timeout=5)
+        public = " ".join(key.with_suffix(".pub").read_text().split()[:2])
+        attempts = self.root / "attempted"
+        self._install_scan(
+            "import sys\nfrom pathlib import Path\n"
+            "marker=Path(%r)\n"
+            "if not marker.exists():\n    marker.touch()\n    sys.exit(1)\n"
+            "print(%r)\n" % (str(attempts), "192.0.2.1 " + public)
+        )
+        real_sleep = time.sleep
+        with mock.patch.object(infrastructure.time, "sleep",
+                               side_effect=lambda seconds: real_sleep(min(seconds, 0.01))):
+            infrastructure.add_ssh(self.config, [self.machine], base=["192.0.2.1"])
+        self.assertTrue(attempts.exists())
+        self.assertEqual(self.known_hosts.read_text(), "192.0.2.1 " + public + "\n")
 
 
 if __name__ == "__main__":
