@@ -22,19 +22,7 @@ For this demo, each group gets access to a Kubernetes that runs on 2 virtual mac
       cont-nX-Y@al02.anac.cs.vu.nl \
       "ssh -tt nodeX 'ssh -tt -i ~/.ssh/id_rsa_continuum cloud_controller_cont-nX-Y@192.168.ZZZ.2'"
     ```
-    Replace every `X`, `Y`, and `ZZZ` with your assigned values. Keep this SSH session open while using Grafana in Part 2.
-
-    The first `ssh` normally tries default private-key files such as `~/.ssh/id_ed25519` and `~/.ssh/id_rsa`, as well as keys available through `ssh-agent`. If your matching private key has another name or location, add `-i "/path/to/your/private_key"` before `cont-nX-Y@al02.anac.cs.vu.nl`. Leave the inner `-i ~/.ssh/id_rsa_continuum` unchanged: that key is prepared on the remote machine for the final hop.
-
-    A `.pub` file alone cannot authenticate you. OpenSSH does support `-i key.pub` when the matching private key is already loaded in `ssh-agent`; this is an agent configuration, not a general operating-system-specific workaround.
-
-    If connecting fails:
-    - `Permission denied (publickey)`: check your assigned username and that the public key you sent matches the private key SSH is using. Select that private key explicitly with `-i` as described above. For `Too many authentication failures`, also add `-o IdentitiesOnly=yes` to the first `ssh`.
-    - `Identity file ... not accessible` or `Load key ...: invalid format`: check the key path in your current terminal and use the private-key file rather than its `.pub` file, unless you have deliberately configured an agent. For an `UNPROTECTED PRIVATE KEY FILE` warning on Linux/macOS, restrict access with `chmod 600 /path/to/your/private_key`.
-    - `Could not resolve hostname`, `Connection timed out`, or `Connection refused`: check the hostname and your network connection, and ask a teacher to confirm access to the named host. Do not change the remote machines or their keys.
-    - `Address already in use` for local port 3000: close an earlier tutorial SSH session, or change only the first `3000` in `-L 3000:192.168.ZZZ.2:3000` to `3001` and open http://localhost:3001 in Part 2.
-
-    To diagnose the first hop separately, run `ssh -vvv cont-nX-Y@al02.anac.cs.vu.nl` (include your explicit `-i` option if needed). Exit that session before retrying the full command. If the first hop works but connecting to `nodeX` or the VM fails, show the teacher the exact error and the host where it occurs.
+    Replace `X`, `Y`, and `ZZZ` with your assigned values. Keep this SSH session open while using Grafana. SSH normally finds default keys automatically. For a key with another name or location, add `-i "/path/to/your/private_key"` to the first `ssh` command. Leave the inner `-i ~/.ssh/id_rsa_continuum` unchanged. If login fails, check your username and that you are using the key pair whose public key you sent. Ask a teacher for help and include the exact error message.
 
 ## Part 2: Inspect the Kubernetes Cluster
 You inspect the Kubernetes cluster running on 2 VMs to see what the cluster does under the hood. 
