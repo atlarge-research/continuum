@@ -2,18 +2,11 @@
 
 ## Scope
 
-This evidence certifies the software-only local row `P-QEMU-10-SW-LOCAL` in
-`docs/release_certification_matrix.md`.
+This evidence certifies the software-only local row `P-QEMU-10-SW-LOCAL` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision a single-host QEMU variant of the
-legacy P-QEMU-10 node counts and complete the Kubernetes, OpenFaaS, and endpoint
-runtime software phase. The variant keeps three cloud VMs and four endpoint VMs,
-but lowers cloud VM cores from the legacy value of 6 to 4 so the suite fits the
-dedicated runner's 20-core single-host limit.
+It proves that the rework stack can provision a single-host QEMU variant of the legacy P-QEMU-10 node counts and complete the Kubernetes, OpenFaaS, and endpoint runtime software phase. The variant keeps three cloud VMs and four endpoint VMs, but lowers cloud VM cores from the legacy value of 6 to 4 so the suite fits the dedicated runner's 20-core single-host limit.
 
-It does not certify the exact legacy CPU shape or the full OpenFaaS
-image-classification application benchmark from
-`configuration/tests/qemu/10_kubernetes-openfaas.cfg`.
+It does not certify the exact legacy CPU shape or the full OpenFaaS image-classification application benchmark from `configuration/tests/qemu/10_kubernetes-openfaas.cfg`.
 
 ## Source And Command
 
@@ -49,24 +42,17 @@ The experiment lock records:
 4. no network emulation,
 5. `k8s-main`, `openfaas-main`, and `endpoint-runtime` software modules.
 
-The retained runner summary records `exit_code=0`, `ssh_output_found`,
-`experiment_lock_written`, `state_file_written`, `state_phase=software`, and
-`resume_contract_match`. The retained stdout records the Kubernetes,
-OpenFaaS, and endpoint-runtime playbook sequence and the Kubernetes node-ready
-runtime check. It does not retain a gateway-specific OpenFaaS readiness
-snapshot.
+The retained runner summary records `exit_code=0`, `ssh_output_found`, `experiment_lock_written`, `state_file_written`, `state_phase=software`, and `resume_contract_match`. The retained stdout records the Kubernetes, OpenFaaS, and endpoint-runtime playbook sequence and the Kubernetes node-ready runtime check. It does not retain a gateway-specific OpenFaaS readiness snapshot.
 
 ## What This Claims
 
 This row may be described as:
 
-1. QEMU can provision the P-QEMU-10-style node counts on a single host when
-   cloud VM cores are capped to fit the runner.
+1. QEMU can provision the P-QEMU-10-style node counts on a single host when cloud VM cores are capped to fit the runner.
 2. Kubernetes installs and reaches Ready on the three-cloud-node topology.
 3. The OpenFaaS software playbook completes on the Kubernetes topology.
 4. The endpoint runtime software phase completes on the four endpoint VMs.
-5. The runner observes the standard release artifacts: experiment lock, state
-   file, `phase_completed = software`, and matching resume contract.
+5. The runner observes the standard release artifacts: experiment lock, state file, `phase_completed = software`, and matching resume contract.
 
 ## Limitations
 
@@ -76,19 +62,12 @@ This evidence does not certify:
 2. multi-host QEMU scheduling for the exact 26-core legacy shape,
 3. the full OpenFaaS image-classification application benchmark,
 4. image-classification metric artifacts on OpenFaaS,
-5. Docker image prefetch or local-registry behavior for OpenFaaS application
-   images,
+5. Docker image prefetch or local-registry behavior for OpenFaaS application images,
 6. cloud-provider OpenFaaS behavior,
 7. gateway-specific OpenFaaS readiness beyond software-phase completion.
 
 This software-only evidence does not certify parent row `P-QEMU-10`.
 
-The exact legacy software shape exceeded the dedicated runner's single-host
-capacity and auto-selected `matthijs@node3`; that host was unreachable from the
-runner during the attempt saved at
-`/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-05-23_21-32-24.json`.
+The exact legacy software shape exceeded the dedicated runner's single-host capacity and auto-selected `matthijs@node3`; that host was unreachable from the runner during the attempt saved at `/home/continuum-smoke/continuum_smoke/qemu_openfaas_software_parity/.continuum/test_results/test_results_2026-05-23_21-32-24.json`.
 
-The full `qemu_openfaas_image_parity` suite is ported but not certified. Its
-preflight currently fails for the `continuum-smoke` user because the legacy
-`docker_pull = True` behavior maps to forced image prefetch:
-`Docker socket access: exit code 1; Docker daemon access: permission denied`.
+The full `qemu_openfaas_image_parity` suite is ported but not certified. Its preflight currently fails for the `continuum-smoke` user because the legacy `docker_pull = True` behavior maps to forced image prefetch: `Docker socket access: exit code 1; Docker daemon access: permission denied`.

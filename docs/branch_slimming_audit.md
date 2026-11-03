@@ -1,17 +1,10 @@
 # Branch slimming audit
 
-This applies Section8 of `docs/rework_milestone_release_plan.md`; it is factual
-scope accounting, not another policy or certification ledger. At clean
-`d93f8903ff28904aeee071ff4cbbbcd2e14c198f`, a fresh `git diff main...HEAD --shortstat`
-reported 470 changed files, 74,773 insertions and 5,463 deletions. That is the
-pre-checker-packet checkpoint, not a final-candidate count; recalculate at final
-acceptance. No arbitrary line-count target is used.
+This applies Section8 of `docs/rework_milestone_release_plan.md`; it is factual scope accounting, not another policy or certification ledger. At clean `d93f8903ff28904aeee071ff4cbbbcd2e14c198f`, a fresh `git diff main...HEAD --shortstat` reported 470 changed files, 74,773 insertions and 5,463 deletions. That is the pre-checker-packet checkpoint, not a final-candidate count; recalculate at final acceptance. No arbitrary line-count target is used.
 
 ## Major additions: one category each
 
-Categories are: 1 reproduction/runtime behavior; 2 correctness/safety;
-3 regression coverage; 4 test-host boundary; 5 active provenance/evidence;
-6 obsolete/superseded material; 7 duplicate/unnecessary machinery.
+Categories are: 1 reproduction/runtime behavior; 2 correctness/safety; 3 regression coverage; 4 test-host boundary; 5 active provenance/evidence; 6 obsolete/superseded material; 7 duplicate/unnecessary machinery.
 
 | Major addition | Category | Concrete disposition and justification |
 | --- | ---: | --- |
@@ -47,18 +40,8 @@ Categories are: 1 reproduction/runtime behavior; 2 correctness/safety;
 | `scripts/test/verify_network_profiles.py` | Declared network settings are mistaken for measured latency/throughput success. Retain measured-artifact/tolerance validation and its negative regressions. |
 | `scripts/test/check_kata_host_prereqs.py` and registry-cache prerequisite checks | Claimed runtime capability/cache readiness lacks the required host capability or image identity. Retain prerequisite checks, explicitly not reproduction/application certification. |
 
-The audit compile list retains all four release checkers. Its twelve required
-gates are unchanged; artifact/pre-tag readiness, pytest mirrors, lint baselines,
-debt scan and suite prerequisites remain informational there. Applicable changed
-file validation still applies. Matrix command-policy checks have one required
-owner; source freshness is stricter, not bypassed to make old evidence pass.
+The audit compile list retains all four release checkers. Its twelve required gates are unchanged; artifact/pre-tag readiness, pytest mirrors, lint baselines, debt scan and suite prerequisites remain informational there. Applicable changed file validation still applies. Matrix command-policy checks have one required owner; source freshness is stricter, not bypassed to make old evidence pass.
 
 ## Open boundaries
 
-Completed-ledger consolidation preserves full Git objects and independent private
-copies at the exact b484f12 source checkpoint; current files retain navigation.
-The historical reproduction-scope answer, final legacy dispositions, refreshed
-configuration hashes and fresh exact-candidate runtime/manual acceptance remain
-open. Same-application parameter sweeps remain candidate-only until collision-free
-cleanup/idempotence is demonstrated separately. Nothing here authorizes cloud
-spending, broad deletion, privilege changes, merge, push, tagging or publication.
+Completed-ledger consolidation preserves full Git objects and independent private copies at the exact b484f12 source checkpoint; current files retain navigation. The historical reproduction-scope answer, final legacy dispositions, refreshed configuration hashes and fresh exact-candidate runtime/manual acceptance remain open. Same-application parameter sweeps remain candidate-only until collision-free cleanup/idempotence is demonstrated separately. Nothing here authorizes cloud spending, broad deletion, privilege changes, merge, push, tagging or publication.

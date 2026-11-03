@@ -2,14 +2,9 @@
 
 ## 1. Release Type
 
-This is a draft for an intermediate rework milestone release. It is not a final
-replacement for the old `main` branch.
+This is a draft for an intermediate rework milestone release. It is not a final replacement for the old `main` branch.
 
-The purpose of this milestone is to publish the structured planning-engine
-rework with a small, evidence-backed local module set and the first certified
-old-main QEMU parity rows. Any support claim in these notes is limited to rows
-marked `certified` or `core-ready` in
-`docs/release_certification_matrix.md`.
+The purpose of this milestone is to publish the structured planning-engine rework with a small, evidence-backed local module set and the first certified old-main QEMU parity rows. Any support claim in these notes is limited to rows marked `certified` or `core-ready` in `docs/release_certification_matrix.md`.
 
 ## 2. Primary Evidence
 
@@ -30,22 +25,13 @@ Use these documents as the release evidence set:
 13. `docs/release_evidence_qemu_openfaas_image_local_2026-07-08.md`
 14. `docs/release_evidence_qemu_openfaas_image_2026-07-08.md`
 
-Before tagging, rerun the commands in section 7. VM-backed evidence may name a
-clean runtime source commit that precedes final release-documentation commits,
-but no runtime, config, profile, playbook, wrapper, or runner path may change
-after that evidence source commit without rerunning the affected wrapper
-scenario.
+Before tagging, rerun the commands in section 7. VM-backed evidence may name a clean runtime source commit that precedes final release-documentation commits, but no runtime, config, profile, playbook, wrapper, or runner path may change after that evidence source commit without rerunning the affected wrapper scenario.
 
-Current checkpoint: this evidence predates the normal-user migration and later
-runtime changes. It is not tag-ready for the current candidate. Preserve dated
-evidence unchanged and refresh affected runtime rows before claiming current
-support. Approved scope/gates are in `docs/rework_milestone_release_plan.md`;
-no merge, push, tag, release or publication is authorized.
+Current checkpoint: this evidence predates the normal-user migration and later runtime changes. It is not tag-ready for the current candidate. Preserve dated evidence unchanged and refresh affected runtime rows before claiming current support. Approved scope/gates are in `docs/rework_milestone_release_plan.md`; no merge, push, tag, release or publication is authorized.
 
 ## 3. What This Milestone Certifies
 
-This milestone certifies matrix row `M1-CORE`, the structured Continuum core,
-as `core-ready` for:
+This milestone certifies matrix row `M1-CORE`, the structured Continuum core, as `core-ready` for:
 
 1. YAML/profile composition and schema validation,
 2. normalized infrastructure, software, and benchmark domains,
@@ -77,8 +63,7 @@ This milestone certifies the following local QEMU/libvirt rows:
 | `P-QEMU-10-APP-LOCAL` | Single-host CPU-capped OpenFaaS image-classification application subset of old-main P-QEMU-10 |
 | `P-QEMU-10` | Exact old-main QEMU OpenFaaS image-classification application parity row |
 
-These rows are certified only for the exact configs, profiles, host context,
-runtime targets, and limitations recorded in the evidence documents.
+These rows are certified only for the exact configs, profiles, host context, runtime targets, and limitations recorded in the evidence documents.
 
 ## 4. What This Milestone Does Not Certify
 
@@ -89,47 +74,29 @@ The following rows remain unclaimed:
 1. GCP rows `P-GCP-01` through `P-GCP-10`,
 2. AWS row `P-AWS-01`,
 3. bare-metal provider support,
-4. broader `kubecontrol`, `kube_kata`, `text_translation`, `stress`,
-   `mem_usage`, `empty`, and `empty_kata` runtime support,
+4. broader `kubecontrol`, `kube_kata`, `text_translation`, `stress`, `mem_usage`, `empty`, and `empty_kata` runtime support,
 5. a visual frontend,
 6. structured experiment database support,
 7. a reproducibility-package catalog.
 
-These may be ported, certified, preserved as historical, or deprecated in later
-milestones.
+These may be ported, certified, preserved as historical, or deprecated in later milestones.
 
 ## 5. Known Limitations
 
 1. QEMU is a provider module, not Continuum core.
-2. Full Kubernetes image-classification parity is certified for `P-QEMU-05`;
-   the exact evidence is `docs/release_evidence_qemu_k8s_image_2026-07-08.md`.
-   Full endpoint image/runtime parity is certified for `P-QEMU-08`; the exact
-   evidence is `docs/release_evidence_qemu_endpoint_image_2026-07-08.md`.
-3. Full KubeEdge application parity is certified only for `P-QEMU-06`; the
-   exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-07-08.md`.
-   Full Mist application parity is certified only for `P-QEMU-07`; the exact
-   evidence is `docs/release_evidence_qemu_mist_image_2026-07-08.md`.
-4. Evidence for `P-QEMU-10-APP-LOCAL` covers only the single-host CPU-capped
-   OpenFaaS subset; exact parent row `P-QEMU-10` is certified separately in
-   `docs/release_evidence_qemu_openfaas_image_2026-07-08.md`.
-5. Cloud-provider rows need YAML profiles, credential/cost documentation, and
-   cloud-backed evidence before they can be release-supported.
-6. Cache-backed full application parity rows require an explicitly primed local
-   registry cache for certification. Prime as a Docker-capable normal user via
-   `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite <suite>`.
-7. Broader QEMU/OpenFaaS claims beyond the certified exact `P-QEMU-10` config
-   still need their own resource-shape/capacity review and retained evidence.
-8. Normal-user prerequisites and the reviewed venv must be verified; retired
-   installed helpers and the old smoke account are not the active procedure.
+2. Full Kubernetes image-classification parity is certified for `P-QEMU-05`; the exact evidence is `docs/release_evidence_qemu_k8s_image_2026-07-08.md`. Full endpoint image/runtime parity is certified for `P-QEMU-08`; the exact evidence is `docs/release_evidence_qemu_endpoint_image_2026-07-08.md`.
+3. Full KubeEdge application parity is certified only for `P-QEMU-06`; the exact evidence is `docs/release_evidence_qemu_kubeedge_image_2026-07-08.md`. Full Mist application parity is certified only for `P-QEMU-07`; the exact evidence is `docs/release_evidence_qemu_mist_image_2026-07-08.md`.
+4. Evidence for `P-QEMU-10-APP-LOCAL` covers only the single-host CPU-capped OpenFaaS subset; exact parent row `P-QEMU-10` is certified separately in `docs/release_evidence_qemu_openfaas_image_2026-07-08.md`.
+5. Cloud-provider rows need YAML profiles, credential/cost documentation, and cloud-backed evidence before they can be release-supported.
+6. Cache-backed full application parity rows require an explicitly primed local registry cache for certification. Prime as a Docker-capable normal user via `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite <suite>`.
+7. Broader QEMU/OpenFaaS claims beyond the certified exact `P-QEMU-10` config still need their own resource-shape/capacity review and retained evidence.
+8. Normal-user prerequisites and the reviewed venv must be verified; retired installed helpers and the old smoke account are not the active procedure.
 
 ## 6. User-Facing Wording
 
 Use wording like:
 
-> Continuum M1 is an intermediate rework milestone. It certifies the structured
-> planning core plus a local QEMU/KVM module set and selected old-main QEMU
-> parity rows. See the release certification matrix for exact supported
-> combinations.
+> Continuum M1 is an intermediate rework milestone. It certifies the structured planning core plus a local QEMU/KVM module set and selected old-main QEMU parity rows. See the release certification matrix for exact supported combinations.
 
 Avoid wording like:
 
@@ -170,28 +137,12 @@ sh scripts/test/run_smoke_host.sh qemu_openfaas_image_local_parity
 sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity
 ```
 
-Keep this order. Run from the live reviewed checkout as the normal user, with
-explicit retained-root and venv exports from `docs/smoke_runner_isolation.md`.
-No dedicated-repo sync, wrapper install or root-helper verification is used.
+Keep this order. Run from the live reviewed checkout as the normal user, with explicit retained-root and venv exports from `docs/smoke_runner_isolation.md`. No dedicated-repo sync, wrapper install or root-helper verification is used.
 
-The wrapper scenarios above are the VM-backed evidence gate for the rows claimed
-in section 3. If runtime, runner, verifier, profile, or playbook code changed
-after the latest VM-backed evidence snapshot, rerun the affected scenario and
-refresh the evidence document before tagging. The pre-tag checker also requires
-the current worktree to be clean and every listed release-evidence document to
-name a clean VM-evidence source commit. Final release-documentation and release
-checker commits may follow that source commit; runtime-affecting changes may
-not.
-Historical wrapper additions and Kata/shared-runtime changes have no source
-freshness exemption. Command-list policy is checked once by the required matrix
-gate; pre-tag readiness checks source/tree/report evidence separately.
+The wrapper scenarios above are the VM-backed evidence gate for the rows claimed in section 3. If runtime, runner, verifier, profile, or playbook code changed after the latest VM-backed evidence snapshot, rerun the affected scenario and refresh the evidence document before tagging. The pre-tag checker also requires the current worktree to be clean and every listed release-evidence document to name a clean VM-evidence source commit. Final release-documentation and release checker commits may follow that source commit; runtime-affecting changes may not. Historical wrapper additions and Kata/shared-runtime changes have no source freshness exemption. Command-list policy is checked once by the required matrix gate; pre-tag readiness checks source/tree/report evidence separately.
 
 ## 8. Suggested Next Milestones
 
-1. Decide exact-resource versus practical-runner claims for any future broader
-   OpenFaaS application claim.
-2. Keep GCP/AWS historical rows unclaimed until maintainers nominate exact
-   provider scope, credentials, budget/capacity guardrails, YAML/profile
-   targets, suites, and evidence requirements.
-3. Preserve the remaining parity matrix as candidate inventory until the
-   approved complete scope review; do not treat it as an automatic work queue.
+1. Decide exact-resource versus practical-runner claims for any future broader OpenFaaS application claim.
+2. Keep GCP/AWS historical rows unclaimed until maintainers nominate exact provider scope, credentials, budget/capacity guardrails, YAML/profile targets, suites, and evidence requirements.
+3. Preserve the remaining parity matrix as candidate inventory until the approved complete scope review; do not treat it as an automatic work queue.

@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies old-main parity row `P-QEMU-06` in
-`docs/release_certification_matrix.md`.
+This evidence certifies old-main parity row `P-QEMU-06` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the legacy P-QEMU-06-style local
-QEMU topology, complete the KubeEdge software phase with endpoint runtime
-present for endpoint resources, and run the image-classification application
-benchmark to metric-artifact completion.
+It proves that the rework stack can provision the legacy P-QEMU-06-style local QEMU topology, complete the KubeEdge software phase with endpoint runtime present for endpoint resources, and run the image-classification application benchmark to metric-artifact completion.
 
 ## Source And Command
 
@@ -32,8 +28,7 @@ benchmark to metric-artifact completion.
 
 ## Result
 
-The final synced-tree refresh run passed on the current runtime source after
-the KubeEdge runtime-prerequisite fixes and later Mist runtime-helper fixes:
+The final synced-tree refresh run passed on the current runtime source after the KubeEdge runtime-prerequisite fixes and later Mist runtime-helper fixes:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
@@ -45,33 +40,22 @@ Benchmark metric artifact:
 /mnt/sdc/continuum_smoke/qemu_kubeedge_image_parity/.continuum/logs/benchmark/2026-07-08_18_41_14_classify-images_metrics_manifest.json
 ```
 
-The passing run followed an earlier failed 2026-06-01 attempt that exposed two
-runtime issues:
+The passing run followed an earlier failed 2026-06-01 attempt that exposed two runtime issues:
 
-1. the KubeEdge base-image prerequisites did not explicitly load and persist the
-   `vxlan` kernel module required by flannel on the edge nodes,
-2. the edge-node host `mosquitto` service conflicted with the KubeEdge broker
-   pod on port 1883.
+1. the KubeEdge base-image prerequisites did not explicitly load and persist the `vxlan` kernel module required by flannel on the edge nodes,
+2. the edge-node host `mosquitto` service conflicted with the KubeEdge broker pod on port 1883.
 
-Commit `c4f034715459d5a7199bac1789b5115699848afb` fixed those issues before the
-first passing evidence run. This document now references the later
-`65d3e193ca29249c1ca33b5aa364367c16911006` refresh run so P-QEMU-06 evidence
-includes the current Mist runtime-helper source.
+Commit `c4f034715459d5a7199bac1789b5115699848afb` fixed those issues before the first passing evidence run. This document now references the later `65d3e193ca29249c1ca33b5aa364367c16911006` refresh run so P-QEMU-06 evidence includes the current Mist runtime-helper source.
 
 ## What This Claims
 
 This row may be described as:
 
-1. QEMU can provision the P-QEMU-06-style topology of one cloud controller, two
-   edge nodes, and two endpoint nodes.
+1. QEMU can provision the P-QEMU-06-style topology of one cloud controller, two edge nodes, and two endpoint nodes.
 2. The KubeEdge software phase completes on that topology.
-3. The endpoint runtime module is present for endpoint resources in the same
-   software phase.
-4. The image-classification application runs on the KubeEdge edge topology and
-   emits benchmark metric artifacts.
-5. The runner observes the standard release artifacts: SSH output, experiment
-   lock, state file, `phase_completed = application`, matching resume contract,
-   and benchmark metrics manifest.
+3. The endpoint runtime module is present for endpoint resources in the same software phase.
+4. The image-classification application runs on the KubeEdge edge topology and emits benchmark metric artifacts.
+5. The runner observes the standard release artifacts: SSH output, experiment lock, state file, `phase_completed = application`, matching resume contract, and benchmark metrics manifest.
 
 ## Limitations
 

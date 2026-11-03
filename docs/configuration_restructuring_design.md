@@ -1,28 +1,16 @@
 # Continuum Configuration Restructuring Design (YAML + Module Graph Aligned)
 
-Approved pre-main scope is in `docs/rework_milestone_release_plan.md`;
-runtime support is factual evidence in `docs/release_certification_matrix.md`,
-not parser acceptance. Keep experiment/environment/software composition.
+Approved pre-main scope is in `docs/rework_milestone_release_plan.md`; runtime support is factual evidence in `docs/release_certification_matrix.md`, not parser acceptance. Keep experiment/environment/software composition.
 
-Resume v1 is QEMU-only, same revision, base path, topology and software contract,
-with linear infrastructure → software → application. Same revision is an
-operator precondition, not commit-tracking machinery. Cross-commit resume,
-arbitrary software replacement on mutated guests and concurrent shared-base-path
-runs are unsupported. Same-application changed-parameter sweeps remain
-candidate-only pending cleanup/idempotence evidence.
+Resume v1 is QEMU-only, same revision, base path, topology and software contract, with linear infrastructure → software → application. Same revision is an operator precondition, not commit-tracking machinery. Cross-commit resume, arbitrary software replacement on mutated guests and concurrent shared-base-path runs are unsupported. Same-application changed-parameter sweeps remain candidate-only pending cleanup/idempotence evidence.
 
-The accepted registry terminology is `run.registry_refresh: missing|all`
-(default `missing`). The removed run.image_prefetch key/off-on modes have no
-compatibility aliases. Registry-cache priming and guest preload remain separate
-operations. Section 10.1 preserves historical implementation syntax, not the
-current accepted schema; old-format locks must be regenerated from source inputs.
+The accepted registry terminology is `run.registry_refresh: missing|all` (default `missing`). The removed run.image_prefetch key/off-on modes have no compatibility aliases. Registry-cache priming and guest preload remain separate operations. Section 10.1 preserves historical implementation syntax, not the current accepted schema; old-format locks must be regenerated from source inputs.
 
 ## 0. Authority and Boundary
 
 This document is authoritative for YAML composition, parsing, validation, and runtime normalization.
 
-Precedence and locked decisions are defined in `docs/rework_plan_stack.md`.
-Software-model semantics are authoritative in `docs/software_module_architecture_plan.md`.
+Precedence and locked decisions are defined in `docs/rework_plan_stack.md`. Software-model semantics are authoritative in `docs/software_module_architecture_plan.md`.
 
 ## 1. Goals
 
@@ -181,8 +169,7 @@ Composition flow:
 3. validate all docs,
 4. compose normalized object.
 
-Normalized object includes resolved domains, targets, and derived fields needed by active runtime migration paths.
-Cluster-level infra intent is normalized to concrete resource records with base tags (`tier`, `cluster`).
+Normalized object includes resolved domains, targets, and derived fields needed by active runtime migration paths. Cluster-level infra intent is normalized to concrete resource records with base tags (`tier`, `cluster`).
 
 ## 6. Validation Contracts
 
@@ -209,13 +196,9 @@ Cluster-level infra intent is normalized to concrete resource records with base 
 1. If `application` is selected, benchmark execution intent must be present (`benchmark.pipeline` minimum).
 2. If `application` is not selected, `benchmark` must be omitted.
 3. Benchmark stages use selector assignment and participate in the same deterministic placement model.
-4. The pipeline-shaped schema and ordered handoff metadata are retained for future ordered
-   execution, but the current executable cardinality is exactly one stage; multiple stages fail
-   canonical validation.
-5. Runtime application execution now consumes canonical `benchmark.pipeline` intent directly;
-   parser/normalization contracts remain authoritative.
-6. Runtime config wiring must not project legacy `domains.workload.*`; application
-   option wiring/verification runs against canonical `benchmark.pipeline[*].config`.
+4. The pipeline-shaped schema and ordered handoff metadata are retained for future ordered execution, but the current executable cardinality is exactly one stage; multiple stages fail canonical validation.
+5. Runtime application execution now consumes canonical `benchmark.pipeline` intent directly; parser/normalization contracts remain authoritative.
+6. Runtime config wiring must not project legacy `domains.workload.*`; application option wiring/verification runs against canonical `benchmark.pipeline[*].config`.
 
 ## 6.4 Infrastructure Clusters/Resources
 
@@ -233,17 +216,13 @@ Cluster-level infra intent is normalized to concrete resource records with base 
 1. `software.modules[]` must be a list of objects.
 2. `id` unique within document.
 3. `type` must resolve in module registry.
-4. `assign_to` accepts exactly one of `match` or software-only `any_of`; each clause is an
-   exact-match AND, and `any_of` is their set union. The governing selector and authorization
-   semantics are in `docs/software_module_architecture_plan.md` §6. Benchmark stages remain
-   single-`match` only.
+4. `assign_to` accepts exactly one of `match` or software-only `any_of`; each clause is an exact-match AND, and `any_of` is their set union. The governing selector and authorization semantics are in `docs/software_module_architecture_plan.md` §6. Benchmark stages remain single-`match` only.
 5. module-local `config` is required and must be a mapping, validated by module validator.
 6. addon module config keys are registry-validated (unknown keys fail fast).
 
 Selector canonicalization contract:
 
-Canonical selector forms, sorting and `selector_id` derivation are defined in
-`docs/software_module_architecture_plan.md` §6 for both single clauses and software unions.
+Canonical selector forms, sorting and `selector_id` derivation are defined in `docs/software_module_architecture_plan.md` §6 for both single clauses and software unions.
 
 ## 6.6 Cross-Domain Consistency
 

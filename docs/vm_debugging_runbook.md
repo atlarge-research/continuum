@@ -1,12 +1,8 @@
 # VM Debugging Runbook
 
-This runbook describes how to inspect Continuum-managed VMs during failed
-operational smoke runs.
+This runbook describes how to inspect Continuum-managed VMs during failed operational smoke runs.
 
-Use the normal-user commands and explicit retained-root/venv exports in
-`docs/smoke_runner_isolation.md`. Support status remains in
-`docs/release_certification_matrix.md`; active gates are
-`docs/rework_milestone_release_plan.md`. Preserve failures before any retry.
+Use the normal-user commands and explicit retained-root/venv exports in `docs/smoke_runner_isolation.md`. Support status remains in `docs/release_certification_matrix.md`; active gates are `docs/rework_milestone_release_plan.md`. Preserve failures before any retry.
 
 The intended order is:
 
@@ -33,15 +29,13 @@ Start with artifacts that Continuum already writes:
 1. main log under `<base_path>/.continuum/logs/`
 2. resolved lock file under `<base_path>/.continuum/experiment_lock.yaml`
 3. resume state under `<base_path>/.continuum/state.json`
-4. test summary JSON under `<base_path>/.continuum/test_results/` when the
-   suite is run with a base-path override
+4. test summary JSON under `<base_path>/.continuum/test_results/` when the suite is run with a base-path override
 5. network-validation NDJSON under `<base_path>/.continuum/logs/network_validation/` when netperf is enabled
 6. benchmark metric manifests and CSV tables under `<base_path>/.continuum/logs/benchmark/` when the application leg runs
 
 ## 3. SSH Hints In Runtime Logs
 
-Continuum now logs VM access hints as soon as infrastructure provisioning
-completes and SSH targets are known.
+Continuum now logs VM access hints as soon as infrastructure provisioning completes and SSH targets are known.
 
 Look for log lines like:
 
@@ -57,13 +51,11 @@ VM access hints from resumed state:
     ssh cloud0@... -i ...
 ```
 
-At the end of successful non-delete runs, Continuum still prints the final
-access summary as well.
+At the end of successful non-delete runs, Continuum still prints the final access summary as well.
 
 ## 4. QEMU Fallback When SSH Hints Are Missing
 
-If a run fails before the final summary or before you notice the SSH lines,
-use the host-side QEMU tooling:
+If a run fails before the final summary or before you notice the SSH lines, use the host-side QEMU tooling:
 
 ```bash
 virsh list --all
@@ -78,8 +70,7 @@ virsh domifaddr <vm-name>
 virsh console <vm-name>
 ```
 
-`virsh domifaddr` is often the fastest way to recover the guest IP when logs are
-not enough.
+`virsh domifaddr` is often the fastest way to recover the guest IP when logs are not enough.
 
 ## 5. Minimal First-Pass Checks Inside A VM
 
@@ -134,8 +125,7 @@ Use these mappings:
    - persisted machine metadata,
    - SSH target lists
 
-If VM reality and the saved state disagree, treat that as a higher-priority bug
-than the immediate phase failure.
+If VM reality and the saved state disagree, treat that as a higher-priority bug than the immediate phase failure.
 
 ## 7. Failure-Specific Guidance
 
@@ -187,3 +177,47 @@ When a smoke run fails:
 5. rerun the smallest relevant smoke path rather than the whole matrix.
 
 The goal is to reduce expensive reruns that are based only on guesswork.
+
+## 9. Disk throughput checks
+
+Continuum YAML VM specs can constrain virtual disk throughput per cluster. The active keys live under `infrastructure.clusters[].resources.vms.spec`:
+
+- `storage_read_mbps`
+- `storage_write_mbps`
+
+Both values are in MB/s. A value of `0.0` means unlimited, which is also the parser default when the key is omitted.
+
+Example:
+
+```yaml
+infrastructure:
+  clusters:
+    - id: cloud-1
+      tier: cloud
+      resources:
+        vms:
+          count: 1
+          spec:
+            cores: 2
+            memory_gb: 4
+            storage_read_mbps: 100.0
+            storage_write_mbps: 50.0
+```
+
+To verify behavior inside a retained VM, first find the SSH hint in `<base_path>/.continuum/logs/` or inspect `<base_path>/.continuum/state.json`. Then run a simple guest-side check:
+
+```bash
+sudo lsblk
+sudo hdparm -Ttv /dev/vda1
+
+sudo mkdir -p /tmp/continuum-disk-check
+sudo mount /dev/vda1 /tmp/continuum-disk-check
+sync
+sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
+sudo dd if=/dev/zero of=/tmp/continuum-disk-check/temp oflag=direct bs=128k count=16k
+sudo rm -f /tmp/continuum-disk-check/temp
+sudo umount /tmp/continuum-disk-check
+sudo rmdir /tmp/continuum-disk-check
+```
+
+Use this as a manual diagnostic only. It is not part of the cloud-safe static audit or the default smoke success contract.

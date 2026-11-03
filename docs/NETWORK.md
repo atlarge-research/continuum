@@ -1,26 +1,19 @@
 # Network
 
-This file describes the host-side network setup used by Continuum's local
-QEMU/libvirt provider. It is operational guidance, not part of the YAML schema.
-For YAML network keys, see `docs/configuration_reference.md`.
+This file describes the host-side network setup used by Continuum's local QEMU/libvirt provider. It is operational guidance, not part of the YAML schema. For YAML network keys, see `docs/configuration_reference.md`.
 
 ## When A Bridge Is Needed
 
-A bridge is needed when QEMU VMs must communicate directly across host or
-physical-machine boundaries. Single-host smoke paths can often use the host's
-existing libvirt/QEMU setup, but the operational smoke baseline still expects
-working `virsh`, SSH, and bridge/route discovery.
+A bridge is needed when QEMU VMs must communicate directly across host or physical-machine boundaries. Single-host smoke paths can often use the host's existing libvirt/QEMU setup, but the operational smoke baseline still expects working `virsh`, SSH, and bridge/route discovery.
 
-The dedicated smoke wrapper can preserve explicit overrides when the host setup
-forwards them:
+The dedicated smoke wrapper can preserve explicit overrides when the host setup forwards them:
 
 ```bash
 CONTINUUM_QEMU_BRIDGE_NAME=br0
 CONTINUUM_QEMU_BRIDGE_GATEWAY=192.168.100.1
 ```
 
-Use overrides only to describe the real host network. They should not be used to
-hide broken libvirt or route setup.
+Use overrides only to describe the real host network. They should not be used to hide broken libvirt or route setup.
 
 ## Creating A Bridge On Ubuntu-like Hosts
 
@@ -73,8 +66,7 @@ ip route
 
 ## Bridge Netfilter
 
-If VMs cannot reach outside networks even though the bridge exists, check bridge
-netfilter settings:
+If VMs cannot reach outside networks even though the bridge exists, check bridge netfilter settings:
 
 ```bash
 sudo tee -a /etc/sysctl.conf <<EOF
@@ -108,6 +100,4 @@ provider:
       middle_base: 90
 ```
 
-Do not edit code to replace `br0` for normal runs. Prefer host setup,
-environment profiles, or the explicit wrapper bridge override variables when
-the host really uses a different bridge.
+Do not edit code to replace `br0` for normal runs. Prefer host setup, environment profiles, or the explicit wrapper bridge override variables when the host really uses a different bridge.

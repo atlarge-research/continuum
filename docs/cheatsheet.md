@@ -1,15 +1,10 @@
 # Cheat Sheet
 
-This file lists quick operational references for the active Continuum runtime.
-For the canonical YAML model, start with `docs/configuration_reference.md` and
-`docs/migration_notes.md`. For release support status, use
-`docs/release_certification_matrix.md`.
+This file lists quick operational references for the active Continuum runtime. For the canonical YAML model, start with `docs/configuration_reference.md` and `docs/migration_notes.md`. For release support status, use `docs/release_certification_matrix.md`.
 
 ## Files
 
-Continuum runtime artifacts are rooted in the selected provider `base_path`.
-For shipped local profiles, that usually means the current user's home
-directory unless a runner override is used.
+Continuum runtime artifacts are rooted in the selected provider `base_path`. For shipped local profiles, that usually means the current user's home directory unless a runner override is used.
 
 | What | Location | Notes |
 | --- | --- | --- |
@@ -25,23 +20,14 @@ directory unless a runner override is used.
 
 ## Containers
 
-A Docker registry is created only when required image pulls exist for the
-selected run targets. Continuum resolves required images from software/benchmark
-intent, then prefetches into the local registry using `run.registry_refresh`:
+A Docker registry is created only when required image pulls exist for the selected run targets. Continuum resolves required images from software/benchmark intent, then prefetches into the local registry using `run.registry_refresh`:
 
 - `missing` (default): pull/push only required images missing or invalid in the local registry cache.
 - `all`: force refresh pull/push for all required images.
 
-All VMs get images from this registry when applicable. This avoids repeated
-pulls across many VMs and helps prevent remote registry rate limits.
+All VMs get images from this registry when applicable. This avoids repeated pulls across many VMs and helps prevent remote registry rate limits.
 
-For `registry_refresh: missing` suites, runtime does not need host-side Docker
-when required images are already in the local registry cache. Prime as the
-Docker-capable normal user through the repo runner. Use the explicit retained
-root/venv exports in `docs/smoke_runner_isolation.md`; no installed helper or
-separate account is used. Registry refresh does not itself invoke the priming
-tool or change guest-preload requirements; the removed image_prefetch key is
-not accepted as an alias.
+For `registry_refresh: missing` suites, runtime does not need host-side Docker when required images are already in the local registry cache. Prime as the Docker-capable normal user through the repo runner. Use the explicit retained root/venv exports in `docs/smoke_runner_isolation.md`; no installed helper or separate account is used. Registry refresh does not itself invoke the priming tool or change guest-preload requirements; the removed image_prefetch key is not accepted as an alias.
 
 ## Useful Commands
 
@@ -75,9 +61,7 @@ not accepted as an alias.
 
 ## VM Debugging
 
-Continuum logs SSH hints after infrastructure completion and when loading
-retained state. If a smoke run fails after VM creation, inspect artifacts first,
-then use `docs/vm_debugging_runbook.md`.
+Continuum logs SSH hints after infrastructure completion and when loading retained state. If a smoke run fails after VM creation, inspect artifacts first, then use `docs/vm_debugging_runbook.md`.
 
 Common host-side commands:
 
@@ -97,8 +81,7 @@ Inside Kubernetes control-plane VMs:
 
 ## Network Validation
 
-Network-validation smoke writes structured netperf NDJSON under
-`<base_path>/.continuum/logs/network_validation/`. Validate an existing run with:
+Network-validation smoke writes structured netperf NDJSON under `<base_path>/.continuum/logs/network_validation/`. Validate an existing run with:
 
 ```bash
 python3 scripts/test/verify_network_profiles.py --base-path <base_path>

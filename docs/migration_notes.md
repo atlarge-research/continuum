@@ -1,20 +1,12 @@
 # YAML Migration Notes
 
-The 2026-10-27 approved policy is `docs/rework_milestone_release_plan.md`.
-It replaces full old-main parity as the release gate with approved reproduction
-scope and complete bounded inventories; legacy inputs are preserved until final
-scope confirmation. Normal-user host migration and current commands are in
-`docs/smoke_runner_isolation.md`. Historical matrix rows/evidence below are not
-renewed by migration. The registry terminology hard cut is implemented as
-`run.registry_refresh: missing|all`, default `missing`, without aliases.
+The 2026-10-27 approved policy is `docs/rework_milestone_release_plan.md`. It replaces full old-main parity as the release gate with approved reproduction scope and complete bounded inventories; legacy inputs are preserved until final scope confirmation. Normal-user host migration and current commands are in `docs/smoke_runner_isolation.md`. Historical matrix rows/evidence below are not renewed by migration. The registry terminology hard cut is implemented as `run.registry_refresh: missing|all`, default `missing`, without aliases.
 
 This note covers the hard-cut migration from legacy config paths to the canonical YAML model.
 
 ## Scope
 
-Runtime input-format support is separate from module-set release support. Exact
-release-supported combinations are tracked in
-`docs/release_certification_matrix.md`.
+Runtime input-format support is separate from module-set release support. Exact release-supported combinations are tracked in `docs/release_certification_matrix.md`.
 
 Supported runtime input formats:
 
@@ -115,9 +107,7 @@ software:
 Important rules:
 
 - module ids must be unique
-- module placement and its exhaustive authorization envelope are explicit through exactly one of
-  `assign_to.match` or software-only `assign_to.any_of`; each clause is an exact-match AND and
-  `any_of` is their set union
+- module placement and its exhaustive authorization envelope are explicit through exactly one of `assign_to.match` or software-only `assign_to.any_of`; each clause is an exact-match AND and `any_of` is their set union
 - module roles and topology may partition or validate the resolved envelope but may not expand it
 - benchmark-stage placement remains match-only
 - module-local `config` is required even when empty
@@ -146,12 +136,7 @@ Allowed values:
 - `missing` (default): refresh only missing/invalid required registry images.
 - `all`: refresh every required registry image.
 
-The semantic migration is old off → missing and old on → all. This is operator
-guidance, not an automatic conversion or compatibility path: old keys are
-rejected, even alongside the new key, and off/on/boolean values are invalid for
-registry_refresh. Both infrastructure-level spellings are rejected. Old-format
-normalized locks are not replayable; regenerate locks from current experiment
-inputs. Priming the registry cache and preloading guests remain separate actions.
+The semantic migration is old off → missing and old on → all. This is operator guidance, not an automatic conversion or compatibility path: old keys are rejected, even alongside the new key, and off/on/boolean values are invalid for registry_refresh. Both infrastructure-level spellings are rejected. Old-format normalized locks are not replayable; regenerate locks from current experiment inputs. Priming the registry cache and preloading guests remain separate actions.
 
 ### 4. Legacy benchmark sizing helper surface
 
@@ -218,11 +203,7 @@ The repository examples under `configs/experiments/` are regression-tested again
 
 ## Legacy Configuration Backlog
 
-The `configuration/` tree is retained as historical reproduction material and
-migration reference, not as an active runtime entrypoint. As of the T10
-inventory, it contains 259 legacy `.cfg` files. Keep the files in place unless
-maintainers explicitly approve removal; migration work should add YAML examples,
-release evidence, or historical/deprecation notes beside the existing records.
+The `configuration/` tree is retained as historical reproduction material and migration reference, not as an active runtime entrypoint. As of the T10 inventory, it contains 259 legacy `.cfg` files. Keep the files in place unless maintainers explicitly approve removal; migration work should add YAML examples, release evidence, or historical/deprecation notes beside the existing records.
 
 | Legacy Surface | Current YAML / Disposition | Next Action |
 | --- | --- | --- |

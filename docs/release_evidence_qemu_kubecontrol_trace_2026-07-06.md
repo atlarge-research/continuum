@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies research case-study row
-`M2-QEMU-KUBECONTROL-TRACE` in `docs/release_certification_matrix.md`.
+This evidence certifies research case-study row `M2-QEMU-KUBECONTROL-TRACE` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can run the strict Columbo-style local QEMU
-`kubecontrol` plus `empty` application workflow and satisfy the full
-control-plane trace evidence contract for the minimal per-call deployment
-experiment.
+It proves that the rework stack can run the strict Columbo-style local QEMU `kubecontrol` plus `empty` application workflow and satisfy the full control-plane trace evidence contract for the minimal per-call deployment experiment.
 
 ## Source And Command
 
@@ -39,8 +35,7 @@ The retained VM-backed run passed:
 | --- | --- | --- | --- |
 | `configs/experiments/parity/qemu_kubecontrol_empty/01_kubecontrol_empty_call.yaml` | PASS | 742.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `application`, resume contract matched, benchmark evidence found, benchmark metric tables found, benchmark metric artifacts found |
 
-The strict suite success criteria require the `CLOUD OUTPUT` table and benchmark
-metric artifact to contain populated numeric values for:
+The strict suite success criteria require the `CLOUD OUTPUT` table and benchmark metric artifact to contain populated numeric values for:
 
 1. `controller_read_workload (s)`,
 2. `controller_unpacked_workload (s)`,
@@ -59,16 +54,10 @@ The runner reported the benchmark metric manifest at:
 
 This row may be described as:
 
-1. Continuum can run the strict Columbo-style `kubecontrol` plus `empty`
-   control-plane trace workflow on the local-QEMU profile.
-2. The run reaches `phase_completed = application` and writes the standard
-   lock, state, resume-contract, stdout, and benchmark evidence artifacts.
-3. The suite-level evidence gate confirms populated controller, scheduler,
-   kubelet, and application timing columns in both retained stdout and
-   benchmark metric artifacts.
-4. The implementation remains a composition of Continuum modules, profiles,
-   experiments, suites, and docs; it does not add Columbo-specific concepts to
-   the Continuum core.
+1. Continuum can run the strict Columbo-style `kubecontrol` plus `empty` control-plane trace workflow on the local-QEMU profile.
+2. The run reaches `phase_completed = application` and writes the standard lock, state, resume-contract, stdout, and benchmark evidence artifacts.
+3. The suite-level evidence gate confirms populated controller, scheduler, kubelet, and application timing columns in both retained stdout and benchmark metric artifacts.
+4. The implementation remains a composition of Continuum modules, profiles, experiments, suites, and docs; it does not add Columbo-specific concepts to the Continuum core.
 
 ## Limitations
 
@@ -76,8 +65,6 @@ This evidence does not certify:
 
 1. every Columbo paper parameter sweep or figure,
 2. GCP, AWS, bare-metal, or multi-host behavior for this workflow,
-3. legacy `.cfg` execution of
-   `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`,
-4. broader `kubecontrol` application coverage outside this minimal `empty`
-   per-call experiment,
+3. legacy `.cfg` execution of `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`,
+4. broader `kubecontrol` application coverage outside this minimal `empty` per-call experiment,
 5. `empty_kata`, `kube_kata`, or resource-usage applications.

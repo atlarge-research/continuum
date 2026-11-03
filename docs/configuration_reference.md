@@ -1,20 +1,10 @@
 # YAML Configuration Reference
 
-Support and release scope are in `docs/release_certification_matrix.md` and
-`docs/rework_milestone_release_plan.md`. Shipped inventory means every tracked
-`.yaml` under `configs/experiments/` and `configs/profiles/`, including explicitly
-classified templates; parser acceptance is not runtime support. Legacy `.cfg`
-inputs and test fixtures are separate inventories.
+Support and release scope are in `docs/release_certification_matrix.md` and `docs/rework_milestone_release_plan.md`. Shipped inventory means every tracked `.yaml` under `configs/experiments/` and `configs/profiles/`, including explicitly classified templates; parser acceptance is not runtime support. Legacy `.cfg` inputs and test fixtures are separate inventories.
 
-Resume requires the same revision, base path, topology and software contract,
-QEMU only, in linear infrastructure → software → application order. Cross-commit
-resume, arbitrary software replacement and concurrent shared-base-path runs are
-unsupported. Sequential same-application changed-parameter sweeps remain
-candidate-only until cleanup/idempotence is demonstrated.
+Resume requires the same revision, base path, topology and software contract, QEMU only, in linear infrastructure → software → application order. Cross-commit resume, arbitrary software replacement and concurrent shared-base-path runs are unsupported. Sequential same-application changed-parameter sweeps remain candidate-only until cleanup/idempotence is demonstrated.
 
-The accepted registry setting is `run.registry_refresh: missing|all`, default
-`missing`. The removed `run.image_prefetch` key and off/on values have no aliases;
-old-format locks must be regenerated from current source inputs, not replayed.
+The accepted registry setting is `run.registry_refresh: missing|all`, default `missing`. The removed `run.image_prefetch` key and off/on values have no aliases; old-format locks must be regenerated from current source inputs, not replayed.
 
 This is the user-facing reference for Continuum's YAML input model.
 
@@ -26,9 +16,7 @@ Continuum uses three YAML document kinds:
 
 The active examples live under `configs/experiments/`.
 
-This reference documents the schema and module identifiers accepted by the
-rework parser. It is not a release-support matrix. Runtime support claims are
-limited to the rows marked `certified` in `docs/release_certification_matrix.md`.
+This reference documents the schema and module identifiers accepted by the rework parser. It is not a release-support matrix. Runtime support claims are limited to the rows marked `certified` in `docs/release_certification_matrix.md`.
 
 ## File Model
 
@@ -88,27 +76,15 @@ Allowed `run.targets` values:
 
 `application` enables phase-3 benchmark/application execution and requires a `benchmark.pipeline` definition.
 
-State reuse is explicit. Omitting `infrastructure` from `run.targets` requests a resume from the
-last-known snapshot at `<base_path>/.continuum/state.json`; merely finding that file never triggers
-resume. Before software or application work begins, every managed guest recorded in the snapshot
-must pass the authenticated SSH reachability preflight. Recorded guest names and IPs must be
-globally unique, and each category's names, IPs, and recorded/configured counts must agree.
+State reuse is explicit. Omitting `infrastructure` from `run.targets` requests a resume from the last-known snapshot at `<base_path>/.continuum/state.json`; merely finding that file never triggers resume. Before software or application work begins, every managed guest recorded in the snapshot must pass the authenticated SSH reachability preflight. Recorded guest names and IPs must be globally unique, and each category's names, IPs, and recorded/configured counts must agree.
 
-Infrastructure-skipping resume is currently supported only for QEMU. AWS and GCP resume requests
-are rejected; run the infrastructure phase in the same execution for those cloud providers.
-Bare-metal resume is also rejected, and the provider remains release-unsupported. It can be
-enabled separately after its provider validation is repaired and a supported YAML profile plus
-host-backed evidence are available.
+Infrastructure-skipping resume is currently supported only for QEMU. AWS and GCP resume requests are rejected; run the infrastructure phase in the same execution for those cloud providers. Bare-metal resume is also rejected, and the provider remains release-unsupported. It can be enabled separately after its provider validation is repaired and a supported YAML profile plus host-backed evidence are available.
 
-`state.json` is retained after completed runs, including runs with `delete_on_exit: true`. It is a
-last-known deployment snapshot and post-mortem artifact, not evidence that the recorded resources
-still exist or are currently reachable.
+`state.json` is retained after completed runs, including runs with `delete_on_exit: true`. It is a last-known deployment snapshot and post-mortem artifact, not evidence that the recorded resources still exist or are currently reachable.
 
 `prepare_for_resume: true` keeps selected later-phase software prerequisites available during an infrastructure-only retained run. Use it only for retained-resume workflows such as the benchmark smoke infrastructure leg; generic infrastructure-only runs should leave it omitted or `false`.
 
-`registry_refresh: missing` preserves valid cached required registry images;
-`registry_refresh: all` refreshes every required image. Cache priming and guest
-preload are separate operations, not alternate meanings of this setting.
+`registry_refresh: missing` preserves valid cached required registry images; `registry_refresh: all` refreshes every required image. Cache priming and guest preload are separate operations, not alternate meanings of this setting.
 
 ## Infrastructure Schema
 
@@ -144,10 +120,7 @@ Top-level `infrastructure` keys:
 | `storage_read_mbps` | number | no | `0.0` | Must be `>= 0` |
 | `storage_write_mbps` | number | no | `0.0` | Must be `>= 0` |
 
-QEMU/libvirt represents VM memory at whole-KiB precision. A positive request that is not
-already KiB-aligned is rounded upward by less than one KiB at the QEMU generation boundary;
-the canonical and normalized `memory_gb` values remain unchanged. AWS and GCP VM memory is
-determined by the configured provider machine type.
+QEMU/libvirt represents VM memory at whole-KiB precision. A positive request that is not already KiB-aligned is rounded upward by less than one KiB at the QEMU generation boundary; the canonical and normalized `memory_gb` values remain unchanged. AWS and GCP VM memory is determined by the configured provider machine type.
 
 ### `infrastructure.network`
 
@@ -219,8 +192,7 @@ Top-level keys for `ContinuumSoftware`:
 | `assign_to` | mapping | yes | Exhaustive resource authorization envelope |
 | `config` | mapping | yes | Module-local config |
 
-Software `assign_to` accepts exactly one of `match` or `any_of`. `match` is one
-exact-match clause with implicit AND across its key/value predicates:
+Software `assign_to` accepts exactly one of `match` or `any_of`. `match` is one exact-match clause with implicit AND across its key/value predicates:
 
 ```yaml
 assign_to:
@@ -237,10 +209,7 @@ assign_to:
     - cluster: edge-1
 ```
 
-The resolved resources are the module's exhaustive authorization envelope. Module roles,
-capabilities, and topology rules may partition or validate resources inside that envelope, but
-must never implicitly add resources outside it. `any_of` is software-only; benchmark-stage
-selectors remain match-only.
+The resolved resources are the module's exhaustive authorization envelope. Module roles, capabilities, and topology rules may partition or validate resources inside that envelope, but must never implicitly add resources outside it. `any_of` is software-only; benchmark-stage selectors remain match-only.
 
 Accepted module types:
 
@@ -280,9 +249,7 @@ Top-level keys:
 | --- | --- | --- | --- |
 | `pipeline` | list | yes when benchmark is present | Exactly one stage currently |
 
-The pipeline-shaped schema is retained for future ordered multi-stage execution. The current
-execution boundary supports exactly one executable stage, so configurations and experiment locks
-containing two or more stages fail validation instead of silently executing only the first stage.
+The pipeline-shaped schema is retained for future ordered multi-stage execution. The current execution boundary supports exactly one executable stage, so configurations and experiment locks containing two or more stages fail validation instead of silently executing only the first stage.
 
 ### `benchmark.pipeline[]`
 
@@ -294,8 +261,7 @@ containing two or more stages fail validation instead of silently executing only
 | `tags` | mapping | yes | Must use `benchmark.*` namespacing for benchmark-owned tags |
 | `config` | mapping | yes | Stage-local contract |
 
-Benchmark `assign_to` supports only one exact-match `match` clause. Software-only `any_of` is
-not accepted for benchmark stages.
+Benchmark `assign_to` supports only one exact-match `match` clause. Software-only `any_of` is not accepted for benchmark stages.
 
 Known benchmark stage config contracts:
 
@@ -320,10 +286,7 @@ Unknown config keys for known stage types fail fast.
 
 ## Shipped Examples and Profiles
 
-These shipped examples and profiles are regression-validated from disk by
-`scripts/test/e2e/test_example_configs.py`. A listed example is parser/profile
-coverage; release-certified runtime support is tracked separately in
-`docs/release_certification_matrix.md`.
+These shipped examples and profiles are regression-validated from disk by `scripts/test/e2e/test_example_configs.py`. A listed example is parser/profile coverage; release-certified runtime support is tracked separately in `docs/release_certification_matrix.md`.
 
 Runnable experiment examples:
 

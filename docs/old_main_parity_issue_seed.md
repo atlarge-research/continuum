@@ -1,52 +1,28 @@
 # Old-Main Parity Issue Seed
 
-Historical candidate inventory, not an authoritative pre-main release queue.
-`docs/rework_milestone_release_plan.md` replaces full old-main parity with the
-approved reproduction boundary. Existing rows/actions below are preserved
-unchanged until complete inventory and final user scope confirmation; they do
-not require implementing every historical provider before main. The current
-checker preserves inventory completeness, not an obsolete scope gate.
+Historical candidate inventory, not an authoritative pre-main release queue. `docs/rework_milestone_release_plan.md` replaces full old-main parity with the approved reproduction boundary. Existing rows/actions below are preserved unchanged until complete inventory and final user scope confirmation; they do not require implementing every historical provider before main. The current checker preserves inventory completeness, not an obsolete scope gate.
 
 ## 1. Purpose
 
-This document is the issue seed for work after the first M1 intermediate
-release. It mirrors the non-ready rows in `docs/release_certification_matrix.md`
-so they can be converted into issues or a project board without losing the
-release boundary.
+This document is the issue seed for work after the first M1 intermediate release. It mirrors the non-ready rows in `docs/release_certification_matrix.md` so they can be converted into issues or a project board without losing the release boundary.
 
-Rows listed here are not release-supported. Under the current checked contract,
-a row leaves this document only after it becomes `certified`. `historical` is a
-non-terminal, unresolved disposition and every historical `P-*` row remains in
-this seed. Closing an unsupported historical provider without certification
-would require a separate atomic change introducing an explicit checked terminal
-disposition and updating the matrix checker, certification matrix, and this seed
-together; this document does not define that future disposition.
+Rows listed here are not release-supported. Under the current checked contract, a row leaves this document only after it becomes `certified`. `historical` is a non-terminal, unresolved disposition and every historical `P-*` row remains in this seed. Closing an unsupported historical provider without certification would require a separate atomic change introducing an explicit checked terminal disposition and updating the matrix checker, certification matrix, and this seed together; this document does not define that future disposition.
 
-`scripts/test/check_release_matrix.py` treats this document as checked release
-planning state: every non-ready `P-*` matrix row must appear here with the same
-status, a non-empty issue seed, and an exact copy of the matrix certification
-action. Ready rows must be removed, and the conversion notes must preserve the
-issue-creation rules needed to keep future parity work evidence-bound.
+`scripts/test/check_release_matrix.py` treats this document as checked release planning state: every non-ready `P-*` matrix row must appear here with the same status, a non-empty issue seed, and an exact copy of the matrix certification action. Ready rows must be removed, and the conversion notes must preserve the issue-creation rules needed to keep future parity work evidence-bound.
 
 ## 2. QEMU Application Parity
 
-No non-ready QEMU application parity rows remain in this seed. `P-QEMU-10` left
-this document after exact retained VM/application evidence certified it in
-`docs/release_certification_matrix.md`.
+No non-ready QEMU application parity rows remain in this seed. `P-QEMU-10` left this document after exact retained VM/application evidence certified it in `docs/release_certification_matrix.md`.
 
 ## 3. Cloud Provider Parity
 
-These rows remain historical until YAML provider profiles, credential/cost
-documentation, and fresh cloud-backed evidence exist.
+These rows remain historical until YAML provider profiles, credential/cost documentation, and fresh cloud-backed evidence exist.
 
-Issue conversion should preserve one issue per matrix row unless maintainers
-choose an explicit umbrella issue for a shared prerequisite. Group the row
-issues by provider and module family:
+Issue conversion should preserve one issue per matrix row unless maintainers choose an explicit umbrella issue for a shared prerequisite. Group the row issues by provider and module family:
 
 1. GCP infrastructure topology: `P-GCP-01` through `P-GCP-04`.
 2. GCP Kubernetes and observability: `P-GCP-05` and `P-GCP-09`.
-3. GCP edge/application module families: `P-GCP-06`, `P-GCP-07`, and
-   `P-GCP-08`.
+3. GCP edge/application module families: `P-GCP-06`, `P-GCP-07`, and `P-GCP-08`.
 4. GCP OpenFaaS/serverless: `P-GCP-10`.
 5. AWS infrastructure topology: `P-AWS-01`.
 
@@ -66,9 +42,7 @@ issues by provider and module family:
 
 ## 4. Non-Row Module-Family Follow-Up
 
-These backlog entries do not have `P-*` parity rows, but they should be
-converted into issues beside the provider rows so unsupported surfaces do not
-turn into implicit claims:
+These backlog entries do not have `P-*` parity rows, but they should be converted into issues beside the provider rows so unsupported surfaces do not turn into implicit claims:
 
 | Module Family | Current Status | Issue Seed |
 | --- | --- | --- |
@@ -81,35 +55,20 @@ turn into implicit claims:
 
 When converting this seed into issues:
 
-1. keep one issue per matrix row unless multiple rows share the same concrete
-   prerequisite,
+1. keep one issue per matrix row unless multiple rows share the same concrete prerequisite,
 2. include the row ID in the issue title,
 3. copy the certification action from `docs/release_certification_matrix.md`,
-4. for the current QEMU/GCP/AWS `P-*` inventory, require fresh VM-backed or
-   cloud-backed evidence before closing a row as certified, as specified by the
-   applicable certification-matrix gate; use the provider-appropriate gate for
-   active non-row applications, which may permit host-backed evidence, and
-   never treat arbitrary local tests as sufficient,
+4. for the current QEMU/GCP/AWS `P-*` inventory, require fresh VM-backed or cloud-backed evidence before closing a row as certified, as specified by the applicable certification-matrix gate; use the provider-appropriate gate for active non-row applications, which may permit host-backed evidence, and never treat arbitrary local tests as sufficient,
 5. update the matrix, release notes, and this seed in the same change.
 
 ## 6. Nomination Rule
 
-Until a maintainer nominates a concrete target, every row and module in this
-seed stays unclaimed and docs-only. Nomination must name the exact scope,
-credentials or host access, cost or capacity guardrails, YAML/profile target,
-suite and success-detector work, evidence requirements, and documentation
-updates.
+Until a maintainer nominates a concrete target, every row and module in this seed stays unclaimed and docs-only. Nomination must name the exact scope, credentials or host access, cost or capacity guardrails, YAML/profile target, suite and success-detector work, evidence requirements, and documentation updates.
 
 After nomination, prefer this implementation order:
 
-1. provider infrastructure first: `P-GCP-01`, then `P-GCP-02` through
-   `P-GCP-04`, with `P-AWS-01` as a separate infrastructure-only track,
-2. GCP software/application rows next: `P-GCP-09`, `P-GCP-05`,
-   `P-GCP-06`, `P-GCP-07`, `P-GCP-08`, then `P-GCP-10`,
-3. non-row modules after provider disposition: `baremetal`,
-   `text_translation`, then `stress` and `mem_usage`.
+1. provider infrastructure first: `P-GCP-01`, then `P-GCP-02` through `P-GCP-04`, with `P-AWS-01` as a separate infrastructure-only track,
+2. GCP software/application rows next: `P-GCP-09`, `P-GCP-05`, `P-GCP-06`, `P-GCP-07`, `P-GCP-08`, then `P-GCP-10`,
+3. non-row modules after provider disposition: `baremetal`, `text_translation`, then `stress` and `mem_usage`.
 
-Do not create support claims from issue conversion alone. Certification still
-requires the release matrix to move the exact row or module family to
-`certified` with retained provider-appropriate runtime evidence required by the
-applicable matrix gate. Arbitrary local tests are insufficient.
+Do not create support claims from issue conversion alone. Certification still requires the release matrix to move the exact row or module family to `certified` with retained provider-appropriate runtime evidence required by the applicable matrix gate. Arbitrary local tests are insufficient.

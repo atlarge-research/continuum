@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies the software-only subset row `P-QEMU-08-SW` in
-`docs/release_certification_matrix.md`.
+This evidence certifies the software-only subset row `P-QEMU-08-SW` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the legacy P-QEMU-08-style local
-QEMU endpoint topology and complete the endpoint runtime software phase. It does
-not certify the full endpoint-only image-classification application benchmark
-from `configuration/tests/qemu/08_endpoint_img.cfg`.
+It proves that the rework stack can provision the legacy P-QEMU-08-style local QEMU endpoint topology and complete the endpoint runtime software phase. It does not certify the full endpoint-only image-classification application benchmark from `configuration/tests/qemu/08_endpoint_img.cfg`.
 
 ## Source And Command
 
@@ -36,11 +32,7 @@ from `configuration/tests/qemu/08_endpoint_img.cfg`.
 | --- | --- | --- | --- |
 | `configs/experiments/parity/qemu_endpoint_software/08_endpoint_runtime.yaml` | PASS | 197.8s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched, teardown verified |
 
-The run exercised two endpoint VMs with network emulation enabled, matching the
-legacy endpoint-only topology shape from `configuration/tests/qemu/08_endpoint_img.cfg`.
-The log records endpoint base-image preparation, endpoint VM launch, network
-emulation setup, endpoint runtime installation, software-phase state
-persistence, and teardown.
+The run exercised two endpoint VMs with network emulation enabled, matching the legacy endpoint-only topology shape from `configuration/tests/qemu/08_endpoint_img.cfg`. The log records endpoint base-image preparation, endpoint VM launch, network emulation setup, endpoint runtime installation, software-phase state persistence, and teardown.
 
 ## What This Claims
 
@@ -49,8 +41,7 @@ This row may be described as:
 1. QEMU can provision the P-QEMU-08-style topology of two endpoint nodes.
 2. Network emulation setup completes for that endpoint-only topology.
 3. The endpoint runtime software phase completes on endpoint resources.
-4. The runner observes the standard release artifacts: experiment lock, state
-   file, `phase_completed = software`, matching resume contract, and teardown.
+4. The runner observes the standard release artifacts: experiment lock, state file, `phase_completed = software`, matching resume contract, and teardown.
 
 ## Limitations
 
@@ -58,10 +49,7 @@ This evidence does not certify:
 
 1. the full endpoint-only image-classification application benchmark,
 2. image-classification metric artifacts on endpoint-only execution,
-3. Docker image prefetch or local-registry behavior for endpoint application
-   images,
+3. Docker image prefetch or local-registry behavior for endpoint application images,
 4. cloud-provider endpoint-only behavior.
 
-This software-only evidence does not certify parent row `P-QEMU-08`. The full
-endpoint image/runtime parent row is certified separately by
-`docs/release_evidence_qemu_endpoint_image_2026-07-08.md`.
+This software-only evidence does not certify parent row `P-QEMU-08`. The full endpoint image/runtime parent row is certified separately by `docs/release_evidence_qemu_endpoint_image_2026-07-08.md`.

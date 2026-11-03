@@ -2,13 +2,9 @@
 
 ## Purpose
 
-This is the tracked Phase-F audit for major runtime, parser, planner, infrastructure,
-application, and e2e-runner functions.
+This is the tracked Phase-F audit for major runtime, parser, planner, infrastructure, application, and e2e-runner functions.
 
-The executable source of truth is `scripts/test/coverage_manifest.json`.
-The broad cloud-safe gate is `scripts/test/run_cloud_static_audit.sh`, and the
-manifest-specific guard is `scripts/test/unit/test_coverage_manifest.py`.
-That unit test validates that:
+The executable source of truth is `scripts/test/coverage_manifest.json`. The broad cloud-safe gate is `scripts/test/run_cloud_static_audit.sh`, and the manifest-specific guard is `scripts/test/unit/test_coverage_manifest.py`. That unit test validates that:
 
 1. every audited source file exists,
 2. every listed major function still exists in that source file,
@@ -20,14 +16,9 @@ That unit test validates that:
 
 The audit covers these active major surfaces:
 
-1. YAML loading, profile composition, schema validation, domain validation, selector/scope handling,
-   module contracts, runtime option validation, image requirements, config access, lock writing,
-   and resume-contract integrity.
-2. Runtime state persistence, QEMU base-image integrity, bridge/gateway discovery, Ansible
-   inventory/group-vars generation, network validation artifacts, resource-manager planning,
-   and application runtime helpers.
-3. E2E runner suite selection, prerequisite validation, success detection, artifact validation,
-   result persistence, and failure classification.
+1. YAML loading, profile composition, schema validation, domain validation, selector/scope handling, module contracts, runtime option validation, image requirements, config access, lock writing, and resume-contract integrity.
+2. Runtime state persistence, QEMU base-image integrity, bridge/gateway discovery, Ansible inventory/group-vars generation, network validation artifacts, resource-manager planning, and application runtime helpers.
+3. E2E runner suite selection, prerequisite validation, success detection, artifact validation, result persistence, and failure classification.
 
 The test layout is now explicit:
 
@@ -37,8 +28,4 @@ The test layout is now explicit:
 
 ## Maintenance Rule
 
-When a future change adds or materially changes a major parser/runtime/planner/infrastructure
-function, update `scripts/test/coverage_manifest.json` in the same commit as the tests. If the
-function is intentionally not unit-testable, the manifest must point to the narrowest local
-regression test that exercises the behavior and explain the fail-fast/error scenario in the
-`failure` field.
+When a future change adds or materially changes a major parser/runtime/planner/infrastructure function, update `scripts/test/coverage_manifest.json` in the same commit as the tests. If the function is intentionally not unit-testable, the manifest must point to the narrowest local regression test that exercises the behavior and explain the fail-fast/error scenario in the `failure` field.

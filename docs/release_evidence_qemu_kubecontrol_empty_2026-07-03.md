@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies research case-study row
-`M2-QEMU-KUBECONTROL-EMPTY` in `docs/release_certification_matrix.md`.
+This evidence certifies research case-study row `M2-QEMU-KUBECONTROL-EMPTY` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the Columbo-style local QEMU
-`kubecontrol` profile, complete the software phase, run the `empty`
-application in per-call deployment mode, and emit retained benchmark evidence
-without adding Columbo-specific concepts to the Continuum core.
+It proves that the rework stack can provision the Columbo-style local QEMU `kubecontrol` profile, complete the software phase, run the `empty` application in per-call deployment mode, and emit retained benchmark evidence without adding Columbo-specific concepts to the Continuum core.
 
 ## Source And Command
 
@@ -48,18 +44,12 @@ Benchmark metric artifact:
 
 This row may be described as:
 
-1. Continuum can run the Columbo-style `kubecontrol` plus `empty` module
-   composition on the exact two-cloud-VM local-QEMU profile.
+1. Continuum can run the Columbo-style `kubecontrol` plus `empty` module composition on the exact two-cloud-VM local-QEMU profile.
 2. The `kubecontrol` software phase reaches Kubernetes cluster readiness.
 3. The `empty` application completes in per-call deployment mode.
-4. The run reaches `phase_completed = application` and writes the standard
-   experiment lock, state, resume-contract, stdout, and benchmark evidence
-   artifacts.
-5. The benchmark metric artifact records the `CLOUD OUTPUT` table with
-   `started_application (s)`.
-6. The implementation uses profiles, resource-manager/application modules,
-   suite metadata, and docs; it does not introduce Columbo-specific core
-   framework concepts.
+4. The run reaches `phase_completed = application` and writes the standard experiment lock, state, resume-contract, stdout, and benchmark evidence artifacts.
+5. The benchmark metric artifact records the `CLOUD OUTPUT` table with `started_application (s)`.
+6. The implementation uses profiles, resource-manager/application modules, suite metadata, and docs; it does not introduce Columbo-specific core framework concepts.
 
 ## Limitations
 
@@ -68,8 +58,5 @@ This evidence does not certify:
 1. a full reproduction of all Columbo paper figures or parameter sweeps,
 2. GCP, AWS, or bare-metal behavior for this workflow,
 3. legacy `.cfg` execution of `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`,
-4. retained legacy trace points for `apiserver`, `controller-manager`, or
-   `scheduler`; the retained image exposes kubelet, worker, application, and
-   resource-utilization evidence, and the generated dataframe leaves the
-   unavailable control-plane phase columns empty,
+4. retained legacy trace points for `apiserver`, `controller-manager`, or `scheduler`; the retained image exposes kubelet, worker, application, and resource-utilization evidence, and the generated dataframe leaves the unavailable control-plane phase columns empty,
 5. `empty_kata` or broader kube_kata behavior.

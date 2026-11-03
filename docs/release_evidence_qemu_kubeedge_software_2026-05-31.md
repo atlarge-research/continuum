@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies the software-only subset row `P-QEMU-06-SW` in
-`docs/release_certification_matrix.md`.
+This evidence certifies the software-only subset row `P-QEMU-06-SW` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the legacy P-QEMU-06-style local
-QEMU topology and complete the KubeEdge software phase with endpoint runtime
-present for endpoint resources. It does not certify the full
-image-classification application benchmark from `configuration/tests/qemu/06_kubeedge-img.cfg`.
+It proves that the rework stack can provision the legacy P-QEMU-06-style local QEMU topology and complete the KubeEdge software phase with endpoint runtime present for endpoint resources. It does not certify the full image-classification application benchmark from `configuration/tests/qemu/06_kubeedge-img.cfg`.
 
 ## Source And Command
 
@@ -32,29 +28,22 @@ image-classification application benchmark from `configuration/tests/qemu/06_kub
 
 ## Result
 
-The final synced-tree run passed after the host-wrapper and KubeEdge role
-fixes:
+The final synced-tree run passed after the host-wrapper and KubeEdge role fixes:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
 | `configs/experiments/parity/qemu_kubeedge_software/06_kubeedge_software.yaml` | PASS | 1899.9s | `exit_code=0`, SSH output found, experiment lock written, state file written, state phase `software`, resume contract matched |
 
-The same row also passed earlier in 729.3s, 299.4s, and 282.4s while the
-certification harness was being tightened. The committed evidence should use the
-final 1899.9s run above because it followed all final KubeEdge role and
-host-wrapper edits.
+The same row also passed earlier in 729.3s, 299.4s, and 282.4s while the certification harness was being tightened. The committed evidence should use the final 1899.9s run above because it followed all final KubeEdge role and host-wrapper edits.
 
 ## What This Claims
 
 This row may be described as:
 
-1. QEMU can provision the P-QEMU-06-style topology of one cloud controller, two
-   edge nodes, and two endpoint nodes.
+1. QEMU can provision the P-QEMU-06-style topology of one cloud controller, two edge nodes, and two endpoint nodes.
 2. The KubeEdge software phase completes on that topology.
-3. The endpoint runtime module is present for endpoint resources in the same
-   software phase.
-4. The runner observes the standard release artifacts: SSH hints, experiment
-   lock, state file, `phase_completed = software`, and matching resume contract.
+3. The endpoint runtime module is present for endpoint resources in the same software phase.
+4. The runner observes the standard release artifacts: SSH hints, experiment lock, state file, `phase_completed = software`, and matching resume contract.
 
 ## Limitations
 
@@ -69,13 +58,4 @@ This evidence does not certify:
 
 This software-only evidence does not certify parent row `P-QEMU-06`.
 
-The full `qemu_kubeedge_image_parity` suite is ported but not certified. At the
-time this software-only evidence was captured, local-registry application image
-staging still needed Docker daemon access for the `continuum-smoke` user. The
-suite now gates on a host-primed local registry cache instead. A later full
-application attempt reached the application phase, then failed under host disk
-pressure while the endpoint publisher image was being pulled and while the test
-runner was saving its JSON summary. Keep full `P-QEMU-06` unclaimed until
-the relocated `/mnt/sdc/continuum_smoke` runner records a full VM-backed
-application run that passes. `P-QEMU-05` remains Docker-gated because it models
-a forced-prefetch row.
+The full `qemu_kubeedge_image_parity` suite is ported but not certified. At the time this software-only evidence was captured, local-registry application image staging still needed Docker daemon access for the `continuum-smoke` user. The suite now gates on a host-primed local registry cache instead. A later full application attempt reached the application phase, then failed under host disk pressure while the endpoint publisher image was being pulled and while the test runner was saving its JSON summary. Keep full `P-QEMU-06` unclaimed until the relocated `/mnt/sdc/continuum_smoke` runner records a full VM-backed application run that passes. `P-QEMU-05` remains Docker-gated because it models a forced-prefetch row.

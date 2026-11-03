@@ -1,17 +1,10 @@
 # Software Module Architecture Plan (Final Target)
 
-This document owns domain semantics, not an expansion of release scope.
-The approved policies in `docs/rework_milestone_release_plan.md` constrain
-pre-main work; factual support remains in `docs/release_certification_matrix.md`.
-Module extensibility is not permission to add features. Arbitrary software
-replacement on retained mutated VMs is unsupported; preserve the same software
-contract for QEMU resume. Benchmark pipeline representation does not imply
-multi-stage runtime support or certified parameter-sweep idempotence.
+This document owns domain semantics, not an expansion of release scope. The approved policies in `docs/rework_milestone_release_plan.md` constrain pre-main work; factual support remains in `docs/release_certification_matrix.md`. Module extensibility is not permission to add features. Arbitrary software replacement on retained mutated VMs is unsupported; preserve the same software contract for QEMU resume. Benchmark pipeline representation does not imply multi-stage runtime support or certified parameter-sweep idempotence.
 
 ## 0. Authority
 
-This document is the single source of truth for software schema and planner semantics.
-Precedence/locking rules are defined in `docs/rework_plan_stack.md`.
+This document is the single source of truth for software schema and planner semantics. Precedence/locking rules are defined in `docs/rework_plan_stack.md`.
 
 ## 1. Objective
 
@@ -32,8 +25,7 @@ Define a deterministic software execution model where:
 4. Dependencies are internal; no user dependency edges.
 5. Deterministic placement, ordering, and execution.
 6. Infra-owned tags are immutable from software modules.
-7. A module assignment is an exhaustive authorization envelope: execution may not modify a
-   resource outside its resolved assignment.
+7. A module assignment is an exhaustive authorization envelope: execution may not modify a resource outside its resolved assignment.
 
 ## 3. User-Facing Software Schema
 
@@ -56,8 +48,7 @@ software:
       config: {}
 ```
 
-As an alternative to the Kubernetes orchestrator above, a KubeEdge deployment can declare its
-complete cloud-and-edge authorization envelope with `any_of`:
+As an alternative to the Kubernetes orchestrator above, a KubeEdge deployment can declare its complete cloud-and-edge authorization envelope with `any_of`:
 
 ```yaml
 software:
@@ -79,8 +70,7 @@ Schema rules:
 4. `config` is required and must be a mapping (use `{}` when no keys are needed),
 5. no user dependency edge field,
 6. `match` is one exact-match AND clause,
-7. `any_of` is the set union of exact-match AND clauses and is available only to software
-   modules; benchmark-stage selectors remain match-only,
+7. `any_of` is the set union of exact-match AND clauses and is available only to software modules; benchmark-stage selectors remain match-only,
 8. the resolved assignment is the module's exhaustive authorization envelope.
 
 ## 4. Resource Identity and Tag Contract
@@ -119,8 +109,7 @@ Registry defines per-module static truths:
 
 User config does not redefine these semantics.
 
-Registry may also expose internal image-catalog references for prefetch planning.
-These are runtime-internal contracts (not user schema fields) and must remain deterministic.
+Registry may also expose internal image-catalog references for prefetch planning. These are runtime-internal contracts (not user schema fields) and must remain deterministic.
 
 Dependency strategy is explicit-only:
 
@@ -132,8 +121,7 @@ Dependency strategy is explicit-only:
 
 Selector language:
 
-1. software selectors contain exactly one of `match: {key: value}` or
-   `any_of: [{key: value}, ...]`.
+1. software selectors contain exactly one of `match: {key: value}` or `any_of: [{key: value}, ...]`.
 2. each clause uses exact equality with implicit AND across pairs.
 3. `any_of` is the set union of its clauses.
 4. benchmark-stage selectors remain match-only.
@@ -143,18 +131,15 @@ Canonical selector representation:
 
 1. normalize to object form: `{"match":[["k1","v1"],["k2","v2"]]}`.
 2. sort pairs lexicographically by key, then value.
-3. normalize software unions to `{"any_of":[{"match":[...]}, ...]}` and sort clauses by
-   canonical JSON.
+3. normalize software unions to `{"any_of":[{"match":[...]}, ...]}` and sort clauses by canonical JSON.
 4. serialize as canonical JSON for identity and lockfile use.
 5. derive `selector_id` as `sel_<sha256-prefix>` from canonical JSON.
 
 Authorization semantics:
 
 1. the union of resolved VM ids is exhaustive: a module may not modify an unselected resource,
-2. roles, capabilities, cardinality, and topology may partition or validate resources inside the
-   envelope but may never expand it,
-3. the current legacy Ansible group check is a temporary execution adapter, not canonical
-   module-to-tier semantics; it is removable when execution consumes resolved assignments,
+2. roles, capabilities, cardinality, and topology may partition or validate resources inside the envelope but may never expand it,
+3. the current legacy Ansible group check is a temporary execution adapter, not canonical module-to-tier semantics; it is removable when execution consumes resolved assignments,
 4. current post-phase hooks are verification-only and do not expand the mutation envelope.
 
 Constraint scopes:
@@ -182,21 +167,14 @@ Violation diagnostics must include:
 The implemented software execution interface is:
 
 1. `resource_manager.start(runner)` owns centralized software dispatch.
-2. Resource-manager modules expose `build_phase_plan(config) -> list[PlanEntry]` and
-   `base_install_playbook(config, tier)` for software and base-image preparation.
-3. `plans.build_software_phase_entries(config)` combines the selected orchestrator's plan
-   with centrally planned addons and validates each owner's execution envelope.
+2. Resource-manager modules expose `build_phase_plan(config) -> list[PlanEntry]` and `base_install_playbook(config, tier)` for software and base-image preparation.
+3. `plans.build_software_phase_entries(config)` combines the selected orchestrator's plan with centrally planned addons and validates each owner's execution envelope.
 4. `plans.execute_entries(runner, entries)` dispatches entries through the shared runner.
 5. The optional resource-manager `post_phase_hook(runner)` verifies the deployed software.
 
-`PlanEntry` records execution kind, playbook/command, runner options, owner and immutable
-legacy target-group metadata. The current software adapter accepts proven `vms` playbook
-targets and rejects command entries whose resource mutation scope cannot be proven.
-Module configuration validation/defaulting happens at parser/bootstrap boundaries using
-registry contracts and existing module option hooks.
+`PlanEntry` records execution kind, playbook/command, runner options, owner and immutable legacy target-group metadata. The current software adapter accepts proven `vms` playbook targets and rejects command entries whose resource mutation scope cannot be proven. Module configuration validation/defaulting happens at parser/bootstrap boundaries using registry contracts and existing module option hooks.
 
-The following is a proposed future module API, not an implemented interface or a current
-module authoring requirement:
+The following is a proposed future module API, not an implemented interface or a current module authoring requirement:
 
 1. `validate_config(instance.config)`
 2. `place(ctx, instance, candidate_vms) -> PlacementResult` (optional)
@@ -211,15 +189,9 @@ module authoring requirement:
 
 ## 8. Planner Semantics
 
-Current planning validates declared module capabilities and overlapping assignment scopes;
-it does not auto-inject dependencies. The execution adapter permits exactly one
-orchestrator and orders its entries first, followed by centrally planned OpenFaaS and
-endpoint-runtime entries when selected. Observability is included in the orchestrator's
-plan. Registry checks and this fixed adapter order do not constitute a generic graph
-executor or expose arbitrary placement hooks.
+Current planning validates declared module capabilities and overlapping assignment scopes; it does not auto-inject dependencies. The execution adapter permits exactly one orchestrator and orders its entries first, followed by centrally planned OpenFaaS and endpoint-runtime entries when selected. Observability is included in the orchestrator's plan. Registry checks and this fixed adapter order do not constitute a generic graph executor or expose arbitrary placement hooks.
 
-The target planner flow below describes proposed graph/API behavior beyond the implemented
-adapter; it is not an implementation queue for the current closure:
+The target planner flow below describes proposed graph/API behavior beyond the implemented adapter; it is not an implementation queue for the current closure:
 
 1. parse `software.modules[]`,
 2. validate IDs/types/config shape,
@@ -233,10 +205,7 @@ adapter; it is not an implementation queue for the current closure:
 10. execute `apply(...)` in order,
 11. emit resolved software placement tags/artifacts for benchmark-stage resolver use.
 
-Until assignment-scoped execution replaces the broad legacy inventory, planner validation maps
-each software playbook's declared legacy target groups to normalized VM ids and rejects plans that
-would exceed the owning module's authorization envelope. This adapter describes current executor
-behavior only; literal legacy groups are not module requirements.
+Until assignment-scoped execution replaces the broad legacy inventory, planner validation maps each software playbook's declared legacy target groups to normalized VM ids and rejects plans that would exceed the owning module's authorization envelope. This adapter describes current executor behavior only; literal legacy groups are not module requirements.
 
 Determinism requirements:
 
@@ -246,12 +215,7 @@ Determinism requirements:
 
 ## 9. Lockfile
 
-The implemented `planner_snapshot` contains `software_execution_order`,
-`software_plan_entries`, `software_module_assignments` and `benchmark_stage_assignments`.
-Assignment records include selectors' identities, resolved VM ids/resources and scopes;
-normalized configuration retains canonical selectors and resource tags. Replay validates
-the snapshot against the current deterministic adapter plan. The current lock does not
-claim to serialize a generic dependency graph or arbitrary module-exported facts.
+The implemented `planner_snapshot` contains `software_execution_order`, `software_plan_entries`, `software_module_assignments` and `benchmark_stage_assignments`. Assignment records include selectors' identities, resolved VM ids/resources and scopes; normalized configuration retains canonical selectors and resource tags. Replay validates the snapshot against the current deterministic adapter plan. The current lock does not claim to serialize a generic dependency graph or arbitrary module-exported facts.
 
 The target resolved software artifact would include:
 
@@ -304,8 +268,7 @@ E2E smoke tests:
 3. Explicit-only dependency strategy (no auto-injection).
 4. Cluster-first base tagging from infrastructure (`cluster=<id>` for all resources in cluster).
 5. Benchmark stages must support selector/tag assignment and software-tag handoff.
-6. Selector clauses are exact-match AND; software supports `match` or `any_of` unions,
-   while benchmark stages accept a single `match`. Section 6 owns these semantics.
+6. Selector clauses are exact-match AND; software supports `match` or `any_of` unions, while benchmark stages accept a single `match`. Section 6 owns these semantics.
 7. Selector identity uses canonical normalized JSON + `selector_id` hash.
 8. Scope identity is structured (`vm`, `cluster`, `selector` objects).
 9. Hard-fail reserved tag collisions.

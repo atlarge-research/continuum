@@ -30,13 +30,7 @@ isProject: false
 
 ## 0. Authority and Scope
 
-This is a historical record of the completed restructuring phases, not the
-current program roadmap or execution queue. Approved scope and ordered gates
-are in `docs/rework_milestone_release_plan.md`; authority is mapped by
-`docs/rework_plan_stack.md`. Current evidence is factual status in
-`docs/release_certification_matrix.md`, and the restart point is
-`docs/rework_release_handoff.md`. Historical phase completion does not renew
-candidate runtime evidence.
+This is a historical record of the completed restructuring phases, not the current program roadmap or execution queue. Approved scope and ordered gates are in `docs/rework_milestone_release_plan.md`; authority is mapped by `docs/rework_plan_stack.md`. Current evidence is factual status in `docs/release_certification_matrix.md`, and the restart point is `docs/rework_release_handoff.md`. Historical phase completion does not renew candidate runtime evidence.
 
 ## 1. Program Objectives
 
@@ -113,9 +107,7 @@ Status snapshot (updated May 22, 2026):
 
 Objective: standardize application deployment roles/templates and remove remaining duplication.
 
-The Phase-D cleanup target is closed: benchmark/application launch, timing,
-worker-output, and completion concerns are application-owned, while
-resource-manager modules own platform installation and generic readiness checks.
+The Phase-D cleanup target is closed: benchmark/application launch, timing, worker-output, and completion concerns are application-owned, while resource-manager modules own platform installation and generic readiness checks.
 
 Closure snapshot (updated May 22, 2026):
 
@@ -151,33 +143,15 @@ Objective: finalize robust phase resume and state validation boundaries.
 
 Current implementation snapshot (updated May 20, 2026):
 
-1. `experiment_lock.yaml` and `state.json` share a canonical `resume_contract`
-   derived from provider identity/config, normalized infrastructure topology and
-   resources, network settings, software modules, software assignments, and
-   software execution plan metadata.
-2. The resume contract intentionally excludes phase-local request fields:
-   `run.targets`, `run.prepare_for_resume`, cleanup/delete intent, base path,
-   and benchmark pipeline content.
-3. `continuum.py` writes the resolved lock during bootstrap before provisioning
-   or state resume begins, so lock/contract failures stop before VM work.
-4. `state.json` is now schema v2 with `kind: ContinuumState`, timestamp,
-   `phase_completed`, atomic writes, machine data, and the persisted
-   `resume_contract`.
-5. Resume rejects legacy state, malformed machine data, invalid phases, and
-   stale contract hashes before software/application execution starts.
-6. The e2e runner validates lock/state schema and matching resume-contract
-   hashes, with `state_schema_mismatch` and `resume_contract_mismatch` failure
-   buckets for smoke triage.
-7. The e2e runner now also validates structured network-validation NDJSON under
-   `<base_path>/.continuum/logs/network_validation/` and lightweight
-   benchmark-smoke metric-table evidence for the resumed application leg.
-8. Benchmark-smoke metric evidence is now persisted as a structured runtime
-   manifest plus CSV tables under `<base_path>/.continuum/logs/benchmark/`, and
-   runner success detection validates the expected endpoint metric table before
-   accepting the resumed application leg.
-9. Phase-E implementation is closed for the active rework scope; runner-level
-   benchmark statistical assertions are implemented, while final
-   reproducibility-package design remains a deferred follow-up topic.
+1. `experiment_lock.yaml` and `state.json` share a canonical `resume_contract` derived from provider identity/config, normalized infrastructure topology and resources, network settings, software modules, software assignments, and software execution plan metadata.
+2. The resume contract intentionally excludes phase-local request fields: `run.targets`, `run.prepare_for_resume`, cleanup/delete intent, base path, and benchmark pipeline content.
+3. `continuum.py` writes the resolved lock during bootstrap before provisioning or state resume begins, so lock/contract failures stop before VM work.
+4. `state.json` is now schema v2 with `kind: ContinuumState`, timestamp, `phase_completed`, atomic writes, machine data, and the persisted `resume_contract`.
+5. Resume rejects legacy state, malformed machine data, invalid phases, and stale contract hashes before software/application execution starts.
+6. The e2e runner validates lock/state schema and matching resume-contract hashes, with `state_schema_mismatch` and `resume_contract_mismatch` failure buckets for smoke triage.
+7. The e2e runner now also validates structured network-validation NDJSON under `<base_path>/.continuum/logs/network_validation/` and lightweight benchmark-smoke metric-table evidence for the resumed application leg.
+8. Benchmark-smoke metric evidence is now persisted as a structured runtime manifest plus CSV tables under `<base_path>/.continuum/logs/benchmark/`, and runner success detection validates the expected endpoint metric table before accepting the resumed application leg.
+9. Phase-E implementation is closed for the active rework scope; runner-level benchmark statistical assertions are implemented, while final reproducibility-package design remains a deferred follow-up topic.
 
 ## Phase F: Cleanup and CI Hardening
 
@@ -185,22 +159,14 @@ Objective: remove dead legacy paths and enforce quality gates consistently.
 
 Phase-F test architecture closure status (updated May 21, 2026):
 
-1. Major-function coverage is tracked in `scripts/test/coverage_manifest.json`
-   and documented in `docs/major_function_test_coverage.md`.
-2. `scripts/test/unit/test_coverage_manifest.py` validates audited source
-   paths, major function names, test references, and success/fail-fast coverage
-   notes.
-3. Unit tests now live under `scripts/test/unit/`, local e2e-runner tests live
-   under `scripts/test/e2e/`, and shared helpers live under
-   `scripts/test/support/`.
-4. `scripts/test/run_cloud_static_audit.sh` runs unit and e2e discovery as
-   first-class required gates before the combined discovery gate.
+1. Major-function coverage is tracked in `scripts/test/coverage_manifest.json` and documented in `docs/major_function_test_coverage.md`.
+2. `scripts/test/unit/test_coverage_manifest.py` validates audited source paths, major function names, test references, and success/fail-fast coverage notes.
+3. Unit tests now live under `scripts/test/unit/`, local e2e-runner tests live under `scripts/test/e2e/`, and shared helpers live under `scripts/test/support/`.
+4. `scripts/test/run_cloud_static_audit.sh` runs unit and e2e discovery as first-class required gates before the combined discovery gate.
 
 ## Phase G: Retired Speculative Queue
 
-No lifecycle-platform, configuration-library, database or structured-package
-project is authorized by this historical plan. Follow the approved narrow
-stabilization/reproduction scope instead.
+No lifecycle-platform, configuration-library, database or structured-package project is authorized by this historical plan. Follow the approved narrow stabilization/reproduction scope instead.
 
 ## 5. Program Deliverables
 

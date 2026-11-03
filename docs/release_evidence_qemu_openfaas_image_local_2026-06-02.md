@@ -2,18 +2,11 @@
 
 ## Scope
 
-This evidence certifies the local application subset row
-`P-QEMU-10-APP-LOCAL` in `docs/release_certification_matrix.md`.
+This evidence certifies the local application subset row `P-QEMU-10-APP-LOCAL` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision a single-host QEMU variant of the
-legacy P-QEMU-10 node counts and complete the Kubernetes, OpenFaaS,
-endpoint-runtime, and image-classification application phases. The variant
-keeps three cloud VMs and four endpoint VMs, but lowers cloud VM cores from the
-legacy value of 6 to 4 so the suite fits the dedicated runner's 20-core
-single-host limit.
+It proves that the rework stack can provision a single-host QEMU variant of the legacy P-QEMU-10 node counts and complete the Kubernetes, OpenFaaS, endpoint-runtime, and image-classification application phases. The variant keeps three cloud VMs and four endpoint VMs, but lowers cloud VM cores from the legacy value of 6 to 4 so the suite fits the dedicated runner's 20-core single-host limit.
 
-It does not certify the exact legacy CPU shape or parent row `P-QEMU-10` from
-`configuration/tests/qemu/10_kubernetes-openfaas.cfg`.
+It does not certify the exact legacy CPU shape or parent row `P-QEMU-10` from `configuration/tests/qemu/10_kubernetes-openfaas.cfg`.
 
 ## Source And Command
 
@@ -58,28 +51,20 @@ The retained runner summary records:
 
 This row may be described as:
 
-1. QEMU can provision the P-QEMU-10-style node counts on a single host when
-   cloud VM cores are capped to fit the runner.
+1. QEMU can provision the P-QEMU-10-style node counts on a single host when cloud VM cores are capped to fit the runner.
 2. Kubernetes installs and reaches Ready on the three-cloud-node topology.
-3. OpenFaaS installs, deploys the image-classification function, and exposes it
-   through the gateway path used by endpoint publishers.
+3. OpenFaaS installs, deploys the image-classification function, and exposes it through the gateway path used by endpoint publishers.
 4. Endpoint publishers complete the image-classification application phase.
-5. The runner observes standard release artifacts and structured benchmark
-   metric artifacts through the application phase.
+5. The runner observes standard release artifacts and structured benchmark metric artifacts through the application phase.
 
 ## Limitations
 
 This evidence does not certify:
 
-1. the exact legacy P-QEMU-10 resource shape with three cloud VMs at 6 cores
-   each,
+1. the exact legacy P-QEMU-10 resource shape with three cloud VMs at 6 cores each,
 2. multi-host QEMU scheduling for the exact 26-core legacy shape,
 3. parent row `P-QEMU-10`,
 4. cloud-provider OpenFaaS behavior,
 5. OpenFaaS behavior without the primed local registry cache.
 
-The exact legacy application shape selected external host `matthijs@node3` on
-2026-06-02 and failed before provisioning because SSH returned `No route to
-host`. Keep parent row `P-QEMU-10` unclaimed until reachable external QEMU
-capacity or a larger local runner can produce retained VM/application evidence
-for the exact shape.
+The exact legacy application shape selected external host `matthijs@node3` on 2026-06-02 and failed before provisioning because SSH returned `No route to host`. Keep parent row `P-QEMU-10` unclaimed until reachable external QEMU capacity or a larger local runner can produce retained VM/application evidence for the exact shape.

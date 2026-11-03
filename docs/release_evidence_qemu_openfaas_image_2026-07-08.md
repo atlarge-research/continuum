@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies exact old-main parity row `P-QEMU-10` in
-`docs/release_certification_matrix.md`.
+This evidence certifies exact old-main parity row `P-QEMU-10` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the legacy QEMU OpenFaaS
-image-classification topology on local plus external QEMU capacity, complete
-the Kubernetes, OpenFaaS, endpoint-runtime, and image-classification
-application phases, and emit benchmark metric artifacts.
+It proves that the rework stack can provision the legacy QEMU OpenFaaS image-classification topology on local plus external QEMU capacity, complete the Kubernetes, OpenFaaS, endpoint-runtime, and image-classification application phases, and emit benchmark metric artifacts.
 
 ## Source And Command
 
@@ -53,14 +49,11 @@ The retained runner summary records:
 
 This row may be described as:
 
-1. QEMU can provision the exact P-QEMU-10 legacy resource shape using local plus
-   external QEMU capacity.
+1. QEMU can provision the exact P-QEMU-10 legacy resource shape using local plus external QEMU capacity.
 2. Kubernetes installs and reaches Ready on the three-cloud-node topology.
-3. OpenFaaS installs, deploys the image-classification function, and exposes it
-   through the gateway path used by endpoint publishers.
+3. OpenFaaS installs, deploys the image-classification function, and exposes it through the gateway path used by endpoint publishers.
 4. Endpoint publishers complete the image-classification application phase.
-5. The runner observes standard release artifacts and structured benchmark
-   metric artifacts through the application phase.
+5. The runner observes standard release artifacts and structured benchmark metric artifacts through the application phase.
 
 ## Limitations
 
@@ -68,6 +61,5 @@ This evidence does not certify:
 
 1. cloud-provider OpenFaaS behavior,
 2. OpenFaaS behavior without the primed local registry cache,
-3. every Columbo paper figure, parameter sweep, cloud provider, non-QEMU
-   topology, `kube_kata`, or broader `kubecontrol` behavior,
+3. every Columbo paper figure, parameter sweep, cloud provider, non-QEMU topology, `kube_kata`, or broader `kubecontrol` behavior,
 4. behavior outside the exact YAML config and profile set listed above.

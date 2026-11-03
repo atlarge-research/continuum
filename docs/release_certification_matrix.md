@@ -1,19 +1,24 @@
 # Continuum Release Certification Matrix
 
-The 2026-10-27 policy in `docs/rework_milestone_release_plan.md` replaces full
-old-main parity as a pre-main gate. Existing row statuses, dates and evidence
-below are unchanged historical facts, not refreshed normal-user certification.
-The transitional legacy inventory remains complete pending final scope review.
-For current host commands and migrated-root exports use
-`docs/smoke_runner_isolation.md`. No merge/push/tag/release is authorized.
+The 2026-10-27 policy in `docs/rework_milestone_release_plan.md` replaces full old-main parity as a pre-main gate. Existing row statuses, dates and evidence below are unchanged historical facts, not refreshed normal-user certification. The transitional legacy inventory remains complete pending final scope review. For current host commands and migrated-root exports use `docs/smoke_runner_isolation.md`. No merge/push/tag/release is authorized.
 
-## Current engineering DEVELOPMENT checkpoint — 2026-10-29
+## Current selected engineering checkpoint — 2026-11-03
 
-All selected Packet D development families have independent read-only evidence
-review and coordinator acceptance. Their exact receipts, hashes, results and
-limitations are in the linked sections of the
-[release handoff](rework_release_handoff.md). These are distinct source-bound
-development observations, including two explicitly mixed-source assessments:
+Frozen runtime `1f1980e1e0b4d5828059f646d768edaaaa611525` has all thirteen selected final groups independently reviewed and ROOT-accepted: two operational passes; infrastructure, network, Kubernetes image, endpoint image and observability; KubeEdge, Mist, five-invocation application reuse, strict Columbo, exact Kata startup and node4/node3 OpenFaaS last. The [current handoff](rework_release_handoff.md#current-checkpoint--2026-11-03) supplies every exact case root, acceptance/review hash, command/environment/result binding, failure/recovery and retention limit. All eight unrelated participating-host domains were preserved; seven intended OpenFaaS workload guests remain running. Accepted work was not rerun.
+
+All twelve required static gates passed on clean H (986 unit, 173 local-e2e, 1,159 combined). Inventory v15 is bound to H with 359 rows+135 exclusions/494 source hashes/zero unaccounted paths. Its 257 pending historical dispositions and `final_configuration_gate_closed:false` remain factual. The later83-path reviewed-documentation import and four factual reconciliations have separate applicable doc-check/source/review receipts at `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4/final-docs-1f1980e1e0b4/final-source-receipt.json`; they do not renew runtime/static/inventory attribution.
+
+This accepts the selected functional engineering checkpoint, not the historical July rows or complete scientific reproductions. Original operational1/2/observability/OpenFaaS stopped2 adapters remain preserved alongside separately accepted evidence-only/offline recoveries. Exact Kata is100 STARTs / 100 complete startup trace rows with only 61 retained ENDs, so all 100 sleep-job completion is unproven. OpenFaaS's600 outcomes took92.28–98.58 seconds per publisher; all 600 cannot-keep-up spans remain, without achieved 5 Hz / 30 s, calibrated timing, accuracy, continuous-health or build-provenance claims. Narrow reuse/Columbo/Kata/OpenFaaS evidence does not establish generic sweeps, wider provider/topology/research equivalence or thesis completion.
+
+No M1 row ID/status/date/action-cell primary evidence, release-note coupling or historical certification is promoted or renewed by this summary. Release-tagging checks below remain future prerequisites rather than an active execution queue. Human architecture/scope/process review is next; implementation, publication and the deferred proposal's coverage audit require separate authority.
+
+<a id="current-engineering-development-checkpoint--2026-10-29"></a>
+
+## Earlier engineering DEVELOPMENT checkpoint — 2026-10-29
+
+The following distinct-source development record and its then-pending final-matrix instructions are historical; the selected final checkpoint above supersedes their operational status without relabeling their evidence.
+
+All selected Packet D development families have independent read-only evidence review and coordinator acceptance. Their exact receipts, hashes, results and limitations are in the linked sections of the [release handoff](rework_release_handoff.md). These are distinct source-bound development observations, including two explicitly mixed-source assessments:
 
 | Selected workflow family | Accepted development source and evidence |
 | --- | --- |
@@ -25,82 +30,34 @@ development observations, including two explicitly mixed-source assessments:
 | Kata startup | VM source `f6bf6b3d98692cbc4b5ddb33058b6eccd95ffc3d`, formatter repair/replay `036e6e046521a2c445db8af1e98cec4e1860ae5b`; [selected mixed-source receipt](rework_release_handoff.md#packet-d-kata--selected-mixed-source-development-checkpoint), with preserved sampling/trace limits. |
 | Exact multi-host OpenFaaS image | `ab7a3285a2e7e33336cd526377f19442e525aaa5`; [development receipt](rework_release_handoff.md#packet-d-openfaas--accepted-development-checkpoint): 600 completed decoded outcomes, seven retained guests, no sustained 5-Hz or HTTP-status claim. |
 
-Current Packet E CLI base is `a0d28a071b4a85707cacb95f33d683d2d574d64c`;
-its two corrected observability access hints and one regression have focused,
-carrier and scoped lint proof only. It is not the source of the earlier VM runs.
-The final clean source freeze, refreshed source-bound inventory, all twelve
-canonical static gates and full fresh serial runtime/manual matrix remain
-**PENDING**. Finite metrics and complete workloads do not prove synchronized
-one-way timing, model accuracy, continuous health, live resource utilization or
-fresh image-build provenance. No provider, wider sweep or thesis equivalence is
-established. Columbo and Kata retain their exact documented slices.
+Current Packet E CLI base is `a0d28a071b4a85707cacb95f33d683d2d574d64c`; its two corrected observability access hints and one regression have focused, carrier and scoped lint proof only. It is not the source of the earlier VM runs. The final clean source freeze, refreshed source-bound inventory, all twelve canonical static gates and full fresh serial runtime/manual matrix remain **PENDING**. Finite metrics and complete workloads do not prove synchronized one-way timing, model accuracy, continuous health, live resource utilization or fresh image-build provenance. No provider, wider sweep or thesis equivalence is established. Columbo and Kata retain their exact documented slices.
 
-This checkpoint changes no July row ID, status, date, action-cell primary evidence
-or M1 release-notes coupling. It promotes neither software-only nor local OpenFaaS
-subset rows from broader application evidence and renews no historical
-certification. Final-candidate acceptance and publication readiness are separate
-from this development checkpoint.
+This checkpoint changes no July row ID, status, date, action-cell primary evidence or M1 release-notes coupling. It promotes neither software-only nor local OpenFaaS subset rows from broader application evidence and renews no historical certification. Final-candidate acceptance and publication readiness are separate from this development checkpoint.
 
 ## 1. Purpose
 
-This is the working matrix for turning the milestone release plan into
-checkable rows. Runtime rows can be claimed in release notes only when their
-status is `certified` and their evidence fields point to a fresh run for the
-release being prepared. A non-runtime core row may be claimed as `core-ready`
-under the policy in `docs/rework_milestone_release_plan.md`.
+This is the working matrix for turning the milestone release plan into checkable rows. Runtime rows can be claimed in release notes only when their status is `certified` and their evidence fields point to a fresh run for the release being prepared. A non-runtime core row may be claimed as `core-ready` under the policy in `docs/rework_milestone_release_plan.md`.
 
-Certification policy and labels are defined in
-`docs/rework_milestone_release_plan.md`.
+Certification policy and labels are defined in `docs/rework_milestone_release_plan.md`.
 
 ## 2. How To Use This Matrix
 
 1. Keep `docs/rework_milestone_release_plan.md` as the release strategy.
 2. Keep this document as the operational checklist for release rows.
-3. Update a row to `certified` only after the exact config/module set has passed
-   a full VM-backed, cloud-backed, or host-backed run appropriate to the claim.
+3. Update a row to `certified` only after the exact config/module set has passed a full VM-backed, cloud-backed, or host-backed run appropriate to the claim.
 4. Leave code-present but unproven rows as `ported-unverified`.
-5. Leave legacy-only rows as `historical` while they are unresolved. This is a
-   non-terminal status, so every historical `P-*` row remains in
-   `docs/old_main_parity_issue_seed.md`.
-6. If a feature may not return, mark it `deprecated-proposed` and add rationale,
-   but keep the row in the parity seed because that status is also non-terminal.
+5. Leave legacy-only rows as `historical` while they are unresolved. This is a non-terminal status, so every historical `P-*` row remains in `docs/old_main_parity_issue_seed.md`.
+6. If a feature may not return, mark it `deprecated-proposed` and add rationale, but keep the row in the parity seed because that status is also non-terminal.
 
-Under the current checked contract, a tracked parity row can leave the backlog
-only by becoming `certified`. Closing an unsupported historical provider without
-certification would require a separate atomic change that introduces an explicit
-checked terminal disposition and updates the matrix checker, this document, and
-the parity seed together. This documentation reset does not define that future
-disposition.
+Under the current checked contract, a tracked parity row can leave the backlog only by becoming `certified`. Closing an unsupported historical provider without certification would require a separate atomic change that introduces an explicit checked terminal disposition and updates the matrix checker, this document, and the parity seed together. This documentation reset does not define that future disposition.
 
-Generated logs under `logs/` are local evidence and are not committed by
-default. Release notes should summarize the latest committed source revision,
-command, operator/runner context, and artifact location for each certified row.
-The current M1 release-notes draft is `docs/release_notes_m1_draft.md`.
-`scripts/test/check_release_matrix.py` verifies that matrix config paths and
-suite references resolve to current repository inventories, that every
-runtime-certified row names a concrete rework experiment config and runner
-suite, that the local `origin/main` ref is available, that every legacy test
-config under both the current worktree and the local `origin/main`
-`configuration/tests/` inventory has a matrix disposition, that the M1 draft
-lists every M1/old-main ready row and every M1/old-main ready-row primary
-evidence document, and that M1/old-main non-ready rows stay in the nonclaim
-section. It also verifies that release notes list only M1/old-main ready-row
-primary evidence documents, that certified row references in the module backlog
-point only at ready matrix rows, and that
-`docs/old_main_parity_issue_seed.md` mirrors every non-ready `P-*` row with a
-matching status and a concrete issue seed.
+Generated logs under `logs/` are local evidence and are not committed by default. Release notes should summarize the latest committed source revision, command, operator/runner context, and artifact location for each certified row. The current M1 release-notes draft is `docs/release_notes_m1_draft.md`. `scripts/test/check_release_matrix.py` verifies that matrix config paths and suite references resolve to current repository inventories, that every runtime-certified row names a concrete rework experiment config and runner suite, that the local `origin/main` ref is available, that every legacy test config under both the current worktree and the local `origin/main` `configuration/tests/` inventory has a matrix disposition, that the M1 draft lists every M1/old-main ready row and every M1/old-main ready-row primary evidence document, and that M1/old-main non-ready rows stay in the nonclaim section. It also verifies that release notes list only M1/old-main ready-row primary evidence documents, that certified row references in the module backlog point only at ready matrix rows, and that `docs/old_main_parity_issue_seed.md` mirrors every non-ready `P-*` row with a matching status and a concrete issue seed.
 
-Source freshness is not waived for historical wrapper additions or Kata/shared
-runtime changes. The required matrix check owns release-command presence/order/
-duplication; informational pre-tag readiness keeps source/tree/report/artifact
-checks without repeating that policy pass. See `docs/branch_slimming_audit.md`.
-This integration change does not renew any historical status or evidence below.
+Source freshness is not waived for historical wrapper additions or Kata/shared runtime changes. The required matrix check owns release-command presence/order/ duplication; informational pre-tag readiness keeps source/tree/report/artifact checks without repeating that policy pass. See `docs/branch_slimming_audit.md`. This integration change does not renew any historical status or evidence below.
 
 ## 3. M1 Certified Module-Set Rows
 
-M1 is the first intermediate rework milestone. It should prove the structured
-core plus one local, VM-backed vertical slice. It is not a final replacement for
-old `main`.
+M1 is the first intermediate rework milestone. It should prove the structured core plus one local, VM-backed vertical slice. It is not a final replacement for old `main`.
 
 | ID | Claim Boundary | Configs / Suites | Required Evidence | Current Status | Next Action |
 | --- | --- | --- | --- | --- | --- |
@@ -133,13 +90,7 @@ Preferred M1 host command sequence:
 18. `sh scripts/test/run_smoke_host.sh qemu_kubecontrol_empty_trace_parity` when certifying the strict Columbo-style kubecontrol control-plane trace row.
 19. `sh scripts/test/run_smoke_host.sh qemu_kube_kata_empty_startup_parity` when certifying the local-QEMU Kata startup row.
 
-The current wrapper supports `operational_regression`, which chains
-`phase_smoke_matrix` and `benchmark_k8s_resume`. The dedicated
-`network_validation` suite is claimed for the current M1 evidence snapshot. The
-`qemu_infra_parity` suite remains separate because it certifies old-main
-infrastructure parity rows rather than the first vertical M1 module set. The
-pre-tag gate in `docs/release_notes_m1_draft.md` intentionally lists every
-VM-backed wrapper scenario for rows claimed by the milestone.
+The current wrapper supports `operational_regression`, which chains `phase_smoke_matrix` and `benchmark_k8s_resume`. The dedicated `network_validation` suite is claimed for the current M1 evidence snapshot. The `qemu_infra_parity` suite remains separate because it certifies old-main infrastructure parity rows rather than the first vertical M1 module set. The pre-tag gate in `docs/release_notes_m1_draft.md` intentionally lists every VM-backed wrapper scenario for rows claimed by the milestone.
 
 Before publishing a release candidate from the certification host, also run:
 
@@ -149,26 +100,11 @@ python3 scripts/test/check_release_pretag.py
 python3 scripts/test/check_release_claims.py
 ```
 
-The artifact audit validates that the primary artifact paths named by release
-evidence docs still exist, that runner summary JSON reports zero failures, that
-the cloud-static audit required gates passed, and that structured
-benchmark/network artifacts are parseable. The pre-tag readiness check
-aggregates the documented M1 evidence, verifies that every release-evidence doc
-listed in the release notes names the current git commit and clean source-tree
-state, and must fail until the working tree is clean and normal-user host
-verification records `PASS`. The release-claims check validates that
-public-facing docs still point support claims to this matrix. They do not claim QEMU
-as Continuum core, full main replacement, uncertified cloud support, or full
-application parity rows without evidence.
+The artifact audit validates that the primary artifact paths named by release evidence docs still exist, that runner summary JSON reports zero failures, that the cloud-static audit required gates passed, and that structured benchmark/network artifacts are parseable. The pre-tag readiness check aggregates the documented M1 evidence, verifies that every release-evidence doc listed in the release notes names the current git commit and clean source-tree state, and must fail until the working tree is clean and normal-user host verification records `PASS`. The release-claims check validates that public-facing docs still point support claims to this matrix. They do not claim QEMU as Continuum core, full main replacement, uncertified cloud support, or full application parity rows without evidence.
 
 ## 3.5 Post-M1 Research Case-Study Rows
 
-These post-M1 rows demonstrate Continuum as a research and education platform.
-Their existing `M2-*` row IDs are retained for evidence compatibility, but the
-prefix does not denote the M2 Provider Parity milestone defined in
-`docs/rework_milestone_release_plan.md`. They do not participate in the M1
-release-notes draft until they have their own publication path, and they must
-not be described as release-certified until retained runtime evidence exists.
+These post-M1 rows demonstrate Continuum as a research and education platform. Their existing `M2-*` row IDs are retained for evidence compatibility, but the prefix does not denote the M2 Provider Parity milestone defined in `docs/rework_milestone_release_plan.md`. They do not participate in the M1 release-notes draft until they have their own publication path, and they must not be described as release-certified until retained runtime evidence exists.
 
 | ID | Claim Boundary | Configs / Suites | Required Evidence | Current Status | Next Action |
 | --- | --- | --- | --- | --- | --- |
@@ -178,9 +114,7 @@ not be described as release-certified until retained runtime evidence exists.
 
 ## 4. Old-Main Provider And Topology Parity
 
-This table starts from the legacy test inventory under `configuration/tests/`.
-Rows are not release-ready until the YAML equivalent is explicit and a fresh
-VM-backed or cloud-backed run proves the claim on the rework stack.
+This table starts from the legacy test inventory under `configuration/tests/`. Rows are not release-ready until the YAML equivalent is explicit and a fresh VM-backed or cloud-backed run proves the claim on the rework stack.
 
 | ID | Legacy Row | Old Public Surface | Related Rework YAML / Profile | Status | Certification Action |
 | --- | --- | --- | --- | --- | --- |
@@ -213,11 +147,7 @@ VM-backed or cloud-backed run proves the claim on the rework stack.
 
 ## 5. Module Certification Backlog
 
-This backlog tracks code/config surfaces that exist in the rework branch but
-must not be described as release-certified until they satisfy the
-provider-appropriate runtime-evidence gate defined by the applicable matrix
-row. A gate may explicitly require VM-backed, cloud-backed, or host-backed
-evidence; arbitrary local tests do not satisfy it.
+This backlog tracks code/config surfaces that exist in the rework branch but must not be described as release-certified until they satisfy the provider-appropriate runtime-evidence gate defined by the applicable matrix row. A gate may explicitly require VM-backed, cloud-backed, or host-backed evidence; arbitrary local tests do not satisfy it.
 
 | Module Family | Current Evidence Shape | Status | Required Before Public Claim |
 | --- | --- | --- | --- |
@@ -242,8 +172,7 @@ evidence; arbitrary local tests do not satisfy it.
 
 ## 6. Evidence Record Template
 
-Use this template in release notes or a release-evidence document for every row
-that moves to `certified`.
+Use this template in release notes or a release-evidence document for every row that moves to `certified`.
 
 | Field | Value |
 | --- | --- |
@@ -267,29 +196,13 @@ that moves to `certified`.
 ## 7. Immediate Next Steps
 
 1. Keep the M1 cloud-safe audit fresh on the tree being tagged.
-2. Rerun affected M1 VM-backed rows if runtime, runner, verifier, profile,
-   playbook, or config code changes after the recorded VM-evidence source
-   commit.
-3. Run `sh scripts/test/run_smoke_host.sh
-   release-artifact-audit` on the certification host before tagging any row as
-   release-ready.
-4. Run `python3 scripts/test/check_release_pretag.py` and keep M1 untagged
-   until it reports zero issues.
-5. Verify normal-user prerequisites with `sh scripts/test/setup_agent_host.sh verify`
-   before host execution. No installed helper or dedicated-repo sync is used.
-6. Keep `docs/release_notes_m1_draft.md` synchronized with this matrix before
-   publishing an intermediate release.
-7. Refresh any certified VM-backed row if runtime, runner, verifier, profile,
-   playbook, or config code changes after the recorded VM-evidence source
-   commit.
-8. Keep `P-QEMU-10-APP-LOCAL` scoped as a single-host CPU-capped subset; do not
-   use it to claim exact parent-row parity.
-9. Keep remaining GCP/AWS rows historical until a maintainer nominates exact
-   scope, credentials, cost guardrails, YAML/profile targets, suites, and
-   evidence requirements.
-10. Retain the full parity table as historical candidate inventory until the
-    approved reproduction/configuration scope review, not an automatic work queue.
-11. Keep each historical row unresolved and in
-    `docs/old_main_parity_issue_seed.md` until it is certified. Any future
-    unsupported terminal closure requires the separate atomic checked-
-    disposition change described in section 2.
+2. Rerun affected M1 VM-backed rows if runtime, runner, verifier, profile, playbook, or config code changes after the recorded VM-evidence source commit.
+3. Run `sh scripts/test/run_smoke_host.sh release-artifact-audit` on the certification host before tagging any row as release-ready.
+4. Run `python3 scripts/test/check_release_pretag.py` and keep M1 untagged until it reports zero issues.
+5. Verify normal-user prerequisites with `sh scripts/test/setup_agent_host.sh verify` before host execution. No installed helper or dedicated-repo sync is used.
+6. Keep `docs/release_notes_m1_draft.md` synchronized with this matrix before publishing an intermediate release.
+7. Refresh any certified VM-backed row if runtime, runner, verifier, profile, playbook, or config code changes after the recorded VM-evidence source commit.
+8. Keep `P-QEMU-10-APP-LOCAL` scoped as a single-host CPU-capped subset; do not use it to claim exact parent-row parity.
+9. Keep remaining GCP/AWS rows historical until a maintainer nominates exact scope, credentials, cost guardrails, YAML/profile targets, suites, and evidence requirements.
+10. Retain the full parity table as historical candidate inventory until the approved reproduction/configuration scope review, not an automatic work queue.
+11. Keep each historical row unresolved and in `docs/old_main_parity_issue_seed.md` until it is certified. Any future unsupported terminal closure requires the separate atomic checked- disposition change described in section 2.

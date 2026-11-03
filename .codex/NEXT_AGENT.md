@@ -1,7 +1,6 @@
 # Next Continuum Agent
 
-The overhaul dispatcher is retired. Do not select or update tasks from
-`.codex/OVERHAUL_EXECUTION_PLAN.md`.
+The overhaul dispatcher is retired. Do not select or update tasks from `.codex/OVERHAUL_EXECUTION_PLAN.md`.
 
 Before starting work:
 

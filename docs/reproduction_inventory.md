@@ -1,36 +1,16 @@
 # Candidate reproduction inventory
 
-This is factual scope evidence subordinate to `docs/rework_milestone_release_plan.md`.
-It neither changes policy nor grants certification; factual certification status
-remains in `docs/release_certification_matrix.md`. One final user confirmation is
-still required before reproduction-driven deletions. No such deletion is authorized
-by this inventory.
+This is factual scope evidence subordinate to `docs/rework_milestone_release_plan.md`. It neither changes policy nor grants certification; factual certification status remains in `docs/release_certification_matrix.md`. One final user confirmation is still required before reproduction-driven deletions. No such deletion is authorized by this inventory.
 
-Tracked configuration/profile and fixture coverage is separately recorded in
-`docs/configuration_inventory.md`; complete path accounting does not close the
-historical-scope or final-runtime gates.
+Tracked configuration/profile and fixture coverage is separately recorded in `docs/configuration_inventory.md`. The selected H engineering runtime matrix is accepted, including only the exact R03/R04 slices below; complete path accounting does not close historical scope, paper equivalence or wider provider/resource gates.
 
 ## Survey and interpretation
 
-The survey covers the current README and research/configuration documentation,
-21 locally reachable branch/remotes, 81 README history revisions and 699 unique
-historical Markdown/RST/BibTeX blobs reachable from local Git refs, excluding
-vendored node_modules. It also examines research-script/config references and
-relevant author/commit history. This is a repository inventory, not a claim to
-have identified every external publication or inaccessible thesis.
+The survey covers the current README and research/configuration documentation, 21 locally reachable branch/remotes, 81 README history revisions and 699 unique historical Markdown/RST/BibTeX blobs reachable from local Git refs, excluding vendored node_modules. It also examines research-script/config references and relevant author/commit history. This is a repository inventory, not a claim to have identified every external publication or inaccessible thesis.
 
-The current README names two papers and seven student projects. Additional
-repository evidence identifies Columbo, the independently required Kata workflow,
-unnamed Wasm and text-translation research, and an early ICDCS-labelled commit.
-The early commit may be predecessor framework work, not a separate publication.
-Historical “ongoing” labels are not treated as current student status.
+The current README names two papers and seven student projects. Additional repository evidence identifies Columbo, the independently required Kata workflow, unnamed Wasm and text-translation research, and an early ICDCS-labelled commit. The early commit may be predecessor framework work, not a separate publication. Historical “ongoing” labels are not treated as current student status.
 
-Each candidate has one current disposition below. “Required/open” means required
-by approved policy but not yet accepted on the final candidate. “Preserve/unclaimed”
-means keep the existing implementation/history pending scope confirmation, not
-runtime support. Unknown titles, associations, data and success criteria remain
-explicitly unknown; implementation authorship alone does not establish thesis
-identity.
+Each candidate has one current disposition below. “Required/open” retains the required but unnominated or unaccepted wider paper boundaries; “Accepted exact functional slice” applies only to R03/R04 on frozen H. “Preserve/unclaimed” keeps implementation/history pending scope confirmation without runtime support. Unknown titles, associations, data and criteria remain unknown; authorship alone does not establish thesis identity.
 
 ## Candidate matrix
 
@@ -38,8 +18,8 @@ identity.
 | --- | --- | --- | --- | --- | --- |
 | R01 — Continuum: Automate Infrastructure Deployment and Benchmarking in the Compute Continuum (FastContinuum 2023) | README citation; `scripts/replicate_paper.py` families W01–W05 below. Their exact association with individual paper figures must not be inferred from class names. | Historical QEMU and GCP families; Kubernetes, KubeEdge/mist, endpoint runtime and OpenFaaS as selected by each cfg. | Current cloud/edge/endpoint/OpenFaaS YAML examples and parity suites are component-level mappings, not an established full figure-for-figure replacement. The migrated multi-host OpenFaaS run is functional evidence for that exact configuration only. | Image-classification images, checked-in model/labels/data, registry/network, QEMU/KVM or nominated cloud credentials/capacity. Expected retained deployment/benchmark/network metrics and plots depend on the nominated family; all executions, exit codes and Ansible hosts must pass. | Exact final paper experiment/figure boundary and structured family equivalents remain open; no scientific or final-candidate reproduction claim. **Required/open.** |
 | R02 — The SPEC-RG Reference Architecture for the Compute Continuum (CCGRID 2023 artifact path) | README citation/artifact link; local ref `origin/CCGRID2023-Artifact-Evaluation` README explicitly maps Figure 6 to Deployments, Figure 7 to EndpointScaling and Figure 8 to the model workflow. | The historical artifact uses GCP; the README distinguishes its reduced VM counts/specifications from original QEMU experiments. Kubernetes, KubeEdge/mist and endpoint workloads vary by family. | No complete current structured artifact-figure set is established. Generic QEMU examples are not equivalent evidence for the historical GCP artifact. W01/W02/W06 preserve the historical inputs. | Historical GCP path needs credentials, quota, Terraform/network and billable resources; no cloud execution or spending is authorized by this inventory. Expected deployment/latency plots and model heatmap must use the nominated configuration, data and stated resource differences. | Active cfg execution/conversion gaps, final structured equivalents, provider/cost authority and exact scope require resolution. The earlier “Edge Continuum” citation variant is not an additional paper. **Required/open.** |
-| R03 — Columbo: A Reasoning Framework for Kubernetes' Configuration Space (ICPE 2025) | `docs/columbo_on_continuum.md`; `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`; W07. | Local QEMU, kubecontrol, empty application; two 8-core/32-GiB cloud VMs, CPU pinning. | `configs/experiments/parity/qemu_kubecontrol_empty/01_kubecontrol_empty_call.yaml`, environment local-qemu-cpupin, software kubecontrol; strict suite `qemu_kubecontrol_empty_trace_parity`. July evidence remains historical. | Primed empty/control-plane images, instrumented control-plane binaries and host capacity. Require completed application, lock/state, readiness, deployment/resource CSVs and metrics manifest; all six documented control-plane/kubelet/application timing columns populated in CLOUD OUTPUT and metric artifacts. | Fresh exact-final-candidate full-trace run/manual inspection required. Integration-only empty parity does not substitute for full trace; wider figures/sweeps are outside the provisional slice. **Required/open.** |
-| R04 — Documented local-QEMU Kata startup workflow, not an inferred thesis identity | `docs/kube_kata_on_continuum.md`; `configuration/experiment_kata/1_startup_performance/strong_scalability/node_1_kata_qemu_overlayfs.cfg`; W08. | Local QEMU, kube_kata, empty_kata, kata-qemu/overlayfs; two 8-core/64-GiB cloud VMs. | `configs/experiments/parity/qemu_kube_kata_empty_startup/01_kube_kata_empty_pod.yaml`, local-qemu-cpupin-delete-on-exit, kube-kata; suite `qemu_kube_kata_empty_startup_parity`. July evidence is historical. | Nested KVM/capacity, cached control-plane/empty/Jaeger images and Kata release availability. Exact 100-application startup shape, sleep_time 180; require readiness, RuntimeClasses, guest KVM/runtime, lock/state, four CSV families, CLOUD OUTPUT/KATA OUTPUT with at least 100 rows and teardown evidence. | Fresh final-candidate evidence required. This does not nominate kata-fc, devmapper, resource-usage sweeps or all thesis experiments. **Required/open.** |
+| R03 — Columbo: A Reasoning Framework for Kubernetes' Configuration Space (ICPE 2025) | `docs/columbo_on_continuum.md`; `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`; W07. | Local QEMU, kubecontrol, empty application; two 8-core/32-GiB cloud VMs, CPU pinning. | `configs/experiments/parity/qemu_kubecontrol_empty/01_kubecontrol_empty_call.yaml`, environment local-qemu-cpupin, software kubecontrol; strict suite `qemu_kubecontrol_empty_trace_parity`. July evidence remains historical. | Primed empty/control-plane images, instrumented control-plane binaries and host capacity. Require completed application, lock/state, readiness, deployment/resource CSVs and metrics manifest; all six documented control-plane/kubelet/application timing columns populated in CLOUD OUTPUT and metric artifacts. | Accepted on `1f1980e1e0b4d5828059f646d768edaaaa611525` after complete independent product/preservation review: exact `call_1`, all six finite timing columns and current readiness/lock/state/CSV/manifest evidence. Manual SHA-256 `5f2937253e70f0c5fdf6868e0e90a05779aa84cd56571b3b62fb440852e7d0e1`; independent `f30aa11b192c43b9319c75c1cec3cd829946ac0cd3dda142e2518ca9dd547151`; exact case root and retained failure/recovery references are in the [final handoff](rework_release_handoff.md#accepted-final-runtime-matrix). Integration-only parity, wider figures/sweeps and timing calibration are not inferred. **Accepted exact functional slice.** |
+| R04 — Documented local-QEMU Kata startup workflow, not an inferred thesis identity | `docs/kube_kata_on_continuum.md`; `configuration/experiment_kata/1_startup_performance/strong_scalability/node_1_kata_qemu_overlayfs.cfg`; W08. | Local QEMU, kube_kata, empty_kata, kata-qemu/overlayfs; two 8-core/64-GiB cloud VMs. | `configs/experiments/parity/qemu_kube_kata_empty_startup/01_kube_kata_empty_pod.yaml`, local-qemu-cpupin-delete-on-exit, kube-kata; suite `qemu_kube_kata_empty_startup_parity`. July evidence is historical. | Nested KVM/capacity, cached control-plane/empty/Jaeger images and Kata release availability. Exact 100-application startup shape, sleep_time 180; require readiness, RuntimeClasses, guest KVM/runtime, lock/state, four CSV families, CLOUD OUTPUT/KATA OUTPUT with at least 100 rows and teardown evidence. | Accepted exact startup slice on `1f1980e1e0b4d5828059f646d768edaaaa611525`:100 unique STARTs and 100 complete CLOUD/KATA startup trace rows, all four CSV families, runtime/readiness and teardown. Only 61 END markers were retained; completion of all 100 sleeping applications is unproven. Manual SHA-256 `9ffd95dfeb7ae7e143a7dcf190f279c17dba34f061a2b737224dda4751f8f897`; independent `c5b97927aebd1a03a64bf15c4dc1866bce4212547f257433852b752078b088b5`; full bindings/limits are in the [final handoff](rework_release_handoff.md#accepted-final-runtime-matrix). No kata-fc/devmapper/resource sweep, full thesis identity or calibrated timing claim follows. **Accepted exact functional slice.** |
 | R05 — Daniel Berzak: Embedded Domain Specific Language: A Streamlined Approach for Framework Abstraction | README student list; author commits 76ac882/9534d3d/4414d44/98d1495 and integration 016b78c/6984c19; retained assets under `legacy/input/dsl/` after 12a9b46. | Historical DSL-to-framework input; infrastructure/software depend on the DSL experiment. No thesis-wide provider contract established. | No active DSL equivalent: the current entry point rejects .ts and .cfg. YAML is not proof of equivalent DSL semantics. | Retained TypeScript/Python DSL sources and historical toolchain; exact thesis test corpus and expected semantic/benchmark outputs not established. | User nomination of required DSL behavior, inputs and success criteria needed; no fresh execution evidence. **Preserve/unclaimed.** |
 | R06 — Edgardo Reinoso Campos: Serverless Computing at the Edge in Precise Agriculture | README title; Ed Reinoso commit 97c94b2 introduces signal-classification assets, and later author history adds AWS work. These are source associations, not proof of the complete thesis experiment. | Historical OpenFaaS/signal-classification launch assets and AWS provider work; exact thesis provider/topology is not established. | No nominated structured signal-classification/thesis equivalent. Generic OpenFaaS image classification does not reproduce this study. | Thesis dataset, signal model, sensors/inputs, credentials, exact outputs and criterion not established. | Experiment/data/model nomination and retained evidence missing; preserve historical source associations without inventing scope. **Preserve/unclaimed.** |
 | R07 — Antonios Sklavos: Exploring the Performance-Isolation Trade-off for Isolation Mechanisms | README title; author commit 44bf68e “add thesis configs” creates nine configs under historical antonis_thesis; current broader family is `configuration/experiment_kata/`, W08. | Historical QEMU/Kata/runc variants and startup/resource-usage configurations; exact complete thesis scope needs confirmation. | R04 is an exact structured mapping for one documented startup slice only, not an inferred full-thesis reproduction. | Empty/stress/memory workload images and runtime/trace/capacity dependencies vary by selected cfg; startup CSVs/Jaeger and resource metrics are family outputs, not a thesis-wide acceptance definition. | Confirm association and required variants/figures/data. Broader thesis success criterion and fresh evidence remain unestablished. **Preserve/unclaimed.** |
@@ -53,8 +33,7 @@ identity.
 
 ## Legacy workflow crosswalk
 
-These rows account for research entry points without inventing paper associations.
-They describe historical behavior, not commands to execute unchanged.
+These rows account for research entry points without inventing paper associations. They describe historical behavior, not commands to execute unchanged.
 
 | Workflow | Historical input and provider/software | Expected artifacts/criterion; present gap |
 | --- | --- | --- |
@@ -64,33 +43,18 @@ They describe historical behavior, not commands to execute unchanged.
 | W04 Provider | Same script; `configuration/experiment_provider/`; QEMU/GCP across cloud/edge/mist/endpoint. | Providers comparison PDF and metrics. QEMU parity does not establish GCP behavior or scientific comparison. |
 | W05 Serverless | Same script; `configuration/experiment_serverless/`; OpenFaaS, endpoint counts 1/2/4/8 and worker resources 2/4/8. | Serverless latency PDF/per-case data. Exact multi-host OpenFaaS validation is one functional case, not this twelve-case sweep or a named student study. |
 | W06 Model | `scripts/replicate_model.py`; `configuration/model/` local/offload and normalization inputs, historical artifact Figure 8. | Model heatmap and measured baseline/offload inputs. The script reads the legacy parser but invokes continuum.py with cfgs for measurements; no current structured model path established. |
-| W07 Control-plane sweeps | `scripts/replicate_kubecontrol.py`, combine script, kube analyzer and `configuration/experiment_control/`; QEMU/GCP. | Deployment/resource CSVs and plots across nodes/pods/versions/deployment methods. Only R03's exact call_1 trace slice is provisionally required; current legacy script defaults differ and contain broad cleanup behavior. |
+| W07 Control-plane sweeps | `scripts/replicate_kubecontrol.py`, combine script, kube analyzer and `configuration/experiment_control/`; QEMU/GCP. | Deployment/resource CSVs and plots across nodes/pods/versions/deployment methods. R03's exact call_1 trace slice is accepted on H; wider sweeps remain unnominated. Current legacy script defaults differ and contain broad cleanup behavior. |
 | W08 Kata sweeps | `scripts/kata/run_all_kata_1_startup.sh`, `scripts/kata/run_all_kata_3b_cpu.sh`; `configuration/experiment_kata/`. | Startup/Jaeger/resource CSVs and plots across selected runtime/scaling variants. R04 maps one exact slice only; CPU runner still references absent historical antonis_thesis paths, cfgs are rejected, and shell runners move broad log globs. |
 | W09 Other experiment/module candidates | `configuration/cellular_network/`, `configuration/observability/`, `configuration/network_validation/`, model/translation/Mahimahi work and source-history branches ml-scheduler/openwhisk/kubeserverless. | Network/observability/application metrics vary by workflow. Preserve established provenance and unclaimed functionality; these names do not establish additional paper/thesis identities or current provider support. |
 | W10 Teaching/OpenCraft | Historical tutorial branches (including MPI, ASCI and distributed-systems/network courses), origin/kube-opencraft and `configuration/kube_opencraft/`. | Teaching/application outputs need their own nominated workflow if required. They are not silently promoted into scientific paper requirements. |
 | W11 Figure-1 plotting helper | `scripts/fig1.py`; accepts an existing CSV and includes a Columbo-labelled series. Its header refers to assumed Google Cloud input. | Figure-1 PDF from the supplied CSV. Exact input/provenance and wider comparison scope are not established; this is not an extra requirement of R03's minimal full-trace slice. |
 
-`input/input.py` deliberately rejects legacy .cfg/.ts inputs. The existing
-`scripts/migrate_cfg_to_yaml.py` emits retired topology/workload/orchestrator/addons
-shapes, not the current clusters/modules/pipeline schema. Its existence is not
-evidence that these workflows are migrated. Research scripts may also perform
-broad VM cleanup or log moves; do not run them as an inventory probe.
+`input/input.py` deliberately rejects legacy .cfg/.ts inputs. The existing `scripts/migrate_cfg_to_yaml.py` emits retired topology/workload/orchestrator/addons shapes, not the current clusters/modules/pipeline schema. Its existence is not evidence that these workflows are migrated. Research scripts may also perform broad VM cleanup or log moves; do not run them as an inventory probe.
 
-The exact structured equivalents for wider required paper families must be
-nominated, migrated and validated through separately reviewed packets. This
-documentation packet does not implement a converter, restore a DSL, add a sweep
-or change the four provisional requirements.
+The exact structured equivalents for wider required paper families must be nominated, migrated and validated through separately reviewed packets. This documentation packet does not implement a converter, restore a DSL, add a sweep or change the four provisional requirements.
 
 ## Scope-confirmation gate
 
-The next user scope decision must cover the complete candidate list together:
-which exact R01/R02 figure/workflow boundaries remain required, whether any
-R05–R14 candidates add mandatory reproductions, and which uncertain associations
-the user can identify. R03 and R04 keep their already approved exact slices.
+The next user scope decision must cover the complete candidate list together: which exact R01/R02 figure/workflow boundaries remain required, whether any R05–R14 candidates add mandatory reproductions, and which uncertain associations the user can identify. R03 and R04 keep their already approved exact slices.
 
-Until that answer, all fourteen rows retain the dispositions above, all
-unassigned workflows remain preserved/unclaimed, and reproduction-driven
-deletions remain prohibited. The separate tracked-configuration inventory must
-still give every shipped experiment/profile/template, legacy input and test
-fixture exactly one classification/disposition; this document does not close
-that gate.
+Until that answer, all fourteen rows retain the dispositions above, all unassigned workflows remain preserved/unclaimed, and reproduction-driven deletions remain prohibited. The separate tracked-configuration inventory must still give every shipped experiment/profile/template, legacy input and test fixture exactly one classification/disposition; this document does not close that gate.

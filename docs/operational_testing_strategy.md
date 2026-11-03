@@ -1,19 +1,14 @@
 # Operational Testing Strategy
 
-Current scope and acceptance gates are `docs/rework_milestone_release_plan.md`;
-factual status remains `docs/release_certification_matrix.md`. Run physical
-suites as the normal user using `docs/smoke_runner_isolation.md`; preserve
-historical evidence without treating it as a current-candidate result.
+Current scope and acceptance gates are `docs/rework_milestone_release_plan.md`; factual status remains `docs/release_certification_matrix.md`. Run physical suites as the normal user using `docs/smoke_runner_isolation.md`; preserve historical evidence without treating it as a current-candidate result.
 
 This document defines how Continuum should be tested beyond unit tests.
 
-The goal is to make operational tests phase-aware, reproducible, and useful
-both for engineering handoff and for later research/reporting work.
+The goal is to make operational tests phase-aware, reproducible, and useful both for engineering handoff and for later research/reporting work.
 
 ## 1. Why Operational Tests Need A Separate Design
 
-Unit tests cover parser helpers, selector logic, planner metadata, and narrow
-runtime contracts. They do not prove that a real Continuum run:
+Unit tests cover parser helpers, selector logic, planner metadata, and narrow runtime contracts. They do not prove that a real Continuum run:
 
 1. provisions the expected resources,
 2. persists the right artifacts between phases,
@@ -21,8 +16,7 @@ runtime contracts. They do not prove that a real Continuum run:
 4. launches and measures a benchmark correctly,
 5. resumes or tears down cleanly.
 
-Operational tests must therefore be organized around the runtime phase model in
-`docs/runtime_execution_pipeline.md`.
+Operational tests must therefore be organized around the runtime phase model in `docs/runtime_execution_pipeline.md`.
 
 ## 2. Test Layers
 
@@ -43,32 +37,18 @@ Continuum should keep four testing layers:
 
 ## 2.5 Release Certification Policy
 
-Operational tests are the boundary between "code exists" and "Continuum
-supports this module set."
+Operational tests are the boundary between "code exists" and "Continuum supports this module set."
 
 Release certification uses these rules:
 
-1. static checks, unit tests, parser tests, and local e2e-runner tests are
-   mandatory for every release candidate;
-2. those tests do not certify provider, resource-manager, addon, application, or
-   benchmark runtime claims by themselves;
-3. every runtime support claim needs a full VM-backed, cloud-backed, or
-   host-backed run appropriate to the exact provider, topology, software
-   modules, benchmark/application stage, and runtime targets being claimed;
-4. QEMU/libvirt is the first local provider certification target because it is
-   practical for host-backed smoke testing, but `qemu` remains an infrastructure
-   provider module rather than part of the Continuum core;
-5. intermediate rework milestones may certify only a small module set, but must
-   say so clearly;
-6. the final replacement release for old `main` must certify the old public
-   feature surface under the current checked model; closing an unsupported row
-   without certification first requires a separate atomic change introducing
-   an explicit checked terminal disposition.
+1. static checks, unit tests, parser tests, and local e2e-runner tests are mandatory for every release candidate;
+2. those tests do not certify provider, resource-manager, addon, application, or benchmark runtime claims by themselves;
+3. every runtime support claim needs a full VM-backed, cloud-backed, or host-backed run appropriate to the exact provider, topology, software modules, benchmark/application stage, and runtime targets being claimed;
+4. QEMU/libvirt is the first local provider certification target because it is practical for host-backed smoke testing, but `qemu` remains an infrastructure provider module rather than part of the Continuum core;
+5. intermediate rework milestones may certify only a small module set, but must say so clearly;
+6. the final replacement release for old `main` must certify the old public feature surface under the current checked model; closing an unsupported row without certification first requires a separate atomic change introducing an explicit checked terminal disposition.
 
-The release plan and certification labels are defined in
-`docs/rework_milestone_release_plan.md`.
-`docs/release_certification_matrix.md` is the sole authority for current row
-status, claim boundaries, and primary evidence.
+The release plan and certification labels are defined in `docs/rework_milestone_release_plan.md`. `docs/release_certification_matrix.md` is the sole authority for current row status, claim boundaries, and primary evidence.
 
 ## 3. Runtime Phases To Test
 
@@ -90,8 +70,7 @@ This extends the simpler user view of:
 The extra pieces matter:
 
 1. bootstrap/planning is where most fail-fast guarantees live,
-2. artifact validation and teardown are required for resume correctness and
-   reproducible reruns.
+2. artifact validation and teardown are required for resume correctness and reproducible reruns.
 
 ## 4. Phase-Specific Operational Assertions
 
@@ -125,15 +104,9 @@ Artifacts:
 2. provider logs
 3. optional `<base_path>/.continuum/logs/network_validation/netperf_results_<timestamp>.ndjson`
 
-Network-result NDJSON uses schema v1: exactly one `ContinuumNetperfRun` header is written first,
-followed by `ContinuumNetperfInvocation` records. The header declares every planned directed
-physical pair and its expected profile values; validation requires exactly one latency and one
-throughput invocation per declared pair. Legacy invocation-only artifacts are intentionally
-invalid and must be replaced with fresh host evidence.
+Network-result NDJSON uses schema v1: exactly one `ContinuumNetperfRun` header is written first, followed by `ContinuumNetperfInvocation` records. The header declares every planned directed physical pair and its expected profile values; validation requires exactly one latency and one throughput invocation per declared pair. Legacy invocation-only artifacts are intentionally invalid and must be replaced with fresh host evidence.
 
-Concurrent Continuum runs sharing one `base_path` remain unsupported. Network artifacts use
-exclusive creation, so a same-timestamp collision fails, and an interrupted current artifact is
-left visible so validation fails closed instead of selecting older evidence.
+Concurrent Continuum runs sharing one `base_path` remain unsupported. Network artifacts use exclusive creation, so a same-timestamp collision fails, and an interrupted current artifact is left visible so validation fails closed instead of selecting older evidence.
 
 ### Phase 2: Software Deployment
 
@@ -167,8 +140,7 @@ Current note:
 
 1. runtime application execution is now ungated,
 2. benchmark smoke and teardown evidence are runner-visible on the resumed K8s path,
-3. benchmark metric artifacts are a transitional structured evidence format, not the final
-   reproducibility-package design.
+3. benchmark metric artifacts are a transitional structured evidence format, not the final reproducibility-package design.
 
 ### Phase 4: Artifact Validation And Teardown
 
@@ -182,8 +154,7 @@ Assert:
 
 ## 5. Minimum Smoke Matrix
 
-When a VM-capable test environment is available, the minimum smoke matrix
-should cover one representative case for each active phase boundary.
+When a VM-capable test environment is available, the minimum smoke matrix should cover one representative case for each active phase boundary.
 
 Current recommended baseline:
 
@@ -207,10 +178,8 @@ Current recommended baseline:
    - `configs/experiments/benchmark_smoke/02_software_k8s_three_vm.yaml`
    - `configs/experiments/benchmark_smoke/03_application_k8s_image_classification.yaml`
    - proves the resumed infrastructure -> software -> application path on one shared base path
-   - target shape: two cloud VMs plus one endpoint VM using the supported
-     `kubernetes + endpoint_runtime + image_classification` path
-   - the final application leg uses `delete_on_exit: true` and the runner verifies
-     saved QEMU domain names are absent after teardown.
+   - target shape: two cloud VMs plus one endpoint VM using the supported `kubernetes + endpoint_runtime + image_classification` path
+   - the final application leg uses `delete_on_exit: true` and the runner verifies saved QEMU domain names are absent after teardown.
 
 Preferred execution shape:
 
@@ -220,8 +189,7 @@ Preferred execution shape:
    - resume into software verification on the same VMs,
    - resume into benchmark verification on the same VMs,
    - teardown only at the end via the final application-step environment profile.
-2. Network validation remains a separate smoke path because it uses a different environment/profile
-   and validates the networking subsystem rather than the Kubernetes benchmark path.
+2. Network validation remains a separate smoke path because it uses a different environment/profile and validates the networking subsystem rather than the Kubernetes benchmark path.
 
 ## 6. Success Evidence And Artifact Contract
 
@@ -238,24 +206,9 @@ Required evidence classes:
 7. software platform readiness evidence,
 8. benchmark result evidence.
 
-The existing runner stores summary JSON under `logs/test_results/`.
-That should remain the top-level operational test index.
-Each saved summary should also point at a sibling artifact directory containing
-per-test `stdout.txt`, `stderr.txt`, and `metadata.json`, so failed VM-backed
-smoke runs can be debugged without extracting blobs from one aggregate JSON file.
-For YAML runs, the runner now also treats the resolved lockfile and saved state
-file as part of the baseline success contract instead of relying only on exit
-code and SSH output heuristics. It also requires schema-v2 state payloads and
-matching `resume_contract` hashes between `experiment_lock.yaml` and `state.json`.
+The existing runner stores summary JSON under `logs/test_results/`. That should remain the top-level operational test index. Each saved summary should also point at a sibling artifact directory containing per-test `stdout.txt`, `stderr.txt`, and `metadata.json`, so failed VM-backed smoke runs can be debugged without extracting blobs from one aggregate JSON file. For YAML runs, the runner now also treats the resolved lockfile and saved state file as part of the baseline success contract instead of relying only on exit code and SSH output heuristics. It also requires schema-v2 state payloads and matching `resume_contract` hashes between `experiment_lock.yaml` and `state.json`.
 
-Release certification adds one more local audit step on the certification host:
-run `sh scripts/test/run_smoke_host.sh
-release-artifact-audit` to check the primary artifact paths named by release
-evidence docs. This confirms that retained
-runner summary JSON reports zero failures, cloud-static required gates passed,
-and benchmark/network evidence artifacts are still parseable. It is not a
-cloud-safe CI gate because it intentionally depends on local retained VM-backed
-artifacts.
+Release certification adds one more local audit step on the certification host: run `sh scripts/test/run_smoke_host.sh release-artifact-audit` to check the primary artifact paths named by release evidence docs. This confirms that retained runner summary JSON reports zero failures, cloud-static required gates passed, and benchmark/network evidence artifacts are still parseable. It is not a cloud-safe CI gate because it intentionally depends on local retained VM-backed artifacts.
 
 Concrete smoke success criteria currently agreed:
 
@@ -265,66 +218,40 @@ Concrete smoke success criteria currently agreed:
 2. infrastructure:
    - provisioned VMs are reachable and can execute a trivial command such as `ls`
 3. software:
-   - the target platform is usable, for example `kubectl get nodes` returns both nodes in the
-     two-VM Kubernetes smoke
-   - Kubernetes is the canonical smoke-software target because it is the highest-value and most
-     operationally complex software setup supported by Continuum
+   - the target platform is usable, for example `kubectl get nodes` returns both nodes in the two-VM Kubernetes smoke
+   - Kubernetes is the canonical smoke-software target because it is the highest-value and most operationally complex software setup supported by Continuum
 4. benchmark:
    - benchmark output/logs show a successful execution path and results are emitted
-   - benchmark-smoke application-leg success detection checks stdout evidence for completion,
-     endpoint output, a formatted latency column, and at least one numeric metric row
-   - benchmark-smoke application-leg success detection also validates the structured benchmark
-     metric manifest and CSV table under `<base_path>/.continuum/logs/benchmark/`
-   - benchmark-smoke application-leg success detection also applies bounded statistical
-     assertions over the structured endpoint latency metric column
+   - benchmark-smoke application-leg success detection checks stdout evidence for completion, endpoint output, a formatted latency column, and at least one numeric metric row
+   - benchmark-smoke application-leg success detection also validates the structured benchmark metric manifest and CSV table under `<base_path>/.continuum/logs/benchmark/`
+   - benchmark-smoke application-leg success detection also applies bounded statistical assertions over the structured endpoint latency metric column
 5. teardown/resume:
    - intermediate phases should reuse saved state rather than reprovisioning from scratch
    - all VMs should be cleaned up only at the end of the smoke run
-   - every completed run retains `state.json` as a last-known snapshot, including after
-     delete-on-exit; its presence does not prove that the recorded resources still exist
-   - omitting infrastructure from explicit `run.targets` requests state reuse, which requires an
-     authenticated SSH marker from every recorded managed guest before downstream phases begin
-   - resume state without schema-v2 metadata, with a stale resume contract, or with any currently
-     unreachable managed guest is a failure; reachability failure leaves the snapshot unchanged
-   - every QEMU delete-on-exit run verifies the expected state-recorded domains are absent,
-     independently of the optional suite-level teardown flag; the state save timestamp must be
-     timezone-aware and not predate the current run's freshly written experiment lock
+   - every completed run retains `state.json` as a last-known snapshot, including after delete-on-exit; its presence does not prove that the recorded resources still exist
+   - omitting infrastructure from explicit `run.targets` requests state reuse, which requires an authenticated SSH marker from every recorded managed guest before downstream phases begin
+   - resume state without schema-v2 metadata, with a stale resume contract, or with any currently unreachable managed guest is a failure; reachability failure leaves the snapshot unchanged
+   - every QEMU delete-on-exit run verifies the expected state-recorded domains are absent, independently of the optional suite-level teardown flag; the state save timestamp must be timezone-aware and not predate the current run's freshly written experiment lock
 6. network validation tolerance:
-   - observed TCP_RR latency should be within 25% of the expected round-trip
-     profile value, or within 10 ms, whichever tolerance is larger
-   - constrained throughput links should be within 25% of the expected profile
-     value, or within 10 mbit, whichever tolerance is larger
-   - high-capacity wired defaults are treated as parseable-throughput evidence
-     rather than exact host-capacity assertions
-   - network-validation suite success detection must validate the structured netperf NDJSON
-     written under the run's `<base_path>`
-   - malformed lines, duplicate records, missing planned pairs or directions, non-canonical
-     commands, mismatched timestamps, and non-finite observations fail validation
+   - observed TCP_RR latency should be within 25% of the expected round-trip profile value, or within 10 ms, whichever tolerance is larger
+   - constrained throughput links should be within 25% of the expected profile value, or within 10 mbit, whichever tolerance is larger
+   - high-capacity wired defaults are treated as parseable-throughput evidence rather than exact host-capacity assertions
+   - network-validation suite success detection must validate the structured netperf NDJSON written under the run's `<base_path>`
+   - malformed lines, duplicate records, missing planned pairs or directions, non-canonical commands, mismatched timestamps, and non-finite observations fail validation
 
 Suite behavior policy currently agreed:
 
 1. smoke runs should fail fast,
 2. artifact retention should be additive rather than cleanup-first,
-3. benchmark and infrastructure/software smoke should prefer reusing the same VMs through phase
-   resume where the runtime path supports it.
-4. when an operational smoke fails, retained logs and SSH reachability should be used for diagnosis
-   before attempting speculative reruns; direct VM inspection is an acceptable debugging step.
-5. `docs/vm_debugging_runbook.md` is the standard first debugging reference for retained-VM
-   inspection after smoke failures.
-6. the e2e runner should reject a run as successful when the expected
-   `experiment_lock.yaml` or `state.json` artifacts are missing, unreadable,
-   saved with the wrong `phase_completed` value for the requested target set,
-   or carry mismatched resume-contract metadata.
-7. failed runs should be classified into stable debugging buckets such as
-   `timeout`, `missing_lock`, `missing_state`, `state_schema_mismatch`,
-   `resume_contract_mismatch`, `wrong_state_phase`, `missing_ssh`,
-   `nonzero_exit`, `ansible_failure`, or `teardown_failure` so smoke triage can
-   focus on the right layer first.
+3. benchmark and infrastructure/software smoke should prefer reusing the same VMs through phase resume where the runtime path supports it.
+4. when an operational smoke fails, retained logs and SSH reachability should be used for diagnosis before attempting speculative reruns; direct VM inspection is an acceptable debugging step.
+5. `docs/vm_debugging_runbook.md` is the standard first debugging reference for retained-VM inspection after smoke failures.
+6. the e2e runner should reject a run as successful when the expected `experiment_lock.yaml` or `state.json` artifacts are missing, unreadable, saved with the wrong `phase_completed` value for the requested target set, or carry mismatched resume-contract metadata.
+7. failed runs should be classified into stable debugging buckets such as `timeout`, `missing_lock`, `missing_state`, `state_schema_mismatch`, `resume_contract_mismatch`, `wrong_state_phase`, `missing_ssh`, `nonzero_exit`, `ansible_failure`, or `teardown_failure` so smoke triage can focus on the right layer first.
 
 ## 7. Environment Matrix
 
-"Required environments" means the execution contexts needed to exercise each operational test
-layer. Different layers need different capabilities.
+"Required environments" means the execution contexts needed to exercise each operational test layer. Different layers need different capabilities.
 
 Operational testing should distinguish between:
 
@@ -333,8 +260,7 @@ Operational testing should distinguish between:
 3. cloud-provider-capable environments,
 4. specialized network-validation environments.
 
-Not every environment can run every test layer.
-The test design should therefore declare prerequisites explicitly for each suite.
+Not every environment can run every test layer. The test design should therefore declare prerequisites explicitly for each suite.
 
 Practical interpretation for the current smoke baseline:
 
@@ -347,47 +273,26 @@ Practical interpretation for the current smoke baseline:
 4. benchmark smoke:
    - a QEMU-capable environment with the benchmark-specific runtime prerequisites
 
-The runner should encode those prerequisites directly rather than rely only on
-human-readable docs. The active suite contract is now:
+The runner should encode those prerequisites directly rather than rely only on human-readable docs. The active suite contract is now:
 
 1. `smoke` preflights the local QEMU/libvirt, SSH, image, cloud-init, ACL, curl, and Ansible commands needed for VM-backed smoke execution,
 2. `benchmark_smoke` preflights the same local QEMU/libvirt runner commands for the retained benchmark path,
 3. `network_validation` preflights the same base commands plus `tc` for network emulation,
 4. `qemu_infra_parity` preflights the local QEMU/libvirt commands plus `tc` for infra-only old-main parity rows,
 5. `qemu_k8s_nobench_parity` preflights the local QEMU/libvirt commands plus `tc` for the old-main Kubernetes no-benchmark row,
-6. `qemu_k8s_image_parity` preflights local-registry cache readiness in
-   addition to the QEMU/libvirt and network commands because the full
-   Kubernetes application row uses `registry_refresh: missing` with cached
-   application images,
-7. `qemu_kubeedge_software_parity` preflights the local QEMU/libvirt runner
-   commands for KubeEdge software-only certification,
-8. `qemu_kubeedge_image_parity` preflights local-registry cache readiness in
-   addition to the QEMU/libvirt commands because the full KubeEdge application
-   row uses `registry_refresh: missing` with cached application images,
-9. `qemu_mist_software_parity` preflights the local QEMU/libvirt runner
-   commands for Mist software-only certification,
-10. `qemu_mist_image_parity` preflights local-registry cache readiness in
-   addition to the QEMU/libvirt commands because the ported full Mist
-   application row uses `registry_refresh: missing` with cached application images,
-11. `qemu_endpoint_software_parity` preflights the local QEMU/libvirt runner
-   commands plus `tc` for endpoint-runtime software-only certification,
-12. `qemu_endpoint_image_parity` preflights local-registry cache readiness in
-   addition to the QEMU/libvirt and network commands because the full
-   endpoint-only application row uses `registry_refresh: missing` with cached
-   application images,
-13. `qemu_openfaas_software_parity` preflights the local QEMU/libvirt runner
-   commands for OpenFaaS software-only certification on a single-host CPU-capped
-   variant of the legacy node counts,
-14. `qemu_openfaas_image_parity` preflights local-registry cache readiness in
-   addition to the QEMU/libvirt commands because the full OpenFaaS application
-   row uses `registry_refresh: missing` with cached application images,
+6. `qemu_k8s_image_parity` preflights local-registry cache readiness in addition to the QEMU/libvirt and network commands because the full Kubernetes application row uses `registry_refresh: missing` with cached application images,
+7. `qemu_kubeedge_software_parity` preflights the local QEMU/libvirt runner commands for KubeEdge software-only certification,
+8. `qemu_kubeedge_image_parity` preflights local-registry cache readiness in addition to the QEMU/libvirt commands because the full KubeEdge application row uses `registry_refresh: missing` with cached application images,
+9. `qemu_mist_software_parity` preflights the local QEMU/libvirt runner commands for Mist software-only certification,
+10. `qemu_mist_image_parity` preflights local-registry cache readiness in addition to the QEMU/libvirt commands because the ported full Mist application row uses `registry_refresh: missing` with cached application images,
+11. `qemu_endpoint_software_parity` preflights the local QEMU/libvirt runner commands plus `tc` for endpoint-runtime software-only certification,
+12. `qemu_endpoint_image_parity` preflights local-registry cache readiness in addition to the QEMU/libvirt and network commands because the full endpoint-only application row uses `registry_refresh: missing` with cached application images,
+13. `qemu_openfaas_software_parity` preflights the local QEMU/libvirt runner commands for OpenFaaS software-only certification on a single-host CPU-capped variant of the legacy node counts,
+14. `qemu_openfaas_image_parity` preflights local-registry cache readiness in addition to the QEMU/libvirt commands because the full OpenFaaS application row uses `registry_refresh: missing` with cached application images,
 15. missing prerequisites fail before config discovery or VM provisioning starts,
-16. operators can inspect the configured suite contract with
-   `python3 scripts/test/run_tests.py --list-suites`,
-17. operators can validate a specific host before a long smoke run with
-   `python3 scripts/test/run_tests.py --suite <name> --check-prereqs`,
-18. for authorized physical-host execution, use the normal-user repository
-   runner documented in `docs/smoke_runner_isolation.md`, without sudo scripts.
+16. operators can inspect the configured suite contract with `python3 scripts/test/run_tests.py --list-suites`,
+17. operators can validate a specific host before a long smoke run with `python3 scripts/test/run_tests.py --suite <name> --check-prereqs`,
+18. for authorized physical-host execution, use the normal-user repository runner documented in `docs/smoke_runner_isolation.md`, without sudo scripts.
 
 ## 8. Current Repository State
 
@@ -402,54 +307,31 @@ What is already covered:
 7. real host-backed infrastructure smoke via `configs/experiments/smoke/infra_one_vm.yaml`,
 8. real host-backed infrastructure-plus-software smoke via `configs/experiments/smoke/software_k8s_two_vm.yaml`,
 9. real host-backed network/netperf smoke via `configs/experiments/smoke/network_netperf_two_vm.yaml`.
-10. real host-backed resumed K8s benchmark smoke with teardown verification via
-    `configs/experiments/benchmark_smoke/`.
+10. real host-backed resumed K8s benchmark smoke with teardown verification via `configs/experiments/benchmark_smoke/`.
 11. lock/state resume-contract validation in runner success detection.
 12. structured network-validation NDJSON checks in runner success detection.
-13. lightweight benchmark-result marker, metric-row, and structured metric-artifact evidence
-    in runner success detection for the application leg of the resumed K8s benchmark smoke path.
+13. lightweight benchmark-result marker, metric-row, and structured metric-artifact evidence in runner success detection for the application leg of the resumed K8s benchmark smoke path.
 14. bounded benchmark statistical assertions over structured metric CSV artifacts.
-15. host-wrapper aggregate scenarios for phase-smoke matrix and full operational regression:
-    `phase_smoke_matrix` and `operational_regression`.
-16. dedicated host-wrapper scenario for the network-validation suite:
-    `network_validation`.
-17. dedicated host-wrapper scenario and suite for QEMU old-main infrastructure parity:
-    `qemu_infra_parity`.
-18. dedicated host-wrapper scenario and suite for the QEMU Kubernetes
-    no-benchmark parity row: `qemu_k8s_nobench_parity`.
-19. dedicated host-wrapper scenario and suite for the QEMU Kubernetes
-    image-classification row, with explicit local-registry cache preflight:
-    `qemu_k8s_image_parity`.
-20. dedicated host-wrapper scenario and suite for QEMU KubeEdge software-only
-    parity: `qemu_kubeedge_software_parity`.
-21. dedicated host-wrapper scenario and suite for the full QEMU KubeEdge
-    image-classification row, with explicit local-registry cache preflight:
-    `qemu_kubeedge_image_parity`.
-22. dedicated host-wrapper scenario and suite for QEMU Mist software-only
-    parity: `qemu_mist_software_parity`.
-23. dedicated host-wrapper scenario and suite for the full QEMU Mist
-    image-classification row, with explicit local-registry cache preflight:
-    `qemu_mist_image_parity`.
-24. dedicated host-wrapper scenario and suite for QEMU endpoint-runtime
-    software-only parity: `qemu_endpoint_software_parity`.
-25. dedicated host-wrapper scenario and suite for the full QEMU endpoint-only
-    image-classification row, with explicit local-registry cache preflight:
-    `qemu_endpoint_image_parity`.
-26. dedicated host-wrapper scenario and suite for QEMU OpenFaaS software-only
-    evidence on a single-host CPU-capped variant:
-    `qemu_openfaas_software_parity`.
-27. dedicated host-wrapper scenario and suite for the full QEMU OpenFaaS
-    image-classification row, with explicit Docker preflight:
-    `qemu_openfaas_image_parity`.
-28. owner-isolated QEMU teardown classification with mocked local and external
-    physical-host command boundaries.
+15. host-wrapper aggregate scenarios for phase-smoke matrix and full operational regression: `phase_smoke_matrix` and `operational_regression`.
+16. dedicated host-wrapper scenario for the network-validation suite: `network_validation`.
+17. dedicated host-wrapper scenario and suite for QEMU old-main infrastructure parity: `qemu_infra_parity`.
+18. dedicated host-wrapper scenario and suite for the QEMU Kubernetes no-benchmark parity row: `qemu_k8s_nobench_parity`.
+19. dedicated host-wrapper scenario and suite for the QEMU Kubernetes image-classification row, with explicit local-registry cache preflight: `qemu_k8s_image_parity`.
+20. dedicated host-wrapper scenario and suite for QEMU KubeEdge software-only parity: `qemu_kubeedge_software_parity`.
+21. dedicated host-wrapper scenario and suite for the full QEMU KubeEdge image-classification row, with explicit local-registry cache preflight: `qemu_kubeedge_image_parity`.
+22. dedicated host-wrapper scenario and suite for QEMU Mist software-only parity: `qemu_mist_software_parity`.
+23. dedicated host-wrapper scenario and suite for the full QEMU Mist image-classification row, with explicit local-registry cache preflight: `qemu_mist_image_parity`.
+24. dedicated host-wrapper scenario and suite for QEMU endpoint-runtime software-only parity: `qemu_endpoint_software_parity`.
+25. dedicated host-wrapper scenario and suite for the full QEMU endpoint-only image-classification row, with explicit local-registry cache preflight: `qemu_endpoint_image_parity`.
+26. dedicated host-wrapper scenario and suite for QEMU OpenFaaS software-only evidence on a single-host CPU-capped variant: `qemu_openfaas_software_parity`.
+27. dedicated host-wrapper scenario and suite for the full QEMU OpenFaaS image-classification row, with explicit Docker preflight: `qemu_openfaas_image_parity`.
+28. owner-isolated QEMU teardown classification with mocked local and external physical-host command boundaries.
 
 Deferred after the active rework:
 
 1. no new reproducibility-package or database architecture is authorized,
 2. live external-QEMU teardown coverage; current owner isolation is exercised only with mocks,
-3. policy decisions for which slow scenario regressions are mandatory in local development,
-   CI, and release certification.
+3. policy decisions for which slow scenario regressions are mandatory in local development, CI, and release certification.
 
 ## 9. Operational Follow-Up Policy
 
@@ -458,62 +340,32 @@ The current active runner contract is implemented and validated through:
 1. cloud-safe static audit and unit/e2e discovery,
 2. dedicated host-backed smoke slices,
 3. the retained resumed benchmark smoke path,
-4. the aggregate `operational_regression` wrapper scenario when a single host command should cover
-   phase-boundary smoke plus retained benchmark smoke,
-5. the separate `network_validation` wrapper scenario when release certification
-   needs the dedicated network-validation suite,
-6. the separate `qemu_infra_parity` wrapper scenario when release certification
-   needs the old-main QEMU infrastructure parity rows,
-7. the separate `qemu_k8s_nobench_parity` wrapper scenario when release
-   certification needs the old-main QEMU Kubernetes no-benchmark row.
-8. the separate `qemu_kubeedge_software_parity` wrapper scenario when release
-   certification needs KubeEdge software evidence without the application
-   registry path.
-9. the separate `qemu_kubeedge_image_parity` wrapper scenario when release
-   certification needs full KubeEdge application evidence after the application
-   image cache is primed for the selected runner.
-10. the separate `qemu_mist_software_parity` wrapper scenario when release
-   certification needs Mist software evidence without the application registry
-   path.
-11. the separate `qemu_mist_image_parity` wrapper scenario when release
-   certification needs full Mist application evidence after the application
-   image cache is primed for the selected runner.
-12. the separate `qemu_endpoint_software_parity` wrapper scenario when release
-   certification needs endpoint-runtime software evidence without the
-   application registry path.
-13. the separate `qemu_openfaas_software_parity` wrapper scenario when release
-   certification needs OpenFaaS software evidence without the application
-   registry path on a single-host CPU-capped variant.
+4. the aggregate `operational_regression` wrapper scenario when a single host command should cover phase-boundary smoke plus retained benchmark smoke,
+5. the separate `network_validation` wrapper scenario when release certification needs the dedicated network-validation suite,
+6. the separate `qemu_infra_parity` wrapper scenario when release certification needs the old-main QEMU infrastructure parity rows,
+7. the separate `qemu_k8s_nobench_parity` wrapper scenario when release certification needs the old-main QEMU Kubernetes no-benchmark row.
+8. the separate `qemu_kubeedge_software_parity` wrapper scenario when release certification needs KubeEdge software evidence without the application registry path.
+9. the separate `qemu_kubeedge_image_parity` wrapper scenario when release certification needs full KubeEdge application evidence after the application image cache is primed for the selected runner.
+10. the separate `qemu_mist_software_parity` wrapper scenario when release certification needs Mist software evidence without the application registry path.
+11. the separate `qemu_mist_image_parity` wrapper scenario when release certification needs full Mist application evidence after the application image cache is primed for the selected runner.
+12. the separate `qemu_endpoint_software_parity` wrapper scenario when release certification needs endpoint-runtime software evidence without the application registry path.
+13. the separate `qemu_openfaas_software_parity` wrapper scenario when release certification needs OpenFaaS software evidence without the application registry path on a single-host CPU-capped variant.
 
-Speculative observability/reproducibility architecture is not an active work
-queue. Use the approved retained artifact interfaces and policy boundaries.
+Speculative observability/reproducibility architecture is not an active work queue. Use the approved retained artifact interfaces and policy boundaries.
 
 Cache-integrity note:
 
 1. `.continuum` image reuse does not trust file existence alone,
-2. cache validation occurs on the owning host and checks readable image data,
-   exact schema-v1 ready metadata, expected fields, and content fingerprints,
-3. participating ready markers are invalidated durably before cache
-   modification begins,
-4. ready metadata is published atomically only after image preparation and
-   bounded shutdown confirmation complete successfully,
-5. external-owner behavior currently has mocked and static coverage, but no
-   live external-host certification.
+2. cache validation occurs on the owning host and checks readable image data, exact schema-v1 ready metadata, expected fields, and content fingerprints,
+3. participating ready markers are invalidated durably before cache modification begins,
+4. ready metadata is published atomically only after image preparation and bounded shutdown confirmation complete successfully,
+5. external-owner behavior currently has mocked and static coverage, but no live external-host certification.
 
-QEMU alone decides reuse/rebuild per physical owner and profile slot; the test
-runner never deletes guessed legacy base-image names. The retired CLI options
-`--rebuild-base-images` / `--use-cache` and root/suite JSON keys
-`base_image_rebuild_frequency`, `rebuild_base_images`, `use_cache` fail explicitly.
-The historical `base_images_rebuilt` result field remains `[]`, not a runtime
-cache claim. Missing artifacts invalidate a cache, but access/inspection errors
-abort before invalidation and require operator inspection of the exact path,
-numeric ownership/mode, parent sticky bit and ACLs. Cleanup preserves the current
-run's user-data YAML; mode and ACL initialization apply only to newly created disks.
+QEMU alone decides reuse/rebuild per physical owner and profile slot; the test runner never deletes guessed legacy base-image names. The retired CLI options `--rebuild-base-images` / `--use-cache` and root/suite JSON keys `base_image_rebuild_frequency`, `rebuild_base_images`, `use_cache` fail explicitly. The historical `base_images_rebuilt` result field remains `[]`, not a runtime cache claim. Missing artifacts invalidate a cache, but access/inspection errors abort before invalidation and require operator inspection of the exact path, numeric ownership/mode, parent sticky bit and ACLs. Cleanup preserves the current run's user-data YAML; mode and ACL initialization apply only to newly created disks.
 
 ## 10. How A User Or Research Collaborator Can Help
 
-The most useful external input is not more ad hoc test cases. It is explicit
-test policy.
+The most useful external input is not more ad hoc test cases. It is explicit test policy.
 
 High-value decisions:
 

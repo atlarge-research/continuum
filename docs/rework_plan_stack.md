@@ -4,97 +4,53 @@
 
 This is the authority map, not a second policy ledger.
 
-1. `docs/rework_milestone_release_plan.md` owns the fourteen approved pre-main
-   policies, reproduction boundary, ordered gates and publication prohibition.
-2. `docs/configuration_restructuring_design.md` owns YAML composition,
-   parser/bootstrap validation, normalized configuration and resume semantics.
-3. `docs/software_module_architecture_plan.md` owns software module graph,
-   selector/scope, tag governance, registry and planner semantics.
-4. `docs/release_certification_matrix.md` is the factual row-status and
-   evidence authority; policy changes do not renew historical runs.
-5. `docs/rework_release_handoff.md` is the concise operational checkpoint,
-   subordinate to the above. `docs/rework_kickoff.md` is navigation only.
+1. `docs/rework_milestone_release_plan.md` owns the fourteen approved pre-main policies, reproduction boundary, ordered gates and publication prohibition.
+2. `docs/configuration_restructuring_design.md` owns YAML composition, parser/bootstrap validation, normalized configuration and resume semantics.
+3. `docs/software_module_architecture_plan.md` owns software module graph, selector/scope, tag governance, registry and planner semantics.
+4. `docs/release_certification_matrix.md` is the factual row-status and evidence authority; policy changes do not renew historical runs.
+5. `docs/rework_release_handoff.md` is the concise operational checkpoint, subordinate to the above. `docs/rework_kickoff.md` is navigation only.
 
-`docs/ansible_restructuring_design.md` and
-`docs/phase_c_implementation_plan.md` are historical phase records, not an
-active architecture queue. `docs/post_release_roadmap.md` is retired.
-The old overhaul dispatcher remains retired. Domain semantics must not
-contradict approved scope; resolve a domain conflict in its domain document
-and synchronize dependent operational docs atomically.
+`docs/ansible_restructuring_design.md` and `docs/phase_c_implementation_plan.md` are historical phase records, not an active architecture queue. `docs/post_release_roadmap.md` is retired. The old overhaul dispatcher remains retired. Domain semantics must not contradict approved scope; resolve a domain conflict in its domain document and synchronize dependent operational docs atomically.
 
-`docs/reproduction_inventory.md` is subordinate factual candidate-scope evidence,
-not another policy authority or certification ledger. Its final user scope
-confirmation and the separate configuration/fixture inventory remain open gates.
+`docs/reproduction_inventory.md` is subordinate factual candidate-scope evidence, not another policy authority or certification ledger. Its final user scope confirmation and the separate configuration/fixture inventory remain open gates.
 
 ## Locked boundaries
 
-- Core/module boundary: Continuum core owns planning, validation,
-  selector/scope resolution, module contracts, runtime handoff, state and
-  evidence contracts. Provider/software/application stacks are modules.
-  `qemu` is a provider module and must not be described as core.
-- Runtime claims require VM-backed or cloud-backed evidence, or host-backed
-  evidence where the applicable matrix gate permits it. Static success alone
-  is insufficient.
-- Intermediate rework milestones may certify bounded subsets; they are not
-  final main replacement releases.
-- Final main replacement requires approved reproduction scope and zero
-  unaccounted rows in the reproduction/config inventories, followed by final
-  explicit user approval. The complete old-main parity inventory remains
-  historical candidate coverage, not the replacement release scope.
-- Existing hard-cut schema, cluster-first `infrastructure.clusters[]`,
-  `software.modules[]`, exact-match AND selector clauses with software-only `any_of`
-  unions and single-`match` benchmark selectors (module authority §6), structured scope
-  identities, explicit-only dependencies, deterministic planning and
-  reserved-tag collision errors remain. Benchmark tags cannot overwrite
-  `role`; use namespaced keys such as `benchmark.role`.
-- Parser/bootstrap validates and defaults once. Runtime uses canonical keys
-  without compatibility fallbacks. Keep the parser orchestration facade,
-  domain validators and layered semantic config-access helpers; no
-  speculative configuration-library migration.
-- The approved registry terminology hard cut is run.registry_refresh missing/all,
-  default missing, without aliases; use the current domain schema. Frozen
-  historical ledger entries below retain their original image_prefetch spelling.
-- No new core features, speculative architecture or automatic recovery.
-  Normal-user migration and the QEMU repair follow the ordered approved gates.
+- Core/module boundary: Continuum core owns planning, validation, selector/scope resolution, module contracts, runtime handoff, state and evidence contracts. Provider/software/application stacks are modules. `qemu` is a provider module and must not be described as core.
+- Runtime claims require VM-backed or cloud-backed evidence, or host-backed evidence where the applicable matrix gate permits it. Static success alone is insufficient.
+- Intermediate rework milestones may certify bounded subsets; they are not final main replacement releases.
+- Final main replacement requires approved reproduction scope and zero unaccounted rows in the reproduction/config inventories, followed by final explicit user approval. The complete old-main parity inventory remains historical candidate coverage, not the replacement release scope.
+- Existing hard-cut schema, cluster-first `infrastructure.clusters[]`, `software.modules[]`, exact-match AND selector clauses with software-only `any_of` unions and single-`match` benchmark selectors (module authority §6), structured scope identities, explicit-only dependencies, deterministic planning and reserved-tag collision errors remain. Benchmark tags cannot overwrite `role`; use namespaced keys such as `benchmark.role`.
+- Parser/bootstrap validates and defaults once. Runtime uses canonical keys without compatibility fallbacks. Keep the parser orchestration facade, domain validators and layered semantic config-access helpers; no speculative configuration-library migration.
+- The approved registry terminology hard cut is run.registry_refresh missing/all, default missing, without aliases; use the current domain schema. Frozen historical ledger entries below retain their original image_prefetch spelling.
+- No new core features, speculative architecture or automatic recovery. Normal-user migration and the QEMU repair follow the ordered approved gates.
 - No merge, push, tag, release or publication before final explicit approval.
 
 ## Synchronization
 
-Before each nontrivial packet, freeze exact files and acceptance criteria,
-obtain independent read-only plan review, implement/test, and independently
-review the complete uncommitted diff. Resolve actionable findings before a
-local commit. Preserve unrelated edits and private/generated evidence.
-Keep policy detail once in the milestone authority and semantics once in the
-domain authorities. Historical phase completion is not candidate certification.
+Before each nontrivial packet, freeze exact files and acceptance criteria, obtain independent read-only plan review, implement/test, and independently review the complete uncommitted diff. Resolve actionable findings before a local commit. Preserve unrelated edits and private/generated evidence. Keep policy detail once in the milestone authority and semantics once in the domain authorities. Historical phase completion is not candidate certification.
+
+## Future work requiring renewed user discussion
+
+- [Small reproducibility and failure-diagnosis proposal](superpowers/plans/2026-10-30-reproducibility-failure-diagnosis.md): deferred navigation only, outside the current checkpoint. Before scheduling or executing even its initial coverage audit, discuss again with the user whether it is wanted or mostly overengineering, and obtain a renewed decision. If later approved, first check existing coverage for at most two hours; keep the total effort to one to two engineer-days including tests/docs, make at most two small fixes, and stop early with zero fixes if existing coverage is sufficient. This entry grants no audit or implementation authority and changes no current gates.
 
 ## 11. Historical Implementation Snapshot (Frozen May 22, 2026)
 
-The complete frozen implementation ledger is preserved verbatim in Git object
-`b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`.
-Inspect it with `git show b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`.
-Verified private copies and SHA-256 bindings are in `docs/rework_release_handoff.md`.
+The complete frozen implementation ledger is preserved verbatim in Git object `b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`. Inspect it with `git show b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`. Verified private copies and SHA-256 bindings are in `docs/rework_release_handoff.md`.
 
-This is historical provenance, not a current work queue or renewed certification.
-The authority map, current boundaries and closure commitments in this document
-remain active; use the current handoff for execution status.
+This is historical provenance, not a current work queue or renewed certification. The authority map, current boundaries and closure commitments in this document remain active; use the current handoff for execution status.
 
 ## 12. End-of-Rework Test Closure Commitments
 
 Closed May 21, 2026:
 
-1. Major-function coverage is audited and tracked by
-   `scripts/test/coverage_manifest.json`, with the maintenance contract
-   documented in `docs/major_function_test_coverage.md`.
-2. `scripts/test/unit/test_coverage_manifest.py` keeps the audit live by
-   validating audited source paths, major function names, referenced tests, and
-   success/fail-fast coverage notes.
-3. Test suites are split into dedicated unit and local e2e-regression
-   directories:
+1. Major-function coverage is audited and tracked by `scripts/test/coverage_manifest.json`, with the maintenance contract documented in `docs/major_function_test_coverage.md`.
+2. `scripts/test/unit/test_coverage_manifest.py` keeps the audit live by validating audited source paths, major function names, referenced tests, and success/fail-fast coverage notes.
+3. Test suites are split into dedicated unit and local e2e-regression directories:
    - `scripts/test/unit/`
    - `scripts/test/e2e/`
    - shared helpers under `scripts/test/support/`
-4. `scripts/test/run_cloud_static_audit.sh` now runs unit and e2e discovery as
-   separate required gates before the combined suite.
+4. `scripts/test/run_cloud_static_audit.sh` now runs unit and e2e discovery as separate required gates before the combined suite.
 
 ## 13. End-of-Rework Documentation Closure Commitments
 
@@ -105,23 +61,14 @@ Closed for the active rework baseline:
 3. Developer-facing architecture docs for parser/runtime decomposition boundaries, module contracts, runtime phases, and operational testing are published across the design docs.
 4. Runnable examples/templates are synchronized with parser validation and covered by repository regression tests.
 5. The final doc-audit gate is represented by `scripts/test/check_docs_paths.py` and `scripts/test/run_cloud_static_audit.sh`; generated reports stay under ignored `logs/cloud_static_audit/`.
-6. The earlier speculative observability/package/database follow-up is retired;
-   it is not authorized by historical documentation closure.
+6. The earlier speculative observability/package/database follow-up is retired; it is not authorized by historical documentation closure.
 
 ## 14. Deferred Outside Active Closure
 
-The May 21, 2026 closure sweep classifies the remaining inline code-debt notes
-as outside the active PR-23 documentation/runtime rework:
+The May 21, 2026 closure sweep classifies the remaining inline code-debt notes as outside the active PR-23 documentation/runtime rework:
 
-1. QEMU-specific base-IP ownership in `infrastructure/qemu/qemu.py` should be
-   handled as a provider-interface cleanup, not folded into the smoke/docs
-   closure.
-2. Endpoint runtime environment configurability in
-   `resource_manager/endpoint/endpoint.py` should be handled with an explicit
-   benchmark/runtime option design before changing user-facing behavior.
-3. Splitting KubeEdge and Mist in `resource_manager/kubeedge/kubeedge.py`
-   remains a provider/module boundary refactor and requires a separate
-   compatibility plan.
+1. QEMU-specific base-IP ownership in `infrastructure/qemu/qemu.py` should be handled as a provider-interface cleanup, not folded into the smoke/docs closure.
+2. Endpoint runtime environment configurability in `resource_manager/endpoint/endpoint.py` should be handled with an explicit benchmark/runtime option design before changing user-facing behavior.
+3. Splitting KubeEdge and Mist in `resource_manager/kubeedge/kubeedge.py` remains a provider/module boundary refactor and requires a separate compatibility plan.
 
-The active rework closure therefore treats these as tracked follow-up debt, not
-unimplemented docs-requested overhaul items.
+The active rework closure therefore treats these as tracked follow-up debt, not unimplemented docs-requested overhaul items.

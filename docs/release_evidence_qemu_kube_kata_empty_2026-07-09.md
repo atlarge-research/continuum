@@ -2,12 +2,9 @@
 
 ## Scope
 
-This evidence certifies research case-study row
-`M2-QEMU-KUBE-KATA-EMPTY` in `docs/release_certification_matrix.md`.
+This evidence certifies research case-study row `M2-QEMU-KUBE-KATA-EMPTY` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can run the minimal legacy Kata startup
-benchmark shape on local QEMU with `kube_kata`, `empty_kata`, `kata-qemu`, and
-`overlayfs`.
+It proves that the rework stack can run the minimal legacy Kata startup benchmark shape on local QEMU with `kube_kata`, `empty_kata`, `kata-qemu`, and `overlayfs`.
 
 ## Source And Command
 
@@ -44,14 +41,10 @@ The wrapper reported:
 benchmark_metric_artifacts=/mnt/sdc/continuum_smoke/qemu_kube_kata_empty_startup_parity/.continuum/logs/benchmark/2026-07-09_20_51_51_empty-kata-pod_metrics_manifest.json
 ```
 
-The suite evidence contract requires the retained benchmark metric manifest to
-contain both:
+The suite evidence contract requires the retained benchmark metric manifest to contain both:
 
 1. `CLOUD OUTPUT` with at least 100 rows,
-2. `KATA OUTPUT` with at least 100 rows and the Kata phase columns
-   `kata_create_runtime (s)`, `kata_create_vm (s)`,
-   `kata_connect_to_vm (s)`, and
-   `kata_create_container_and_launch (s)`.
+2. `KATA OUTPUT` with at least 100 rows and the Kata phase columns `kata_create_runtime (s)`, `kata_create_vm (s)`, `kata_connect_to_vm (s)`, and `kata_create_container_and_launch (s)`.
 
 The run reached the Jaeger trace contract before writing artifacts:
 
@@ -63,23 +56,16 @@ Collected 100 complete Kata timestamp row(s), expected 100
 
 This row may be described as:
 
-1. Continuum can run the minimal local-QEMU Kata startup benchmark using
-   `kube_kata`, `empty_kata`, `kata-qemu`, and `overlayfs`.
-2. The run reaches `phase_completed = application` and writes the standard
-   lock, state, resume-contract, stdout, metadata, and benchmark evidence
-   artifacts.
-3. The software phase installs RuntimeClass objects for `kata-qemu`, `kata-fc`,
-   and `runc`, verifies the guest Kata runtime, and exposes the legacy Jaeger
-   query endpoint on the worker.
-4. The application phase produces retained benchmark metric artifacts for both
-   cloud-level startup timing and Jaeger-derived Kata timing.
+1. Continuum can run the minimal local-QEMU Kata startup benchmark using `kube_kata`, `empty_kata`, `kata-qemu`, and `overlayfs`.
+2. The run reaches `phase_completed = application` and writes the standard lock, state, resume-contract, stdout, metadata, and benchmark evidence artifacts.
+3. The software phase installs RuntimeClass objects for `kata-qemu`, `kata-fc`, and `runc`, verifies the guest Kata runtime, and exposes the legacy Jaeger query endpoint on the worker.
+4. The application phase produces retained benchmark metric artifacts for both cloud-level startup timing and Jaeger-derived Kata timing.
 
 ## Limitations
 
 This evidence does not certify:
 
-1. `kata-fc`, `devmapper`, or runtime/filesystem combinations beyond
-   `kata-qemu` plus `overlayfs`,
+1. `kata-fc`, `devmapper`, or runtime/filesystem combinations beyond `kata-qemu` plus `overlayfs`,
 2. GCP, AWS, bare-metal, multi-host, edge, or endpoint Kata topologies,
 3. every legacy Kata startup parameter sweep,
 4. resource-usage, stress, memory-usage, or non-`empty_kata` applications,

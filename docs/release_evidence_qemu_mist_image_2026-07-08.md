@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies old-main parity row `P-QEMU-07` in
-`docs/release_certification_matrix.md`.
+This evidence certifies old-main parity row `P-QEMU-07` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the legacy P-QEMU-07-style local
-QEMU edge/endpoint topology, complete the Mist software phase, run the
-image-classification application benchmark, verify teardown, and emit benchmark
-metric artifacts.
+It proves that the rework stack can provision the legacy P-QEMU-07-style local QEMU edge/endpoint topology, complete the Mist software phase, run the image-classification application benchmark, verify teardown, and emit benchmark metric artifacts.
 
 ## Source And Command
 
@@ -32,10 +28,7 @@ metric artifacts.
 
 ## Result
 
-The final synced-tree run passed after fixing Mist Docker startup warning
-handling, the Mist worker readiness Docker status command, Mist worker SSH
-startup retries, Docker `--env` argv construction, Mosquitto apt-lock retries,
-and Ansible retry-noise success detection:
+The final synced-tree run passed after fixing Mist Docker startup warning handling, the Mist worker readiness Docker status command, Mist worker SSH startup retries, Docker `--env` argv construction, Mosquitto apt-lock retries, and Ansible retry-noise success detection:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
@@ -47,21 +40,13 @@ Benchmark metric artifact:
 /mnt/sdc/continuum_smoke/qemu_mist_image_parity/.continuum/logs/benchmark/2026-07-08_19_32_31_classify-images_metrics_manifest.json
 ```
 
-The passing run followed failed 2026-06-01 and 2026-07-03 attempts that exposed
-Mist application/runtime and host-readiness issues:
+The passing run followed failed 2026-06-01 and 2026-07-03 attempts that exposed Mist application/runtime and host-readiness issues:
 
-1. Mist Docker worker startup treated nonfatal SSH/Docker warning stderr as
-   fatal even when Docker returned a container id.
-2. Mist worker readiness used over-escaped Docker status formatting, causing
-   `docker container ls` to reject the command.
-3. Retried per-edge Mist worker startup needed Docker `--env` arguments as
-   separate argv entries after moving from a batched command list to per-target
-   SSH retries.
-4. Fresh endpoint base-image rebuilds could race unattended-upgrades while
-   installing Mosquitto, so the Mosquitto apt task now waits and retries.
-5. Successful Ansible package retries can emit `FAILED - RETRYING`; the test
-   runner now treats that as retry noise instead of a final failure when the
-   run exits cleanly and all required artifacts are present.
+1. Mist Docker worker startup treated nonfatal SSH/Docker warning stderr as fatal even when Docker returned a container id.
+2. Mist worker readiness used over-escaped Docker status formatting, causing `docker container ls` to reject the command.
+3. Retried per-edge Mist worker startup needed Docker `--env` arguments as separate argv entries after moving from a batched command list to per-target SSH retries.
+4. Fresh endpoint base-image rebuilds could race unattended-upgrades while installing Mosquitto, so the Mosquitto apt task now waits and retries.
+5. Successful Ansible package retries can emit `FAILED - RETRYING`; the test runner now treats that as retry noise instead of a final failure when the run exits cleanly and all required artifacts are present.
 
 Commits through `57b18f44` fixed those issues before this passing evidence run.
 
@@ -69,16 +54,11 @@ Commits through `57b18f44` fixed those issues before this passing evidence run.
 
 This row may be described as:
 
-1. QEMU can provision the P-QEMU-07-style topology of two edge nodes and four
-   endpoint nodes.
+1. QEMU can provision the P-QEMU-07-style topology of two edge nodes and four endpoint nodes.
 2. The Mist software phase completes on that topology.
-3. The endpoint runtime module is present for endpoint resources in the same
-   software phase.
-4. The image-classification application runs on the Mist edge/endpoint topology
-   and emits benchmark metric artifacts.
-5. The runner observes the standard release artifacts: SSH output, experiment
-   lock, state file, `phase_completed = application`, matching resume contract,
-   teardown verification, and benchmark metrics manifest.
+3. The endpoint runtime module is present for endpoint resources in the same software phase.
+4. The image-classification application runs on the Mist edge/endpoint topology and emits benchmark metric artifacts.
+5. The runner observes the standard release artifacts: SSH output, experiment lock, state file, `phase_completed = application`, matching resume contract, teardown verification, and benchmark metrics manifest.
 
 ## Limitations
 
@@ -88,5 +68,4 @@ This evidence does not certify:
 2. broad Mist version compatibility beyond the configured profile,
 3. OpenFaaS behavior outside the separately certified QEMU P-QEMU-10 row,
 4. broader Mist applications beyond the image-classification path,
-5. the longer-term architecture cleanup needed to split Mist from the shared
-   KubeEdge base-install path.
+5. the longer-term architecture cleanup needed to split Mist from the shared KubeEdge base-install path.

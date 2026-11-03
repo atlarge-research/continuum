@@ -2,13 +2,9 @@
 
 ## Scope
 
-This evidence certifies old-main parity row `P-QEMU-08` in
-`docs/release_certification_matrix.md`.
+This evidence certifies old-main parity row `P-QEMU-08` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the legacy P-QEMU-08-style local
-QEMU endpoint-only topology, complete the endpoint-runtime software phase, run
-the image-classification application benchmark, verify teardown, and emit
-benchmark metric artifacts.
+It proves that the rework stack can provision the legacy P-QEMU-08-style local QEMU endpoint-only topology, complete the endpoint-runtime software phase, run the image-classification application benchmark, verify teardown, and emit benchmark metric artifacts.
 
 ## Source And Command
 
@@ -32,9 +28,7 @@ benchmark metric artifacts.
 
 ## Result
 
-The clean-source run passed after cache-backed image parity preflights were
-added and the already-certified VM evidence set was refreshed on the same
-release-evidence source line:
+The clean-source run passed after cache-backed image parity preflights were added and the already-certified VM evidence set was refreshed on the same release-evidence source line:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
@@ -50,14 +44,10 @@ Benchmark metric artifact:
 
 This row may be described as:
 
-1. QEMU can provision the P-QEMU-08-style endpoint-only topology of two endpoint
-   VMs with 4g network emulation enabled.
+1. QEMU can provision the P-QEMU-08-style endpoint-only topology of two endpoint VMs with 4g network emulation enabled.
 2. The endpoint runtime software phase completes on that topology.
-3. The image-classification application runs on the endpoint-only topology and
-   emits benchmark metric artifacts.
-4. The runner observes the standard release artifacts: SSH output, experiment
-   lock, state file, `phase_completed = application`, matching resume contract,
-   teardown verification, and benchmark metrics manifest.
+3. The image-classification application runs on the endpoint-only topology and emits benchmark metric artifacts.
+4. The runner observes the standard release artifacts: SSH output, experiment lock, state file, `phase_completed = application`, matching resume contract, teardown verification, and benchmark metrics manifest.
 
 ## Limitations
 
@@ -67,5 +57,4 @@ This evidence does not certify:
 2. broad endpoint-runtime version compatibility beyond the configured profile,
 3. forced image-prefetch as a public runner requirement for `continuum-smoke`,
 4. Kubernetes, KubeEdge, Mist, or OpenFaaS application rows,
-5. broader image-classification parameter sweeps beyond the configured
-   frequency, duration, and resource values.
+5. broader image-classification parameter sweeps beyond the configured frequency, duration, and resource values.

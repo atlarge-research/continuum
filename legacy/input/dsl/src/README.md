@@ -1,6 +1,5 @@
 # Embedded DSL in Typescript
-In this README we will explain how to use and/or extend the currently implemented EDSL (Embedded domain specific lanugage).
-This implementation is quite simple to use thanks to the custom VS-Code code snippets which are a core part of making this a productive tool.
+In this README we will explain how to use and/or extend the currently implemented EDSL (Embedded domain specific lanugage). This implementation is quite simple to use thanks to the custom VS-Code code snippets which are a core part of making this a productive tool.
 
 ## Requirements
 To make use of the DSL itself any text editor and terminal will do. With that being said the implementation highly leverages the use of VS-Code features and thefore we highly recommend you use it.

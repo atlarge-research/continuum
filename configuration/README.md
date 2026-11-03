@@ -1,8 +1,7 @@
 # Configuration
 This directory contains legacy `.cfg` configurations kept for historical reproduction and migration reference.
 
-Release support for any migrated module combination is bounded by
-`docs/release_certification_matrix.md`.
+Release support for any migrated module combination is bounded by `docs/release_certification_matrix.md`.
 
 The active runtime input model is YAML-only:
 
@@ -15,8 +14,7 @@ For the active schema and migration guidance, use:
 - `docs/configuration_reference.md`
 - `docs/migration_notes.md`
 
-The grouped backlog for remaining `.cfg` families is in
-`docs/migration_notes.md#legacy-configuration-backlog`.
+The grouped backlog for remaining `.cfg` families is in `docs/migration_notes.md#legacy-configuration-backlog`.
 
 For new YAML users, start from:
 

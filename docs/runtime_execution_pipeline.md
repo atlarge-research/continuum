@@ -1,19 +1,10 @@
 # Runtime Execution Pipeline
 
-The pre-main support boundary is `docs/rework_milestone_release_plan.md` and
-factual evidence is `docs/release_certification_matrix.md`. The supported resume
-contract is QEMU-only, same revision/base path/topology/software contract,
-linear infrastructure → software → application. Cross-commit resume, arbitrary
-software replacement and concurrent shared-base-path runs are unsupported.
-Same-application parameter sweeps remain candidate-only. Although the schema uses
-a pipeline list, `input/configuration/benchmark_domain_validation.py` rejects
-more than one executable stage; ordered multi-stage execution is unsupported.
+The pre-main support boundary is `docs/rework_milestone_release_plan.md` and factual evidence is `docs/release_certification_matrix.md`. The supported resume contract is QEMU-only, same revision/base path/topology/software contract, linear infrastructure → software → application. Cross-commit resume, arbitrary software replacement and concurrent shared-base-path runs are unsupported. Same-application parameter sweeps remain candidate-only. Although the schema uses a pipeline list, `input/configuration/benchmark_domain_validation.py` rejects more than one executable stage; ordered multi-stage execution is unsupported.
 
-This document describes the runtime execution pipeline that Continuum follows
-for YAML-driven runs, and ties each phase to the code that currently owns it.
+This document describes the runtime execution pipeline that Continuum follows for YAML-driven runs, and ties each phase to the code that currently owns it.
 
-It is intentionally separate from the program-level rework phases in
-`docs/ansible_restructuring_design.md`.
+It is intentionally separate from the program-level rework phases in `docs/ansible_restructuring_design.md`.
 
 ## 1. Purpose
 
@@ -34,9 +25,7 @@ Continuum's runtime pipeline currently has five practical phases:
 3. benchmark/application execution,
 4. artifact capture, state persistence, and optional teardown.
 
-The user-visible `run.targets` values map to phases 1 to 3, but phase 0 and
-phase 4 are real execution boundaries and matter for both correctness and
-operational testing.
+The user-visible `run.targets` values map to phases 1 to 3, but phase 0 and phase 4 are real execution boundaries and matter for both correctness and operational testing.
 
 ## 3. Phase 0: Bootstrap And Planning
 
@@ -76,8 +65,7 @@ It covers:
 1. canonical `config` object,
 2. `config["normalized"]`,
 3. `config["planner_snapshot"]`,
-4. resolved lock file at `<base_path>/.continuum/experiment_lock.yaml`, including
-   `resume_contract` metadata.
+4. resolved lock file at `<base_path>/.continuum/experiment_lock.yaml`, including `resume_contract` metadata.
 
 ### Failure classes
 
@@ -99,8 +87,7 @@ It covers:
 
 ### Scope
 
-This phase is responsible for turning normalized infrastructure intent into
-real machines, IPs, registry state, and optional network emulation.
+This phase is responsible for turning normalized infrastructure intent into real machines, IPs, registry state, and optional network emulation.
 
 ### Primary code surfaces
 
@@ -128,10 +115,8 @@ real machines, IPs, registry state, and optional network emulation.
 1. live machine inventory,
 2. SSH/IP materialized in runtime config,
 3. optional local registry content,
-4. optional network-validation NDJSON results under
-   `<base_path>/.continuum/logs/network_validation/`,
-5. schema-v2 state file at `<base_path>/.continuum/state.json` with
-   `phase_completed=infrastructure` and matching `resume_contract`.
+4. optional network-validation NDJSON results under `<base_path>/.continuum/logs/network_validation/`,
+5. schema-v2 state file at `<base_path>/.continuum/state.json` with `phase_completed=infrastructure` and matching `resume_contract`.
 
 ### Operational success evidence
 
@@ -145,8 +130,7 @@ real machines, IPs, registry state, and optional network emulation.
 
 ### Scope
 
-This phase installs and configures the orchestrator and addon modules through
-the centralized software planner boundary.
+This phase installs and configures the orchestrator and addon modules through the centralized software planner boundary.
 
 ### Primary code surfaces
 
@@ -165,10 +149,7 @@ the centralized software planner boundary.
 4. run resource-manager post-phase hooks,
 5. persist software-phase resume state.
 
-The implemented hooks are resource-manager `build_phase_plan(config)` and optional
-`post_phase_hook(runner)`, with centralized addon entries and shared `PlanEntry` dispatch.
-See `docs/software_module_architecture_plan.md` §7–§9 for the current adapter contract,
-its fixed execution order and snapshot fields, distinguished from proposed module APIs.
+The implemented hooks are resource-manager `build_phase_plan(config)` and optional `post_phase_hook(runner)`, with centralized addon entries and shared `PlanEntry` dispatch. See `docs/software_module_architecture_plan.md` §7–§9 for the current adapter contract, its fixed execution order and snapshot fields, distinguished from proposed module APIs.
 
 ### Outputs
 
@@ -181,8 +162,7 @@ its fixed execution order and snapshot fields, distinguished from proposed modul
 1. all software plan entries execute successfully,
 2. no direct module start path bypasses centralized planner execution,
 3. post-phase hook completes,
-4. state file advances from `infrastructure` to `software` without changing the
-   resume contract.
+4. state file advances from `infrastructure` to `software` without changing the resume contract.
 
 ## 6. Phase 3: Benchmark/Application Execution
 
@@ -192,11 +172,7 @@ This phase launches benchmark workload logic and waits for completion.
 
 ### Current status
 
-Application execution is now reachable for YAML runs.
-Phase D role consolidation moved benchmark launch and completion behavior under
-application-owned helpers and roles. `run.targets: application` no longer stops
-at runtime-target resolution and no longer silently skips when a runnable
-application module is missing.
+Application execution is now reachable for YAML runs. Phase D role consolidation moved benchmark launch and completion behavior under application-owned helpers and roles. `run.targets: application` no longer stops at runtime-target resolution and no longer silently skips when a runnable application module is missing.
 
 ### Primary code surfaces
 
@@ -220,24 +196,19 @@ application module is missing.
 2. worker and endpoint outputs are collected,
 3. benchmark metrics are formatted without runtime fallback aliases,
 4. state file advances to `phase_completed=application`,
-5. host-backed benchmark smoke completes on the intended resume path with lightweight
-   application-leg result evidence visible in stdout and in structured benchmark metric
-   artifacts under `<base_path>/.continuum/logs/benchmark/`.
+5. host-backed benchmark smoke completes on the intended resume path with lightweight application-leg result evidence visible in stdout and in structured benchmark metric artifacts under `<base_path>/.continuum/logs/benchmark/`.
 
 ## 7. Phase 4: Artifact Capture, Resume, And Teardown
 
-This is a cross-cutting runtime concern rather than a separately requested
-`run.targets` phase, but it is part of the pipeline.
+This is a cross-cutting runtime concern rather than a separately requested `run.targets` phase, but it is part of the pipeline.
 
 ### Owned behaviors
 
 1. experiment lock writing during bootstrap before infrastructure or resume execution,
 2. schema-v2 state persistence after each executable phase,
-3. explicit resume validation by state schema, phase ordering, resume-contract hash, and an
-   authenticated SSH marker from every recorded managed guest when skipping infrastructure,
+3. explicit resume validation by state schema, phase ordering, resume-contract hash, and an authenticated SSH marker from every recorded managed guest when skipping infrastructure,
 4. final SSH access hints,
-5. optional provider teardown when `delete` is enabled, while retaining `state.json` as a
-   last-known deployment snapshot and post-mortem artifact.
+5. optional provider teardown when `delete` is enabled, while retaining `state.json` as a last-known deployment snapshot and post-mortem artifact.
 
 ### Primary code surfaces
 
@@ -250,22 +221,13 @@ This is a cross-cutting runtime concern rather than a separately requested
 ### Operational success evidence
 
 1. the lock and persistent `state.json` are present and have matching `resume_contract` hashes,
-2. resume is requested only by `run.targets` that omit infrastructure and rejects legacy,
-   malformed, incompatible, or currently unreachable state cleanly,
+2. resume is requested only by `run.targets` that omit infrastructure and rejects legacy, malformed, incompatible, or currently unreachable state cleanly,
 3. final artifact/log locations are discoverable,
-4. SSH preflight failure preserves `state.json` and occurs before Ansible, software,
-   application, or new phase-state saves,
-5. QEMU E2E success classification first binds `state.json` to the current run by requiring its
-   timezone-aware save timestamp not to predate the freshly written experiment lock, then checks
-   that teardown leaves no expected owner-scoped domains behind,
+4. SSH preflight failure preserves `state.json` and occurs before Ansible, software, application, or new phase-state saves,
+5. QEMU E2E success classification first binds `state.json` to the current run by requiring its timezone-aware save timestamp not to predate the freshly written experiment lock, then checks that teardown leaves no expected owner-scoped domains behind,
 6. benchmark smoke reports a stable `teardown_failure` when retained QEMU domains remain after a delete-on-exit application leg.
 
-The presence of `state.json` does not assert that infrastructure currently exists. It remains
-available after successful or failed teardown. A later explicit resume is currently supported only
-for QEMU, and may proceed only when all recorded guests are reachable. AWS, GCP, and bare-metal
-resume paths fail closed until their retained-provider lifecycle is supported and verified.
-Bare-metal remains release-unsupported independently of resume handling. The SSH marker proves
-authenticated command execution but does not provide stronger guest identity attestation.
+The presence of `state.json` does not assert that infrastructure currently exists. It remains available after successful or failed teardown. A later explicit resume is currently supported only for QEMU, and may proceed only when all recorded guests are reachable. AWS, GCP, and bare-metal resume paths fail closed until their retained-provider lifecycle is supported and verified. Bare-metal remains release-unsupported independently of resume handling. The SSH marker proves authenticated command execution but does not provide stronger guest identity attestation.
 
 ## 8. Mapping To `run.targets`
 
@@ -275,8 +237,7 @@ Current mapping:
 
 1. `infrastructure` -> phases 0, 1, and 4
 2. `software` -> phases 0, 1 or QEMU resume-from-1, 2, and 4
-3. `application` -> phases 0, 1 or QEMU resume-from-1, 2 or QEMU resume-from-2,
-   3, and 4
+3. `application` -> phases 0, 1 or QEMU resume-from-1, 2 or QEMU resume-from-2, 3, and 4
 
 Current runtime note:
 
@@ -286,24 +247,17 @@ Current runtime note:
 
 ## 9. Operational Testing Implications
 
-The runtime pipeline should be tested at phase boundaries, not just by final
-pass/fail output.
+The runtime pipeline should be tested at phase boundaries, not just by final pass/fail output.
 
 Minimum assertions per phase:
 
 1. Phase 0: parser succeeds or fails with the expected invariant error.
-2. Phase 1: state file, SSH/IP materialization, and optional network artifacts
-   exist and pass the structured netperf verifier when network validation is
-   enabled.
+2. Phase 1: state file, SSH/IP materialization, and optional network artifacts exist and pass the structured netperf verifier when network validation is enabled.
 3. Phase 2: centralized software plan executes and state advances to `software`.
-4. Phase 3: benchmark artifacts and metrics are emitted, with runner-visible
-   functional markers, stdout metric-table evidence, and structured metric-artifact
-   sanity checks on the resumed K8s benchmark smoke path.
-5. Phase 4: lock/state resume contracts match, explicit resume passes all-guest reachability, and
-   teardown classification behaves consistently.
+4. Phase 3: benchmark artifacts and metrics are emitted, with runner-visible functional markers, stdout metric-table evidence, and structured metric-artifact sanity checks on the resumed K8s benchmark smoke path.
+5. Phase 4: lock/state resume contracts match, explicit resume passes all-guest reachability, and teardown classification behaves consistently.
 
-Use `docs/operational_testing_strategy.md` for the test strategy that sits on
-top of this phase model.
+Use `docs/operational_testing_strategy.md` for the test strategy that sits on top of this phase model.
 
 Current lightweight smoke baseline:
 
@@ -321,5 +275,4 @@ Preferred operational shape for the Kubernetes path:
 2. infrastructure deployment and verification,
 3. resume into software deployment and verification on the same VMs,
 4. resume into benchmark execution on the same VMs,
-5. teardown only after the final phase, while retaining logs, lockfiles, and the last-known state
-   snapshot.
+5. teardown only after the final phase, while retaining logs, lockfiles, and the last-known state snapshot.

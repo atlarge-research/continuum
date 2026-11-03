@@ -1,10 +1,5 @@
-# Application: Empty
-This application is used to benchmark the control plane of a resource manager. It only consists of a sleep, and print statements to indicate the start and end of the application.
+# Application: Empty with Kata
 
-## How to use
-If you just want to use the application, ignore this folder, and use the following Docker containers from DockerHub:
+Use the [Kata guide](../../docs/kube_kata_on_continuum.md) for the supported workflow and its prerequisites. The shared purpose of the sleep-based control-plane benchmark is described in the [Empty application README](../empty/README.md).
 
-- redplanet00/kubeedge-applications:empty
-
-## Building and updating
-If you want to update the application, you are free to do so. Instructions on how to build the docker containers can be found in the `docker.sh` files present in the combined, publisher, and subscriber folders.
+This directory contains the Kata-specific benchmark integration. Its image build script is [src/docker.sh](src/docker.sh); the shared description does not establish support for additional runtime or image combinations.

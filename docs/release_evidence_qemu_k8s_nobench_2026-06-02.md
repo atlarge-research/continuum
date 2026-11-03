@@ -2,17 +2,11 @@
 
 ## 1. Scope
 
-This snapshot records VM-backed evidence for old-main QEMU parity row
-`P-QEMU-09`, derived from
-`configuration/tests/qemu/09_kubernetes-nobench.cfg`.
+This snapshot records VM-backed evidence for old-main QEMU parity row `P-QEMU-09`, derived from `configuration/tests/qemu/09_kubernetes-nobench.cfg`.
 
-Exact release support boundaries are tracked in
-`docs/release_certification_matrix.md`.
+Exact release support boundaries are tracked in `docs/release_certification_matrix.md`.
 
-It covers QEMU infrastructure, Kubernetes software installation, endpoint
-runtime placement required by the rework selector contract, and the
-observability addon. It does not certify the remaining QEMU application,
-KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
+It covers QEMU infrastructure, Kubernetes software installation, endpoint runtime placement required by the rework selector contract, and the observability addon. It does not certify the remaining QEMU application, KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
 
 ## 2. Source And Runner Context
 
@@ -40,8 +34,7 @@ KubeEdge, Mist, endpoint-only application, or OpenFaaS rows.
 | Result summary path | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/test_results/test_results_2026-06-02_18-37-06.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_k8s_nobench_parity/.continuum/` |
 
-Before the final passing execution, the dedicated repo was synced from the live
-checkout and verified:
+Before the final passing execution, the dedicated repo was synced from the live checkout and verified:
 
 1. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
 2. `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated`
@@ -53,28 +46,16 @@ checkout and verified:
 | --- | --- | --- |
 | `P-QEMU-09` | `configuration/tests/qemu/09_kubernetes-nobench.cfg` | `configs/experiments/parity/qemu_k8s_nobench/09_kubernetes_nobench.yaml` |
 
-The rework YAML profile is
-`configs/profiles/software/k8s-observability-endpoint-runtime.yaml`.
+The rework YAML profile is `configs/profiles/software/k8s-observability-endpoint-runtime.yaml`.
 
-The profile includes `endpoint_runtime` because the reworked selector contract
-requires endpoint resources in a software-phase run to have an endpoint runtime
-module placement. The old `.cfg` expressed this row as
-`resource_manager_only = True` with endpoint nodes and `observability = True`.
+The profile includes `endpoint_runtime` because the reworked selector contract requires endpoint resources in a software-phase run to have an endpoint runtime module placement. The old `.cfg` expressed this row as `resource_manager_only = True` with endpoint nodes and `observability = True`.
 
 ## 4. Defects Exposed Before Certification
 
 The row initially failed twice before the earlier 2026-05-31 certification run:
 
-1. Endpoint base-image installation reused
-   `playbooks/resource_manager/endpoint_install.yml`, whose host pattern also
-   targeted live endpoint VMs. During base-image creation those VMs were not
-   reachable yet. The fix split base-image endpoint preparation into
-   `playbooks/resource_manager/endpoint_base_install.yml` and kept
-   `endpoint_install.yml` scoped to live `endpoints`.
-2. The observability role applied `/kube-prometheus/...` manifests without
-   ensuring the kube-prometheus checkout existed. After adding a pinned
-   `release-0.13` checkout, client-side CRD apply failed on annotation-size
-   limits. The fix uses server-side apply for the setup manifests.
+1. Endpoint base-image installation reused `playbooks/resource_manager/endpoint_install.yml`, whose host pattern also targeted live endpoint VMs. During base-image creation those VMs were not reachable yet. The fix split base-image endpoint preparation into `playbooks/resource_manager/endpoint_base_install.yml` and kept `endpoint_install.yml` scoped to live `endpoints`.
+2. The observability role applied `/kube-prometheus/...` manifests without ensuring the kube-prometheus checkout existed. After adding a pinned `release-0.13` checkout, client-side CRD apply failed on annotation-size limits. The fix uses server-side apply for the setup manifests.
 
 These fixes remain part of the evidence scope for this row.
 
@@ -98,9 +79,6 @@ Result summary:
 
 ## 6. Certification Result
 
-`P-QEMU-09` is certified for the current rework branch and local QEMU/libvirt
-runner.
+`P-QEMU-09` is certified for the current rework branch and local QEMU/libvirt runner.
 
-If QEMU infrastructure, Kubernetes software planning, endpoint-runtime base/live
-installation, observability role behavior, or this YAML parity config changes
-before publication, rerun `qemu_k8s_nobench_parity`.
+If QEMU infrastructure, Kubernetes software planning, endpoint-runtime base/live installation, observability role behavior, or this YAML parity config changes before publication, rerun `qemu_k8s_nobench_parity`.

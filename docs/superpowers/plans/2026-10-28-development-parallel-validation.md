@@ -1,18 +1,10 @@
 # Development-only two-host isolation pilot — approval draft
 
-Recommendation: use the existing node4 runner plus node5, one workflow per host,
-in a reserved window. This needs no Continuum core/wrapper/scheduler change.
-Proceed only after independent amendment review and explicit user approval of
-the allocations, own-directory preparation, dependency installation into a new
-node5 venv, and the concurrent pilot. Serial work remains the fallback.
+Recommendation: use the existing node4 runner plus node5, one workflow per host, in a reserved window. This needs no Continuum core/wrapper/scheduler change. Proceed only after independent amendment review and explicit user approval of the allocations, own-directory preparation, dependency installation into a new node5 venv, and the concurrent pilot. Serial work remains the fallback.
 
 ## Survey facts (2026-10-28 13:00–13:04 UTC)
 
-Normal-user read-only SSH surveyed node1,node2,node3,node5 serially. All have
-KVM read/write access and qemu:///system access. All have br0 on the same
-192.168.0.0/16, host addresses .1.101/.102/.103/.105, gateway 192.168.1.99.
-This is a shared L2 network: disjoint physical hosts alone do not prevent IP
-collisions. Cached neighbours are evidence of occupation, not proof of vacancy.
+Normal-user read-only SSH surveyed node1,node2,node3,node5 serially. All have KVM read/write access and qemu:///system access. All have br0 on the same 192.168.0.0/16, host addresses .1.101/.102/.103/.105, gateway 192.168.1.99. This is a shared L2 network: disjoint physical hosts alone do not prevent IP collisions. Cached neighbours are evidence of occupation, not proof of vacancy.
 
 | Host | Existing domains | Native Python / checked own venvs | Large canonical own root; available space |
 | --- | --- | --- | --- |
@@ -21,26 +13,11 @@ collisions. Cached neighbours are evidence of occupation, not proof of vacancy.
 | node3 | endpoint1/2/3_matthijs running, six vCPUs; four fnsr20261002 domains shutoff | expected runner venv absent; not a candidate | /mnt/sdb/matthijs; 1.25 TiB |
 | node5 | four running cont-n5-* guests, 16 vCPUs/64 GiB configured RAM; no *_matthijs domain | native 3.8.10; no checked own venv; no ansible-playbook in PATH | /mnt/sdc/matthijs; 1.18 TiB |
 
-Node1/node3/node5 report 20 logical CPUs; node2 reports 40. All have about
-251 GiB RAM. Node5 had
-232 GiB available RAM. Existing VM CPU allocations mean shared-host contention
-is real; the proposed pilot adds only one 2-vCPU/2-GiB guest per host, with no
-CPU pinning or timing acceptance claim. No other users' workload is stopped.
+Node1/node3/node5 report 20 logical CPUs; node2 reports 40. All have about 251 GiB RAM. Node5 had 232 GiB available RAM. Existing VM CPU allocations mean shared-host contention is real; the proposed pilot adds only one 2-vCPU/2-GiB guest per host, with no CPU pinning or timing acceptance claim. No other users' workload is stopped.
 
-The old checkouts are unsuitable as candidates: node1/node2 at b2bac2c,
-node3 at b5b0262, node5 at 59c3ce0; node2 and node5 have tracked modifications.
-Leave all of them untouched. The user does not need their old revisions changed.
-Node1 and node3 /mnt/sdc are aliases of /mnt/sdb, measured directly.
+The old checkouts are unsuitable as candidates: node1/node2 at b2bac2c, node3 at b5b0262, node5 at 59c3ce0; node2 and node5 have tracked modifications. Leave all of them untouched. The user does not need their old revisions changed. Node1 and node3 /mnt/sdc are aliases of /mnt/sdb, measured directly.
 
-Node4 is the existing authorized runner with the pinned 3.8.10/core2.13.2
-environment. Coordinator reports A-managed guests absent and its unrelated
-domains protected. Node4 is available only when packet B has no running guests:
-before B runtime in an explicitly reserved window, or after B's final teardown.
-The infra-only pilot uses the reviewed packet-A source pinned below, independently
-of B's writer checkout. Refresh node4's own controller processes, domain states,
-CPU allocation/load, available RAM, filesystem capacity and address inventory
-immediately before preparation; require capacity for the bounded pilot without
-stopping existing workloads. Do not interrupt B to gain a pilot window.
+Node4 is the existing authorized runner with the pinned 3.8.10/core2.13.2 environment. Coordinator reports A-managed guests absent and its unrelated domains protected. Node4 is available only when packet B has no running guests: before B runtime in an explicitly reserved window, or after B's final teardown. The infra-only pilot uses the reviewed packet-A source pinned below, independently of B's writer checkout. Refresh node4's own controller processes, domain states, CPU allocation/load, available RAM, filesystem capacity and address inventory immediately before preparation; require capacity for the bounded pilot without stopping existing workloads. Do not interrupt B to gain a pilot window.
 
 ## Fixed allocation proposed for approval
 
@@ -49,98 +26,24 @@ stopping existing workloads. Do not interrupt B to gain a pilot window.
 | A | matthijs@node4, local only | 192.168.180.2–192.168.180.251 | 192.168.181.2–192.168.181.251 | /mnt/sdc/matthijs/continuum_parallel_pilot/slot-a |
 | B | matthijs@node5, local only | 192.168.182.2–192.168.182.251 | 192.168.183.2–192.168.183.251 | /mnt/sdc/matthijs/continuum_parallel_pilot/slot-b |
 
-These four middle octets are inside the measured br0 subnet and absent from all
-four surveyed address/neighbour/DHCP records. They are proposed reservations,
-not certified-free pools. Approval must reserve them for this pilot on the shared
-LAN; prelaunch refreshed host inventories and known workload allocations must
-show no conflict. Unknown reservation status or a conflicting address blocks
-launch. No active address probe was performed or authorized during this survey.
-Each pilot actually uses only workload .2 and base .2; reserving complete windows
-prevents later count growth from silently colliding. Reject any plan crossing
-.251 or using any other middle octet. Keep each slot's pools stable on reuse.
+These four middle octets are inside the measured br0 subnet and absent from all four surveyed address/neighbour/DHCP records. They are proposed reservations, not certified-free pools. Approval must reserve them for this pilot on the shared LAN; prelaunch refreshed host inventories and known workload allocations must show no conflict. Unknown reservation status or a conflicting address blocks launch. No active address probe was performed or authorized during this survey. Each pilot actually uses only workload .2 and base .2; reserving complete windows prevents later count growth from silently colliding. Reject any plan crossing .251 or using any other middle octet. Keep each slot's pools stable on reuse.
 
-Node3 remains reserved for required final OpenFaaS. It is never an overflow host
-or cleanup target for this pilot. Its three endpoints and the protected unrelated
-domains on node3/node4 remain intact. Node1/node2 are conditional fallback hosts
-only: their system Python/Ansible differ from the pinned environment, so do not
-engineer an interpreter installation now. If node5 cannot be prepared with its
-native Python and user-owned venv, defer concurrency and continue serially on
-node4. Replacing node5 with node1/node2 requires a separately reviewed environment
-attribution amendment and fresh allocation approval.
+Node3 remains reserved for required final OpenFaaS. It is never an overflow host or cleanup target for this pilot. Its three endpoints and the protected unrelated domains on node3/node4 remain intact. Node1/node2 are conditional fallback hosts only: their system Python/Ansible differ from the pinned environment, so do not engineer an interpreter installation now. If node5 cannot be prepared with its native Python and user-owned venv, defer concurrency and continue serially on node4. Replacing node5 with node1/node2 requires a separately reviewed environment attribution amendment and fresh allocation approval.
 
 ## Small preparation included in the requested approval
 
-1. Pin reviewed packet-A commit
-   C=445270eed59e3808a408c40f9826b74617937f44 for this infra-only pilot.
-   Export a Git bundle containing C from the integration repo
-   into private pilot evidence; record bundle SHA256. Transfer only this bundle,
-   pilot input and pinned dependency freeze/wheels to new own directories on
-   node5. No copies of old dirty checkouts, caches, secrets or VM disks.
-2. Clone the same hash-verified bundle into each new ROOT/source, detach at C,
-   verify exact HEAD C and empty tracked/untracked status. Verify a shared tracked
-   file SHA256 manifest and required submodule absence/state. Make each source
-   snapshot read-only (preserve executable bits); leave integration checkout and
-   all old checkouts untouched. Set GIT_OPTIONAL_LOCKS=0. Verify tracked manifest
-   and clean status again after each round. Neither snapshot is a writer checkout.
-3. Use the captured node4 receipt and freeze at
-   /tmp/continuum-parallel-pilot-pinned-env/{receipt.json,freeze.txt}.
-   Freeze SHA256:
-   a00adebafbd6e1fd9e71b5f6800a3deed7f17e64623fbf376c21261f13ad9c50.
-   Receipt binds /home/matthijs/venvs/continuum/bin/python3 to
-   /usr/bin/python3.8, Python3.8.10 and core2.13.2. Refresh attribution before
-   preparation and require this exact freeze hash/distribution set. Its 74
-   syntactically pinned lines include pkg-resources==0.0.0, whose artifact
-   provenance is nonstandard and unverified. The receipt's zero nonstandard
-   requirement-line count is syntax accounting, not wheel availability/provenance.
-4. On node5 only, create new ROOT/venv with native /usr/bin/python3 (3.8.10).
-   Before considering pkg-resources==0.0.0 fulfilled, verify native venv seeding
-   supplied the same distribution and compare its actual source files and
-   distribution metadata bytes against private hash manifests captured from the
-   attributed node4 venv. A matching name/version or import alone is insufficient.
-   Do not fabricate metadata, copy in guessed metadata, silently filter the freeze,
-   substitute another artifact, or alter either environment to conceal a mismatch.
-   If the native seed is absent, provenance cannot be established, or source/
-   metadata bytes differ, stop preparation/pilot and continue serially; no
-   interpreter engineering or privilege expansion is authorized.
-   Once that gate passes, install the unchanged reviewed exact node4 freeze into
-   the new venv, using pinned/hash-recorded verified package artifacts; the
-   already verified native pkg-resources seed must satisfy its unchanged line.
-   No upgrades to
-   node4 env, global pip, apt, privileges, helpers or other users' software.
-   Confirm identical full distribution set, Python3.8.10 and core2.13.2, and
-   record package/wheel hashes. If native venv/ensurepip or required ordinary host
-   tools are unavailable, stop; no host-package repair is implied.
-5. Use ROOT/run/.continuum for locks/state/base and guest images/SSH inventory/
-   generated tmp, ROOT/results for JSON/stdout/stderr/metadata, ROOT/cache for
-   XDG cache, ROOT/mplconfig, ROOT/temp for Python temporary inputs,
-   ROOT/ansible-cp for Ansible SSH control sockets, and ROOT/evidence for
-   manifests/logs. The physical HOME temp exception below is explicitly retained.
-   Roots must be new owned canonical real dirs
-   with private evidence modes. No symlinks/shared writable cache, inherited base
-   QCOW2, backing images outside ROOT or previous results. Base image IP settings
-   persist inside images: never point one slot at the other's cache or move an
-   existing cache to a different middle-base pool.
-6. Copy the existing infra_one_vm experiment to ROOT/control/pilot.yaml and change
-   only use.environment from local-qemu to local-qemu-delete-on-exit. Keep
-   software:none, infrastructure target, one2core/2GiB VM and no cpu pinning.
-   This host-local input is identical on both hosts; record its SHA256. Profiles
-   resolve from the immutable snapshot. No repo config edits are needed.
+1. Pin reviewed packet-A commit C=445270eed59e3808a408c40f9826b74617937f44 for this infra-only pilot. Export a Git bundle containing C from the integration repo into private pilot evidence; record bundle SHA256. Transfer only this bundle, pilot input and pinned dependency freeze/wheels to new own directories on node5. No copies of old dirty checkouts, caches, secrets or VM disks.
+2. Clone the same hash-verified bundle into each new ROOT/source, detach at C, verify exact HEAD C and empty tracked/untracked status. Verify a shared tracked file SHA256 manifest and required submodule absence/state. Make each source snapshot read-only (preserve executable bits); leave integration checkout and all old checkouts untouched. Set GIT_OPTIONAL_LOCKS=0. Verify tracked manifest and clean status again after each round. Neither snapshot is a writer checkout.
+3. Use the captured node4 receipt and freeze at /tmp/continuum-parallel-pilot-pinned-env/{receipt.json,freeze.txt}. Freeze SHA256: a00adebafbd6e1fd9e71b5f6800a3deed7f17e64623fbf376c21261f13ad9c50. Receipt binds /home/matthijs/venvs/continuum/bin/python3 to /usr/bin/python3.8, Python3.8.10 and core2.13.2. Refresh attribution before preparation and require this exact freeze hash/distribution set. Its 74 syntactically pinned lines include pkg-resources==0.0.0, whose artifact provenance is nonstandard and unverified. The receipt's zero nonstandard requirement-line count is syntax accounting, not wheel availability/provenance.
+4. On node5 only, create new ROOT/venv with native /usr/bin/python3 (3.8.10). Before considering pkg-resources==0.0.0 fulfilled, verify native venv seeding supplied the same distribution and compare its actual source files and distribution metadata bytes against private hash manifests captured from the attributed node4 venv. A matching name/version or import alone is insufficient. Do not fabricate metadata, copy in guessed metadata, silently filter the freeze, substitute another artifact, or alter either environment to conceal a mismatch. If the native seed is absent, provenance cannot be established, or source/ metadata bytes differ, stop preparation/pilot and continue serially; no interpreter engineering or privilege expansion is authorized. Once that gate passes, install the unchanged reviewed exact node4 freeze into the new venv, using pinned/hash-recorded verified package artifacts; the already verified native pkg-resources seed must satisfy its unchanged line. No upgrades to node4 env, global pip, apt, privileges, helpers or other users' software. Confirm identical full distribution set, Python3.8.10 and core2.13.2, and record package/wheel hashes. If native venv/ensurepip or required ordinary host tools are unavailable, stop; no host-package repair is implied.
+5. Use ROOT/run/.continuum for locks/state/base and guest images/SSH inventory/ generated tmp, ROOT/results for JSON/stdout/stderr/metadata, ROOT/cache for XDG cache, ROOT/mplconfig, ROOT/temp for Python temporary inputs, ROOT/ansible-cp for Ansible SSH control sockets, and ROOT/evidence for manifests/logs. The physical HOME temp exception below is explicitly retained. Roots must be new owned canonical real dirs with private evidence modes. No symlinks/shared writable cache, inherited base QCOW2, backing images outside ROOT or previous results. Base image IP settings persist inside images: never point one slot at the other's cache or move an existing cache to a different middle-base pool.
+6. Copy the existing infra_one_vm experiment to ROOT/control/pilot.yaml and change only use.environment from local-qemu to local-qemu-delete-on-exit. Keep software:none, infrastructure target, one2core/2GiB VM and no cpu pinning. This host-local input is identical on both hosts; record its SHA256. Profiles resolve from the immutable snapshot. No repo config edits are needed.
 
 ## Collision guards and exact execution shape
 
-Before each round, require explicit hostname match, uid matthijs, canonical HOME
-/home/matthijs (node5 login supplies a trailing slash, so set canonical HOME in
-the cleared child environment), own canonical ROOT, no own controller outside
-the selected pilot, no packet-B guests, and zero domains matching the actual
-QEMU startup cleanup pattern `\w*_matthijs`. QEMU names are username scoped
-(cloud_controller_matthijs/base0_matthijs), not base-root scoped; one workflow
-per physical host is mandatory. Inventory every unrelated domain's UUID/state,
-inactive XML hash and visible disk/backing paths before/after. Do not alter the
-existing four cont-n5-* guests or any domain to clear this guard.
+Before each round, require explicit hostname match, uid matthijs, canonical HOME /home/matthijs (node5 login supplies a trailing slash, so set canonical HOME in the cleared child environment), own canonical ROOT, no own controller outside the selected pilot, no packet-B guests, and zero domains matching the actual QEMU startup cleanup pattern `\w*_matthijs`. QEMU names are username scoped (cloud_controller_matthijs/base0_matthijs), not base-root scoped; one workflow per physical host is mandatory. Inventory every unrelated domain's UUID/state, inactive XML hash and visible disk/backing paths before/after. Do not alter the existing four cont-n5-* guests or any domain to clear this guard.
 
-On each selected host, from ROOT/source, the approved launch uses existing raw
-runner flags (the shell wrapper does not forward these flags). Substitute only
-the table's root/IPs and the attributed Python path below:
+On each selected host, from ROOT/source, the approved launch uses existing raw runner flags (the shell wrapper does not forward these flags). Substitute only the table's root/IPs and the attributed Python path below:
 
 ```sh
 env -i HOME=/home/matthijs USER=matthijs LOGNAME=matthijs \
@@ -158,105 +61,26 @@ env -i HOME=/home/matthijs USER=matthijs LOGNAME=matthijs \
   --middle-ip-base "$BASE_MIDDLE" --external-physical-machines '' --stop-on-failure
 ```
 
-For A: ROOT=/mnt/sdc/matthijs/continuum_parallel_pilot/slot-a,
-WORKLOAD_MIDDLE=180, BASE_MIDDLE=181,
-PYTHON=/home/matthijs/venvs/continuum/bin/python3,
-VENV_BIN=/home/matthijs/venvs/continuum/bin.
-For B: ROOT=/mnt/sdc/matthijs/continuum_parallel_pilot/slot-b,
-WORKLOAD_MIDDLE=182, BASE_MIDDLE=183,
-PYTHON=$ROOT/venv/bin/python3, VENV_BIN=$ROOT/venv/bin.
-All directories/log files are precreated normally after approval; log files0600.
-Before either VM launch, use the same cleared environment to run
-`scripts/test/run_tests.py --check-prereqs --suite smoke`; any failure stops the
-pilot without host-package or permission repair.
+For A: ROOT=/mnt/sdc/matthijs/continuum_parallel_pilot/slot-a, WORKLOAD_MIDDLE=180, BASE_MIDDLE=181, PYTHON=/home/matthijs/venvs/continuum/bin/python3, VENV_BIN=/home/matthijs/venvs/continuum/bin. For B: ROOT=/mnt/sdc/matthijs/continuum_parallel_pilot/slot-b, WORKLOAD_MIDDLE=182, BASE_MIDDLE=183, PYTHON=$ROOT/venv/bin/python3, VENV_BIN=$ROOT/venv/bin. All directories/log files are precreated normally after approval; log files0600. Before either VM launch, use the same cleared environment to run `scripts/test/run_tests.py --check-prereqs --suite smoke`; any failure stops the pilot without host-package or permission repair.
 
-Explicit empty --external-physical-machines bypasses runner auto-overflow to
-matthijs@node3. Verify resolved lock and inventory are local-only before accepting
-any result; reject a host reference outside the allocated singleton. Keep test
-config at the candidate's unchanged default: empty CLI override is decisive,
-and there is no need for an alternate scheduler/test config.
+Explicit empty --external-physical-machines bypasses runner auto-overflow to matthijs@node3. Verify resolved lock and inventory are local-only before accepting any result; reject a host reference outside the allocated singleton. Keep test config at the candidate's unchanged default: empty CLI override is decisive, and there is no need for an alternate scheduler/test config.
 
-AnsibleRunner pins local temp inside ROOT/run/.continuum/ansible/tmp, but hardsets
-remote_tmp to ~/.continuum-ansible-matthijs/tmp. Cold qemu_prepare_os uses the
-localhost physical-host inventory, so the exact physical temp path on BOTH node4
-and node5 is /home/matthijs/.continuum-ansible-matthijs/tmp. This lies outside ROOT.
-Before preparation, resolve that path/ancestors, require canonical own directories
-with no symlink/ownership collision, and capture a private baseline of any existing
-file contents/hashes and metadata (or explicit absence). One workflow per host
-and no other same-user controller are mandatory for this shared HOME temp path.
-Preserve all preexisting content; do not clean unrelated files, change permissions,
-or override core remote_tmp. If safe preservation cannot be shown, stop and remain
-serial. After each round require the preexisting file bytes/metadata unchanged;
-record any pilot-created temp remnants separately and preserve them for review.
-Guest remote_tmp uses the same home-relative name in each distinct isolated guest.
-Exported wrapper remote-tag variables do not override this core behavior.
+AnsibleRunner pins local temp inside ROOT/run/.continuum/ansible/tmp, but hardsets remote_tmp to ~/.continuum-ansible-matthijs/tmp. Cold qemu_prepare_os uses the localhost physical-host inventory, so the exact physical temp path on BOTH node4 and node5 is /home/matthijs/.continuum-ansible-matthijs/tmp. This lies outside ROOT. Before preparation, resolve that path/ancestors, require canonical own directories with no symlink/ownership collision, and capture a private baseline of any existing file contents/hashes and metadata (or explicit absence). One workflow per host and no other same-user controller are mandatory for this shared HOME temp path. Preserve all preexisting content; do not clean unrelated files, change permissions, or override core remote_tmp. If safe preservation cannot be shown, stop and remain serial. After each round require the preexisting file bytes/metadata unchanged; record any pilot-created temp remnants separately and preserve them for review. Guest remote_tmp uses the same home-relative name in each distinct isolated guest. Exported wrapper remote-tag variables do not override this core behavior.
 
-Direct framework SSH uses the base-scoped known_hosts. Ansible additionally needs
-the ANSIBLE_SSH_ARGS and ANSIBLE_SSH_CONTROL_PATH_DIR above: these confine its host
-key writes and multiplexing sockets to this slot. ANSIBLE_SSH_COMMON_ARGS alone
-is insufficient because generated inventory defines ansible_ssh_common_args with
-higher precedence. Before accepting either round, inspect effective SSH options
-and evidence that known-hosts/control sockets stayed at the exact allocated paths;
-require preexisting ~/.ssh/known_hosts and ~/.ansible/cp content unchanged.
+Direct framework SSH uses the base-scoped known_hosts. Ansible additionally needs the ANSIBLE_SSH_ARGS and ANSIBLE_SSH_CONTROL_PATH_DIR above: these confine its host key writes and multiplexing sockets to this slot. ANSIBLE_SSH_COMMON_ARGS alone is insufficient because generated inventory defines ansible_ssh_common_args with higher precedence. Before accepting either round, inspect effective SSH options and evidence that known-hosts/control sockets stayed at the exact allocated paths; require preexisting ~/.ssh/known_hosts and ~/.ansible/cp content unchanged.
 
-Launch exactly one operator session per host, near-simultaneously, with both
-controllers active and a recorded interval with a pilot domain active on both
-hosts. If cold builds fail to overlap, do not claim concurrent isolation; inspect
-and obtain a bounded timing adjustment instead of silently adding workload.
-After both first runs pass and finish teardown, repeat the same pair once with
-the same roots/pools/source to exercise warm base reuse; use round-2 log names.
-Do not introduce failure injection, broad pruning or additional suites.
+Launch exactly one operator session per host, near-simultaneously, with both controllers active and a recorded interval with a pilot domain active on both hosts. If cold builds fail to overlap, do not claim concurrent isolation; inspect and obtain a bounded timing adjustment instead of silently adding workload. After both first runs pass and finish teardown, repeat the same pair once with the same roots/pools/source to exercise warm base reuse; use round-2 log names. Do not introduce failure injection, broad pruning or additional suites.
 
 ## Measurable acceptance and stop conditions
 
-Require four successful runner executions (two cold, two warm), exit0, no timeout,
-new separate result entries and complete stdout/stderr/metadata/Ansible recaps;
-actual overlapping VM activity on both hosts; VM XML/MAC/address evidence agrees
-with each host's only expected workload/base IPs and disks/backing paths stay
-inside its own run root. Inspect both generated locks and state to prove exact
-same source, disjoint pools and singleton host placement.
+Require four successful runner executions (two cold, two warm), exit0, no timeout, new separate result entries and complete stdout/stderr/metadata/Ansible recaps; actual overlapping VM activity on both hosts; VM XML/MAC/address evidence agrees with each host's only expected workload/base IPs and disks/backing paths stay inside its own run root. Inspect both generated locks and state to prove exact same source, disjoint pools and singleton host placement.
 
-During each overlap, compare baseline unrelated domain UUID/state/inactive XML
-hashes, existing disk path/ownership metadata and domain sets; all must remain
-unchanged. At the end, built-in delete_on_exit must leave no active *_matthijs
-pilot domain on either host; unrelated guests stay in their baseline states.
-No guest cache may be borrowed cross-slot. Confirm no source bytes/status changed,
-results/cache/locks/control sockets and base-generated temp remain under each ROOT,
-and the disclosed physical HOME temp baseline is preserved. Require that no new
-node3 pilot domain or state appeared. Node3 retained endpoint UUID/state/inactive XML hashes must match
-the baseline. Preserve all pilot evidence and disks pending review; do not delete
-retained roots or failed state. No `prune-scenario` is needed.
+During each overlap, compare baseline unrelated domain UUID/state/inactive XML hashes, existing disk path/ownership metadata and domain sets; all must remain unchanged. At the end, built-in delete_on_exit must leave no active *_matthijs pilot domain on either host; unrelated guests stay in their baseline states. No guest cache may be borrowed cross-slot. Confirm no source bytes/status changed, results/cache/locks/control sockets and base-generated temp remain under each ROOT, and the disclosed physical HOME temp baseline is preserved. Require that no new node3 pilot domain or state appeared. Node3 retained endpoint UUID/state/inactive XML hashes must match the baseline. Preserve all pilot evidence and disks pending review; do not delete retained roots or failed state. No `prune-scenario` is needed.
 
-Any unresolved allocation collision, source/env mismatch, missing capability,
-unexpected domain/host/path, failed run or changed protected baseline stops the
-pilot; preserve evidence, diagnose and remain serial. A passing independently
-reviewed pilot enables only this fixed two-singleton-host development allocation.
-It does not authorize concurrent multi-host OpenFaaS, shared-host workflows,
-final-candidate acceptance or timing comparison. Final OpenFaaS stays last and
-uses its separately approved node3 workflow.
+Any unresolved allocation collision, source/env mismatch, missing capability, unexpected domain/host/path, failed run or changed protected baseline stops the pilot; preserve evidence, diagnose and remain serial. A passing independently reviewed pilot enables only this fixed two-singleton-host development allocation. It does not authorize concurrent multi-host OpenFaaS, shared-host workflows, final-candidate acceptance or timing comparison. Final OpenFaaS stays last and uses its separately approved node3 workflow.
 
 ## Evidence and approval boundary
 
-Exact reviewed survey plan/payload:
-/tmp/continuum-parallel-pilot-survey-plan.md and
-/tmp/continuum-parallel-pilot-survey.py.
-Full private first connected survey: /tmp/continuum-parallel-pilot-survey-network/.
-Node2 complete retry: /tmp/continuum-parallel-pilot-survey-node2-complete/.
-Supplemental native-Python/own-venv metadata:
-/tmp/continuum-parallel-pilot-env-survey/.
-Parsed convenience summary: /tmp/continuum-parallel-pilot-survey-summary.json.
-Pinned environment receipt/freeze: /tmp/continuum-parallel-pilot-pinned-env/.
-Initial sandbox-denied SSH logs/status remain separately under
-/tmp/continuum-parallel-pilot-node*.ssh-stderr and
-/tmp/continuum-parallel-pilot-survey-status.json.
+Exact reviewed survey plan/payload: /tmp/continuum-parallel-pilot-survey-plan.md and /tmp/continuum-parallel-pilot-survey.py. Full private first connected survey: /tmp/continuum-parallel-pilot-survey-network/. Node2 complete retry: /tmp/continuum-parallel-pilot-survey-node2-complete/. Supplemental native-Python/own-venv metadata: /tmp/continuum-parallel-pilot-env-survey/. Parsed convenience summary: /tmp/continuum-parallel-pilot-survey-summary.json. Pinned environment receipt/freeze: /tmp/continuum-parallel-pilot-pinned-env/. Initial sandbox-denied SSH logs/status remain separately under /tmp/continuum-parallel-pilot-node*.ssh-stderr and /tmp/continuum-parallel-pilot-survey-status.json.
 
-All actual host execution so far was read-only survey. No candidate copy, venv,
-dependency install, domain operation, allocation reservation or concurrent launch
-has occurred. C and freeze hash are now pinned; package artifact/native-seed byte
-provenance remains an explicit preparation gate, not an established fact.
-Coordinator must obtain independent scoped re-review of this revised draft, then
-ask for explicit approval of this bounded preparation/allocation/pilot before any
-such operation. After approved preparation, verify the exact artifact/native-seed
-manifest before either VM launch; a missing/mismatched manifest stops the pilot.
-If broader engineering becomes necessary, defer and continue the approved serial
-sequence.
+All actual host execution so far was read-only survey. No candidate copy, venv, dependency install, domain operation, allocation reservation or concurrent launch has occurred. C and freeze hash are now pinned; package artifact/native-seed byte provenance remains an explicit preparation gate, not an established fact. Coordinator must obtain independent scoped re-review of this revised draft, then ask for explicit approval of this bounded preparation/allocation/pilot before any such operation. After approved preparation, verify the exact artifact/native-seed manifest before either VM launch; a missing/mismatched manifest stops the pilot. If broader engineering becomes necessary, defer and continue the approved serial sequence.

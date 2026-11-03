@@ -2,14 +2,9 @@
 
 ## Scope
 
-This evidence certifies old-main parity row `P-QEMU-05` in
-`docs/release_certification_matrix.md`.
+This evidence certifies old-main parity row `P-QEMU-05` in `docs/release_certification_matrix.md`.
 
-It proves that the rework stack can provision the legacy P-QEMU-05-style local
-QEMU cloud/endpoint topology, complete the Kubernetes and endpoint-runtime
-software phases, run the image-classification application benchmark with
-netperf enabled, and emit both benchmark metric and network-validation
-artifacts.
+It proves that the rework stack can provision the legacy P-QEMU-05-style local QEMU cloud/endpoint topology, complete the Kubernetes and endpoint-runtime software phases, run the image-classification application benchmark with netperf enabled, and emit both benchmark metric and network-validation artifacts.
 
 ## Source And Command
 
@@ -33,9 +28,7 @@ artifacts.
 
 ## Result
 
-The clean-source run passed after cache-backed image parity preflights were
-added and the already-certified VM evidence set was refreshed on the same
-release-evidence source line:
+The clean-source run passed after cache-backed image parity preflights were added and the already-certified VM evidence set was refreshed on the same release-evidence source line:
 
 | Config | Result | Duration | Success Reason |
 | --- | --- | --- | --- |
@@ -57,18 +50,12 @@ Benchmark metric artifact:
 
 This row may be described as:
 
-1. QEMU can provision the P-QEMU-05-style topology of two cloud VMs and two
-   endpoint VMs with 4g network emulation enabled.
+1. QEMU can provision the P-QEMU-05-style topology of two cloud VMs and two endpoint VMs with 4g network emulation enabled.
 2. The Kubernetes software phase completes on the cloud resources.
-3. The endpoint runtime module is present for endpoint resources in the same
-   software phase.
-4. The image-classification application runs on the Kubernetes/endpoint
-   topology and emits benchmark metric artifacts.
-5. The netperf/network-validation artifact is emitted for the configured
-   network-emulated path.
-6. The runner observes the standard release artifacts: SSH output, experiment
-   lock, state file, `phase_completed = application`, matching resume contract,
-   network-validation NDJSON, and benchmark metrics manifest.
+3. The endpoint runtime module is present for endpoint resources in the same software phase.
+4. The image-classification application runs on the Kubernetes/endpoint topology and emits benchmark metric artifacts.
+5. The netperf/network-validation artifact is emitted for the configured network-emulated path.
+6. The runner observes the standard release artifacts: SSH output, experiment lock, state file, `phase_completed = application`, matching resume contract, network-validation NDJSON, and benchmark metrics manifest.
 
 ## Limitations
 
@@ -78,7 +65,5 @@ This evidence does not certify:
 2. broad Kubernetes version compatibility beyond the configured profile,
 3. forced image-prefetch as a public runner requirement for `continuum-smoke`,
 4. OpenFaaS image-classification behavior,
-5. endpoint-only image/runtime parity row `P-QEMU-08`, which is certified
-   separately by `docs/release_evidence_qemu_endpoint_image_2026-06-02.md`,
-6. broader image-classification parameter sweeps beyond the configured
-   frequency, duration, and resource values.
+5. endpoint-only image/runtime parity row `P-QEMU-08`, which is certified separately by `docs/release_evidence_qemu_endpoint_image_2026-06-02.md`,
+6. broader image-classification parameter sweeps beyond the configured frequency, duration, and resource values.

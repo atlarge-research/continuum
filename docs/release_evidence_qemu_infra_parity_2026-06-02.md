@@ -2,15 +2,11 @@
 
 ## 1. Scope
 
-This snapshot records VM-backed evidence for the first four old-main QEMU
-infrastructure-only rows from `configuration/tests/qemu/`.
+This snapshot records VM-backed evidence for the first four old-main QEMU infrastructure-only rows from `configuration/tests/qemu/`.
 
-Exact release support boundaries are tracked in
-`docs/release_certification_matrix.md`.
+Exact release support boundaries are tracked in `docs/release_certification_matrix.md`.
 
-It covers only QEMU infrastructure/topology parity. It does not certify the
-remaining old-main QEMU software rows for Kubernetes image/build, KubeEdge,
-Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
+It covers only QEMU infrastructure/topology parity. It does not certify the remaining old-main QEMU software rows for Kubernetes image/build, KubeEdge, Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
 
 ## 2. Source And Runner Context
 
@@ -36,8 +32,7 @@ Mist, endpoint image/runtime, Kubernetes without benchmark, or OpenFaaS.
 | Result summary path | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/test_results/test_results_2026-06-02_17-50-07.json` |
 | Artifact root | `/mnt/sdc/continuum_smoke/qemu_infra_parity/.continuum/` |
 
-Before execution, the dedicated repo was synced from the live checkout and
-verified:
+Before execution, the dedicated repo was synced from the live checkout and verified:
 
 1. `sudo -n /usr/local/bin/continuum-hostctl sync-repo`
 2. `sudo -n /usr/local/bin/continuum-hostctl install-wrapper dedicated`
@@ -52,15 +47,12 @@ verified:
 | `P-QEMU-03` | `configuration/tests/qemu/03_infraonly-endpoint.cfg` | `configs/experiments/parity/qemu/03_infraonly_endpoint.yaml` |
 | `P-QEMU-04` | `configuration/tests/qemu/04_infraonly-all.cfg` | `configs/experiments/parity/qemu/04_infraonly_all.yaml` |
 
-The edge-only and endpoint-only rows require no-op software profiles that target
-the available cluster because the reworked parser validates module selectors
-even when only the infrastructure phase is requested:
+The edge-only and endpoint-only rows require no-op software profiles that target the available cluster because the reworked parser validates module selectors even when only the infrastructure phase is requested:
 
 1. `configs/profiles/software/none-edge.yaml`
 2. `configs/profiles/software/none-endpoint.yaml`
 
-The edge-only row uses `configs/profiles/environment/local-qemu-cpupin.yaml` to
-preserve the old `cpu_pin = True` provider intent.
+The edge-only row uses `configs/profiles/environment/local-qemu-cpupin.yaml` to preserve the old `cpu_pin = True` provider intent.
 
 ## 4. VM-Backed Run
 
@@ -87,14 +79,11 @@ Total suite time: 460.6s.
 
 ## 5. Certification Result
 
-The following old-main parity rows are certified for the current rework branch
-and local QEMU/libvirt runner:
+The following old-main parity rows are certified for the current rework branch and local QEMU/libvirt runner:
 
 1. `P-QEMU-01`
 2. `P-QEMU-02`
 3. `P-QEMU-03`
 4. `P-QEMU-04`
 
-If QEMU infrastructure runtime, parser selector behavior, provider profiles, or
-these YAML parity configs change before publication, rerun
-`qemu_infra_parity`.
+If QEMU infrastructure runtime, parser selector behavior, provider profiles, or these YAML parity configs change before publication, rerun `qemu_infra_parity`.

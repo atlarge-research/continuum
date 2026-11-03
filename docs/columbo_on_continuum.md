@@ -1,30 +1,16 @@
 # Columbo On Continuum
 
-Approved scope is `docs/rework_milestone_release_plan.md`: the minimal `call_1`
-full control-plane trace slice, not all paper figures/sweeps. Current factual
-row status is `docs/release_certification_matrix.md`. Use the normal-user
-host exports/procedure in `docs/smoke_runner_isolation.md`; dated results below
-remain historical and do not certify the migrated candidate.
+Approved scope is `docs/rework_milestone_release_plan.md`: the minimal `call_1` full control-plane trace slice, not all paper figures/sweeps. Current factual row status is `docs/release_certification_matrix.md`. Use the normal-user host exports/procedure in `docs/smoke_runner_isolation.md`; dated results below remain historical and do not certify the migrated candidate.
 
 ## Purpose
 
-This document explains how the Columbo paper functionality is represented on
-the reworked Continuum stack. Columbo is the ICPE 2025 paper "Columbo: A
-Reasoning Framework for Kubernetes' Configuration Space". The paper studies
-Kubernetes workload deployment, measures control-plane pipeline stages, and
-uses those measurements to reason about configuration bottlenecks.
+This document explains how the Columbo paper functionality is represented on the reworked Continuum stack. Columbo is the ICPE 2025 paper "Columbo: A Reasoning Framework for Kubernetes' Configuration Space". The paper studies Kubernetes workload deployment, measures control-plane pipeline stages, and uses those measurements to reason about configuration bottlenecks.
 
-For Continuum, the important engineering lesson is that this research workflow
-should be implemented as a composition of modules, profiles, experiments, and
-evidence checks. It should not require Columbo-specific code in the Continuum
-core.
+For Continuum, the important engineering lesson is that this research workflow should be implemented as a composition of modules, profiles, experiments, and evidence checks. It should not require Columbo-specific code in the Continuum core.
 
 ## Module Mapping
 
-The first certified Columbo slice is intentionally small and maps the legacy
-configuration
-`configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg`
-to structured YAML:
+The first certified Columbo slice is intentionally small and maps the legacy configuration `configuration/experiment_control/microbenchmark/qemu/deployment/call_1.cfg` to structured YAML:
 
 | Paper/Experiment Concern | Continuum Surface |
 | --- | --- |
@@ -35,10 +21,7 @@ to structured YAML:
 | Reproducible experiment declaration | `configs/experiments/parity/qemu_kubecontrol_empty/01_kubecontrol_empty_call.yaml` |
 | Retained release evidence | suite and wrapper scenario `qemu_kubecontrol_empty_parity` |
 
-The YAML experiment keeps the exact local-QEMU shape of the legacy `call_1`
-configuration: two cloud VMs, 8 cores per VM, 32 GB memory per VM, CPU pinning,
-Kubernetes `v1.27.0`, cached worker image setup, and one `empty` application
-worker.
+The YAML experiment keeps the exact local-QEMU shape of the legacy `call_1` configuration: two cloud VMs, 8 cores per VM, 32 GB memory per VM, CPU pinning, Kubernetes `v1.27.0`, cached worker image setup, and one `empty` application worker.
 
 ## Core Boundary
 
@@ -50,38 +33,21 @@ The expected implementation boundary for this Columbo slice is:
 4. suite and wrapper metadata under `scripts/test/`,
 5. release and research documentation under `docs/`.
 
-The Continuum core should not grow Columbo-specific concepts such as Columbo
-rules, Columbo pipeline names, or paper-specific benchmark assumptions. If this
-work reveals a missing core capability, the change must be implemented as a
-generic framework fix, covered by focused tests, and described separately from
-the Columbo module work.
+The Continuum core should not grow Columbo-specific concepts such as Columbo rules, Columbo pipeline names, or paper-specific benchmark assumptions. If this work reveals a missing core capability, the change must be implemented as a generic framework fix, covered by focused tests, and described separately from the Columbo module work.
 
-In the first structured slice, the shared benchmark-metrics manifest writer is
-part of the application runtime helper layer. The `empty` module uses that
-existing artifact contract to make its deployment dataframe machine-checkable;
-this is a module-level use of a generic evidence API, not a Columbo-specific
-core extension.
+In the first structured slice, the shared benchmark-metrics manifest writer is part of the application runtime helper layer. The `empty` module uses that existing artifact contract to make its deployment dataframe machine-checkable; this is a module-level use of a generic evidence API, not a Columbo-specific core extension.
 
 ## Evidence Contract
 
-The `qemu_kubecontrol_empty_parity` suite is the evidence gate for this slice.
-The local registry cache must first contain
-`redplanet00/kubeedge-applications:empty`. Prime as the Docker-capable normal
-user with `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite
-qemu_kubecontrol_empty_parity`. A retained VM-backed run must prove:
+The `qemu_kubecontrol_empty_parity` suite is the evidence gate for this slice. The local registry cache must first contain `redplanet00/kubeedge-applications:empty`. Prime as the Docker-capable normal user with `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite qemu_kubecontrol_empty_parity`. A retained VM-backed run must prove:
 
 1. Continuum reaches `phase_completed = application`,
 2. experiment lock and state artifacts are written,
-3. Kubernetes reaches the kubecontrol software phase and passes cluster
-   readiness checks,
+3. Kubernetes reaches the kubecontrol software phase and passes cluster readiness checks,
 4. the `empty` benchmark finishes,
-5. deployment timing output includes `CLOUD OUTPUT` and
-   `started_application (s)`,
-6. runtime logs include the kubecontrol CSV artifacts:
-   `*_dataframe.csv`, `*_dataframe_resources.csv`, and
-   `*_dataframe_resources_os.csv`,
-7. benchmark logs include a `ContinuumBenchmarkMetrics` manifest for
-   `CLOUD OUTPUT`.
+5. deployment timing output includes `CLOUD OUTPUT` and `started_application (s)`,
+6. runtime logs include the kubecontrol CSV artifacts: `*_dataframe.csv`, `*_dataframe_resources.csv`, and `*_dataframe_resources_os.csv`,
+7. benchmark logs include a `ContinuumBenchmarkMetrics` manifest for `CLOUD OUTPUT`.
 
 Retained certification evidence now exists for the exact local-QEMU profile:
 
@@ -94,20 +60,9 @@ Retained certification evidence now exists for the exact local-QEMU profile:
 | Benchmark manifest | `/mnt/sdc/continuum_smoke/qemu_kubecontrol_empty_parity/.continuum/logs/benchmark/2026-07-03_16_42_16_empty-call_metrics_manifest.json` |
 | Evidence note | `docs/release_evidence_qemu_kubecontrol_empty_2026-07-03.md` |
 
-The July 3 retained image exposed kubelet, worker, application, and
-resource-utilization evidence. The legacy Columbo trace points for
-`apiserver`, `controller-manager`, and `scheduler` are absent from the
-retained control-plane logs, so the generated dataframe leaves those phase
-columns empty and skips the full control-plane phase plot. This row therefore
-certifies the Continuum module/profile/suite integration and retained evidence
-contract for the Columbo-style workflow, not a reproduction of every
-instrumented control-plane event used in the paper.
+The July 3 retained image exposed kubelet, worker, application, and resource-utilization evidence. The legacy Columbo trace points for `apiserver`, `controller-manager`, and `scheduler` are absent from the retained control-plane logs, so the generated dataframe leaves those phase columns empty and skips the full control-plane phase plot. This row therefore certifies the Continuum module/profile/suite integration and retained evidence contract for the Columbo-style workflow, not a reproduction of every instrumented control-plane event used in the paper.
 
-The stricter `qemu_kubecontrol_empty_trace_parity` suite is reserved for full
-trace evidence. It uses the same experiment directory and cache model as
-`qemu_kubecontrol_empty_parity`, but its success criteria require populated
-control-plane, kubelet, and application timing columns in both `CLOUD OUTPUT`
-and the benchmark metrics manifest.
+The stricter `qemu_kubecontrol_empty_trace_parity` suite is reserved for full trace evidence. It uses the same experiment directory and cache model as `qemu_kubecontrol_empty_parity`, but its success criteria require populated control-plane, kubelet, and application timing columns in both `CLOUD OUTPUT` and the benchmark metrics manifest.
 
 Retained trace evidence now exists for the exact local-QEMU trace profile:
 
@@ -120,10 +75,7 @@ Retained trace evidence now exists for the exact local-QEMU trace profile:
 | Benchmark manifest | `/mnt/sdc/continuum_smoke/qemu_kubecontrol_empty_trace_parity/.continuum/logs/benchmark/2026-07-06_10_06_48_empty-call_metrics_manifest.json` |
 | Evidence note | `docs/release_evidence_qemu_kubecontrol_trace_2026-07-06.md` |
 
-That row certifies the minimal local-QEMU `call_1` control-plane trace
-reproduction through Continuum modules, profiles, suites, and generic benchmark
-evidence contracts. It still does not certify every Columbo paper figure,
-parameter sweep, or non-QEMU provider topology.
+That row certifies the minimal local-QEMU `call_1` control-plane trace reproduction through Continuum modules, profiles, suites, and generic benchmark evidence contracts. It still does not certify every Columbo paper figure, parameter sweep, or non-QEMU provider topology.
 
 ## Reusing The Pattern
 
@@ -131,15 +83,9 @@ A future paper-specific Continuum integration should follow the same shape:
 
 1. identify the provider, software/resource-manager, and application modules,
 2. add or reuse profiles for those modules,
-3. add one minimal experiment YAML that captures the smallest meaningful paper
-   claim,
+3. add one minimal experiment YAML that captures the smallest meaningful paper claim,
 4. expose a named suite and retained wrapper scenario,
-5. add artifact checks that validate the paper-specific output through generic
-   Continuum evidence contracts,
-6. document which files are modules/configs/docs and whether any core fixes were
-   necessary.
+5. add artifact checks that validate the paper-specific output through generic Continuum evidence contracts,
+6. document which files are modules/configs/docs and whether any core fixes were necessary.
 
-This keeps Continuum marketable as a platform for distributed-systems research
-and education: papers can bring their own module logic and experiment profiles
-while the core stays focused on planning, validation, runtime handoff, state,
-and evidence.
+This keeps Continuum marketable as a platform for distributed-systems research and education: papers can bring their own module logic and experiment profiles while the core stays focused on planning, validation, runtime handoff, state, and evidence.
