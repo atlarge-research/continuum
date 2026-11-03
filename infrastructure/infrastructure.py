@@ -5,6 +5,7 @@ Impelemnt infrastructure
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import time
 
@@ -436,17 +437,40 @@ def add_ssh(config, machines, base=None):
             logging.error("".join(error))
             sys.exit(1)
 
-    # Once the known_hosts file has been cleaned up, add all new keys
+    # One discovery budget covers every guest; a hung probe must also be bounded.
+    started = time.monotonic()
+    deadline = started + 600
     for ip in ips:
         logging.info("Wait for VM to have started up")
+        last_error = "No host keys returned"
         while True:
-            command = f"ssh-keyscan {ip} >> {known_hosts_path}"
-            _, error = machines[0].process(config, command, shell=True)[0]
-
-            if any("# " + str(ip) + ":" in err for err in error):
-                break
-
-            time.sleep(5)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                message = "SSH key discovery failed for %s after %.1fs: %s" % (
+                    ip, time.monotonic() - started, last_error
+                )
+                logging.error(message)
+                raise RuntimeError(message)
+            try:
+                result = subprocess.run(
+                    ["ssh-keyscan", ip], capture_output=True, text=True,
+                    timeout=min(5, remaining), check=False,
+                )
+                keys = [line for line in result.stdout.splitlines()
+                        if len(line.split()) >= 3 and not line.startswith("#")
+                        and line.split()[1].startswith(("ssh-", "ecdsa-", "sk-"))]
+                if result.returncode == 0 and keys:
+                    with open(known_hosts_path, "a", encoding="utf-8") as filep:
+                        filep.write("\n".join(keys) + "\n")
+                    break
+                last_error = result.stderr.strip() or "No host keys returned (exit %s)" % (
+                    result.returncode
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                last_error = str(exc)
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(5, remaining))
 
     logging.info("SSH keys have been added")
 

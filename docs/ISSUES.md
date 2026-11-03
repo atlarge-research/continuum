@@ -51,11 +51,23 @@ For agent-run smoke work, use the normal-user repository-script workflow in `doc
 
 CPU pinning can only use cores exposed by the host cgroup configuration. Check `/sys/fs/cgroup/cpuset/cpuset.cpus` and related machine-slice cpuset files before treating this as a Continuum scheduling bug.
 
+### Fresh VM SSH key discovery times out
+
+Fresh-VM host-key discovery has one 600-second monotonic budget shared across the selected addresses, with each keyscan subprocess limited to at most five seconds or the remaining budget. A server banner alone does not establish success. On failure, inspect the reported address, elapsed time and last scan error alongside VM console, bridge and routing state. Key discovery remains unauthenticated and does not establish authenticated guest readiness; known-host handling and the existing trust policy still apply.
+
 ## Docker and Local Registry
 
 If a guest reports `server gave HTTP response to HTTPS client`, the local Docker registry is being contacted over HTTP without an insecure-registry entry. Check Docker daemon configuration on the involved VM and restart Docker after changes.
 
 The local registry is now internal runtime behavior. User intent is only `run.registry_refresh: missing|all` in YAML. Both infrastructure-level registry settings and the removed run.image_prefetch key are rejected; there is no alias.
+
+### Kubernetes subscriber image retrieval or readiness fails
+
+Current-execution MQTT subscribers must be `Running` with the pod condition `Ready=True` before publishers start. Missing readiness conditions and completed subscribers cannot satisfy startup; `Succeeded` still satisfies completion polling. Readiness does not establish application-level MQTT subscription. The existing `worker_ready_timeout_seconds` deadline applies, and primary Kubernetes API/transport errors still fail immediately.
+
+Watch the changing pod conditions and init/container waiting reasons in the main log. Kubernetes performs its own image-pull retries; Continuum waits within the existing deadline without restarting deployments. On timeout or terminal pod failure, the log includes a best-effort event excerpt for up to three selected pod UIDs, at most ten events per pod and 500 message characters per event, with a five-second API request timeout. Event collection failure is secondary to the original error; absent pod UIDs produce no unscoped event query.
+
+When image retrieval fails, inspect DNS, routes and registry reachability from the affected guest and read the actual container-runtime error. Successful host access does not establish guest access. Docker forwarding rules can interfere with connectivity, but inspect the actual path before changing them. Check advertised HTTP endpoints separately from pod health. Preserve failed state and logs before a reviewed rerun; avoid blanket retries or automatic firewall changes.
 
 ## Ansible
 

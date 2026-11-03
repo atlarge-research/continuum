@@ -887,8 +887,51 @@ def _prepare_kubernetes_execution(config, machines, worker_apps):
     return labels
 
 
+def _log_kubernetes_pod_states(pods, previous):
+    """Report changes using fetched pod data, including init/container waiting reasons."""
+    current = {}
+    for pod in pods:
+        metadata = pod["metadata"]
+        status = pod.get("status", {})
+        details = [("phase", status.get("phase"))]
+        details.extend((condition.get("type"), condition.get("status"))
+                       for condition in status.get("conditions", []))
+        for field in ("initContainerStatuses", "containerStatuses"):
+            for container in status.get(field, []):
+                waiting = container.get("state", {}).get("waiting")
+                if waiting:
+                    details.append((field, container.get("name"), waiting.get("reason"),
+                                    str(waiting.get("message", ""))[:500]))
+        identity = metadata.get("uid", metadata["name"])
+        current[identity] = details
+        if previous.get(identity) != details:
+            logging.info("Kubernetes subscriber %s: %s", metadata["name"], details)
+    return current
+
+
+def _log_kubernetes_pod_events(config, machines, pods):
+    """Collect a small, best-effort excerpt scoped to current pod UIDs only."""
+    # Bound both the number of requests and each API request, and cap logged text.
+    for pod in pods[:3]:
+        metadata = pod["metadata"]
+        if not metadata.get("uid"):
+            continue
+        try:
+            events = _kubectl_items(config, machines, [
+                "--request-timeout=5s", "get", "events",
+                "--field-selector=involvedObject.uid=" + metadata["uid"],
+                "--sort-by=.metadata.creationTimestamp",
+            ])
+            for event in events[-10:]:
+                logging.warning("Kubernetes subscriber %s event %s: %s", metadata["name"],
+                                str(event.get("reason", ""))[:100],
+                                str(event.get("message", ""))[:500])
+        except Exception as exc:  # pylint: disable=broad-except
+            logging.warning("Could not collect events for %s: %s", metadata["name"], exc)
+
+
 def _wait_kubernetes_execution(config, machines, completion=False):
-    """Require the current subscribers to run, or finish, within a bounded wait."""
+    """Require current subscribers to be ready, or finish, within a bounded wait."""
     execution = config["_kubernetes_worker_execution"]
     timeout = config_access.benchmark_primary_stage(config)["config"].get(
         "worker_ready_timeout_seconds", 900
@@ -896,16 +939,28 @@ def _wait_kubernetes_execution(config, machines, completion=False):
     if timeout < 1:
         raise ValueError("worker_ready_timeout_seconds must be >= 1")
     deadline = time.monotonic() + timeout
+    previous = {}
     while True:
         pods = _execution_pods(config, machines, execution["selector"])
+        previous = _log_kubernetes_pod_states(pods, previous)
         phases = [pod["status"]["phase"] for pod in pods]
         bad_phases = ("Failed", "Unknown") if completion else ("Failed", "Unknown", "Succeeded")
         if any(phase in bad_phases for phase in phases):
+            _log_kubernetes_pod_events(config, machines, pods)
             raise RuntimeError("Current Kubernetes subscriber has invalid status: %s" % phases)
-        wanted = "Succeeded" if completion else "Running"
-        if len(phases) == execution["count"] and all(phase == wanted for phase in phases):
+        wanted = "Succeeded" if completion else "Running with Ready=True"
+        ready = all(
+            pod["status"]["phase"] == "Succeeded" if completion else (
+                pod["status"]["phase"] == "Running" and any(
+                    condition.get("type") == "Ready" and condition.get("status") == "True"
+                    for condition in pod["status"].get("conditions", [])
+                )
+            ) for pod in pods
+        )
+        if len(pods) == execution["count"] and ready:
             return
         if time.monotonic() >= deadline:
+            _log_kubernetes_pod_events(config, machines, pods)
             raise RuntimeError("Timeout waiting for current Kubernetes subscribers to be " + wanted)
         time.sleep(3)
 

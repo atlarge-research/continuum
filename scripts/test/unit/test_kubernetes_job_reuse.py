@@ -68,7 +68,9 @@ class _KubernetesMachine:
                                          "uid": job["metadata"]["uid"], "controller": True}],
                 },
                 "spec": {"containers": [{"name": "image-classification"}]},
-                "status": {"phase": "Running"},
+                "status": {"phase": "Running", "conditions": [
+                    {"type": "Ready", "status": "True"}
+                ]},
             }
 
     def finish(self, phase="Succeeded"):
@@ -98,8 +100,9 @@ class _KubernetesMachine:
         if "logs" in tokens:
             name = tokens[-1]
             return [(["retained output for " + name], self.stderr)]
-        if "jobs" in tokens:
-            return [([json.dumps({"items": list(self.jobs.values())})], self.stderr)]
+        if "jobs" in tokens or "events" in tokens:
+            items = list(self.jobs.values()) if "jobs" in tokens else []
+            return [([json.dumps({"items": items})], self.stderr)]
         pods = list(self.pods.values())
         if "-l" in tokens:
             selector = tokens[tokens.index("-l") + 1]
@@ -117,7 +120,7 @@ class _KubernetesMachine:
         return [(rows, self.stderr)]
 
 
-class KubernetesJobReuseTests(unittest.TestCase):
+class KubernetesJobReuseTests(unittest.TestCase):  # pylint: disable=too-many-public-methods
     """Exercise public worker lifecycle boundaries without a Kubernetes host."""
 
     def setUp(self):
@@ -262,7 +265,7 @@ class KubernetesJobReuseTests(unittest.TestCase):
     def test_readiness_rejects_terminal_fresh_subscriber(self):
         """MQTT needs a live subscriber; a completed pod cannot receive images."""
         self._start()
-        for phase in ("Succeeded", "Failed"):
+        for phase in ("Succeeded", "Failed", "Unknown"):
             with self.subTest(phase=phase):
                 self.machine.finish(phase)
                 with self.assertRaises((RuntimeError, SystemExit)):
@@ -330,6 +333,145 @@ class KubernetesJobReuseTests(unittest.TestCase):
         self.machine.fail_operation = "pods"
         with self.assertRaisesRegex(RuntimeError, "non-zero"):
             runtime_helpers.wait_kubernetes_workers_ready(self.config, [self.machine], False)
+
+    def _wait_sequence(self, snapshots, completion=False):
+        """Poll changing API snapshots without real sleeps."""
+        with mock.patch.object(runtime_helpers, "_execution_pods", side_effect=snapshots), \
+                mock.patch.object(runtime_helpers.time, "sleep") as sleep:
+            runtime_helpers._wait_kubernetes_execution(  # pylint: disable=protected-access
+                self.config, [self.machine], completion=completion
+            )
+        return sleep.call_count
+
+    def test_missing_unready_then_ready_subscriber(self):
+        """Publishers must wait through absent pods and missing/false Ready conditions."""
+        self._start()
+        ready = copy.deepcopy(next(iter(self.machine.pods.values())))
+        unready = copy.deepcopy(ready)
+        unready["status"]["conditions"] = [{"type": "Ready", "status": "False"}]
+        missing = copy.deepcopy(ready)
+        missing["status"].pop("conditions")
+        boolean = copy.deepcopy(ready)
+        boolean["status"]["conditions"][0]["status"] = True
+        self.assertEqual(self._wait_sequence(
+            [[], [missing], [unready], [boolean], [ready]]
+        ), 4)
+
+    def test_completion_succeeds_first_poll_without_ready(self):
+        """Completed subscribers need no live readiness condition."""
+        self._start()
+        self.machine.finish()
+        pod = copy.deepcopy(next(iter(self.machine.pods.values())))
+        pod["status"].pop("conditions")
+        self.assertEqual(self._wait_sequence([[pod]], completion=True), 0)
+
+    def test_image_pull_recovery_and_init_wait_changes_are_logged_once(self):
+        """Kubernetes retries images; log changes, including init state and recovery."""
+        self._start()
+        ready = copy.deepcopy(next(iter(self.machine.pods.values())))
+        pending = copy.deepcopy(ready)
+        pending["status"] = {"phase": "Pending", "initContainerStatuses": [
+            {"name": "init", "state": {"waiting": {"reason": "ErrImagePull",
+                                                   "message": "init image unavailable"}}}
+        ]}
+        backoff = copy.deepcopy(pending)
+        backoff["status"].pop("initContainerStatuses")
+        backoff["status"]["containerStatuses"] = [
+            {"name": "subscriber", "state": {"waiting": {"reason": "ImagePullBackOff",
+                                                         "message": "retrying image"}}}
+        ]
+        with self.assertLogs(level="INFO") as logs:
+            self.assertEqual(self._wait_sequence([
+                [pending], [pending], [backoff], [ready]
+            ]), 3)
+        output = "\n".join(logs.output)
+        self.assertEqual(output.count("ErrImagePull"), 1)
+        self.assertIn("init image unavailable", output)
+        self.assertIn("ImagePullBackOff", output)
+        self.assertIn("Running", output)
+
+    def test_timeout_collects_bounded_uid_scoped_events(self):
+        """Persistent image failures retain only current-pod event excerpts."""
+        self._start()
+        pod = next(iter(self.machine.pods.values()))
+        pod["status"] = {"phase": "Pending", "containerStatuses": [
+            {"name": "subscriber", "state": {"waiting": {"reason": "ImagePullBackOff"}}}
+        ]}
+        events = [{"reason": "Failed", "message": "bad image " + str(index)}
+                  for index in range(20)]
+        with mock.patch.object(runtime_helpers, "_kubectl_items", return_value=events) as query, \
+                mock.patch.object(runtime_helpers, "_execution_pods", return_value=[pod]), \
+                mock.patch.object(runtime_helpers.time, "monotonic", side_effect=[0, 3]), \
+                self.assertLogs(level="INFO") as logs:
+            with self.assertRaisesRegex(RuntimeError, "Timeout"):
+                runtime_helpers.wait_kubernetes_workers_ready(self.config, [self.machine], False)
+        args = query.call_args.args[2]
+        self.assertIn("events", args)
+        self.assertIn("--field-selector=involvedObject.uid=" + pod["metadata"]["uid"], args)
+        self.assertIn("--request-timeout=5s", args)
+        output = "\n".join(logs.output)
+        self.assertIn("ImagePullBackOff", output)
+        self.assertIn("bad image 19", output)
+        self.assertNotIn("bad image 0", output)
+
+    def test_event_diagnostic_failure_preserves_primary_error(self):
+        """An API, transport or JSON failure during diagnostics is secondary."""
+        self._start()
+        pod = next(iter(self.machine.pods.values()))
+        for phase in ("Failed", "Pending"):
+            pod["status"]["phase"] = phase
+            for failure in (RuntimeError("event API unavailable"), ValueError("invalid JSON")):
+                with self.subTest(phase=phase, failure=failure), \
+                        mock.patch.object(runtime_helpers, "_execution_pods", return_value=[pod]), \
+                        mock.patch.object(runtime_helpers, "_kubectl_items", side_effect=failure), \
+                        mock.patch.object(runtime_helpers.time, "monotonic", side_effect=[0, 3]):
+                    with self.assertRaisesRegex(RuntimeError, "invalid status|Timeout"):
+                        runtime_helpers.wait_kubernetes_workers_ready(
+                            self.config, [self.machine], False
+                        )
+
+    def test_primary_pod_api_failure_does_not_collect_events(self):
+        """Main-query failure still surfaces immediately without diagnostic calls."""
+        self._start()
+        with mock.patch.object(runtime_helpers, "_execution_pods",
+                               side_effect=RuntimeError("API")), \
+                mock.patch.object(runtime_helpers, "_kubectl_items") as query:
+            with self.assertRaisesRegex(RuntimeError, "API"):
+                runtime_helpers.wait_kubernetes_workers_ready(self.config, [self.machine], False)
+        query.assert_not_called()
+
+    def test_all_selected_subscribers_must_be_ready(self):
+        """One ready subscriber cannot hide an unready peer."""
+        self._start()
+        ready = copy.deepcopy(next(iter(self.machine.pods.values())))
+        peer = copy.deepcopy(ready)
+        peer["metadata"].update(name="peer", uid="peer-uid")
+        peer["status"]["conditions"] = [{"type": "Ready", "status": "False"}]
+        self.config["_kubernetes_worker_execution"]["count"] = 2
+        self.assertEqual(self._wait_sequence([[ready, peer], [ready, ready]]), 1)
+
+    def test_event_excerpt_caps_requests_and_skips_missing_uids(self):
+        """Diagnostic work is bounded and never falls back to unscoped events."""
+        self._start()
+        pod = next(iter(self.machine.pods.values()))
+        pods = [copy.deepcopy(pod) for _index in range(5)]
+        for index, selected in enumerate(pods):
+            selected["metadata"]["uid"] = "selected-%d" % index
+        events = [{"reason": "Failed", "message": "x" * 2000}] * 20
+        with mock.patch.object(runtime_helpers, "_kubectl_items", return_value=events) as query, \
+                self.assertLogs(level="WARNING") as logs:
+            runtime_helpers._log_kubernetes_pod_events(  # pylint: disable=protected-access
+                self.config, [self.machine], pods
+            )
+        self.assertEqual(query.call_count, 3)
+        self.assertEqual(len(logs.output), 30)
+        self.assertNotIn("x" * 501, "\n".join(logs.output))
+        pod["metadata"].pop("uid")
+        with mock.patch.object(runtime_helpers, "_kubectl_items") as query:
+            runtime_helpers._log_kubernetes_pod_events(  # pylint: disable=protected-access
+                self.config, [self.machine], [pod]
+            )
+        query.assert_not_called()
 
 
 if __name__ == "__main__":
