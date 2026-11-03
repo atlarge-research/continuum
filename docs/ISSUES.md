@@ -24,6 +24,19 @@ virsh undefine <domain-name>
 
 For smoke runs, prefer the runner teardown path when possible. Manual cleanup is best reserved for broken retained states after artifacts have been inspected.
 
+### Teardown reports success but QEMU guests remain
+
+Check the same libvirt connection used for creation. The November 3 reliability run exposed a false teardown success: creation used `qemu:///system`, while provider deletion and runner verification used bare `virsh`, whose default on that host was an empty `qemu:///session`. An empty default inventory or successful runner exit therefore did not prove task-VM absence. The provider/verifier correction remains pending a separate scope decision; see `docs/rework_release_handoff.md` for the preserved failure and manual cleanup evidence.
+
+```bash
+virsh uri
+virsh -c qemu:///system list --all --uuid
+virsh -c qemu:///system dominfo <task-domain-uuid>
+virsh -c qemu:///system domblklist <task-domain-uuid> --details
+```
+
+Preserve logs, state, XML and disk references before cleanup. Match the current UUID and canonical disk paths to the task's recorded allocation, inspect unrelated domains and concurrent same-user workflows, and obtain any required authorization before stopping a guest. A name suffix or private base directory alone does not prove exclusive cleanup ownership. Verify absence using the explicit creation connection afterward; preserve failed disks and evidence.
+
 ### Missing default network or bridge problems
 
 Continuum's local QEMU path expects usable libvirt and bridge networking. If VMs cannot reach the network, first check:
