@@ -14,19 +14,18 @@ Start debugging in this order:
 
 ### Existing or stale domains
 
-If provisioning fails because a domain already exists, list domains and remove only the stale Continuum domains you intend to discard:
+If provisioning fails because a domain already exists, inspect the system inventory and match the domain UUID and disk paths to the task's recorded allocation before cleanup.
 
 ```bash
-virsh list --all
-virsh destroy <domain-name>
-virsh undefine <domain-name>
+virsh --connect qemu:///system list --all --uuid
+virsh --connect qemu:///system domblklist <task-domain-uuid> --details
 ```
 
 For smoke runs, prefer the runner teardown path when possible. Manual cleanup is best reserved for broken retained states after artifacts have been inspected.
 
 ### Teardown reports success but QEMU guests remain
 
-Check the same libvirt connection used for creation. The November 3 reliability run exposed a false teardown success: creation used `qemu:///system`, while provider deletion and runner verification used bare `virsh`, whose default on that host was an empty `qemu:///session`. An empty default inventory or successful runner exit therefore did not prove task-VM absence. The provider/verifier correction remains pending a separate scope decision; see `docs/rework_release_handoff.md` for the preserved failure and manual cleanup evidence.
+Check the same libvirt connection used for creation. In the November 3 reliability run, creation used `qemu:///system` while provider deletion and runner verification used bare `virsh`, which opened an empty `qemu:///session` on node2. The provider and verifier now select `qemu:///system` explicitly. The provider's username filter applies to that system inventory at startup and teardown. See [the handoff](rework_release_handoff.md#teardown-follow-up--november-4-2026) for the original failure, manual cleanup and separate paused VM validation.
 
 ```bash
 virsh uri
