@@ -4,6 +4,30 @@ This is a subordinate operational restart point, not policy or certification. Us
 
 ## Current checkpoint — 2026-11-03
 
+### Latest human review — node2 benchmark rerun on November 4, 2026
+
+The original three-VM Kubernetes image-classification benchmark passed on node2 at `ad166bf946166a8812aae341f87ba95186720291`. Both executions sent, processed, and received **30 images each**. The teardown-enabled execution exited zero and reported `teardown_evidence_current_run, teardown_verified`. An immediate independent `qemu:///system` inventory matched the pre-run inventory by name and UUID. The run's temporary base VM and all three workload VMs were absent. The capture took place before any manual cleanup.
+
+The rerun used a fresh allocation under `/mnt/sdc/matthijs/benchmark-teardown-rerun-20261104-01a1a2d9-b` as normal UID 1002, with the existing Python 3.10.14 environment and Ansible core 2.13.2. The initial preflight stopped before VM creation when the old address block showed a cached MAC. The successful allocation passed fresh bridge, address, inventory, and capacity checks. Each phase invoked `scripts/test/run_tests.py --config` with the task's `run` directory, `--middle-ip 154 --middle-ip-base 155`, and `--external-physical-machines ""`. The two application executions shared the same base and installed software. The first used a private retain-on-exit variant of the original config. The second used the original teardown-enabled config and archived the first subscriber output under `kubernetes-before-60d1a9f7bd44492f9763ec79d9fed539`.
+
+| Phase | Result | Capture elapsed |
+| --- | --- | --- |
+| Infrastructure | Passed. The transient base VM was created and removed during provisioning. | 407.5 s |
+| Software | Passed on the controller, worker, and endpoint. | 190.2 s |
+| Application with retain | 30 sent, processed, and received. The three workload VM identities were verified before the next execution. | 81.6 s |
+| Application with teardown | 30 sent, processed, and received. All three workload VMs were absent after automatic teardown. | 66.2 s |
+
+| Execution | Job UID | Pod UID | Execution label |
+| --- | --- | --- | --- |
+| Retain | `63eaa11d-90c9-4a57-9b80-da0b7afc46b8` | `0078a2c2-0641-40f5-80de-0fcab6fb9a2e` | `63079d394b5e4f90967995d1b31d4b4d` |
+| Teardown | `4bd58249-4ec6-4fd0-adc1-22347845e06c` | `cdb042fa-c936-4e8d-8a37-edad718a2650` | `60d1a9f7bd44492f9763ec79d9fed539` |
+
+The final inventory contained only `cloud_controller_dha`, `cloud0_dha`, and `TestVM`, with their original UUIDs. The pre-teardown launch record binds the three workload VM UUIDs to task-owned disk paths. The final receipt compares all four captured run UUIDs, including the base VM, against the explicit system inventory. This rerun exercises the corrected local node2 path through the real benchmark. Remote command behavior has regression coverage. The prior negative probes, original teardown failure, and thirteen accepted checkpoint groups retain their original source attribution.
+
+The private evidence directory is `logs/overnight-expansion-20261103/benchmark-rerun-node2`. Start with `metadata-verification.json` and `metadata/automatic-teardown-inventory.json` for the result and exact UUID comparison. The metadata archive SHA-256 is `8e03144e2b58097e8137beb35afa3b3440f4d629c262e05633ef98981e7af1a8`. All 104 payload hashes verified. The archive includes launch commands, environments, config and source hashes, raw image counts, and logs. VM disks and keys remain on node2.
+
+For the broader Continuum review, start with the [README](../README.md#part-2-use-the-framework) and [runtime execution pipeline](runtime_execution_pipeline.md). The [open review questions](#questions-and-restoration-decisions-for-later-human-review) cover the remaining architecture and reproducibility decisions.
+
 ### Expanded reliability follow-up — November 3–4, 2026
 
 The user approved the expanded plan at `6dbd1e5`. The overnight runtime was frozen in local commit **`c9c9910d827b43dcf5958714d34a74c88aff64ca`**, with 105 focused and 1,197 combined tests passing on its final code/test bytes and independent complete-change review finding no actionable issues. The earlier first packet at `22c92b8` retains its separate 76/1,174-test evidence. This follow-up does not renew the thirteen accepted checkpoint groups, their inventories or historical certification.
@@ -51,7 +75,7 @@ After the original 09:00 CET deadline, the user approved the additional teardown
 
 On node2, the probe used the frozen follow-up commit and the existing Python 3.10.14 environment. A fresh inventory matched all three preserved domain UUIDs. The probe also checked for concurrent Continuum processes under the same user before launch and cleanup. The only test guest was a paused transient VM with UUID `e47ea5d8-6301-4e4a-9297-168050c186df`, a private blank disk and no network interface. The patched verifier detected it before cleanup. The local provider removed it and the verifier returned `teardown_verified`. The final system inventory matched the three preserved names and UUIDs. The private receipt `teardown-paused-probe.json` has SHA-256 `7f490a6c1f9dade7c5bd9414c20f1ed7832892ad8b207335934d35ff708a55bb` and contains exact commands, exit statuses, inventories and source hashes.
 
-This proof covers local provider cleanup and verification on node2, with remote command construction and shell behavior exercised by the regression. The two application runs and original failed automatic teardown remain evidence for `c9c9910`. The original benchmark teardown was not replayed. The final package follows the original deadline.
+This paused VM proof preceded the [benchmark rerun](#latest-human-review--node2-benchmark-rerun-on-november-4-2026). Remote command construction and shell behavior were exercised by the regression. The original application runs and failed automatic teardown remain evidence for `c9c9910`. Both follow-up validations occurred after the original deadline.
 
 ### Accepted checkpoint attribution
 
