@@ -42,6 +42,8 @@ def check_output(out):
 def create_inventory_machine(config, machines):
     """Create ansible inventory for creating VMs, so ssh to all physical machines is needed
 
+    Remote workers must already have verified host keys in the operator's known_hosts file.
+
     Args:
         config (dict): Parsed configuration
         machines (list(Machine object)): List of machine objects representing physical machines
@@ -51,7 +53,8 @@ def create_inventory_machine(config, machines):
         # Shared variables between all groups
         f.write("[all:vars]\n")
         f.write("ansible_python_interpreter=/usr/bin/python3\n")
-        f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
+        f.write("ansible_host_key_checking=True\n")
+        f.write("ansible_ssh_common_args='-o StrictHostKeyChecking=yes'\n")
         f.write("base_path=%s\n" % (config["infrastructure"]["base_path"]))
         f.write("username=%s\n" % (config["username"]))
 

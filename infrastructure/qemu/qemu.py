@@ -39,7 +39,7 @@ xargs -I %% sh -c "virsh destroy %%"'
 xargs -I %% sh -c \"virsh destroy %%\""
                 % (config["username"])
             )
-            command = "ssh %s -t 'bash -l -c \"%s\"'" % (machine.name, comm)
+            command = "ssh -T %s 'bash -l -c \"%s\"'" % (machine.name, comm)
 
         commands.append(command)
         sshs.append(None)
@@ -422,7 +422,7 @@ def base_image(config, machines):
                     command = "virsh --connect qemu:///system create %s" % (path)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
+                        "ssh -T %s 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
                         % (machine.name, path)
                     )
 
@@ -614,7 +614,7 @@ def base_image(config, machines):
                     command = "virsh --connect qemu:///system shutdown %s" % (base_name)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system shutdown %s\"'"
+                        "ssh -T %s 'bash -l -c \"virsh --connect qemu:///system shutdown %s\"'"
                         % (machine.name, base_name)
                     )
 
@@ -673,7 +673,7 @@ def launch_vms(config, machines, repeat=None):
                     command = "virsh --connect qemu:///system create %s" % (path)
                 else:
                     command = (
-                        "ssh %s -t 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
+                        "ssh -T %s 'bash -l -c \"virsh --connect qemu:///system create %s\"'"
                         % (machine.name, path)
                     )
 

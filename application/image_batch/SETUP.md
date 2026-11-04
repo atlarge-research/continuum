@@ -66,6 +66,8 @@ The first run downloads and builds images. Network shaping is disabled so you ca
 
 ## Provision VMs and Kubernetes
 
+From the first physical node, verify the second node's SSH host-key fingerprint against a trusted source, such as the course operator or the worker's console. Add the verified key to `~/.ssh/known_hosts` under the exact hostname or IP address used in `external_physical_machines`. Physical-worker provisioning rejects missing or changed keys. If a worker is rebuilt or its key rotates, verify the replacement fingerprint before updating the entry.
+
 ~~~bash
 source logs/student-demo/provision/bin/activate
 python continuum.py logs/student-demo/cluster.cfg
