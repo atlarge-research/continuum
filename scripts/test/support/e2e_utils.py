@@ -1119,7 +1119,7 @@ def verify_qemu_teardown(config: Dict, state_payload: Dict) -> Tuple[bool, str]:
     for owner_name, is_local, domain_names in expected_by_owner:
         try:
             owner = Machine(owner_name, is_local)
-            command = ["virsh", "list", "--all", "--name"]
+            command = ["virsh", "--connect", "qemu:///system", "list", "--all", "--name"]
             results = owner.process(
                 config,
                 command,

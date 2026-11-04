@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 import tempfile
 import unittest
 from argparse import ArgumentParser
@@ -11,6 +12,7 @@ from unittest import mock
 import yaml
 
 from input.configuration import resume_contract, yaml_parser
+from infrastructure.qemu import qemu
 
 
 def _load_test_utils_module():
@@ -1622,15 +1624,66 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
         self.assertEqual(
             calls,
             [
-                ("local", ["virsh", "list", "--all", "--name"], "local", False),
+                ("local", ["virsh", "--connect", "qemu:///system", "list", "--all", "--name"],
+                 "local", False),
                 (
                     "operator@external.invalid",
-                    ["virsh", "list", "--all", "--name"],
+                    ["virsh", "--connect", "qemu:///system", "list", "--all", "--name"],
                     "operator@external.invalid",
                     False,
                 ),
             ],
         )
+
+    def test_qemu_cleanup_and_verifier_use_system_inventory(self):
+        """Exercise both cleanup paths when the default session inventory is empty."""
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            virsh = root / "virsh"
+            virsh.write_text(
+                "#!/bin/sh\n"
+                '[ "$1" = --connect ] && [ "$2" = qemu:///system ] || exit 0\n'
+                "shift 2\n"
+                'case "$1" in\n'
+                '  list) cat "$CONTINUUM_TEST_DOMAINS" ;;\n'
+                '  destroy) sed -i "/^$2$/d" "$CONTINUUM_TEST_DOMAINS" ;;\n'
+                '  *) exit 2 ;;\n'
+                'esac\n',
+                encoding="utf-8",
+            )
+            ssh = root / "ssh"
+            ssh.write_text(
+                "#!/bin/sh\n"
+                '[ "$1" = operator@external.invalid ] || exit 2\n'
+                'case "$2" in\n'
+                '  "bash -l -c "*) exec /bin/sh -c "exec /bin/bash -c ${2#bash -l -c }" ;;\n'
+                '  *) exit 2 ;;\n'
+                'esac\n',
+                encoding="utf-8",
+            )
+            virsh.chmod(0o700)
+            ssh.chmod(0o700)
+            domains = root / "system-domains"
+            config = dict(self._qemu_delete_config(tempdir), username="test")
+            local = test_utils.Machine("local", True)
+            remote = test_utils.Machine("operator@external.invalid", False)
+            state = {"machine_data": [self._owner_state()]}
+            with mock.patch.dict(os.environ, {
+                "PATH": os.pathsep.join((tempdir, os.defpath)),
+                "CONTINUUM_TEST_DOMAINS": str(domains),
+            }):
+                for owner in (local, remote):
+                    with self.subTest(owner=owner.name):
+                        domains.write_text("cloud0_test\nunrelated_other\n", encoding="utf-8")
+                        success, reason = test_utils.verify_qemu_teardown(config, state)
+                        self.assertFalse(success, reason)
+                        self.assertIn("cloud0_test", reason)
+                        qemu.delete_vms(config, [owner])
+                        self.assertEqual(domains.read_text(encoding="utf-8"), "unrelated_other\n")
+                        self.assertEqual(
+                            test_utils.verify_qemu_teardown(config, state),
+                            (True, "teardown_verified"),
+                        )
 
     def test_qemu_teardown_rejects_malformed_non_local_owner_identities(self):
         malformed_names = (

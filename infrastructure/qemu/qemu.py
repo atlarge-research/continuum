@@ -723,14 +723,14 @@ def delete_vms(config, machines):
     for machine in machines:
         if machine.is_local:
             command = (
-                r'virsh list --all | grep -o -E "(\w*_%s)" | \
-xargs -I %% sh -c "virsh destroy %%"'
+                r'virsh --connect qemu:///system list --all | grep -o -E "(\w*_%s)" | \
+xargs -I %% sh -c "virsh --connect qemu:///system destroy %%"'
                 % (config["username"])
             )
         else:
             comm = (
-                r"virsh list --all | grep -o -E \"(\w*_%s)\" | \
-xargs -I %% sh -c \"virsh destroy %%\""
+                r"virsh --connect qemu:///system list --all | grep -o -E \"(\w*_%s)\" | \
+xargs -I %% sh -c \"virsh --connect qemu:///system destroy %%\""
                 % (config["username"])
             )
             command = "ssh %s 'bash -l -c \"%s\"'" % (machine.name, comm)
