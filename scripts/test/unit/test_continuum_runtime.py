@@ -321,11 +321,9 @@ class MachineProcessDiagnosticsTests(unittest.TestCase):
         argv = popen.call_args.args[0]
         destination_index = argv.index("owner@node3")
         self.assertEqual(argv[0], "ssh")
-        for option in (
-            "BatchMode=yes", "UserKnownHostsFile=/inert-fixture/known_hosts",
-            "StrictHostKeyChecking=accept-new",
-        ):
+        for option in ("BatchMode=yes", "StrictHostKeyChecking=yes", "ControlPath=none"):
             self.assertLess(argv.index(option), destination_index)
+        self.assertFalse(any(argument.startswith("UserKnownHostsFile=") for argument in argv))
         self.assertFalse(any("LogLevel" in argument for argument in argv))
         self.assertFalse(popen.call_args.kwargs["shell"])
 
@@ -449,16 +447,33 @@ class MachineProcessDiagnosticsTests(unittest.TestCase):
                     self._cache_check(Machine("owner@node3", False), self._ssh_config())
 
     def test_managed_ssh_keeps_configured_host_key_policy(self):
-        """The transport continues to use the caller's exact host-key policy."""
+        """Guest transport keeps the configured policy and run-scoped host keys."""
         config = self._ssh_config()
         config["ssh_strict_host_key_checking"] = "yes"
         with self._mock_process(b"ok\n", b"") as popen:
             result = Machine("owner@node3", False).process(
-                config, ["fixture-command"], ssh="owner@node3", ssh_key=False
+                config, ["fixture-command"], ssh="guest@192.0.2.2", ssh_key=False
             )
         self.assertEqual(result, [[["ok"], []]])
         argv = popen.call_args.args[0]
-        self.assertLess(argv.index("StrictHostKeyChecking=yes"), argv.index("owner@node3"))
+        self.assertLess(argv.index("StrictHostKeyChecking=yes"), argv.index("guest@192.0.2.2"))
+        self.assertIn("UserKnownHostsFile=/inert-fixture/known_hosts", argv)
+
+    def test_worker_hardware_check_rejects_host_key_failure_without_repair(self):
+        """Fail before provisioning when the worker key is missing or changed."""
+        config = self._ssh_config()
+        config["infrastructure"] = {"provider": "qemu"}
+        config["ssh_hostkey_retries"] = 2
+        worker = Machine("owner@node3", False)
+        with (
+            self._mock_process(b"", b"Host key verification failed.\n", returncode=255) as popen,
+            self.assertLogs(level="ERROR") as logs,
+            self.assertRaises(SystemExit),
+        ):
+            worker.check_hardware(config)
+
+        self.assertIn("StrictHostKeyChecking=yes", popen.call_args.args[0])
+        self.assertIn("Host key verification failed.", "\n".join(logs.output))
 
     def test_check_hardware_uses_local_lscpu_directly(self):
         machine = Machine("local", True)
@@ -4683,6 +4698,32 @@ class AddonCompatibilityTests(unittest.TestCase):
 
 
 class QemuMachinePlaybookEnvTests(unittest.TestCase):
+    def test_physical_inventory_enforces_strict_host_keys(self):
+        """Set the Ansible plugin switch and the strict OpenSSH policy for workers."""
+        with tempfile.TemporaryDirectory() as directory:
+            config = {
+                "tmp_dir": directory,
+                "username": "owner",
+                "domains": {"run": {"targets": ["infrastructure"]}},
+                "infrastructure": {
+                    "base_path": directory,
+                    "cloud_nodes": 0,
+                    "edge_nodes": 0,
+                    "endpoint_nodes": 0,
+                },
+            }
+            worker = Machine("owner@worker.example", False)
+            worker.base_names = ["base_cloud_owner"]
+            infrastructure_ansible.create_inventory_machine(config, [worker])
+            inventory = pathlib.Path(directory, "inventory").read_text(encoding="utf-8")
+
+        self.assertIn("ansible_host_key_checking=True\n", inventory)
+        self.assertIn(
+            "ansible_ssh_common_args='-o StrictHostKeyChecking=yes -o ControlPath=none'\n",
+            inventory,
+        )
+        self.assertIn("ansible_host=worker.example", inventory)
+
     def test_machine_playbook_env_disables_ansible_become(self):
         self.assertEqual(qemu_module._machine_playbook_env(), {"ANSIBLE_BECOME": "False"})
 

@@ -436,12 +436,14 @@ BASE_NAMES                  %s""" % (
     ):
         """Execute a process using subprocess, return the output/error of the process.
 
+        Managed SSH to this machine's physical address uses the operator's verified host keys.
+
         Args:
             command (str or list): command(s) to be executed
             config (dict): Parsed configuration
             shell (bool): run locally via /bin/bash if True
             env (dict): env vars
-            ssh (str or list[str]): SSH target(s) for running inside VM(s)
+            ssh (str or list[str]): SSH target(s) for guest or physical host commands
             ssh_key (bool): Use the custom SSH key for VMs
             retryonoutput (bool): Retry on empty output
             wait (bool): If False, return immediately (used for nohup/& patterns)
@@ -478,7 +480,7 @@ BASE_NAMES                  %s""" % (
                 commands = commands * len(ssh)
                 ssh_targets = [None] * len(commands)
 
-            # known_hosts handling (default: user's file, to stay compatible with Ansible/SSH behavior)
+            # Guest trust may be scoped to the run. Physical owners use OpenSSH's trust store.
             home = config.get("home", os.path.expanduser("~"))
             known_hosts = config.get(
                 "ssh_known_hosts_file",
@@ -490,7 +492,7 @@ BASE_NAMES                  %s""" % (
             alive_interval = str(config.get("ssh_server_alive_interval", 5))
             alive_count = str(config.get("ssh_server_alive_count_max", 3))
 
-            strict_hkc = config.get("ssh_strict_host_key_checking", "accept-new")
+            guest_key_policy = config.get("ssh_strict_host_key_checking", "accept-new")
 
             for i, (c, s) in enumerate(zip(commands, ssh)):
                 if s is None:
@@ -499,6 +501,7 @@ BASE_NAMES                  %s""" % (
                     # can't ssh to the machine you're already on
                     continue
 
+                physical_host = s == self.name
                 # IMPORTANT: options MUST come before destination
                 ssh_argv = [
                     "ssh",
@@ -510,11 +513,16 @@ BASE_NAMES                  %s""" % (
                     f"ServerAliveInterval={alive_interval}",
                     "-o",
                     f"ServerAliveCountMax={alive_count}",
-                    "-o",
-                    f"UserKnownHostsFile={known_hosts}",
-                    "-o",
-                    f"StrictHostKeyChecking={strict_hkc}",
                 ]
+                if physical_host:
+                    ssh_argv += ["-o", "StrictHostKeyChecking=yes", "-o", "ControlPath=none"]
+                else:
+                    ssh_argv += [
+                        "-o",
+                        f"UserKnownHostsFile={known_hosts}",
+                        "-o",
+                        f"StrictHostKeyChecking={guest_key_policy}",
+                    ]
                 if ssh_key and s != self.name:
                     ssh_argv += ["-i", config["ssh_key"]]
 
@@ -658,7 +666,11 @@ BASE_NAMES                  %s""" % (
                     any_sleep = True
                     max_attempt_for_sleep = max(max_attempt_for_sleep, transient_counts[idx])
 
-                elif err_type == "hostkey" and hostkey_counts[idx] < max_hostkey_retries:
+                elif (
+                    err_type == "hostkey"
+                    and target != self.name
+                    and hostkey_counts[idx] < max_hostkey_retries
+                ):
                     hostkey_counts[idx] += 1
                     # Repair known_hosts for this host and retry
                     home = config.get("home", os.path.expanduser("~"))
