@@ -32,6 +32,12 @@ Before each nontrivial packet, freeze exact files and acceptance criteria, obtai
 
 ## Future work requiring renewed user discussion
 
+- **Support large QEMU course demos.** Each student gets a private Kubernetes cluster running on one or more QEMU VMs, provisioned by the operator before the demo. The instructor must be able to prepare a base image once, publish it to a shared NFS location that the provisioning hosts access read-only, and copy it into the Continuum image directory for each student allocation. Continuum must reuse the copied base without rebuilding it and preserve the existing behavior of creating a separate writable QCOW2 overlay for each VM.
+
+  Students use their own SSH keys to log in to their assigned physical hosts without sudo. From there, they use the separate Continuum guest SSH key already set up for their allocation to log in to their VMs.
+
+  In the next planning discussion, use the [anac_setup_scripts](https://github.com/atlarge-research/anac_setup_scripts) checkout on the AL02 head node as the starting point for the test. Coordinate account and image preparation on AL02 with the matching Continuum configuration and provisioning run on node4 or whichever host holds the rework checkout. Validate with a fresh student allocation by confirming base-image reuse, independent writable overlays, Ready Kubernetes nodes, and both student SSH access paths.
+
 - [Small reproducibility and failure-diagnosis proposal](superpowers/plans/2026-10-30-reproducibility-failure-diagnosis.md): deferred navigation only, outside the current checkpoint. Before scheduling or executing even its initial coverage audit, discuss again with the user whether it is wanted or mostly overengineering, and obtain a renewed decision. If later approved, first check existing coverage for at most two hours; keep the total effort to one to two engineer-days including tests/docs, make at most two small fixes, and stop early with zero fixes if existing coverage is sufficient. This entry grants no audit or implementation authority and changes no current gates.
 
 ## 11. Historical Implementation Snapshot (Frozen May 22, 2026)
