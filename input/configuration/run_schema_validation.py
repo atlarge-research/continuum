@@ -37,15 +37,11 @@ def normalize_targets(
     return normalized
 
 
-def validate_disabled_run_flags(run: dict, path: Path, prefix: str) -> None:
-    """Reject enabled legacy flags before entering an execution path."""
-    for key in ("dry_run", "clean"):
-        value = run.get(key, False)
-        key_path = "%s.%s" % (prefix, key)
-        if not isinstance(value, bool):
-            _fail(path, key_path, "must be boolean")
-        if value:
-            _fail(path, key_path, "true is unsupported; omit this field or set it to false")
+def validate_run_keys(run: dict, path: Path | str, prefix: str) -> None:
+    """Validate the run mapping and its keys without applying defaults."""
+    if not isinstance(run, dict):
+        _fail(path, prefix, "must be a mapping")
+    _fail_unknown_keys(path, prefix, run, {"targets", "registry_refresh", "prepare_for_resume"})
 
 
 def validate_run(
@@ -55,14 +51,7 @@ def validate_run(
     allowed_targets: set[str],
     allowed_registry_refresh_modes: set[str],
 ) -> list[str]:
-    if not isinstance(run, dict):
-        _fail(path, prefix, "must be a mapping")
-    _fail_unknown_keys(
-        path,
-        prefix,
-        run,
-        {"targets", "dry_run", "clean", "registry_refresh", "prepare_for_resume"},
-    )
+    validate_run_keys(run, path, prefix)
 
     targets = run.get("targets")
     if not isinstance(targets, list) or not targets:
@@ -79,9 +68,6 @@ def validate_run(
             "is selected",
         )
 
-    validate_disabled_run_flags(run, path, prefix)
-    run.setdefault("dry_run", False)
-    run.setdefault("clean", False)
     if not isinstance(run.setdefault("prepare_for_resume", False), bool):
         _fail(path, "%s.prepare_for_resume" % (prefix), "must be boolean")
 

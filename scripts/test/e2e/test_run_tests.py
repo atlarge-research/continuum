@@ -826,7 +826,7 @@ class RunSingleTestTests(unittest.TestCase):
             path.write_text(
                 "kind: ContinuumExperimentLock\nnormalized_config:\n"
                 "  provider: {name: qemu, config: {}}\n"
-                "  run: {targets: [infrastructure], dry_run: true}\n",
+                "  run: {targets: [infrastructure], dry_run: false}\n",
                 encoding="utf-8",
             )
             self.assertIn(str(path), run_tests_module.test_utils.discover_config_files(
@@ -841,7 +841,7 @@ class RunSingleTestTests(unittest.TestCase):
                     base_path_override=tempdir,
                 )
             self.assertFalse(result["success"])
-            self.assertIn("run.dry_run", result["error"])
+            self.assertIn("run.dry_run: unexpected key", result["error"])
             override.assert_not_called()
             popen.assert_not_called()
 
@@ -852,10 +852,10 @@ class RunSingleTestTests(unittest.TestCase):
             config = (
                 "kind: ContinuumExperimentLock\nnormalized_config:\n"
                 "  provider: {name: qemu, config: {}}\n"
-                "  run: {targets: [software], clean: %s}\n"
+                "  run: {targets: [software]%s}\n"
             )
-            path.write_text(config % "false", encoding="utf-8")
-            override.write_text(config % "true", encoding="utf-8")
+            path.write_text(config % "", encoding="utf-8")
+            override.write_text(config % ", clean: false", encoding="utf-8")
             with (
                 mock.patch.object(run_tests_module.subprocess, "Popen") as popen,
                 mock.patch.object(
@@ -865,7 +865,7 @@ class RunSingleTestTests(unittest.TestCase):
             ):
                 result = run_tests_module.run_single_test(str(path), {}, base_path_override=tempdir)
             self.assertFalse(result["success"])
-            self.assertIn("run.clean", result["error"])
+            self.assertIn("run.clean: unexpected key", result["error"])
             self.assertFalse(override.exists())
             popen.assert_not_called()
 

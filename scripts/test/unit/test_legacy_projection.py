@@ -30,8 +30,6 @@ class LegacyProjectionTests(unittest.TestCase):
         return {
             "run": {
                 "targets": ["infrastructure", "software"],
-                "dry_run": False,
-                "clean": True,
                 "registry_refresh": "all",
                 "prepare_for_resume": False,
             },

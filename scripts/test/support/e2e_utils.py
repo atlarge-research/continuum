@@ -134,11 +134,12 @@ def apply_manifest_filter(config_files: Set[str], manifest: Dict) -> Set[str]:
     return result
 
 
-def parse_config_simple(config_path: str, *, validate_execution_flags: bool = False) -> Dict:
+def parse_config_simple(config_path: str, *, validate_run_keys: bool = False) -> Dict:
     """Parse a config file to extract basic information without full validation.
 
     Args:
         config_path: Path to config file
+        validate_run_keys: Check run keys before execution
 
     Returns:
         Dictionary with parsed config values
@@ -149,19 +150,16 @@ def parse_config_simple(config_path: str, *, validate_execution_flags: bool = Fa
             "Only YAML experiment/lock configs are supported by the test runner, got %s"
             % (config_path)
         )
-    return parse_yaml_config_simple(config_path, validate_execution_flags=validate_execution_flags)
+    return parse_yaml_config_simple(config_path, validate_run_keys=validate_run_keys)
 
 
-def parse_yaml_config_simple(config_path: str, *, validate_execution_flags: bool = False) -> Dict:
+def parse_yaml_config_simple(config_path: str, *, validate_run_keys: bool = False) -> Dict:
     """Parse YAML experiment/lock config to extract basic information."""
     path = Path(config_path).expanduser().resolve()
     data = _load_yaml(path)
     data = _normalized_payload_for_testing(path, data)
-    if validate_execution_flags:
-        run = data.get("run", {})
-        if not isinstance(run, dict):
-            validation_utils.fail(path, "run", "must be a mapping")
-        run_schema_validation.validate_disabled_run_flags(run, path, "run")
+    if validate_run_keys:
+        run_schema_validation.validate_run_keys(data.get("run", {}), path, "run")
 
     result = {
         "infrastructure": {},

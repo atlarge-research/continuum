@@ -18,8 +18,6 @@ class ExperimentLockWriterTests(unittest.TestCase):
     def _minimal_config(self, root: Path, sources=None):
         run = {
             "targets": ["infrastructure"],
-            "dry_run": False,
-            "clean": False,
             "registry_refresh": "missing",
             "prepare_for_resume": False,
         }

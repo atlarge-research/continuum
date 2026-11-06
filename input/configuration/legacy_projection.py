@@ -173,8 +173,6 @@ def to_legacy_config(
     config["domains"] = {
         "run": {
             "targets": targets,
-            "dry_run": bool(_required(run, "dry_run", "run.dry_run")),
-            "clean": bool(_required(run, "clean", "run.clean")),
             "registry_refresh": str(_required(run, "registry_refresh", "run.registry_refresh")),
             "prepare_for_resume": bool(
                 _required(run, "prepare_for_resume", "run.prepare_for_resume")

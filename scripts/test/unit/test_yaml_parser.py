@@ -1141,26 +1141,31 @@ class YamlParserTests(unittest.TestCase):
                     "fresh application execution requires the software phase", stderr
                 )
 
-    def test_experiment_rejects_enabled_run_flags_before_runtime_processing(self):
+    def test_experiment_rejects_removed_run_flags_before_runtime_processing(self):
         for key in ("dry_run", "clean"):
-            for target in ("infrastructure", "software"):
-                with self.subTest(key=key, target=target), tempfile.TemporaryDirectory() as tempdir:
-                    path, _ = self._build_triplet(Path(tempdir), tempdir, run_targets=[target])
+            for value in (False, True):
+                with self.subTest(key=key, value=value), tempfile.TemporaryDirectory() as tempdir:
+                    path, _ = self._build_triplet(
+                        Path(tempdir), tempdir, run_targets=["infrastructure"]
+                    )
                     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-                    payload["run"][key] = True
+                    payload["run"][key] = value
                     self._write(path, payload)
-                    self.assertIn("run." + key, self._parse_error_before_runtime_processing(path))
+                    self.assertIn(
+                        f"run.{key}: unexpected key",
+                        self._parse_error_before_runtime_processing(path),
+                    )
 
-    def test_lock_replay_rejects_enabled_run_flags(self):
+    def test_lock_replay_rejects_removed_run_flags(self):
         for key in ("dry_run", "clean"):
-            for target in ("infrastructure", "software"):
-                with self.subTest(key=key, target=target), tempfile.TemporaryDirectory() as tempdir:
+            for value in (False, True):
+                with self.subTest(key=key, value=value), tempfile.TemporaryDirectory() as tempdir:
                     lock_path = self._write_valid_lock(Path(tempdir))
                     payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
-                    payload["normalized_config"]["run"].update(targets=[target], **{key: True})
+                    payload["normalized_config"]["run"].update(targets=["software"], **{key: value})
                     self._write(lock_path, payload)
                     self.assertIn(
-                        "normalized_config.run." + key,
+                        f"normalized_config.run.{key}: unexpected key",
                         self._parse_error_before_runtime_processing(lock_path),
                     )
 
@@ -1512,7 +1517,15 @@ class YamlParserTests(unittest.TestCase):
             from input.configuration import yaml_parser
 
             lock_path = yaml_parser.write_experiment_lock(cfg)
+            payload = yaml.safe_load(Path(lock_path).read_text(encoding="utf-8"))
             cfg_lock = input_module.start(parser, lock_path)
+            for run in (
+                cfg["domains"]["run"],
+                payload["normalized_config"]["run"],
+                cfg_lock["domains"]["run"],
+            ):
+                self.assertNotIn("dry_run", run)
+                self.assertNotIn("clean", run)
             stages = cfg_lock["domains"]["benchmark"]["pipeline"]
             self.assertEqual(stages[0]["id"], "generate")
             self.assertTrue(stages[0]["scope_identities"])

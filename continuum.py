@@ -145,7 +145,7 @@ def main(args):
         run_infrastructure, run_software, run_application = (
             runtime_phase_targets.resolve_runtime_targets(args.config)
         )
-        run_schema_validation.validate_disabled_run_flags(
+        run_schema_validation.validate_run_keys(
             args.config["domains"]["run"], "runtime configuration", "domains.run"
         )
     except ValueError as exc:

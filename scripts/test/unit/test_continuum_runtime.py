@@ -37,21 +37,24 @@ from resource_manager.endpoint import endpoint as endpoint_module
 
 
 class RuntimeTargetResolutionTests(unittest.TestCase):
-    def test_direct_main_rejects_unsupported_run_flags_before_lock_or_runtime(self):
-        for target in ("infrastructure", "software"):
-            for key in ("dry_run", "clean"):
+    def test_direct_main_rejects_removed_run_flags_before_lock_or_runtime(self):
+        for key in ("dry_run", "clean"):
+            for target, value in (("infrastructure", False), ("software", True)):
                 config = {
                     "infrastructure": {"provider": "qemu"},
-                    "domains": {"run": {"targets": [target], key: True}},
+                    "domains": {"run": {"targets": [target], key: value}},
                 }
                 with (
-                    self.subTest(target=target, key=key),
+                    self.subTest(target=target, key=key, value=value),
                     mock.patch.object(continuum_module.yaml_parser, "write_experiment_lock") as lock,
                     mock.patch.object(infrastructure_module, "start") as start,
                     mock.patch.object(infra_state, "load_resume_state") as resume,
-                    self.assertRaises(SystemExit),
+                    self.assertLogs(level="ERROR") as logs,
+                    self.assertRaises(SystemExit) as exit_error,
                 ):
                     continuum_module.main(argparse.Namespace(config=config))
+                self.assertEqual(exit_error.exception.code, 1)
+                self.assertIn(f"domains.run.{key}: unexpected key", logs.output[0])
                 lock.assert_not_called()
                 start.assert_not_called()
                 resume.assert_not_called()
@@ -4283,8 +4286,6 @@ class ResumeStateTests(unittest.TestCase):
         }
         run = {
             "targets": ["infrastructure", "software"],
-            "dry_run": False,
-            "clean": False,
             "registry_refresh": "missing",
             "prepare_for_resume": False,
         }

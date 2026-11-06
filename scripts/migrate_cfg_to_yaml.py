@@ -88,8 +88,6 @@ def _build_experiment(cfg, env_name, sw_name):
                 if infra.getboolean("infra_only", False)
                 else ["infrastructure", "software", "application"]
             ),
-            "dry_run": False,
-            "clean": False,
         },
         "topology": {
             "tiers": {

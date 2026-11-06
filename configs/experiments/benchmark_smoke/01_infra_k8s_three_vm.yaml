@@ -10,8 +10,6 @@ run:
   targets: [infrastructure]
   registry_refresh: missing
   prepare_for_resume: true
-  dry_run: false
-  clean: false
 
 infrastructure:
   clusters:

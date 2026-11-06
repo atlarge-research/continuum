@@ -80,8 +80,6 @@ use:
 run:
   targets: [infrastructure, software, application]
   registry_refresh: missing
-  dry_run: false
-  clean: false
 
 infrastructure:
   clusters:

@@ -9,8 +9,6 @@ use:
 run:
   targets: [infrastructure]
   registry_refresh: missing
-  dry_run: false
-  clean: false
 
 infrastructure:
   clusters:

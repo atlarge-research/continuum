@@ -449,7 +449,7 @@ def _run_single_test(
 
     # Parse config to get base images
     try:
-        config = test_utils.parse_config_simple(config_path, validate_execution_flags=True)
+        config = test_utils.parse_config_simple(config_path, validate_run_keys=True)
         base_path = base_path_override or config.get("infrastructure", {}).get("base_path", "~")
         result["parameter_overrides"] = {
             "base_path": base_path_override,
@@ -496,7 +496,7 @@ def _run_single_test(
         if temp_file_created:
             try:
                 config = test_utils.parse_config_simple(
-                    temp_config_path, validate_execution_flags=True
+                    temp_config_path, validate_run_keys=True
                 )
             except Exception as e:
                 result["error"] = f"Failed to parse overridden config: {e}"

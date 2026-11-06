@@ -21,11 +21,7 @@ class SchemaValidationTests(unittest.TestCase):
         self.network_override_string_keys = ("cloud_location",)
 
     def test_validate_run_normalizes_and_defaults_registry_refresh(self):
-        run = {
-            "targets": [" infrastructure ", "software"],
-            "dry_run": False,
-            "clean": False,
-        }
+        run = {"targets": [" infrastructure ", "software"]}
         targets = run_schema_validation.validate_run(
             run,
             self.path,
@@ -36,34 +32,21 @@ class SchemaValidationTests(unittest.TestCase):
         self.assertEqual(targets, ["infrastructure", "software"])
         self.assertEqual(run["registry_refresh"], "missing")
         self.assertFalse(run["prepare_for_resume"])
+        self.assertNotIn("dry_run", run)
+        self.assertNotIn("clean", run)
 
-    def test_validate_run_rejects_enabled_unsupported_flags(self):
+    def test_validate_run_rejects_removed_flags(self):
         for key in ("dry_run", "clean"):
-            for target in ("infrastructure", "software"):
-                with self.subTest(key=key, target=target):
-                    with self.assertRaisesRegex(ValueError, rf"run\.{key}.*unsupported"):
+            for value in (False, True):
+                with self.subTest(key=key, value=value):
+                    with self.assertRaisesRegex(ValueError, rf"run\.{key}.*unexpected key"):
                         run_schema_validation.validate_run(
-                            {"targets": [target], key: True},
+                            {"targets": ["infrastructure"], key: value},
                             self.path,
                             "run",
                             self.allowed_targets,
                             self.allowed_registry_refresh_modes,
                         )
-
-    def test_validate_run_defaults_clean_and_dry_run(self):
-        run = {"targets": ["software"]}
-        targets = run_schema_validation.validate_run(
-            run,
-            self.path,
-            "run",
-            self.allowed_targets,
-            self.allowed_registry_refresh_modes,
-        )
-        self.assertEqual(targets, ["software"])
-        self.assertFalse(run["dry_run"])
-        self.assertFalse(run["clean"])
-        self.assertEqual(run["registry_refresh"], "missing")
-        self.assertFalse(run["prepare_for_resume"])
 
     def test_validate_run_accepts_prepare_for_resume_for_infra_only(self):
         run = {"targets": ["infrastructure"], "prepare_for_resume": True}
