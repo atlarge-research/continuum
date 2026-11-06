@@ -50,6 +50,8 @@ Before each nontrivial packet, freeze exact files and acceptance criteria, obtai
 
 Both proposals need a separate decision on scope, interface and priority before implementation.
 
+- **Agent-assisted troubleshooting.** Explore a short skill that asks what happened and which run and phase were affected, gathers the available evidence, and routes the user to focused Markdown runbooks. Each runbook would say what command to run, where to run it, how to interpret the output, and what to check next. Start with read-only diagnosis. The assistant could inspect evidence when it has access or give the same commands to the user. QEMU teardown is one possible pilot. Revisit the idea and the role of [the existing troubleshooting guide](ISSUES.md) after this branch is merged and the broader review is complete. Scope and timing remain open.
+
 ## 11. Historical Implementation Snapshot (Frozen May 22, 2026)
 
 The complete frozen implementation ledger is preserved verbatim in Git object `b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`. Inspect it with `git show b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`. Verified private copies and SHA-256 bindings are in `docs/rework_release_handoff.md`.
