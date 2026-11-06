@@ -4,6 +4,7 @@ Impelemnt infrastructure
 
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -198,64 +199,60 @@ using the --file option"""
 
 
 def create_keypair(config, machines):
-    """Create SSH keys to be used for ssh'ing into VMs, local and remote if needed.
-    We use the SSH key of the local machine for all machines, so copy to all.
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
+    """Create the guest keypair on the controller and copy it to worker run roots."""
     logging.info("Create SSH keys to be used with VMs")
+    key = config["ssh_key"]
+    key_dir = os.path.dirname(key)
+    keypair = [key, f"{key}.pub"]
+    batches = [[["mkdir", "-p", key_dir]]]
+    if not os.path.isfile(key):
+        batches.append([["ssh-keygen", "-t", "rsa", "-b", "4096", "-f", key, "-N", "", "-q"]])
+    batches.append([["chmod", "600", path] for path in keypair])
+
+    # Machine.process without an SSH target always runs on the controller.
+    controller = machines[0]
+    for batch in batches:
+        for output, error in controller.process(config, batch):
+            if error or output:
+                logging.error("Controller guest key setup failed: %s", "\n".join(error + output))
+                sys.exit(1)
+
     for machine in machines:
         if machine.is_local:
-            ssh_key_dir = os.path.dirname(config["ssh_key"])
-            ssh_public_key = "%s.pub" % (config["ssh_key"])
-            commands = [["mkdir", "-p", ssh_key_dir]]
-
-            if not os.path.isfile(config["ssh_key"]):
-                commands.append(
-                    [
-                        "ssh-keygen",
-                        "-t",
-                        "rsa",
-                        "-b",
-                        "4096",
-                        "-f",
-                        config["ssh_key"],
-                        "-N",
-                        "",
-                        "-q",
-                    ]
-                )
-
-            results = machine.process(config, commands)
-        else:
-            source = "%s*" % (config["ssh_key"])
-            dest = machine.name + ":./.ssh/"
-            results = [machine.copy_files(config, source, dest)]
-
-        for output, error in results:
-            if error:
-                logging.error("".join(error))
-                sys.exit(1)
-            elif output:
-                logging.error("".join(output))
-                sys.exit(1)
-
-        # Set correct key permissions to be sure
-        if machine.is_local:
-            commands = [
-                ["chmod", "600", config["ssh_key"]],
-                ["chmod", "600", ssh_public_key],
-            ]
-            results = machine.process(config, commands)
-            for output, error in results:
-                if error:
-                    logging.error("".join(error))
-                    sys.exit(1)
-                elif output:
-                    logging.error("".join(output))
-                    sys.exit(1)
+            continue
+        prepare = (
+            'test ! -L "$1" && mkdir -m 700 -p -- "$1" && chmod 700 -- "$1"'
+            ' && mktemp -d -- "$1/.upload.XXXXXXXX"'
+        )
+        output, error = machine.process_on_owner(
+            config, ["sh", "-c", prepare, "sh", key_dir], timeout_seconds=30,
+        )[0]
+        if error or len(output) != 1:
+            logging.error("Guest key staging on %s failed: %s", machine.name,
+                          "\n".join(error + output))
+            sys.exit(1)
+        staging = output[0]
+        if (os.path.normpath(os.path.dirname(staging)) != os.path.normpath(key_dir)
+                or not os.path.basename(staging).startswith(".upload.")):
+            logging.error("Invalid guest key staging path from %s: %r", machine.name, staging)
+            sys.exit(1)
+        output, error = machine.copy_to_worker(config, keypair, os.path.join(staging, ""))
+        if not (output or error):
+            # Keep the previous keys until both uploads have finished. The controller may see
+            # the same filesystem as this worker, so never truncate a source key in place.
+            install = (
+                'test ! -d "$3" && test ! -d "$4"'
+                ' && test -f "$1/$2" && test -f "$1/$2.pub"'
+                ' && mv -fT -- "$1/$2" "$3" && mv -fT -- "$1/$2.pub" "$4" && rmdir -- "$1"'
+            )
+            output, error = machine.process_on_owner(
+                config, ["sh", "-c", install, "sh", staging, os.path.basename(key), *keypair],
+                timeout_seconds=30,
+            )[0]
+        if output or error:
+            logging.error("Guest key transfer to %s failed: %s", machine.name,
+                          "\n".join(error + output))
+            sys.exit(1)
 
 
 def create_tmp_dir(config, machines):
@@ -280,118 +277,52 @@ def create_tmp_dir(config, machines):
 
 
 def delete_old_content(config, machines):
-    """Delete continuum content from previous runs, excluding base images
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    commands = []
+    """Clean generated workspace files on each physical owner."""
+    base = shlex.quote(os.path.join(config["infrastructure"]["base_path"], ".continuum"))
+    remove = "rm -rf %s" % " ".join(
+        f"{base}/{name}" for name in ("cloud", "edge", "endpoint", "infrastructure")
+    )
+    clean_files = f"find {base} -maxdepth 1 -type f ! -name experiment_lock.yaml -delete"
     for machine in machines:
         if machine.is_local:
-            command = """\
-rm -rf %s/.continuum/images/*gcp* && \
-rm -rf %s/.continuum/images/.gcp* && \
-rm -rf %s/.continuum/images/*.tf && \
-rm -rf %s/.continuum/cloud && \
-rm -rf %s/.continuum/edge && \
-rm -rf %s/.continuum/endpoint && \
-rm -rf %s/.continuum/infrastructure && \
-find %s/.continuum -maxdepth 1 -type f ! -name experiment_lock.yaml -delete""" % (
-                (config["infrastructure"]["base_path"],) * 8
+            command = (
+                f"rm -rf {base}/images/*gcp* {base}/images/.gcp* {base}/images/*.tf"
+                f" && {remove} && {clean_files}"
             )
+            results = machine.process(config, [command], shell=True)
         else:
-            command = """\
-ssh %s \"\
-rm -rf %s/.continuum/cloud && \
-rm -rf %s/.continuum/edge && \
-rm -rf %s/.continuum/endpoint && \
-rm -rf %s/.continuum/infrastructure && \
-find %s/.continuum -maxdepth 1 -type f ! -name experiment_lock.yaml -delete\"""" % (
-                (machine.name,) + (config["infrastructure"]["base_path"],) * 5
+            command = f"{remove} && if [ -d {base} ]; then {clean_files}; fi"
+            results = machine.process_on_owner(config, ["sh", "-c", command], timeout_seconds=120)
+        for output, error in results:
+            missing_local = machine.is_local and all(
+                "No such file or directory" in line for line in error
             )
-
-        commands.append(command)
-
-    results = machines[0].process(config, commands, shell=True)
-
-    for output, error in results:
-        if error and not all("No such file or directory" in line for line in error):
-            logging.error("".join(error))
-            sys.exit(1)
-        elif output:
-            logging.error("".join(output))
-            sys.exit(1)
+            if output or (error and not missing_local):
+                logging.error("Workspace cleanup on %s: %s", machine.name, "\n".join(error + output))
+                sys.exit(1)
 
 
 def create_continuum_dir(config, machines):
-    """Create the .continuum and .continuum/images folders for storage
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    commands = []
-
+    """Create the workspace and images directories on each physical owner."""
+    base = shlex.quote(os.path.join(config["infrastructure"]["base_path"], ".continuum"))
+    images = f"{base}/images"
     for machine in machines:
+        user = shlex.quote(config["username"] if machine.is_local else machine.user)
+        acl = f"u:{user}:rwx,g:kvm:rwx"
+        command = (
+            f"mkdir -p {base} && mkdir -p {images} && chmod 755 {base} && chmod 755 {images}"
+            " && if command -v setfacl >/dev/null 2>&1; then "
+            f"setfacl -m {acl} {images} >/dev/null 2>&1 || true; "
+            f"setfacl -d -m {acl} {images} >/dev/null 2>&1 || true; fi"
+        )
         if machine.is_local:
-            command = (
-                "mkdir -p %s/.continuum && \
-                 mkdir -p %s/.continuum/images && \
-                 chmod 755 %s/.continuum && \
-                 chmod 755 %s/.continuum/images && \
-                 if command -v setfacl >/dev/null 2>&1; then \
-                   setfacl -m u:%s:rwx,g:kvm:rwx %s/.continuum/images >/dev/null 2>&1 || true; \
-                   setfacl -d -m u:%s:rwx,g:kvm:rwx %s/.continuum/images >/dev/null 2>&1 || true; \
-                 fi"
-                % (
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    config["username"],
-                    config["infrastructure"]["base_path"],
-                    config["username"],
-                    config["infrastructure"]["base_path"],
-                )
-            )
+            results = machine.process(config, [command], shell=True)
         else:
-            command = (
-                'ssh %s "\
-                 mkdir -p %s/.continuum && \
-                 mkdir -p %s/.continuum/images && \
-                 chmod 755 %s/.continuum && \
-                 chmod 755 %s/.continuum/images && \
-                 if command -v setfacl >/dev/null 2>&1; then \
-                   setfacl -m u:%s:rwx,g:kvm:rwx %s/.continuum/images >/dev/null 2>&1 || true; \
-                   setfacl -d -m u:%s:rwx,g:kvm:rwx %s/.continuum/images >/dev/null 2>&1 || true; \
-                 fi"'
-                % (
-                    machine.name,
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    config["infrastructure"]["base_path"],
-                    machine.user,
-                    config["infrastructure"]["base_path"],
-                    machine.user,
-                    config["infrastructure"]["base_path"],
-                )
-            )
-
-        commands.append(command)
-
-    results = machines[0].process(config, commands, shell=True)
-
-    for (output, error), command in zip(results, commands):
-        if error:
-            logging.error("Command: %s", command)
-            logging.error("".join(error))
-            sys.exit(1)
-        elif output:
-            logging.error("Command: %s", command)
-            logging.error("".join(output))
-            sys.exit(1)
+            results = machine.process_on_owner(config, ["sh", "-c", command], timeout_seconds=30)
+        for output, error in results:
+            if error or output:
+                logging.error("Workspace setup on %s: %s", machine.name, "\n".join(error + output))
+                sys.exit(1)
 
 
 def add_ssh(config, machines, base=None):

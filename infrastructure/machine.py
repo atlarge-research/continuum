@@ -14,16 +14,36 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
 _RESUME_SSH_MARKER = "CONTINUUM_RESUME_SSH_READY_V1"
 _SYNTHETIC_NONZERO_MARKER = "Command exited with non-zero return code"
 _PROCESS_CLEANUP_GRACE_SECONDS = 2
+_VERIFIED_WORKER_OPTIONS = ["-o", "StrictHostKeyChecking=yes", "-o", "ControlPath=none"]
 
 # -----------------------------
 # Helper utilities
 # -----------------------------
+
+
+def _ssh_connection_options(config):
+    return [
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=%s" % config.get("ssh_connect_timeout", 10),
+        "-o", "ServerAliveInterval=%s" % config.get("ssh_server_alive_interval", 5),
+        "-o", "ServerAliveCountMax=%s" % config.get("ssh_server_alive_count_max", 3),
+    ]
+
+
+def _sftp_path(path):
+    """Quote one SFTP batch operand."""
+    if any(char in path for char in "\r\n\0"):
+        raise ValueError("SFTP paths cannot contain a line break or NUL")
+    if path.startswith("-"):
+        path = "./" + path
+    return '"' + path.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _shlex_join(argv):
@@ -487,11 +507,6 @@ BASE_NAMES                  %s""" % (
                 os.path.join(home, ".ssh", "known_hosts"),
             )
 
-            # SSH options
-            connect_timeout = str(config.get("ssh_connect_timeout", 10))
-            alive_interval = str(config.get("ssh_server_alive_interval", 5))
-            alive_count = str(config.get("ssh_server_alive_count_max", 3))
-
             guest_key_policy = config.get("ssh_strict_host_key_checking", "accept-new")
 
             for i, (c, s) in enumerate(zip(commands, ssh)):
@@ -503,19 +518,9 @@ BASE_NAMES                  %s""" % (
 
                 physical_host = s == self.name
                 # IMPORTANT: options MUST come before destination
-                ssh_argv = [
-                    "ssh",
-                    "-o",
-                    "BatchMode=yes",
-                    "-o",
-                    f"ConnectTimeout={connect_timeout}",
-                    "-o",
-                    f"ServerAliveInterval={alive_interval}",
-                    "-o",
-                    f"ServerAliveCountMax={alive_count}",
-                ]
+                ssh_argv = ["ssh", *_ssh_connection_options(config)]
                 if physical_host:
-                    ssh_argv += ["-o", "StrictHostKeyChecking=yes", "-o", "ControlPath=none"]
+                    ssh_argv += _VERIFIED_WORKER_OPTIONS
                 else:
                     ssh_argv += [
                         "-o",
@@ -525,6 +530,8 @@ BASE_NAMES                  %s""" % (
                     ]
                 if ssh_key and s != self.name:
                     ssh_argv += ["-i", config["ssh_key"]]
+                if physical_host:
+                    ssh_argv.append("--")
 
                 # remote command portion
                 if shell:
@@ -739,6 +746,44 @@ BASE_NAMES                  %s""" % (
 
         return outputs
 
+    def process_on_owner(self, config, command, *, timeout_seconds=None):
+        """Run argv on this physical host, preserving literal remote arguments."""
+        if self.is_local:
+            return self.process(config, command, timeout_seconds=timeout_seconds)
+        return self.process(
+            config, [shlex.quote(argument) for argument in command],
+            ssh=self.name, ssh_key=False, timeout_seconds=timeout_seconds,
+        )
+
+    def copy_to_worker(self, config, sources, destination):
+        """Send exact files to this verified worker, preserving source modes."""
+        if self.is_local:
+            raise ValueError("Worker copy requires a remote owner")
+        target = _sftp_path(destination)
+        if not sources:
+            return [[], []]
+        with tempfile.TemporaryDirectory(prefix="continuum-sftp-") as staging:
+            batch = os.path.join(staging, "batch")
+            with open(batch, "w", encoding="utf-8") as stream:
+                for index, source in enumerate(sources):
+                    operand = _sftp_path(source)
+                    remote_path = target
+                    if any(char in source for char in "*?[]\\"):
+                        # SFTP globs the local operand even when it was quoted.
+                        # Use a literal alias so another matching file is never sent.
+                        alias = os.path.join(staging, str(index))
+                        os.symlink(os.path.abspath(source), alias)
+                        operand = _sftp_path(alias)
+                        remote_path = _sftp_path(
+                            os.path.join(destination, os.path.basename(source))
+                        )
+                    stream.write(f"@put -p {operand} {remote_path}\n")
+            argv = [
+                "sftp", *_ssh_connection_options(config), *_VERIFIED_WORKER_OPTIONS,
+                "-b", batch, "--", self.name,
+            ]
+            return self.process(config, argv, timeout_seconds=120)[0]
+
     def check_hardware(self, config):
         """Get the amount of physical cores for this machine. This automatically functions as
         reachability check for this machine.
@@ -812,8 +857,9 @@ def make_machine_objects(config):
         list(Machine object): List of machine objects representing physical machines
     """
     logging.info("Initialize machine objects")
-    names = ["local"] + config["infrastructure"]["external_physical_machines"]
-    return [Machine(name, "local" in name) for name in names]
+    return [Machine("local", True)] + [
+        Machine(name, False) for name in config["infrastructure"]["external_physical_machines"]
+    ]
 
 
 def remove_idle(machines, nodes_per_machine):

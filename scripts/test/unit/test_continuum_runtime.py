@@ -5693,14 +5693,17 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
 
     def test_ordinary_vm_launch_already_accepts_trailing_blank(self):
         machine = mock.Mock()
+        machine.cloud_controller_names = []
+        machine.cloud_names = ["vm"]
+        machine.edge_names = []
+        machine.endpoint_names = []
         for display_name in ("vm", "'vm'"):
             with self.subTest(display_name=display_name):
-                machine.process.return_value = [(["Domain %s created from /exact/domain.xml"
-                                                  % display_name, ""], [])]
+                machine.process_on_owner.return_value = [
+                    (["Domain %s created from /exact/domain.xml" % display_name, ""], []),
+                ]
                 with mock.patch.object(qemu_module.time, "sleep"):
-                    self.assertEqual(
-                        qemu_module.launch_vms({}, [machine], repeat=["create argv"]), [],
-                    )
+                    qemu_module.launch_vms({"infrastructure": {"base_path": "/exact"}}, [machine])
 
     def test_failed_machine_process_stages_prevent_publication(self):
         stages = (
@@ -6368,7 +6371,8 @@ class InfrastructureWorkspacePermissionTests(unittest.TestCase):
         machine = mock.Mock()
         machine.is_local = True
         machine.process.side_effect = [
-            [([], []), ([], [])],
+            [([], [])],
+            [([], [])],
             [([], []), ([], [])],
         ]
         config = {"ssh_key": "/tmp/continuum-smoke/.continuum/ssh/id_rsa_continuum"}
@@ -6376,11 +6380,13 @@ class InfrastructureWorkspacePermissionTests(unittest.TestCase):
         with mock.patch("infrastructure.infrastructure.os.path.isfile", return_value=False):
             infrastructure_module.create_keypair(config, [machine])
 
-        create_call = machine.process.call_args_list[0]
+        mkdir_call, create_call, chmod_call = machine.process.call_args_list
+        self.assertEqual(
+            mkdir_call.args[1], [["mkdir", "-p", "/tmp/continuum-smoke/.continuum/ssh"]]
+        )
         self.assertEqual(
             create_call.args[1],
             [
-                ["mkdir", "-p", "/tmp/continuum-smoke/.continuum/ssh"],
                 [
                     "ssh-keygen",
                     "-t",
@@ -6397,7 +6403,6 @@ class InfrastructureWorkspacePermissionTests(unittest.TestCase):
         )
         self.assertNotIn("shell", create_call.kwargs)
 
-        chmod_call = machine.process.call_args_list[1]
         self.assertEqual(
             chmod_call.args[1],
             [

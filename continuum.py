@@ -182,6 +182,17 @@ def main(args):
             logging.error("%s", exc)
             sys.exit(1)
         try:
+            if args.config["infrastructure"].get("delete"):
+                for owner in machines:
+                    if owner.is_local:
+                        continue
+                    _, error = owner.process_on_owner(
+                        args.config, ["true"], timeout_seconds=30,
+                    )[0]
+                    if error:
+                        raise RuntimeError(
+                            f"Physical worker {owner.name}: " + "\n".join(error)
+                        )
             reachable_targets = machine_utils.validate_resume_ssh_reachability(
                 args.config,
                 machines,

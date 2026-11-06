@@ -4,6 +4,7 @@ Create and use QEMU Vms
 
 import base64
 import binascii
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import logging
@@ -915,58 +916,29 @@ def set_ip_names(config, machines, nodes_per_machine):
 
 
 def copy(config, machines):
-    """Copy Infrastructure files to all machines
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
+    """Copy generated QEMU XML and cloud-init files to each owning host."""
     logging.info("Start copying infrastructure files to all nodes")
-
-    # Now copy the files over
+    destination = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
+    tmp_dir = config.get("tmp_dir") or os.path.join(config["base"], ".tmp")
     for machine in machines:
+        names = (
+            machine.cloud_controller_names + machine.cloud_names + machine.edge_names
+            + machine.endpoint_names + machine.base_names
+        )
+        sources = [
+            os.path.join(tmp_dir, filename)
+            for name in names
+            for filename in (f"domain_{name}.xml", f"user_data_{name}.yml")
+        ]
         if machine.is_local:
-            dest = os.path.join(config["infrastructure"]["base_path"], ".continuum/")
+            results = machine.process(config, [["cp", "--", source, destination]
+                                               for source in sources])
         else:
-            dest = machine.name + ":%s/.continuum/" % (config["infrastructure"]["base_path"])
-
-        out = []
-
-        # Copy VM creation files
-        for name in (
-            machine.cloud_controller_names
-            + machine.cloud_names
-            + machine.edge_names
-            + machine.endpoint_names
-            + machine.base_names
-        ):
-            out.append(
-                machine.copy_files(
-                    config,
-                    os.path.join(
-                        config.get("tmp_dir", os.path.join(config["base"], ".tmp")),
-                        "domain_" + name + ".xml",
-                    ),
-                    dest,
-                )
-            )
-            out.append(
-                machine.copy_files(
-                    config,
-                    os.path.join(
-                        config.get("tmp_dir", os.path.join(config["base"], ".tmp")),
-                        "user_data_" + name + ".yml",
-                    ),
-                    dest,
-                )
-            )
-
-        for output, error in out:
-            if error:
-                logging.error("".join(error))
-                sys.exit(1)
-            elif output:
-                logging.error("".join(output))
+            results = [machine.copy_to_worker(config, sources, destination)]
+        for output, error in results:
+            if error or output:
+                logging.error("QEMU file transfer to %s failed: %s", machine.name,
+                              "\n".join(error + output))
                 sys.exit(1)
 
 
@@ -1170,69 +1142,31 @@ def base_image(config, machines, runner=None):
         )
 
 
-def launch_vms(config, machines, repeat=None):
-    """Launch VMs concurrently
-    Moved into a function so it can be re-executed when a VM didn't start for some reason
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-        repeat (list, optional): Repeat specific execution. If empty, start all VMs. Defaults to [].
-
-    Returns:
-        list: Commands to execute again
-    """
-    # Launch the VMs concurrently
+def launch_vms(config, machines):
+    """Launch on the assigned owners without retrying ambiguous mutations."""
     logging.info("Start VMs")
-
-    # Sometimes previous QEMU commands aren't finished yet,
-    # so it's safer to wait a bit to prevent lock errors
     time.sleep(5)
 
-    commands = []
-    if not repeat:
-        for machine in machines:
-            for name in (
-                machine.cloud_controller_names
-                + machine.cloud_names
-                + machine.edge_names
-                + machine.endpoint_names
-            ):
-                path = os.path.join(
-                    config["infrastructure"]["base_path"], ".continuum/domain_%s.xml" % (name)
-                )
-                if machine.is_local:
-                    command = "virsh --connect qemu:///system create %s" % (path)
-                else:
-                    command = "ssh %s 'bash -l -c \"virsh --connect qemu:///system create %s\"'" % (
-                        machine.name,
-                        path,
-                    )
+    def launch(owner, name):
+        path = os.path.join(config["infrastructure"]["base_path"], ".continuum",
+                            f"domain_{name}.xml")
+        _single_process_result(
+            owner.process_on_owner(
+                config, ["virsh", "--connect", "qemu:///system", "create", path],
+                timeout_seconds=120,
+            ),
+            f"Launch of {name} on {owner.name}",
+        )
 
-                commands.append(command)
-
-        results = machines[0].process(config, commands, shell=True)
-    else:
-        # Only execute specific commands on repeat until VMs are launched succesfully
-        commands = repeat
-        results = machines[0].process(config, commands, shell=True)
-
-    repeat = []
-    for command, (output, error) in zip(commands, results):
-        logging.debug("Check output for command [%s]", command)
-
-        if error and "kex_exchange_identification" in error[0]:
-            # Repeat execution if key exchange error, can be solved by executing again
-            logging.error("ERROR, REPEAT EXECUTION: %s", "".join(error))
-            repeat.append(command)
-        elif error and "Connection to " not in error[0]:
-            logging.error("ERROR: %s", "".join(error))
-            sys.exit(1)
-        elif "Domain " not in output[0] or " created from " not in output[0]:
-            logging.error("ERROR: %s", "".join(output))
-            sys.exit(1)
-
-    return repeat
+    with ThreadPoolExecutor(max_workers=16) as workers:
+        jobs = [
+            workers.submit(launch, owner, name)
+            for owner in machines
+            for name in (owner.cloud_controller_names + owner.cloud_names
+                         + owner.edge_names + owner.endpoint_names)
+        ]
+        for job in jobs:
+            job.result()
 
 
 def start_vms(config, machines, runner=None):
@@ -1299,19 +1233,7 @@ def start_vms(config, machines, runner=None):
         )
         logging.info("qemu_create_vms playbook output:\n%s", "".join(output))
 
-    # Start VMs
-    repeat = []
-    i = 0
-    while True:
-        repeat = launch_vms(config, machines, repeat)
-        if not repeat:
-            break
-
-        if i == 1:
-            logging.error("ERROR AFTER %i REPS: %s", i + 1, " | ".join(repeat))
-            sys.exit(1)
-
-        i += 1
+    launch_vms(config, machines)
 
 
 def start(config, machines):
