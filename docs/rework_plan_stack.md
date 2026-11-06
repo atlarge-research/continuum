@@ -44,6 +44,12 @@ Before each nontrivial packet, freeze exact files and acceptance criteria, obtai
 
 - [Small reproducibility and failure-diagnosis proposal](superpowers/plans/2026-10-30-reproducibility-failure-diagnosis.md): deferred navigation only, outside the current checkpoint. Before scheduling or executing even its initial coverage audit, discuss again with the user whether it is wanted or mostly overengineering, and obtain a renewed decision. If later approved, first check existing coverage for at most two hours; keep the total effort to one to two engineer-days including tests/docs, make at most two small fixes, and stop early with zero fixes if existing coverage is sufficient. This entry grants no audit or implementation authority and changes no current gates.
 
+- **Read-only experiment preview.** Consider a `plan` command that reuses configuration resolution and validation to show selected phases, requested VM counts and sizes, software assignments and benchmark stages. It would report which decisions depend on live host state and leave the deployment untouched. Decide later how much of the resolved plan to expose and whether live read-only checks belong in a separate mode.
+
+- **Run-scoped resource cleanup.** Consider a separate cleanup command for failed runs and retained deployments. The environment profile's `delete_on_exit` setting already requests VM teardown at the end of a run. A cleanup command could use a run ID or state file to preview and remove resources verified to belong to that run, preserving shared images and caches, logs and results. Decide later how to record ownership across hosts and handle failures before state is saved. Cleanup should refuse to delete resources whose ownership it cannot verify.
+
+Both proposals need a separate decision on scope, interface and priority before implementation.
+
 ## 11. Historical Implementation Snapshot (Frozen May 22, 2026)
 
 The complete frozen implementation ledger is preserved verbatim in Git object `b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`. Inspect it with `git show b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/rework_plan_stack.md`. Verified private copies and SHA-256 bindings are in `docs/rework_release_handoff.md`.
