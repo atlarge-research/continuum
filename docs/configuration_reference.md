@@ -65,8 +65,10 @@ Top-level keys for `ContinuumExperiment`:
 | `targets` | list of strings | yes | none | Non-empty, no duplicates |
 | `registry_refresh` | string | no | `missing` | Allowed: `missing`, `all`; refresh missing/invalid required registry images or all required images |
 | `prepare_for_resume` | boolean | no | `false` | Only valid with `targets: [infrastructure]`; prepares retained infra for later resume |
-| `dry_run` | boolean | no | `false` | Parser-owned default |
-| `clean` | boolean | no | `false` | Parser-owned default |
+| `dry_run` | boolean | no | `false` | Compatibility field. Only `false` is supported. |
+| `clean` | boolean | no | `false` | Compatibility field. Only `false` is supported. |
+
+The runner rejects `true` for either field before executing the experiment. Use the environment profile's `delete_on_exit` setting to request VM teardown after a run.
 
 Allowed `run.targets` values:
 

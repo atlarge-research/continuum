@@ -448,7 +448,7 @@ def _run_single_test(
 
     # Parse config to get base images
     try:
-        config = test_utils.parse_config_simple(config_path)
+        config = test_utils.parse_config_simple(config_path, validate_execution_flags=True)
         base_path = base_path_override or config.get("infrastructure", {}).get("base_path", "~")
         result["parameter_overrides"] = {
             "base_path": base_path_override,
@@ -486,16 +486,19 @@ def _run_single_test(
             result["failure_class"] = test_utils.classify_test_failure(result)
             return result
 
-        try:
-            config = test_utils.parse_config_simple(temp_config_path)
-        except Exception as e:
-            result["error"] = f"Failed to parse overridden config: {e}"
-            result["execution_time"] = time.time() - start_time
-            result["failure_class"] = test_utils.classify_test_failure(result)
-            return result
-
     # Run continuum.py
     try:
+        if temp_file_created:
+            try:
+                config = test_utils.parse_config_simple(
+                    temp_config_path, validate_execution_flags=True
+                )
+            except Exception as e:
+                result["error"] = f"Failed to parse overridden config: {e}"
+                result["execution_time"] = time.time() - start_time
+                result["failure_class"] = test_utils.classify_test_failure(result)
+                return result
+
         # Get the continuum.py path (assume we're in project root)
         # Go up from scripts/test/run_tests.py to project root
         script_dir = os.path.dirname(os.path.abspath(__file__))

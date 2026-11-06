@@ -800,6 +800,55 @@ class RunTestsCliTests(unittest.TestCase):
 
 
 class RunSingleTestTests(unittest.TestCase):
+    def test_flagged_config_is_discoverable_but_never_executed(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = Path(tempdir) / "invalid.yaml"
+            path.write_text(
+                "kind: ContinuumExperimentLock\nnormalized_config:\n"
+                "  provider: {name: qemu, config: {}}\n"
+                "  run: {targets: [infrastructure], dry_run: true}\n",
+                encoding="utf-8",
+            )
+            self.assertIn(str(path), run_tests_module.test_utils.discover_config_files(
+                [tempdir], [], provider="qemu",
+            ))
+            with (
+                mock.patch.object(run_tests_module.subprocess, "Popen") as popen,
+                mock.patch.object(run_tests_module.test_utils, "override_config_parameters") as override,
+            ):
+                result = run_tests_module.run_single_test(
+                    str(path), {"success_detection": {"require_exit_code_zero": False}},
+                    base_path_override=tempdir,
+                )
+            self.assertFalse(result["success"])
+            self.assertIn("run.dry_run", result["error"])
+            override.assert_not_called()
+            popen.assert_not_called()
+
+    def test_rejected_overridden_lock_is_removed_before_returning(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = Path(tempdir) / "input.yaml"
+            override = Path(tempdir) / "override.yaml"
+            config = (
+                "kind: ContinuumExperimentLock\nnormalized_config:\n"
+                "  provider: {name: qemu, config: {}}\n"
+                "  run: {targets: [software], clean: %s}\n"
+            )
+            path.write_text(config % "false", encoding="utf-8")
+            override.write_text(config % "true", encoding="utf-8")
+            with (
+                mock.patch.object(run_tests_module.subprocess, "Popen") as popen,
+                mock.patch.object(
+                    run_tests_module.test_utils, "override_config_parameters",
+                    return_value=str(override),
+                ),
+            ):
+                result = run_tests_module.run_single_test(str(path), {}, base_path_override=tempdir)
+            self.assertFalse(result["success"])
+            self.assertIn("run.clean", result["error"])
+            self.assertFalse(override.exists())
+            popen.assert_not_called()
+
     def test_direct_wrapper_preserves_success_temp_cleanup_and_session_launch(self):
         previous = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))
         with tempfile.TemporaryDirectory() as tempdir:

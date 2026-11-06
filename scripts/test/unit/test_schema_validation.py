@@ -24,7 +24,7 @@ class SchemaValidationTests(unittest.TestCase):
         run = {
             "targets": [" infrastructure ", "software"],
             "dry_run": False,
-            "clean": True,
+            "clean": False,
         }
         targets = run_schema_validation.validate_run(
             run,
@@ -36,6 +36,19 @@ class SchemaValidationTests(unittest.TestCase):
         self.assertEqual(targets, ["infrastructure", "software"])
         self.assertEqual(run["registry_refresh"], "missing")
         self.assertFalse(run["prepare_for_resume"])
+
+    def test_validate_run_rejects_enabled_unsupported_flags(self):
+        for key in ("dry_run", "clean"):
+            for target in ("infrastructure", "software"):
+                with self.subTest(key=key, target=target):
+                    with self.assertRaisesRegex(ValueError, rf"run\.{key}.*unsupported"):
+                        run_schema_validation.validate_run(
+                            {"targets": [target], key: True},
+                            self.path,
+                            "run",
+                            self.allowed_targets,
+                            self.allowed_registry_refresh_modes,
+                        )
 
     def test_validate_run_defaults_clean_and_dry_run(self):
         run = {"targets": ["software"]}

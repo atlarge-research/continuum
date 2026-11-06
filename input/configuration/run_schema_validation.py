@@ -37,6 +37,17 @@ def normalize_targets(
     return normalized
 
 
+def validate_disabled_run_flags(run: dict, path: Path, prefix: str) -> None:
+    """Reject enabled legacy flags before entering an execution path."""
+    for key in ("dry_run", "clean"):
+        value = run.get(key, False)
+        key_path = "%s.%s" % (prefix, key)
+        if not isinstance(value, bool):
+            _fail(path, key_path, "must be boolean")
+        if value:
+            _fail(path, key_path, "true is unsupported; omit this field or set it to false")
+
+
 def validate_run(
     run: dict,
     path: Path,
@@ -68,11 +79,11 @@ def validate_run(
             "is selected",
         )
 
-    for key in ("dry_run", "clean", "prepare_for_resume"):
-        if key in run and not isinstance(run[key], bool):
-            _fail(path, "%s.%s" % (prefix, key), "must be boolean")
-        if key not in run:
-            run[key] = False
+    validate_disabled_run_flags(run, path, prefix)
+    run.setdefault("dry_run", False)
+    run.setdefault("clean", False)
+    if not isinstance(run.setdefault("prepare_for_resume", False), bool):
+        _fail(path, "%s.prepare_for_resume" % (prefix), "must be boolean")
 
     if run["prepare_for_resume"] and normalized_targets != ["infrastructure"]:
         _fail(

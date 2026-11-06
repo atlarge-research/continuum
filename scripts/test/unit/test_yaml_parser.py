@@ -1141,6 +1141,29 @@ class YamlParserTests(unittest.TestCase):
                     "fresh application execution requires the software phase", stderr
                 )
 
+    def test_experiment_rejects_enabled_run_flags_before_runtime_processing(self):
+        for key in ("dry_run", "clean"):
+            for target in ("infrastructure", "software"):
+                with self.subTest(key=key, target=target), tempfile.TemporaryDirectory() as tempdir:
+                    path, _ = self._build_triplet(Path(tempdir), tempdir, run_targets=[target])
+                    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+                    payload["run"][key] = True
+                    self._write(path, payload)
+                    self.assertIn("run." + key, self._parse_error_before_runtime_processing(path))
+
+    def test_lock_replay_rejects_enabled_run_flags(self):
+        for key in ("dry_run", "clean"):
+            for target in ("infrastructure", "software"):
+                with self.subTest(key=key, target=target), tempfile.TemporaryDirectory() as tempdir:
+                    lock_path = self._write_valid_lock(Path(tempdir))
+                    payload = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+                    payload["normalized_config"]["run"].update(targets=[target], **{key: True})
+                    self._write(lock_path, payload)
+                    self.assertIn(
+                        "normalized_config.run." + key,
+                        self._parse_error_before_runtime_processing(lock_path),
+                    )
+
     def test_lock_replay_rejects_fresh_application_without_software(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

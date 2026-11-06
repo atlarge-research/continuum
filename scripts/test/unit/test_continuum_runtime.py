@@ -37,6 +37,25 @@ from resource_manager.endpoint import endpoint as endpoint_module
 
 
 class RuntimeTargetResolutionTests(unittest.TestCase):
+    def test_direct_main_rejects_unsupported_run_flags_before_lock_or_runtime(self):
+        for target in ("infrastructure", "software"):
+            for key in ("dry_run", "clean"):
+                config = {
+                    "infrastructure": {"provider": "qemu"},
+                    "domains": {"run": {"targets": [target], key: True}},
+                }
+                with (
+                    self.subTest(target=target, key=key),
+                    mock.patch.object(continuum_module.yaml_parser, "write_experiment_lock") as lock,
+                    mock.patch.object(infrastructure_module, "start") as start,
+                    mock.patch.object(infra_state, "load_resume_state") as resume,
+                    self.assertRaises(SystemExit),
+                ):
+                    continuum_module.main(argparse.Namespace(config=config))
+                lock.assert_not_called()
+                start.assert_not_called()
+                resume.assert_not_called()
+
     def test_set_logging_uses_runtime_workspace_log_dir(self):
         with tempfile.TemporaryDirectory() as tempdir:
             args = argparse.Namespace(

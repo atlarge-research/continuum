@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import yaml
 
 from infrastructure.machine import Machine
-from input.configuration import resume_contract, validation_utils, yaml_parser
+from input.configuration import resume_contract, run_schema_validation, validation_utils, yaml_parser
 
 _ORCHESTRATOR_MODULE_TYPES = ("none", "kubernetes", "kubeedge", "kubecontrol", "kube_kata", "mist")
 _VERIFY_NETWORK_PROFILES = None
@@ -134,7 +134,7 @@ def apply_manifest_filter(config_files: Set[str], manifest: Dict) -> Set[str]:
     return result
 
 
-def parse_config_simple(config_path: str) -> Dict:
+def parse_config_simple(config_path: str, *, validate_execution_flags: bool = False) -> Dict:
     """Parse a config file to extract basic information without full validation.
 
     Args:
@@ -149,14 +149,19 @@ def parse_config_simple(config_path: str) -> Dict:
             "Only YAML experiment/lock configs are supported by the test runner, got %s"
             % (config_path)
         )
-    return parse_yaml_config_simple(config_path)
+    return parse_yaml_config_simple(config_path, validate_execution_flags=validate_execution_flags)
 
 
-def parse_yaml_config_simple(config_path: str) -> Dict:
+def parse_yaml_config_simple(config_path: str, *, validate_execution_flags: bool = False) -> Dict:
     """Parse YAML experiment/lock config to extract basic information."""
     path = Path(config_path).expanduser().resolve()
     data = _load_yaml(path)
     data = _normalized_payload_for_testing(path, data)
+    if validate_execution_flags:
+        run = data.get("run", {})
+        if not isinstance(run, dict):
+            validation_utils.fail(path, "run", "must be a mapping")
+        run_schema_validation.validate_disabled_run_flags(run, path, "run")
 
     result = {
         "infrastructure": {},

@@ -23,7 +23,9 @@ from infrastructure import (
 
 # pylint: disable-next=redefined-builtin
 from input import input
-from input.configuration import config_access, runtime_phase_targets, yaml_parser
+from input.configuration import (
+    config_access, run_schema_validation, runtime_phase_targets, yaml_parser,
+)
 from resource_manager import resource_manager
 
 
@@ -141,6 +143,9 @@ def main(args):
     try:
         run_infrastructure, run_software, run_application = (
             runtime_phase_targets.resolve_runtime_targets(args.config)
+        )
+        run_schema_validation.validate_disabled_run_flags(
+            args.config["domains"]["run"], "runtime configuration", "domains.run"
         )
     except ValueError as exc:
         logging.error("%s", exc)
