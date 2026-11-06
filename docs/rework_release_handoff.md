@@ -2,7 +2,15 @@
 
 This is a subordinate operational restart point, not policy or certification. Use `docs/rework_plan_stack.md`, `docs/rework_milestone_release_plan.md` and `docs/release_certification_matrix.md` for authority, policy and factual rows.
 
-## Current checkpoint — 2026-11-03
+## Engineering checkpoint · November 6, 2026
+
+QEMU-20261106 is on local branch `codex/overnight-qemu-20261106` in the isolated worktree. The exact engineering source is `dd744c20c23c5a6364785da231cf38055584150e`. It follows `5eaa1a054df55a2bbc6b29732554ac1e5eaab026` for fail-closed run flags and `89b7dd627fbc08ddc20d96dd58ee5e1f6711515b` for physical-worker trust. The three packets passed independent read-only review. The source checkout and its local review guide were preserved.
+
+The canonical cloud-static audit passed all 12 required gates on clean `dd744c2`. The unit, local end-to-end and combined unittest runs passed 1,048, 177 and 1,225 tests. The report is `logs/cloud_static_audit/cloud_static_audit_2026-11-06T003137Z.md` in the isolated worktree, SHA-256 `6983101c1d6f4d2f8784f504f9bc0f30e136883b7a26a8093845235cd22ef8a1`. Informational findings include historical artifact and pre-tag checks and image/registry prerequisites. Changed-file pylint was compared with the starting source and adds three line-length findings to the existing diagnostics. The source-bound configuration refresh and the paper decision options are recorded in the existing inventories. [Configuration evidence](configuration_inventory.md#preserved-evidence-and-refresh-requirement) · [Reproduction choices](reproduction_inventory.md#2023-reproduction-choices-for-the-next-scope-decision)
+
+No physical scenario was released. A strict, fresh node2 login succeeded for a hostname check. Automatic approval review denied detailed node2 prerequisite inspection and the node3 probe because it could not verify the allocation from the activated goal. The two node2 operational passes, node2-to-node3 remote resume/teardown and node4-to-node3 OpenFaaS therefore have no new workload or teardown evidence. No new guests were created, retained or destroyed. The case-by-case gate record and timeline are in the isolated worktree under `logs/overnight-qemu-20261106/`. The next physical decision is confirmation of the named allocations in a form the approval gate can verify. Final merge acceptance remains open under the milestone policy.
+
+## Earlier checkpoint — 2026-11-03
 
 ### Latest human review — node2 benchmark rerun on November 4, 2026
 
