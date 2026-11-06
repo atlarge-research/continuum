@@ -12,6 +12,10 @@ The primary agent must adjudicate findings as evidence, not votes or automatic r
 
 Keep validation proportional and follow the repository's applicable testing and specialized-skill guidance. This workflow grants no authority for destructive, external, privileged, certification, publishing, or other approval-sensitive actions.
 
+## MCS Physical Validation
+
+The user grants standing approval to run task-relevant physical validation on the group's MCS cluster whenever the user has authorized a time budget for the task. A general task time budget qualifies. Within that budget, proceed with normal-user preflights, test workloads and cleanup of guests created by those tests without asking again. Record the hosts, source revision, exclusive runtime roots, address allocation and ownership checks before launch. Preserve unrelated workloads and evidence. Honor any narrower task constraint and any required platform approval. Operations outside the test allocation, privilege changes, shared service changes, cloud spending, publication and merging require separate authority. Follow the [physical-host runner guide](docs/smoke_runner_isolation.md).
+
 ## Project Structure & Module Organization
 
 The main entry point is `continuum.py`. Core Python modules live in `infrastructure/`, `resource_manager/`, `application/`, `execution_model/`, and `input/configuration/`. Ansible automation is in `playbooks/` and `roles/`, with root-level `ansible.cfg` and `.ansible-lint`. New YAML profiles and experiments live in `configs/`; legacy `.cfg` examples remain under `configuration/`. Tests are in `scripts/test/`. Docs and diagrams are under `docs/`. Mahimahi is an optional runtime dependency fetched into `<base_path>/.continuum/mahimahi` by the Ansible role for `_mahimahi` presets; do not vendor or edit a repo-root `mahimahi/` checkout unless the task explicitly targets that external project.
