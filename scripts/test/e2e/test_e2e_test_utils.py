@@ -1609,13 +1609,13 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
         }
         calls = []
 
-        def owner_aware_result(machine, _config, command, ssh=None, ssh_key=True):
-            calls.append((machine.name, command, ssh, ssh_key))
+        def owner_aware_result(machine, _config, command, timeout_seconds=None):
+            calls.append((machine.name, command, timeout_seconds))
             if machine.is_local:
                 return [(["external-domain"], [])]
             return [(["local-domain"], [])]
 
-        with mock.patch.object(test_utils.Machine, "process", autospec=True) as process_mock:
+        with mock.patch.object(test_utils.Machine, "process_on_owner", autospec=True) as process_mock:
             process_mock.side_effect = owner_aware_result
             success, reason = test_utils.verify_qemu_teardown(config, state_payload)
 
@@ -1625,61 +1625,73 @@ class E2ETestUtilsYamlTests(unittest.TestCase):
             calls,
             [
                 ("local", ["virsh", "--connect", "qemu:///system", "list", "--all", "--name"],
-                 "local", False),
+                 30),
                 (
                     "operator@external.invalid",
                     ["virsh", "--connect", "qemu:///system", "list", "--all", "--name"],
-                    "operator@external.invalid",
-                    False,
+                    30,
                 ),
             ],
         )
 
     def test_qemu_cleanup_and_verifier_use_system_inventory(self):
-        """Exercise both cleanup paths when the default session inventory is empty."""
+        """Exercise provider and verifier for both owner transports."""
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             virsh = root / "virsh"
             virsh.write_text(
-                "#!/bin/sh\n"
-                '[ "$1" = --connect ] && [ "$2" = qemu:///system ] || exit 0\n'
-                "shift 2\n"
-                'case "$1" in\n'
-                '  list) cat "$CONTINUUM_TEST_DOMAINS" ;;\n'
-                '  destroy) sed -i "/^$2$/d" "$CONTINUUM_TEST_DOMAINS" ;;\n'
-                '  *) exit 2 ;;\n'
-                'esac\n',
+                """#!/bin/sh
+[ "$1" = --connect ] && [ "$2" = qemu:///system ] || exit 0
+shift 2
+case "$1" in
+  list) case "$*" in *--name) cut -d" " -f2 "$DOMAINS";;
+                      *) cut -d" " -f1 "$DOMAINS";; esac ;;
+  dumpxml) n=$(awk -v id="$2" '$1 == id { print $2 }' "$DOMAINS")
+    printf '<domain><name>%s</name><uuid>%s</uuid><devices>' "$n" "$2"
+    printf '<disk type="file"><source file="%s/%s.qcow2"/><target dev="vda"/></disk>' "$IMAGES" "$n"
+    printf '<disk type="file"><source file="%s/user_data_%s.img"/><target dev="vdb"/></disk>' "$IMAGES" "$n"
+    printf '</devices></domain>' ;;
+  domuuid) awk -v name="$2" '$2 == name { print $1 }' "$DOMAINS" ;;
+  destroy) sed -i "/^$2 /d" "$DOMAINS" ;;
+  *) exit 2 ;;
+esac
+""",
                 encoding="utf-8",
             )
             ssh = root / "ssh"
             ssh.write_text(
-                "#!/bin/sh\n"
-                '[ "$1" = operator@external.invalid ] || exit 2\n'
-                'case "$2" in\n'
-                '  "bash -l -c "*) exec /bin/sh -c "exec /bin/bash -c ${2#bash -l -c }" ;;\n'
-                '  *) exit 2 ;;\n'
-                'esac\n',
+                """#!/bin/sh
+while [ "$1" = -o ]; do shift 2; done
+[ "$1" = -- ] && [ "$2" = operator@external.invalid ] || exit 2
+shift 2
+exec /bin/sh -c "$*"
+""",
                 encoding="utf-8",
             )
             virsh.chmod(0o700)
             ssh.chmod(0o700)
             domains = root / "system-domains"
             config = dict(self._qemu_delete_config(tempdir), username="test")
-            local = test_utils.Machine("local", True)
-            remote = test_utils.Machine("operator@external.invalid", False)
-            state = {"machine_data": [self._owner_state()]}
             with mock.patch.dict(os.environ, {
                 "PATH": os.pathsep.join((tempdir, os.defpath)),
-                "CONTINUUM_TEST_DOMAINS": str(domains),
+                "DOMAINS": str(domains),
+                "IMAGES": str(root / ".continuum" / "images"),
             }):
-                for owner in (local, remote):
-                    with self.subTest(owner=owner.name):
-                        domains.write_text("cloud0_test\nunrelated_other\n", encoding="utf-8")
+                for name, is_local in (("local", True), ("operator@external.invalid", False)):
+                    with self.subTest(owner=name):
+                        owner = test_utils.Machine(name, is_local)
+                        owner.cloud_names = ["cloud0_test"]
+                        state = {"machine_data": [self._owner_state(name=name, is_local=is_local)]}
+                        unrelated = "00000000-0000-4000-8000-000000000002 unrelated_other\n"
+                        domains.write_text(
+                            "00000000-0000-4000-8000-000000000001 cloud0_test\n" + unrelated,
+                            encoding="utf-8",
+                        )
                         success, reason = test_utils.verify_qemu_teardown(config, state)
                         self.assertFalse(success, reason)
                         self.assertIn("cloud0_test", reason)
                         qemu.delete_vms(config, [owner])
-                        self.assertEqual(domains.read_text(encoding="utf-8"), "unrelated_other\n")
+                        self.assertEqual(domains.read_text(encoding="utf-8"), unrelated)
                         self.assertEqual(
                             test_utils.verify_qemu_teardown(config, state),
                             (True, "teardown_verified"),

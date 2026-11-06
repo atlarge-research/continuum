@@ -473,7 +473,10 @@ set_suite_scenario() {
 
 case "$SCENARIO" in
   phase_smoke_matrix)
-    run_child_scenarios infra_one_vm software_k8s_two_vm network_netperf_two_vm
+    for child_scenario in infra_one_vm software_k8s_two_vm network_netperf_two_vm; do
+      printf '\n=== Running smoke scenario: %s ===\n' "$child_scenario"
+      sh "$0" "$child_scenario" --delete-on-exit
+    done
     exit 0
     ;;
   operational_regression)
@@ -685,6 +688,15 @@ if [ "$RUN_MODE" = "suite" ]; then
       --base-path "$BASE_PATH"
 fi
 
+case "$SCENARIO:${2:-}" in
+  infra_one_vm:--delete-on-exit|software_k8s_two_vm:--delete-on-exit|network_netperf_two_vm:--delete-on-exit)
+    set -- --delete-on-exit
+    ;;
+  *)
+    set --
+    ;;
+esac
+
 exec env -i \
   HOME="$HOME" \
   PATH="$VENV_BIN:$SAFE_PATH" \
@@ -701,4 +713,4 @@ exec env -i \
   ${QEMU_BRIDGE_GATEWAY:+CONTINUUM_QEMU_BRIDGE_GATEWAY="$QEMU_BRIDGE_GATEWAY"} \
   "$PYTHON_BIN" scripts/test/run_tests.py \
     --config "$CONFIG" \
-    --base-path "$BASE_PATH"
+    --base-path "$BASE_PATH" "$@"

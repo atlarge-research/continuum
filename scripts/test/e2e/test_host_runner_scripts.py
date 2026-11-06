@@ -304,6 +304,10 @@ class HostRunnerScriptTests(unittest.TestCase):
                 "PYARGS:scripts/test/run_tests.py --suite benchmark_smoke --base-path",
                 result.stdout,
             )
+            invocations = [line for line in result.stdout.splitlines() if line.startswith("PYARGS:")]
+            self.assertEqual(len(invocations), 4)
+            self.assertTrue(all(line.endswith(" --delete-on-exit") for line in invocations[:3]))
+            self.assertNotIn("--delete-on-exit", invocations[3])
 
     def test_run_smoke_storage_report_does_not_require_runner_python(self):
         with tempfile.TemporaryDirectory() as tempdir:

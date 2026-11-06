@@ -69,7 +69,7 @@ case "$COMMAND" in
       echo "Normal user needs read/write access to /dev/kvm; ask the host operator." >&2
       exit 1
     }
-    virsh -c "${LIBVIRT_DEFAULT_URI:-qemu:///system}" list --all
+    virsh --connect qemu:///system list --all
     CONTINUUM_SMOKE_BASE_ROOT="$BASE_ROOT" CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \
       sh "$REPO_ROOT/scripts/test/run_smoke_host.sh" check-prereqs --suite smoke
     CONTINUUM_SMOKE_BASE_ROOT="$BASE_ROOT" CONTINUUM_SMOKE_PYTHON="$PYTHON_BIN" \

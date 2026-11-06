@@ -9,9 +9,11 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shlex
 import sys
 import time
+from xml.etree import ElementTree
 
 import yaml
 from jinja2 import Environment, StrictUndefined, TemplateError
@@ -175,7 +177,7 @@ def _invalidate_base_image_marker(machine, config, raw_base_name):
 
 
 def _confirm_base_vms_stopped(config, selected_entries):
-    """Boundedly confirm selected transient domains are absent from running domains."""
+    """Boundedly confirm selected transient domains are absent from system libvirt."""
     owners = []
     for machine, _raw_base_name, _normalized_name, _invalid_reason in selected_entries:
         if all(machine is not owner for owner in owners):
@@ -192,7 +194,7 @@ def _confirm_base_vms_stopped(config, selected_entries):
             "--connect",
             "qemu:///system",
             "list",
-            "--state-running",
+            "--all",
             "--name",
         ]
         for attempt in range(_BASE_SHUTDOWN_ATTEMPTS):
@@ -709,41 +711,194 @@ def _base_profile_token(config):
     return "np1_mm%s" % (int(enable_mahimahi))
 
 
+def _system_virsh(config, owner, *args):
+    """Run one checked command on the system libvirt connection of the owner."""
+    operation = f"virsh {' '.join(args)} on {owner.name}"
+    try:
+        result = owner.process_on_owner(
+            config, ["virsh", "--connect", "qemu:///system", *args], timeout_seconds=30,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"{operation} failed: {exc}") from exc
+    return _single_process_result(result, operation)
+
+
+def _domain_uuids(config, owner, *filters):
+    lines = _system_virsh(config, owner, "list", "--all", *filters, "--uuid")
+    uuids = [line.strip() for line in lines if line.strip()]
+    if len(set(uuids)) != len(uuids) or any(
+        not re.fullmatch(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}", value)
+        for value in uuids
+    ):
+        raise RuntimeError(f"Malformed system libvirt UUID inventory on {owner.name}")
+    return uuids
+
+
+def _domain_names(config, owner):
+    return {
+        line.strip()
+        for line in _system_virsh(config, owner, "list", "--all", "--name")
+        if line.strip()
+    }
+
+
+def _domain_xml(config, owner, uuid, *options):
+    output = _system_virsh(config, owner, "dumpxml", *options, uuid)
+    try:
+        domain = ElementTree.fromstring("\n".join(output))
+    except ElementTree.ParseError as exc:
+        raise RuntimeError(f"Invalid libvirt XML for {uuid} on {owner.name}") from exc
+    if domain.tag != "domain" or domain.findtext("uuid") != uuid or not domain.findtext("name"):
+        raise RuntimeError(f"Cannot verify libvirt identity for {uuid} on {owner.name}")
+    return domain
+
+
+def _disk_paths(config, owner, domain, *, startup):
+    paths = set()
+    for source in domain.findall("./devices/disk//source"):
+        paths.update(source.get(key) for key in ("file", "dev", "dir") if source.get(key))
+        pool, volume = source.get("pool"), source.get("volume")
+        if startup and (pool or volume):
+            if not (pool and volume):
+                raise RuntimeError(f"Incomplete libvirt volume source on {owner.name}")
+            result = _system_virsh(config, owner, "vol-path", f"--pool={pool}", f"--vol={volume}")
+            if len(result) != 1 or not os.path.isabs(result[0]):
+                raise RuntimeError(f"Cannot resolve libvirt volume {pool}/{volume} on {owner.name}")
+            paths.add(result[0])
+    return paths
+
+
+def _expected_disk_pair(domain, name, root, paths):
+    disks = domain.findall("./devices/disk")
+    if len(disks) != 2:
+        return False
+    actual = {}
+    for disk in disks:
+        target = disk.find("target")
+        source = disk.find("source")
+        if disk.get("type") != "file" or target is None or source is None:
+            return False
+        actual[target.get("dev")] = paths.get(source.get("file"))
+    return actual == {
+        "vda": os.path.join(root, f"{name}.qcow2"),
+        "vdb": os.path.join(root, f"user_data_{name}.img"),
+    }
+
+
+def _cleanup_targets(config, owner, *, startup):
+    """Read inventory and prove ownership before the caller mutates any host."""
+    expected = set(
+        owner.cloud_controller_names + owner.cloud_names + owner.edge_names
+        + owner.endpoint_names + owner.base_names
+    )
+    names = re.compile(
+        r"(?:cloud_controller|(?:cloud|edge|endpoint|base)[0-9]+"
+        r"|base_(?:cloud|edge)_[a-zA-Z0-9_-]+_np1_mm[01]_[0-9]+"
+        r"|base_endpoint_np1_mm[01]_[0-9]+)_" + re.escape(config["username"])
+    )
+    uuids = _domain_uuids(config, owner)
+    transient = set(_domain_uuids(config, owner, "--transient"))
+    if not transient.issubset(uuids):
+        raise RuntimeError(f"System libvirt inventory changed during cleanup on {owner.name}")
+
+    base = config["infrastructure"]["base_path"]
+    root = os.path.join(base, ".continuum/images")
+    lexical_root = os.path.normpath(root)
+    entries = []
+    references = set()
+    identities = [(uuid, None) for uuid in uuids]
+    if not startup:
+        identities = []
+        for name in sorted(expected & _domain_names(config, owner)):
+            if not names.fullmatch(name):
+                raise RuntimeError(f"Unexpected saved QEMU domain name {name!r} on {owner.name}")
+            result = _system_virsh(config, owner, "domuuid", name)
+            matching = [line.strip() for line in result if line.strip()]
+            if len(matching) != 1 or matching[0] not in uuids:
+                raise RuntimeError(f"Cannot bind saved domain {name} to a UUID on {owner.name}")
+            identities.append((matching[0], name))
+
+    for uuid, expected_name in identities:
+        active_xml = _domain_xml(config, owner, uuid)
+        name = active_xml.findtext("name")
+        if expected_name is not None and name != expected_name:
+            raise RuntimeError(f"Saved domain {expected_name} changed identity on {owner.name}")
+        sources = _disk_paths(config, owner, active_xml, startup=startup)
+        if startup and uuid not in transient:
+            inactive = _domain_xml(config, owner, uuid, "--inactive")
+            sources.update(_disk_paths(config, owner, inactive, startup=True))
+        references.update(sources)
+        entries.append((uuid, name, active_xml, sources))
+
+    raw_paths = [base, root, *sorted(references)]
+    resolved = _single_process_result(
+        owner.process_on_owner(
+            config, ["realpath", "-m", "--", *raw_paths], timeout_seconds=30,
+        ),
+        f"Resolve image and domain paths on {owner.name}",
+    )
+    if len(resolved) != len(raw_paths) or not all(os.path.isabs(path) for path in resolved):
+        raise RuntimeError(f"Cannot verify canonical libvirt disk paths on {owner.name}")
+    paths = dict(zip(raw_paths, resolved))
+    canonical_root = paths[root]
+    if canonical_root != os.path.join(paths[base], ".continuum/images"):
+        raise RuntimeError(f"Image workspace resolves outside the configured base on {owner.name}")
+    targets = []
+    for uuid, name, domain, sources in entries:
+        if (uuid in transient and names.fullmatch(name)
+                and _expected_disk_pair(domain, name, canonical_root, paths)):
+            targets.append((uuid, name))
+            continue
+        if name in expected or (startup and any(
+            os.path.commonpath([canonical_root, paths[path]]) == canonical_root
+            or (os.path.isabs(lexical_root) and os.path.isabs(path)
+                and os.path.commonpath([lexical_root, path]) == lexical_root)
+            for path in sources
+        )):
+            raise RuntimeError(
+                f"Protected system libvirt domain {name} ({uuid}) on {owner.name} "
+                f"conflicts with the planned workspace {canonical_root}"
+            )
+    return expected, targets, set(uuids)
+
+
+def _cleanup_domains(config, machines, *, startup):
+    inventories = [
+        (owner, *_cleanup_targets(config, owner, startup=startup)) for owner in machines
+    ]
+    failures = []
+    for owner, expected, targets, initial_uuids in inventories:
+        for uuid, name in targets:
+            try:
+                _system_virsh(config, owner, "destroy", uuid)
+            except RuntimeError as exc:
+                failures.append(f"{name} ({uuid}) on {owner.name}: {exc}")
+
+        try:
+            remaining_uuids = set(_domain_uuids(config, owner))
+            if startup and remaining_uuids - initial_uuids:
+                failures.append(f"System libvirt inventory changed during startup on {owner.name}")
+            remaining_names = _domain_names(config, owner)
+            for uuid, name in targets:
+                if uuid in remaining_uuids:
+                    failures.append(f"{name} ({uuid}) still present on {owner.name}")
+            conflicts = (expected | {name for _, name in targets}) & remaining_names
+            if conflicts:
+                failures.append(f"Domains still present on {owner.name}: {', '.join(sorted(conflicts))}")
+        except RuntimeError as exc:
+            failures.append(str(exc))
+    if failures:
+        raise RuntimeError("QEMU cleanup could not be verified:\n" + "\n".join(failures))
+
+
+def cleanup_startup(config, machines):
+    """Remove old domains in this workspace before stale files are removed."""
+    _cleanup_domains(config, machines, startup=True)
+
+
 def delete_vms(config, machines):
-    """Delete the VMs created by Continuum: Always at the start of a run the delete old VMs,
-    and possilby at the end if the run if configured by the user
-
-    Args:
-        config (dict): Parsed configuration
-        machines (list(Machine object)): List of machine objects representing physical machines
-    """
-    logging.info("Start deleting VMs")
-
-    commands = []
-    sshs = []
-    for machine in machines:
-        if machine.is_local:
-            command = (
-                r'virsh --connect qemu:///system list --all | grep -o -E "(\w*_%s)" | \
-xargs -I %% sh -c "virsh --connect qemu:///system destroy %%"'
-                % (config["username"])
-            )
-        else:
-            comm = (
-                r"virsh --connect qemu:///system list --all | grep -o -E \"(\w*_%s)\" | \
-xargs -I %% sh -c \"virsh --connect qemu:///system destroy %%\""
-                % (config["username"])
-            )
-            command = "ssh %s 'bash -l -c \"%s\"'" % (machine.name, comm)
-
-        commands.append(command)
-        sshs.append(None)
-
-    results = machines[0].process(config, commands, shell=True, ssh=sshs, ssh_key=False)
-
-    # Wait for process to finish. Outcome of destroy command does not matter
-    for command, (_, _) in zip(commands, results):
-        logging.debug("Check output for command [%s]", command)
+    """Tear down only the state-attributed transient domains of this deployment."""
+    _cleanup_domains(config, machines, startup=False)
 
 
 def add_options(_config):

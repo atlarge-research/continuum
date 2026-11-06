@@ -129,7 +129,8 @@ def _log_vm_access_hints(config, header="To access the VMs"):
 
     if config.get("infrastructure", {}).get("provider") == "qemu":
         logging.info(
-            "QEMU fallback inspection hint: use `virsh list --all` to enumerate running VMs "
+            "QEMU fallback inspection hint: use `virsh --connect qemu:///system list --all` "
+            "to enumerate VMs "
             "when SSH hints are not yet available in the log."
         )
 

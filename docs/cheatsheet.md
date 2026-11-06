@@ -67,8 +67,8 @@ Common host-side commands:
 
 | Command | Description |
 | --- | --- |
-| `virsh list --all` | List QEMU/libvirt domains |
-| `virsh domifaddr <vm-name>` | Recover guest IPs when logs are incomplete |
+| `virsh --connect qemu:///system list --all` | List QEMU/libvirt domains |
+| `virsh --connect qemu:///system domifaddr <vm-name>` | Recover guest IPs when logs are incomplete |
 | `ssh user@ip -i key` | SSH into a retained VM using logged hints |
 
 Inside Kubernetes control-plane VMs:

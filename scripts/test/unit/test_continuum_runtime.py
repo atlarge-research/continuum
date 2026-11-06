@@ -102,7 +102,7 @@ class RuntimeTargetResolutionTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "virsh list --all" in call.args[0]
+                "virsh --connect qemu:///system list --all" in call.args[0]
                 for call in mock_info.call_args_list
             )
         )
@@ -2480,6 +2480,7 @@ class ImagePrefetchFlowTests(unittest.TestCase):
     def test_fresh_infrastructure_prepares_images_before_provider_start(self):
         config = {
             "infrastructure": {
+                "provider": "qemu",
                 "cpu_pin": False,
                 "cloud_nodes": 1,
                 "edge_nodes": 0,
@@ -2489,7 +2490,8 @@ class ImagePrefetchFlowTests(unittest.TestCase):
                 "endpoint_cores": 1,
                 "network_emulation": False,
                 "netperf": False,
-            }
+            },
+            "module": {"provider": mock.Mock()},
         }
         machine = mock.Mock(cores=4)
         events = []
@@ -5666,7 +5668,7 @@ class QemuBaseImageMetadataTests(unittest.TestCase):
                                                         "qemu:///system", "list"]]
                 self.assertEqual(len(confirmations), 1)
                 self.assertEqual(confirmations[0].args[1], ["virsh", "--connect",
-                                 "qemu:///system", "list", "--state-running", "--name"])
+                                 "qemu:///system", "list", "--all", "--name"])
                 self.assertEqual(confirmations[0].kwargs,
                                  {} if owner.is_local else {"ssh": remote.name, "ssh_key": False})
 

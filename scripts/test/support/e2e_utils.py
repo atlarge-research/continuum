@@ -1125,12 +1125,7 @@ def verify_qemu_teardown(config: Dict, state_payload: Dict) -> Tuple[bool, str]:
         try:
             owner = Machine(owner_name, is_local)
             command = ["virsh", "--connect", "qemu:///system", "list", "--all", "--name"]
-            results = owner.process(
-                config,
-                command,
-                ssh=owner.name,
-                ssh_key=False,
-            )
+            results = owner.process_on_owner(config, command, timeout_seconds=30)
         except Exception as exc:
             return False, "Teardown verification failed: owner %s: %s" % (owner_name, exc)
         if not isinstance(results, list) or len(results) != 1:
@@ -1143,25 +1138,18 @@ def verify_qemu_teardown(config: Dict, state_payload: Dict) -> Tuple[bool, str]:
                 owner_name,
             )
         output, error = result
-        if not isinstance(output, list) or not isinstance(error, list):
+        if (not isinstance(output, list) or not isinstance(error, list)
+                or not all(isinstance(line, str) for line in output + error)):
             return False, "Teardown verification failed: owner %s returned malformed output" % (
                 owner_name,
             )
-        synthetic_error = next(
-            (
-                line
-                for line in error
-                if "Command exited with non-zero return code" in str(line)
-            ),
-            None,
-        )
-        if synthetic_error:
+        if error:
             return False, "Teardown verification failed: owner %s: %s" % (
                 owner_name,
-                synthetic_error,
+                "\n".join(error),
             )
 
-        present_domains = set(output)
+        present_domains = {name.strip() for name in output if name.strip()}
         remaining = sorted(set(domain_names).intersection(present_domains))
         if remaining:
             return False, "Teardown verification failed: VM domain(s) still present on %s: %s" % (
@@ -1400,6 +1388,7 @@ def override_config_parameters(
     middle_ip: Optional[int] = None,
     middle_ip_base: Optional[int] = None,
     external_physical_machines: Optional[str] = None,
+    delete_on_exit: bool = False,
 ) -> str:
     """Create a temporary YAML config file with overridden parameters.
 
@@ -1425,6 +1414,7 @@ def override_config_parameters(
         middle_ip=middle_ip,
         middle_ip_base=middle_ip_base,
         external_physical_machines=external_physical_machines,
+        delete_on_exit=delete_on_exit,
     )
 
 
@@ -1434,6 +1424,7 @@ def override_yaml_config_parameters(
     middle_ip: Optional[int] = None,
     middle_ip_base: Optional[int] = None,
     external_physical_machines: Optional[str] = None,
+    delete_on_exit: bool = False,
 ) -> str:
     """Create temporary YAML config with overridden provider fields.
 
@@ -1442,6 +1433,10 @@ def override_yaml_config_parameters(
     """
     path = Path(config_path).expanduser().resolve()
     data = _load_yaml(path)
+    if delete_on_exit:
+        provider = _normalized_payload_for_testing(path, data).get("provider", {})
+        if provider.get("name") != "qemu" or not base_path:
+            raise ValueError("delete_on_exit override requires a QEMU input and explicit base path")
 
     if data.get("kind") == "ContinuumExperimentLock":
         lock_data = data
@@ -1454,6 +1449,9 @@ def override_yaml_config_parameters(
 
         parsed_provider_cfg = parsed_config["normalized"]["provider"]["config"]
         parsed_infra = parsed_config["infrastructure"]
+        if delete_on_exit:
+            parsed_provider_cfg["delete_on_exit"] = True
+            parsed_infra["delete"] = True
         if base_path is not None:
             expanded_path = os.path.expanduser(base_path)
             if expanded_path.endswith("/"):
@@ -1494,6 +1492,8 @@ def override_yaml_config_parameters(
         if expanded_path.endswith("/"):
             expanded_path = expanded_path[:-1]
         provider_cfg["base_path"] = expanded_path
+    if delete_on_exit:
+        provider_cfg["delete_on_exit"] = True
 
     ip_cfg = provider_cfg.setdefault("ip", {})
     if middle_ip is not None:

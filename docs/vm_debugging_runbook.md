@@ -58,7 +58,7 @@ At the end of successful non-delete runs, Continuum still prints the final acces
 If a run fails before the final summary or before you notice the SSH lines, use the host-side QEMU tooling:
 
 ```bash
-virsh list --all
+virsh --connect qemu:///system list --all
 ```
 
 This shows which Continuum VMs are still running.
@@ -66,11 +66,11 @@ This shows which Continuum VMs are still running.
 Useful follow-up commands:
 
 ```bash
-virsh domifaddr <vm-name>
-virsh console <vm-name>
+virsh --connect qemu:///system domifaddr <vm-name>
+virsh --connect qemu:///system console <vm-name>
 ```
 
-`virsh domifaddr` is often the fastest way to recover the guest IP when logs are not enough.
+`virsh --connect qemu:///system domifaddr` is often the fastest way to recover the guest IP when logs are not enough.
 
 ## 5. Minimal First-Pass Checks Inside A VM
 
@@ -132,8 +132,8 @@ If VM reality and the saved state disagree, treat that as a higher-priority bug 
 Infrastructure failure after VM creation:
 
 1. check the host log for provisioning step boundaries,
-2. recover VM names with `virsh list --all`,
-3. verify guest reachability with SSH or `virsh console`,
+2. recover VM names with `virsh --connect qemu:///system list --all`,
+3. verify guest reachability with SSH or `virsh --connect qemu:///system console`,
 4. compare guest IPs to `state.json`.
 
 Software failure:

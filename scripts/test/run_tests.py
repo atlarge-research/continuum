@@ -414,6 +414,7 @@ def _run_single_test(
     middle_ip_override: Optional[int] = None,
     middle_ip_base_override: Optional[int] = None,
     external_physical_machines_override: Optional[str] = None,
+    delete_on_exit: bool = False,
     timeout_minutes: int = 30,
     coordinator=None,
 ) -> Dict:
@@ -456,6 +457,8 @@ def _run_single_test(
             "middleIP_base": middle_ip_base_override,
             "external_physical_machines": external_physical_machines_override,
         }
+        if delete_on_exit:
+            result["parameter_overrides"]["delete_on_exit"] = True
     except Exception as e:
         result["error"] = f"Failed to parse config: {e}"
         result["execution_time"] = time.time() - start_time
@@ -470,6 +473,7 @@ def _run_single_test(
         or middle_ip_override is not None
         or middle_ip_base_override is not None
         or external_physical_machines_override is not None
+        or delete_on_exit
     ):
         try:
             temp_config_path = test_utils.override_config_parameters(
@@ -478,6 +482,7 @@ def _run_single_test(
                 middle_ip=middle_ip_override,
                 middle_ip_base=middle_ip_base_override,
                 external_physical_machines=external_physical_machines_override,
+                delete_on_exit=delete_on_exit,
             )
             temp_file_created = True
         except Exception as e:
@@ -608,6 +613,7 @@ def _run_tests(
     middle_ip_override: Optional[int] = None,
     middle_ip_base_override: Optional[int] = None,
     external_physical_machines_override: Optional[str] = None,
+    delete_on_exit: bool = False,
     stop_on_failure: bool = False,
     coordinator=None,
 ) -> List[Dict]:
@@ -676,6 +682,7 @@ def _run_tests(
             middle_ip_override=middle_ip_override,
             middle_ip_base_override=middle_ip_base_override,
             external_physical_machines_override=external_machines_override,
+            delete_on_exit=delete_on_exit,
             timeout_minutes=timeout_minutes,
             coordinator=coordinator,
         )
@@ -800,6 +807,10 @@ def main():
         help="Override base_path for all tests",
     )
     parser.add_argument(
+        "--delete-on-exit", action="store_true",
+        help="Request and verify QEMU teardown for one --config with an explicit --base-path",
+    )
+    parser.add_argument(
         "--middle-ip",
         type=int,
         help="Override middleIP for all tests",
@@ -826,6 +837,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if args.delete_on_exit and (not args.config or not args.base_path or args.suite):
+        parser.error("--delete-on-exit requires one --config and an explicit --base-path")
 
     # Resolve test config path relative to project root if needed
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -975,6 +988,7 @@ def main():
         middle_ip_override=args.middle_ip,
         middle_ip_base_override=args.middle_ip_base,
         external_physical_machines_override=args.external_physical_machines,
+        delete_on_exit=args.delete_on_exit,
         stop_on_failure=stop_on_failure,
     )
 

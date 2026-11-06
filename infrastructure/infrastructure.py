@@ -427,16 +427,21 @@ def start(config):
 
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
 
-    # Delete old resources
-    delete_vms(config, machines)
+    is_qemu = config["infrastructure"]["provider"] == "qemu"
+    if is_qemu:
+        # QEMU checks planned names for protected system-libvirt collisions.
+        set_ip_names(config, machines, nodes_per_machine)
+        config["module"]["provider"].cleanup_startup(config, machines)
+    else:
+        delete_vms(config, machines)
 
     # Prepare storage for Continuum files
     create_tmp_dir(config, machines)
     delete_old_content(config, machines)
     create_continuum_dir(config, machines)
 
-    # Sets IPs and names for
-    set_ip_names(config, machines, nodes_per_machine)
+    if not is_qemu:
+        set_ip_names(config, machines, nodes_per_machine)
     m.print_schedule(machines)
 
     image_registry.prepare_runtime_images(config, machines)

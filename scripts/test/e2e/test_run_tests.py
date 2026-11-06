@@ -800,6 +800,26 @@ class RunTestsCliTests(unittest.TestCase):
 
 
 class RunSingleTestTests(unittest.TestCase):
+    def test_delete_on_exit_override_is_visible_in_temporary_qemu_lock(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = Path(tempdir) / "input.yaml"
+            source = (
+                "kind: ContinuumExperimentLock\nnormalized_config:\n"
+                "  provider: {name: qemu, config: {delete_on_exit: false}}\n"
+                "  run: {targets: [infrastructure]}\n"
+            )
+            path.write_text(source, encoding="utf-8")
+            result = run_tests_module.test_utils.override_config_parameters(
+                str(path), base_path=tempdir, delete_on_exit=True,
+            )
+            override = Path(result)
+            try:
+                parsed = run_tests_module.test_utils.parse_config_simple(str(override))
+                self.assertTrue(parsed["infrastructure"]["delete_on_exit"])
+                self.assertEqual(path.read_text(encoding="utf-8"), source)
+            finally:
+                override.unlink()
+
     def test_flagged_config_is_discoverable_but_never_executed(self):
         with tempfile.TemporaryDirectory() as tempdir:
             path = Path(tempdir) / "invalid.yaml"
