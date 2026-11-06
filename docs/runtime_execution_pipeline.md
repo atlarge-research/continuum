@@ -1,6 +1,6 @@
 # Runtime Execution Pipeline
 
-The pre-main support boundary is `docs/rework_milestone_release_plan.md` and factual evidence is `docs/release_certification_matrix.md`. The supported resume contract is QEMU-only, same revision/base path/topology/software contract, linear infrastructure → software → application. Cross-commit resume, arbitrary software replacement and concurrent shared-base-path runs are unsupported. Same-application parameter sweeps remain candidate-only. Although the schema uses a pipeline list, `input/configuration/benchmark_domain_validation.py` rejects more than one executable stage; ordered multi-stage execution is unsupported.
+The pre-main support boundary is `docs/rework_milestone_release_plan.md` and factual evidence is `docs/release_certification_matrix.md`. The supported resume contract is QEMU-only, same revision/base path/topology/software contract, linear infrastructure → software → application. Cross-commit resume, arbitrary software replacement and concurrent shared-base-path runs are unsupported. Use one active Continuum invocation per Unix account per physical host, even across base paths. Same-application parameter sweeps remain candidate-only. Although the schema uses a pipeline list, `input/configuration/benchmark_domain_validation.py` rejects more than one executable stage; ordered multi-stage execution is unsupported.
 
 This document describes the runtime execution pipeline that Continuum follows for YAML-driven runs, and ties each phase to the code that currently owns it.
 

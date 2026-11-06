@@ -425,13 +425,15 @@ def start(config):
     else:
         nodes_per_machine = schedule_equal(config, machines)
 
+    controller = machines[0]
     machines, nodes_per_machine = m.remove_idle(machines, nodes_per_machine)
 
     is_qemu = config["infrastructure"]["provider"] == "qemu"
     if is_qemu:
         # QEMU checks planned names for protected system-libvirt collisions.
         set_ip_names(config, machines, nodes_per_machine)
-        config["module"]["provider"].cleanup_startup(config, machines)
+        cleanup_hosts = [controller, *(machine for machine in machines if not machine.is_local)]
+        config["module"]["provider"].cleanup_startup(config, cleanup_hosts)
     else:
         delete_vms(config, machines)
 

@@ -270,7 +270,7 @@ sh scripts/test/setup_agent_host.sh verify
 sh scripts/test/run_smoke_host.sh check-prereqs --suite benchmark_smoke
 ```
 
-These commands create QEMU guests or replace transient guests proven to belong to the configured base. A retained guest in another base can block a planned name, and startup stops before provisioning when it finds one. Preserve prior results and settle their retained-guest disposition first. Select the wrapper root through `CONTINUUM_SMOKE_BASE_ROOT`. Run the following phases in order and preserve each phase's result with the block below **before starting the next phase**.
+Fresh QEMU infrastructure runs stop verified old Continuum guests of the same Unix account on the controller and scheduled workers, including guests from other base paths. Run one Continuum invocation per account per physical host. Use the resume phases to continue a retained run. Select the wrapper root through `CONTINUUM_SMOKE_BASE_ROOT`. Run the following phases in order and preserve each phase's result with the block below **before starting the next phase**.
 
 | Phase and input | Command |
 | --- | --- |

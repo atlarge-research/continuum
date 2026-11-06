@@ -768,21 +768,51 @@ def _disk_paths(config, owner, domain, *, startup):
     return paths
 
 
-def _expected_disk_pair(domain, name, root, paths):
+def _domain_file_disks(domain):
     disks = domain.findall("./devices/disk")
     if len(disks) != 2:
-        return False
+        return {}
     actual = {}
     for disk in disks:
         target = disk.find("target")
         source = disk.find("source")
         if disk.get("type") != "file" or target is None or source is None:
-            return False
-        actual[target.get("dev")] = paths.get(source.get("file"))
-    return actual == {
+            return {}
+        actual[target.get("dev")] = source.get("file")
+    return actual
+
+
+def _expected_disk_pair(name, root):
+    return {
         "vda": os.path.join(root, f"{name}.qcow2"),
         "vdb": os.path.join(root, f"user_data_{name}.img"),
     }
+
+
+def _owned_startup_workspaces(config, owner, workspaces):
+    if not workspaces:
+        return set()
+    uid = _single_process_result(
+        owner.process_on_owner(config, ["id", "-u"], timeout_seconds=30),
+        f"Read physical login UID on {owner.name}",
+    )
+    # libvirt can change live disk ownership. Check the directory Continuum created instead.
+    directories = sorted(workspaces)
+    read_uids = (
+        "command -v stat >/dev/null || exit 1; "
+        "for path; do stat -c %u -- \"$path/.\" 2>/dev/null || printf '?\\n'; done"
+    )
+    uids = _single_process_result(
+        owner.process_on_owner(
+            config, ["sh", "-c", read_uids, "sh", *directories],
+            timeout_seconds=30,
+        ),
+        f"Read Continuum workspace ownership on {owner.name}",
+    )
+    if (len(uid) != 1 or not uid[0].isdecimal() or len(uids) != len(directories)
+            or not all(value == "?" or value.isdecimal() for value in uids)):
+        raise RuntimeError(f"Cannot verify Continuum workspace ownership on {owner.name}")
+    return {path for path, workspace_uid in zip(directories, uids) if workspace_uid == uid[0]}
 
 
 def _cleanup_targets(config, owner, *, startup):
@@ -791,10 +821,12 @@ def _cleanup_targets(config, owner, *, startup):
         owner.cloud_controller_names + owner.cloud_names + owner.edge_names
         + owner.endpoint_names + owner.base_names
     )
+    # Domain names carry the controller username, which may differ from the worker login.
+    suffix = r"[^/\s]+" if startup else re.escape(config["username"])
     names = re.compile(
         r"(?:cloud_controller|(?:cloud|edge|endpoint|base)[0-9]+"
         r"|base_(?:cloud|edge)_[a-zA-Z0-9_-]+_np1_mm[01]_[0-9]+"
-        r"|base_endpoint_np1_mm[01]_[0-9]+)_" + re.escape(config["username"])
+        r"|base_endpoint_np1_mm[01]_[0-9]+)_" + suffix
     )
     uuids = _domain_uuids(config, owner)
     transient = set(_domain_uuids(config, owner, "--transient"))
@@ -828,7 +860,16 @@ def _cleanup_targets(config, owner, *, startup):
             inactive = _domain_xml(config, owner, uuid, "--inactive")
             sources.update(_disk_paths(config, owner, inactive, startup=True))
         references.update(sources)
-        entries.append((uuid, name, active_xml, sources))
+        disks = _domain_file_disks(active_xml)
+        old_root = ""
+        if startup and uuid in transient and names.fullmatch(name) and disks.get("vda"):
+            parent = os.path.dirname(disks["vda"])
+            if (os.path.isabs(parent) and parent.endswith("/.continuum/images")
+                    and disks == _expected_disk_pair(name, parent)):
+                old_root = parent
+                workspace = os.path.dirname(old_root)
+                references.update((old_root, workspace, os.path.dirname(workspace)))
+        entries.append((uuid, name, disks, sources, old_root))
 
     raw_paths = [base, root, *sorted(references)]
     resolved = _single_process_result(
@@ -843,10 +884,27 @@ def _cleanup_targets(config, owner, *, startup):
     canonical_root = paths[root]
     if canonical_root != os.path.join(paths[base], ".continuum/images"):
         raise RuntimeError(f"Image workspace resolves outside the configured base on {owner.name}")
+
+    startup_workspaces = {}
+    for uuid, name, disks, _, old_root in entries:
+        if old_root:
+            raw_workspace = os.path.dirname(old_root)
+            workspace = paths[raw_workspace]
+            if (workspace == os.path.join(paths[os.path.dirname(raw_workspace)], ".continuum")
+                    and paths[old_root] == os.path.join(workspace, "images")
+                    and {dev: paths.get(path) for dev, path in disks.items()}
+                    == _expected_disk_pair(name, paths[old_root])):
+                startup_workspaces[uuid] = workspace
+    owned_workspaces = _owned_startup_workspaces(config, owner, set(startup_workspaces.values()))
+
     targets = []
-    for uuid, name, domain, sources in entries:
-        if (uuid in transient and names.fullmatch(name)
-                and _expected_disk_pair(domain, name, canonical_root, paths)):
+    for uuid, name, disks, sources, _ in entries:
+        owned = (
+            startup_workspaces.get(uuid) in owned_workspaces if startup else
+            uuid in transient and {dev: paths.get(path) for dev, path in disks.items()}
+            == _expected_disk_pair(name, canonical_root)
+        )
+        if owned:
             targets.append((uuid, name))
             continue
         if name in expected or (startup and any(
@@ -892,7 +950,7 @@ def _cleanup_domains(config, machines, *, startup):
 
 
 def cleanup_startup(config, machines):
-    """Remove old domains in this workspace before stale files are removed."""
+    """Stop old Continuum guests owned by the physical login on each host."""
     _cleanup_domains(config, machines, startup=True)
 
 

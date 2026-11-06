@@ -2,7 +2,7 @@
 
 Approved pre-main scope is in `docs/rework_milestone_release_plan.md`; runtime support is factual evidence in `docs/release_certification_matrix.md`, not parser acceptance. Keep experiment/environment/software composition.
 
-Resume v1 is QEMU-only, same revision, base path, topology and software contract, with linear infrastructure → software → application. Same revision is an operator precondition, not commit-tracking machinery. Cross-commit resume, arbitrary software replacement on mutated guests and concurrent shared-base-path runs are unsupported. Same-application changed-parameter sweeps remain candidate-only pending cleanup/idempotence evidence.
+Resume v1 is QEMU-only, same revision, base path, topology and software contract, with linear infrastructure → software → application. Same revision is an operator precondition, not commit-tracking machinery. Cross-commit resume, arbitrary software replacement on mutated guests and concurrent shared-base-path runs are unsupported. Use one active Continuum invocation per Unix account per physical host, even across base paths. Same-application changed-parameter sweeps remain candidate-only pending cleanup/idempotence evidence.
 
 The accepted registry terminology is `run.registry_refresh: missing|all` (default `missing`). The removed run.image_prefetch key/off-on modes have no compatibility aliases. Registry-cache priming and guest preload remain separate operations. Section 10.1 preserves historical implementation syntax, not the current accepted schema; old-format locks must be regenerated from source inputs.
 

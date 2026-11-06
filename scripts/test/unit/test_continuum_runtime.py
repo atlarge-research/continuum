@@ -2496,10 +2496,16 @@ class ImagePrefetchFlowTests(unittest.TestCase):
             },
             "module": {"provider": mock.Mock()},
         }
-        machine = mock.Mock(cores=4)
+        controller = mock.Mock(cores=4, is_local=True)
+        machine = mock.Mock(cores=4, is_local=False)
+        idle_worker = mock.Mock(cores=4, is_local=False)
         events = []
+        cleanup = config["module"]["provider"].cleanup_startup
+        cleanup.side_effect = lambda *_args: events.append("cleanup")
         with mock.patch.object(
-            infrastructure_module.m, "make_machine_objects", return_value=[machine]
+            infrastructure_module.m,
+            "make_machine_objects",
+            return_value=[controller, machine, idle_worker],
         ), mock.patch.object(
             infrastructure_module.m,
             "remove_idle",
@@ -2528,7 +2534,8 @@ class ImagePrefetchFlowTests(unittest.TestCase):
             result = infrastructure_module.start(config)
 
         self.assertEqual(result, [machine])
-        self.assertEqual(events, ["prepare", "provider"])
+        self.assertEqual(events, ["cleanup", "prepare", "provider"])
+        cleanup.assert_called_once_with(config, [controller, machine])
         prepare.assert_called_once_with(config, [machine])
         provider.assert_called_once_with(config, [machine])
 

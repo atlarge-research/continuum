@@ -31,10 +31,19 @@ class QemuCleanupTests(unittest.TestCase):
         self.owner = Machine("alice@worker.local", False)
         self.owner.cloud_names = ["cloud0_alice"]
 
-    def _inventory(self, domains, *, persistent=(), destroy_error=None, retain=False):
+    def _inventory(
+        self, domains, *, persistent=(), destroy_error=None, retain=False, foreign_roots=(),
+        unreadable_roots=(),
+    ):
         def process(_config, argv, **_kwargs):
             if argv[0] == "realpath":
                 return [[list(map(str, map(PurePosixPath, argv[3:]))), []]]
+            if argv == ["id", "-u"]:
+                return [[["1004"], []]]
+            if argv[:2] == ["sh", "-c"]:
+                uids = {path: "1002" for path in foreign_roots}
+                uids.update({path: "?" for path in unreadable_roots})
+                return [[[uids.get(path, "1004") for path in argv[4:]], []]]
             self.assertEqual(argv[:3], ["virsh", "--connect", "qemu:///system"])
             operation, *args = argv[3:]
             if operation == "list":
@@ -57,12 +66,12 @@ class QemuCleanupTests(unittest.TestCase):
             self.fail(f"Unexpected libvirt command: {argv}")
         return mock.patch.object(self.owner, "process_on_owner", side_effect=process)
 
-    def test_startup_destroys_only_exact_account_and_root(self):
+    def test_startup_destroys_only_domains_owned_by_the_physical_login(self):
         domains = {
             OWN: _domain(OWN, "cloud0_alice"),
             OTHER: _domain(OTHER, "cloud0_alice2", "/another/.continuum/images"),
         }
-        with self._inventory(domains) as process:
+        with self._inventory(domains, foreign_roots=["/another/.continuum"]) as process:
             qemu.cleanup_startup(self.config, [self.owner])
         self.assertEqual(set(domains), {OTHER})
         destroy = [c.args[1] for c in process.call_args_list if "destroy" in c.args[1]]
@@ -70,9 +79,60 @@ class QemuCleanupTests(unittest.TestCase):
 
     def test_startup_fails_before_destroy_on_protected_planned_name(self):
         domains = {OTHER: _domain(OTHER, "cloud0_alice", "/another/.continuum/images")}
-        with self._inventory(domains) as process, self.assertRaisesRegex(RuntimeError, "cloud0_alice"):
+        with (
+            self._inventory(domains, foreign_roots=["/another/.continuum"]) as process,
+            self.assertRaisesRegex(RuntimeError, "cloud0_alice"),
+        ):
             qemu.cleanup_startup(self.config, [self.owner])
         self.assertFalse(any("destroy" in c.args[1] for c in process.call_args_list))
+
+    def test_startup_reclaims_old_workspace_with_and_without_name_collision(self):
+        for name in ("cloud0_alice", "edge3_previous_launcher"):
+            with self.subTest(name=name):
+                domains = {OWN: _domain(OWN, name, "/old/.continuum/images")}
+                with self._inventory(domains) as process:
+                    qemu.cleanup_startup(self.config, [self.owner])
+                self.assertEqual(domains, {})
+                self.assertFalse(any(c.args[1][0] in ("rm", "unlink") for c in process.call_args_list))
+
+    def test_startup_preserves_a_pair_redirected_to_another_workspace(self):
+        domains = {OTHER: _domain(OTHER, "edge3_alice", "/old/.continuum/images")}
+        with self._inventory(domains) as process:
+            original = process.side_effect
+
+            def resolve(_config, argv, **kwargs):
+                if argv[0] == "realpath":
+                    return [[[path.replace("/old/", "/elsewhere/") if path.endswith(
+                        (".qcow2", ".img")
+                    ) else path for path in argv[3:]], []]]
+                return original(_config, argv, **kwargs)
+
+            process.side_effect = resolve
+            qemu.cleanup_startup(self.config, [self.owner])
+        self.assertIn(OTHER, domains)
+
+    def test_startup_preserves_unreadable_old_workspace_without_collision(self):
+        domains = {
+            OWN: _domain(OWN, "cloud0_alice", "/old/.continuum/images"),
+            OTHER: _domain(OTHER, "edge3_other", "/private/.continuum/images"),
+        }
+        with self._inventory(domains, unreadable_roots=["/private/.continuum"]):
+            qemu.cleanup_startup(self.config, [self.owner])
+        self.assertEqual(set(domains), {OTHER})
+
+    def test_startup_preserves_a_workspace_redirected_into_another_base(self):
+        domains = {OTHER: _domain(OTHER, "edge3_alice", "/old/.continuum/images")}
+        with self._inventory(domains) as process:
+            original = process.side_effect
+
+            def resolve(_config, argv, **kwargs):
+                if argv[0] == "realpath":
+                    return [[[path.replace("/old/", "/elsewhere/") for path in argv[3:]], []]]
+                return original(_config, argv, **kwargs)
+
+            process.side_effect = resolve
+            qemu.cleanup_startup(self.config, [self.owner])
+        self.assertIn(OTHER, domains)
 
     def test_final_teardown_rejects_nonzero_or_still_present(self):
         for error in ("Permission denied", None):
@@ -120,7 +180,7 @@ class QemuCleanupTests(unittest.TestCase):
         raw_root = "/slot/link/../run/.continuum/images"
         canonical = "/other/run/.continuum/images"
         domains = {OTHER: _domain(OTHER, "cloud0_alice", "/slot/run/.continuum/images")}
-        with self._inventory(domains) as process:
+        with self._inventory(domains, foreign_roots=["/slot/run/.continuum"]) as process:
             original = process.side_effect
 
             def resolve(_config, argv, **kwargs):

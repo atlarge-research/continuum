@@ -25,7 +25,7 @@ For smoke runs, prefer the runner teardown path when possible. Manual cleanup is
 
 ### Teardown reports success but QEMU guests remain
 
-Check the same libvirt connection used for creation. In the November 3 reliability run, creation used `qemu:///system` while provider deletion and runner verification used bare `virsh`, which opened an empty `qemu:///session` on node2. The provider and verifier now select `qemu:///system` explicitly. Startup cleanup requires an exact generated domain name and a matching transient domain with both disk paths in the current workspace. Final teardown also requires the names recorded for that owner in the run state. See [the handoff](rework_release_handoff.md#teardown-follow-up--november-4-2026) for the original failure, manual cleanup and separate paused VM validation.
+Check the same libvirt connection used for creation. In the November 3 reliability run, creation used `qemu:///system` while provider deletion and runner verification used bare `virsh`, which opened an empty `qemu:///session` on node2. The provider and verifier now select `qemu:///system` explicitly. Startup checks exact generated names, transient status and both disk paths in a Continuum workspace owned by the physical login, including earlier workspaces. Final teardown checks the current workspace and the names recorded for that owner in run state. See [the handoff](rework_release_handoff.md#teardown-follow-up--november-4-2026) for the original failure, manual cleanup and separate paused VM validation.
 
 ```bash
 virsh uri

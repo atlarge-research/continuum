@@ -2,7 +2,7 @@
 
 Support and release scope are in `docs/release_certification_matrix.md` and `docs/rework_milestone_release_plan.md`. Shipped inventory means every tracked `.yaml` under `configs/experiments/` and `configs/profiles/`, including explicitly classified templates; parser acceptance is not runtime support. Legacy `.cfg` inputs and test fixtures are separate inventories.
 
-Resume requires the same revision, base path, topology and software contract, QEMU only, in linear infrastructure → software → application order. Cross-commit resume, arbitrary software replacement and concurrent shared-base-path runs are unsupported. Sequential same-application changed-parameter sweeps remain candidate-only until cleanup/idempotence is demonstrated.
+Resume requires the same revision, base path, topology and software contract, QEMU only, in linear infrastructure → software → application order. Cross-commit resume, arbitrary software replacement and concurrent shared-base-path runs are unsupported. Run only one active Continuum invocation per Unix account on each physical host, even across base paths. A fresh QEMU infrastructure run stops verified old Continuum guests of that account on the controller and scheduled workers. Sequential same-application changed-parameter sweeps remain candidate-only until cleanup/idempotence is demonstrated.
 
 The accepted registry setting is `run.registry_refresh: missing|all`, default `missing`. The removed `run.image_prefetch` key and off/on values have no aliases; old-format locks must be regenerated from current source inputs, not replayed.
 
