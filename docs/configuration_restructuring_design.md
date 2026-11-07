@@ -273,6 +273,17 @@ Canonical selector forms, sorting and `selector_id` derivation are defined in `d
 6. run compatibility checks,
 7. persist lock metadata.
 
+## 7.1 BR23 configuration and module cutover
+
+The agreed target keeps hierarchical YAML and module-owned options. Implement the new runtime contract as a direct cutover. This sketch is for implementation review. The current schema and runtime behavior are described above. The benchmark design describes the target module-owned workload inputs and proposed YAML shape. [Agreed merge scope](rework_kickoff.md#agreed-merge-scope) · [Software scope and planner](software_module_architecture_plan.md#7-module-runtime-contract-implemented-adapter-and-proposed-api) · [Benchmark design](runtime_execution_pipeline.md#br23-benchmark-procedure-and-results)
+
+1. **Resolve once.** In the core configuration code, compose YAML and profiles, resolve module descriptors, apply defaults and validate into one read-only resolved experiment with small typed core records and module-owned options. Derive assignments and ordered actions in a separate plan. Keep live machines, SSH and Ansible handles in the execution context. The lock serializes resolved settings and the plan, and resume state records actual progress separately.
+2. **Discover and execute modules by contract.** Put identity, capabilities, option validation, image requirements and execution hooks beside each module. Discover descriptors deterministically from trusted module directories and bind selected implementations once. Move named installer cases such as OpenFaaS out of the shared planner into module-owned `PlanEntry` contributions. Core code checks selected dependencies, stamps plan ownership, enforces assignments and preserves the agreed phase order and selector rules. Retain the current limits of one orchestrator and one executable benchmark stage per run.
+3. **Switch the selected workflows together.** Replace the flat projection and duplicate bootstrap with the new interface for the CLI, retained modules, lock replay and tests. Keep one supported representation in the candidate. Regenerate incompatible locks from source inputs and use a fresh run for incompatible deployment state.
+4. **Prove the extension boundary.** Add and remove a minimal module of each supported kind with no core edits, and test an unknown module, duplicate registration, missing dependency and out-of-scope action before any provisioning. Exercise a real selected module and verify that a kubecontrol option default survives image selection and fresh YAML-to-lock replay with the same resolved options, plan and resume contract. Use the selected QEMU acceptance cases to verify the integrated cutover.
+
+Carry distinct cluster IDs and per-VM specs through QEMU scheduling, provisioning and the runtime resource map, including for multiple clusters in the same tier. The current compatibility projection requires one shared VM spec per tier. The Figure 6 Mist case exercises the target with two endpoint groups and separate benchmark participant assignments. Apply and verify the requested network profile on the links between paired endpoints, which the current network emulation omits. Here a cluster is a named group of VMs. [Figure 6 case](reproduction_inventory.md#selected-figure-restoration)
+
 ## 8. Lockfile
 
 Write resolved lock artifact with:

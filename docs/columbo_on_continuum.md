@@ -1,6 +1,6 @@
 # Columbo On Continuum
 
-Approved scope is `docs/rework_milestone_release_plan.md`: the minimal `call_1` full control-plane trace slice, not all paper figures/sweeps. Current factual row status is `docs/release_certification_matrix.md`. Use the normal-user host exports/procedure in `docs/smoke_runner_isolation.md`; dated results below remain historical and do not certify the migrated candidate.
+The [agreed case manifest](reproduction_inventory.md#br23-projects-and-case-manifest) requires the minimal `call_1` full control-plane trace slice. Factual row status is in `docs/release_certification_matrix.md`. Dated results describe their recorded source. [Normal-user host procedure](smoke_runner_isolation.md)
 
 ## Purpose
 
@@ -19,7 +19,7 @@ The first certified Columbo slice is intentionally small and maps the legacy con
 | Synthetic benchmark workload for deployment-pipeline timing | `empty` application module |
 | Per-call deployment method | `kube_deployment: call` in the `kubecontrol` module config |
 | Reproducible experiment declaration | `configs/experiments/parity/qemu_kubecontrol_empty/01_kubecontrol_empty_call.yaml` |
-| Retained release evidence | suite and wrapper scenario `qemu_kubecontrol_empty_parity` |
+| Required release evidence | strict trace suite and wrapper scenario `qemu_kubecontrol_empty_trace_parity` |
 
 The YAML experiment keeps the exact local-QEMU shape of the legacy `call_1` configuration: two cloud VMs, 8 cores per VM, 32 GB memory per VM, CPU pinning, Kubernetes `v1.27.0`, cached worker image setup, and one `empty` application worker.
 
@@ -37,9 +37,19 @@ The Continuum core should not grow Columbo-specific concepts such as Columbo rul
 
 In the first structured slice, the shared benchmark-metrics manifest writer is part of the application runtime helper layer. The `empty` module uses that existing artifact contract to make its deployment dataframe machine-checkable; this is a module-level use of a generic evidence API, not a Columbo-specific core extension.
 
+## BR23 instrumented Kubernetes
+
+The current install consumes two distinct inputs. The binary override role copies a Kubernetes node tarball from a personal path under `/mnt/sdb` and installs the binaries in the guests. The control plane uses separately staged images that currently have mutable tags. The shared Kubernetes base playbook also selects the override for Kata, so review both consumers before replacing the input. [Binary override defaults](../roles/resource_manager/k8s_binary_override/defaults/main.yml) · [Shared base playbook](../playbooks/resource_manager/k8s_base_install.yml) · [Image catalog](../input/configuration/image_requirements.py)
+
+The historical node archive at `/mnt/sdb/matthijs/kubernetes-node-linux-amd64-v1270.tar.gz` has SHA-256 `bbae85b5c1c7a5bc288adcc0289d13b2a8923b000031dfac0e0e65e5b487786d`. It contains `kubernetes/kubernetes-src.tar.gz`, SHA-256 `8d2d2d4c5c8cd57a2ad5c4b47714abd5c1127d4c7543a092e4344eb9a0cd5a38`, with the instrumented source. In a later read-only check for BR23, the archived kubelet, kubeadm and kubectl hashes and the four component image config digests in `/mnt/sdb/matthijs/archive-kube-compiled/v1270-optimized/` matched the saved identities from the strict `a1e5db2` development run. These are recovery locations and identities. The link between the recovered source and the built binaries still needs a build record. [Original run assessment](rework_release_handoff.md#packet-d-columbo--development-checkpoint)
+
+Preserve the recovered source and exact artifacts. Identify the upstream revision and recover the instrumentation and tuning changes as a pinned source revision or patch series. Perform and document a clean build with pinned toolchain and dependencies, and record the node archive checksum and image digests. Publish or provide an approved durable acquisition path for the source and artifacts used by the public recipe. Make the selected archive and images explicit software-module inputs, verify them before installation and include their identities in base-cache validation. Keep the stock Kubernetes profile on its own inputs. Determine which artifacts Kata needs and qualify them for its selected cases. If source-to-build provenance or distribution cannot be established, bring that specific gap back for a release decision.
+
+For acceptance, run `qemu_kubecontrol_empty_trace_parity` for the strict `call_1` case from a clean checkout with an empty eligible cache and no personal mount. Verify the installed node binaries and running control-plane image identities. Require six finite timing columns in `CLOUD OUTPUT` and the metrics artifact, tied to the current pod and its raw markers. Check that an unavailable or mismatched artifact fails before installation. Record the acquisition or build commands and verified artifacts in the Columbo project.
+
 ## Evidence Contract
 
-The `qemu_kubecontrol_empty_parity` suite is the evidence gate for this slice. The local registry cache must first contain `redplanet00/kubeedge-applications:empty`. Prime as the Docker-capable normal user with `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite qemu_kubecontrol_empty_parity`. A retained VM-backed run must prove:
+The historical `qemu_kubecontrol_empty_parity` integration check used the cached `redplanet00/kubeedge-applications:empty` workload. Its documented priming command was `sh scripts/test/run_smoke_host.sh prime-registry-cache --suite qemu_kubecontrol_empty_parity`. The retained VM-backed integration evidence required:
 
 1. Continuum reaches `phase_completed = application`,
 2. experiment lock and state artifacts are written,

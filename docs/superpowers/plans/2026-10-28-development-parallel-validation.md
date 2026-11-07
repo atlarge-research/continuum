@@ -1,5 +1,7 @@
 # Development-only two-host isolation pilot — approval draft
 
+Dated proposal for the completed node4/node5 isolation pilot. For current work, use the [Continuum rework plan](../../rework_kickoff.md).
+
 Recommendation: use the existing node4 runner plus node5, one workflow per host, in a reserved window. This needs no Continuum core/wrapper/scheduler change. Proceed only after independent amendment review and explicit user approval of the allocations, own-directory preparation, dependency installation into a new node5 venv, and the concurrent pilot. Serial work remains the fallback.
 
 ## Survey facts (2026-10-28 13:00–13:04 UTC)

@@ -1,5 +1,7 @@
 # Continuum continuation: a polished core and validated local modules
 
+Dated October implementation plan preserved for the development checkpoint. For current work, use the [Continuum rework plan](../../rework_kickoff.md).
+
 Approved on 2026-10-28. This is a bounded execution plan subordinate to the policies and domain authorities mapped in `docs/rework_plan_stack.md`. It defines an intermediate engineering checkpoint, not release certification.
 
 ## 1. Goal and boundaries

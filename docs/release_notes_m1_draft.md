@@ -1,5 +1,7 @@
 # Continuum M1 Milestone Release Notes Draft
 
+This is the historical M1 intermediate-release draft. Use the [Continuum rework plan](rework_kickoff.md) for the replacement release.
+
 ## 1. Release Type
 
 This is a draft for an intermediate rework milestone release. It is not a final replacement for the old `main` branch.
@@ -142,6 +144,8 @@ Keep this order. Run from the live reviewed checkout as the normal user, with ex
 The wrapper scenarios above are the VM-backed evidence gate for the rows claimed in section 3. If runtime, runner, verifier, profile, or playbook code changed after the latest VM-backed evidence snapshot, rerun the affected scenario and refresh the evidence document before tagging. The pre-tag checker also requires the current worktree to be clean and every listed release-evidence document to name a clean VM-evidence source commit. Final release-documentation and release checker commits may follow that source commit; runtime-affecting changes may not. Historical wrapper additions and Kata/shared-runtime changes have no source freshness exemption. Command-list policy is checked once by the required matrix gate; pre-tag readiness checks source/tree/report evidence separately.
 
 ## 8. Suggested Next Milestones
+
+These were suggestions from the M1 review. Use the [Continuum rework plan](rework_kickoff.md) for current scope and sequence.
 
 1. Decide exact-resource versus practical-runner claims for any future broader OpenFaaS application claim.
 2. Keep GCP/AWS historical rows unclaimed until maintainers nominate exact provider scope, credentials, budget/capacity guardrails, YAML/profile targets, suites, and evidence requirements.

@@ -8,4 +8,4 @@ Inspect the complete record with:
 git show b484f120f81c437f29d61b19ff5fec4e3790c58e:docs/phase_c_implementation_plan.md
 ```
 
-Verified private copies and content hashes are recorded in `docs/rework_release_handoff.md`. Use that handoff for current work, `docs/rework_milestone_release_plan.md` for approved policy and gates, and `docs/release_certification_matrix.md` for factual evidence scope. Follow `AGENTS.md`; do not revive the historical dispatcher or execution queue.
+Verified private copies and content hashes are recorded in `docs/rework_release_handoff.md`. Use [the rework plan](rework_kickoff.md) for current work, `docs/rework_milestone_release_plan.md` for approved policy and gates, and `docs/release_certification_matrix.md` for factual evidence scope. Follow `AGENTS.md`; do not revive the historical dispatcher or execution queue.

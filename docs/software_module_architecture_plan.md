@@ -1,6 +1,6 @@
 # Software Module Architecture Plan (Final Target)
 
-This document owns domain semantics, not an expansion of release scope. The approved policies in `docs/rework_milestone_release_plan.md` constrain pre-main work; factual support remains in `docs/release_certification_matrix.md`. Module extensibility is not permission to add features. Arbitrary software replacement on retained mutated VMs is unsupported; preserve the same software contract for QEMU resume. Benchmark pipeline representation does not imply multi-stage runtime support or certified parameter-sweep idempotence.
+This document owns software domain semantics and records the current adapter. Use the [rework plan](rework_kickoff.md) for release scope and the [configuration cutover](configuration_restructuring_design.md#71-br23-configuration-and-module-cutover) for the agreed target extension contract. Preserve the same software contract for QEMU resume. The [certification matrix](release_certification_matrix.md) records factual support.
 
 ## 0. Authority
 
@@ -174,7 +174,7 @@ The implemented software execution interface is:
 
 `PlanEntry` records execution kind, playbook/command, runner options, owner and immutable legacy target-group metadata. The current software adapter accepts proven `vms` playbook targets and rejects command entries whose resource mutation scope cannot be proven. Module configuration validation/defaulting happens at parser/bootstrap boundaries using registry contracts and existing module option hooks.
 
-The following is a proposed future module API, not an implemented interface or a current module authoring requirement:
+The following API was considered in the earlier planner design. Use the agreed cutover sketch for module authoring. [Module contract](configuration_restructuring_design.md#71-br23-configuration-and-module-cutover)
 
 1. `validate_config(instance.config)`
 2. `place(ctx, instance, candidate_vms) -> PlacementResult` (optional)
@@ -183,9 +183,7 @@ The following is a proposed future module API, not an implemented interface or a
 
 ## 7.1 Contract Evolution Note (Post-Implementation)
 
-1. Additional internal extension points (for example image requirement exposure for registry prefetch) should be standardized centrally after current PR-3/PR-4 delivery.
-2. Keep module burden minimal by preferring core-managed catalogs/resolvers over ad-hoc module-side pull logic.
-3. Any new extension point must preserve deterministic planning and fail-fast diagnostics.
+For the agreed cutover, modules declare their own image requirements and configuration. The core resolves and checks declarations and retains shared registry staging and refresh logic. Keep planning deterministic and fail fast on invalid declarations. [Configuration cutover](configuration_restructuring_design.md#71-br23-configuration-and-module-cutover) · [Image release](runtime_execution_pipeline.md#br23-workload-image-release)
 
 ## 8. Planner Semantics
 
@@ -277,6 +275,8 @@ E2E smoke tests:
 12. Constraint scopes (`vm`, `cluster`, `selector`) are part of target architecture.
 
 ## 13. Immediate Implementation Focus (Software Track)
+
+These entries describe the earlier software-track PRs. Use the [current framework and software packets](rework_kickoff.md#implementation-packets) for new work.
 
 1. PR-1 completed: canonical `software.modules[]` parser enforcement with selector canonicalization baseline.
 2. PR-2 completed: registry schema and explicit-only dependency/capability validation baseline are implemented in parser/runtime; incremental hardening includes exclusive-capability accounting and runtime conflict/exclusivity validation tests.

@@ -107,7 +107,7 @@ REQUIRED_PLAN_STACK_REFERENCES = (
 REQUIRED_PLAN_STACK_BOUNDARIES = (
     (
         "core-module-boundary",
-        ("core/module boundary", "provider/software/application stacks are modules"),
+        ("core/module boundary", "infrastructure, software and benchmark procedures are modules"),
         "must keep the core/module boundary as a locked decision",
     ),
     (

@@ -1,5 +1,7 @@
 # Continuum: overnight reliability and runtime validation
 
+Dated reliability plans and the results recorded against their source revisions. For current work, use the [Continuum rework plan](../../rework_kickoff.md).
+
 ## Expanded overnight plan — proposed November 3, 2026
 
 The user requested a more ambitious plan after the first packet finished with live validation deferred. This proposal continues from local commit `22c92b8534a60a781eb8c76a3d1b29d404d03343`, retaining that packet and its evidence. The hard deadline is **Wednesday, November 4, 2026 at 09:00 CET**. **07:00–09:00 CET is reserved for closeout.** The substantive target is a reviewed improvement to the complete publisher/subscriber execution path, supported by actual subprocess tests and task-owned VM experiments.

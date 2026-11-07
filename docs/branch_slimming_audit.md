@@ -1,6 +1,6 @@
 # Branch slimming audit
 
-This applies Section8 of `docs/rework_milestone_release_plan.md`; it is factual scope accounting, not another policy or certification ledger. At clean `d93f8903ff28904aeee071ff4cbbbcd2e14c198f`, a fresh `git diff main...HEAD --shortstat` reported 470 changed files, 74,773 insertions and 5,463 deletions. That is the pre-checker-packet checkpoint, not a final-candidate count; recalculate at final acceptance. No arbitrary line-count target is used.
+This is factual scope accounting from the earlier slimming review. At clean `d93f8903ff28904aeee071ff4cbbbcd2e14c198f`, a fresh `git diff main...HEAD --shortstat` reported 470 changed files, 74,773 insertions and 5,463 deletions. Use the clean-cut and acceptance packets for the current inventory and final-candidate diff. [Current plan](rework_kickoff.md#integration-and-release)
 
 ## Major additions: one category each
 

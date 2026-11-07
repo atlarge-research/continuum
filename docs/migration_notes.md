@@ -1,6 +1,6 @@
 # YAML Migration Notes
 
-The 2026-10-27 approved policy is `docs/rework_milestone_release_plan.md`. It replaces full old-main parity as the release gate with approved reproduction scope and complete bounded inventories; legacy inputs are preserved until final scope confirmation. Normal-user host migration and current commands are in `docs/smoke_runner_isolation.md`. Historical matrix rows/evidence below are not renewed by migration. The registry terminology hard cut is implemented as `run.registry_refresh: missing|all`, default `missing`, without aliases.
+The [rework plan](rework_kickoff.md) sets the agreed clean cut and selected release scope. Legacy inputs are preserved pending exact removal approval. The registry terminology hard cut is implemented as `run.registry_refresh: missing|all`, default `missing`, without aliases. [Normal-user commands](smoke_runner_isolation.md)
 
 This note covers the hard-cut migration from legacy config paths to the canonical YAML model.
 
@@ -203,7 +203,7 @@ The repository examples under `configs/experiments/` are regression-tested again
 
 ## Legacy Configuration Backlog
 
-The `configuration/` tree is retained as historical reproduction material and migration reference, not as an active runtime entrypoint. As of the T10 inventory, it contains 259 legacy `.cfg` files. Keep the files in place unless maintainers explicitly approve removal; migration work should add YAML examples, release evidence, or historical/deprecation notes beside the existing records.
+The table records migration options at the T10 baseline, when the `configuration/` tree contained 259 legacy `.cfg` files. Use the agreed case and removal inventories for the current dispositions, including converter retirement. [Selected cases](reproduction_inventory.md#br23-projects-and-case-manifest) · [Removal inventory](configuration_inventory.md#preserved-evidence-and-refresh-requirement)
 
 | Legacy Surface | Current YAML / Disposition | Next Action |
 | --- | --- | --- |

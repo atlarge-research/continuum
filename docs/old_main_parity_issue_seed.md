@@ -1,6 +1,6 @@
 # Old-Main Parity Issue Seed
 
-Historical candidate inventory, not an authoritative pre-main release queue. `docs/rework_milestone_release_plan.md` replaces full old-main parity with the approved reproduction boundary. Existing rows/actions below are preserved unchanged until complete inventory and final user scope confirmation; they do not require implementing every historical provider before main. The current checker preserves inventory completeness, not an obsolete scope gate.
+Historical candidate inventory from the M1 review. Use the [agreed rework plan](rework_kickoff.md) for current release work. The checker preserves row and action coverage until the disposition review closes.
 
 ## 1. Purpose
 
@@ -65,7 +65,7 @@ When converting this seed into issues:
 
 Until a maintainer nominates a concrete target, every row and module in this seed stays unclaimed and docs-only. Nomination must name the exact scope, credentials or host access, cost or capacity guardrails, YAML/profile target, suite and success-detector work, evidence requirements, and documentation updates.
 
-After nomination, prefer this implementation order:
+The earlier M1 proposal listed this order:
 
 1. provider infrastructure first: `P-GCP-01`, then `P-GCP-02` through `P-GCP-04`, with `P-AWS-01` as a separate infrastructure-only track,
 2. GCP software/application rows next: `P-GCP-09`, `P-GCP-05`, `P-GCP-06`, `P-GCP-07`, `P-GCP-08`, then `P-GCP-10`,

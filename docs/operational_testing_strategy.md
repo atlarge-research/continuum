@@ -1,6 +1,6 @@
 # Operational Testing Strategy
 
-Current scope and acceptance gates are `docs/rework_milestone_release_plan.md`; factual status remains `docs/release_certification_matrix.md`. Run physical suites as the normal user using `docs/smoke_runner_isolation.md`; preserve historical evidence without treating it as a current-candidate result.
+Use the [rework plan](rework_kickoff.md#integration-and-release) for the selected gates and [release policy](rework_milestone_release_plan.md) for their approval and evidence rules. Factual status remains `docs/release_certification_matrix.md`. Run physical suites as the normal user using `docs/smoke_runner_isolation.md`; preserve historical evidence without treating it as a current-candidate result.
 
 This document defines how Continuum should be tested beyond unit tests.
 
@@ -35,6 +35,16 @@ Continuum should keep four testing layers:
    - broader provider/network/stack coverage,
    - slower and more environment-dependent.
 
+### Agreed testing changes
+
+Keep committed offline unit and local integration tests for the core and the modules selected for `main`. Use them for development feedback and regression protection. Retain physical QEMU checks for behavior that needs real hosts, guests and software. Use focused offline checks during development and exact-candidate physical evidence for the selected release claims. [BR23 development baseline](rework_kickoff.md#agreed-merge-scope)
+
+Reduce repeated executions of the same Python tests in the audit. Consolidate duplicate coverage where the remaining tests exercise the same behavior at the appropriate boundary. Remove tests tied solely to deferred modules or retired compatibility code as part of the clean cut. Preserve tests for safety and observable behavior, including assignment scope, ownership, resume, teardown and workload completion. The existing audit is the entry point until the testing packet updates discovery and its gate policy together. [Current audit](../scripts/test/run_cloud_static_audit.sh) · [Standing policy](rework_milestone_release_plan.md#2-approved-consolidated-policies)
+
+Move the Python suites to `tests/unit/` and `tests/integration/` before `main`. Keep live host validation commands and their support code separate. Update discovery commands, checker references and active documentation with the move. Compare collected tests before and after, accounting for deliberate additions and removals during the clean cut.
+
+Use one combined `unittest` discovery run as the default Python step in the offline audit, with focused test commands available during development. Keep live validation separate. Update the gate policy, audit tests and report consumers together, and preserve the interpretation of historical reports. Retire the handwritten coverage inventory and its guard if review confirms that the important success and failure cases remain exercised by the retained tests. Move any useful scenario notes into the relevant tests or testing guidance.
+
 ## 2.5 Release Certification Policy
 
 Operational tests are the boundary between "code exists" and "Continuum supports this module set."
@@ -46,9 +56,9 @@ Release certification uses these rules:
 3. every runtime support claim needs a full VM-backed, cloud-backed, or host-backed run appropriate to the exact provider, topology, software modules, benchmark/application stage, and runtime targets being claimed;
 4. QEMU/libvirt is the first local provider certification target because it is practical for host-backed smoke testing, but `qemu` remains an infrastructure provider module rather than part of the Continuum core;
 5. intermediate rework milestones may certify only a small module set, but must say so clearly;
-6. the final replacement release for old `main` must certify the old public feature surface under the current checked model; closing an unsupported row without certification first requires a separate atomic change introducing an explicit checked terminal disposition.
+6. the replacement release is gated by the approved reproduction scope and exact-candidate acceptance. The old public feature inventory tracks historical dispositions. An explicit terminal disposition for a historical parity row requires a coordinated change to the checker, matrix and issue seed.
 
-The release plan and certification labels are defined in `docs/rework_milestone_release_plan.md`. `docs/release_certification_matrix.md` is the sole authority for current row status, claim boundaries, and primary evidence.
+The rework plan lists the selected release cases. The release policy defines certification labels. [Release plan](rework_kickoff.md#integration-and-release) · [Release policy](rework_milestone_release_plan.md) `docs/release_certification_matrix.md` is the sole authority for current row status, claim boundaries, and primary evidence.
 
 ## 3. Runtime Phases To Test
 
@@ -325,13 +335,10 @@ What is already covered:
 25. dedicated host-wrapper scenario and suite for the full QEMU endpoint-only image-classification row, with explicit local-registry cache preflight: `qemu_endpoint_image_parity`.
 26. dedicated host-wrapper scenario and suite for QEMU OpenFaaS software-only evidence on a single-host CPU-capped variant: `qemu_openfaas_software_parity`.
 27. dedicated host-wrapper scenario and suite for the full QEMU OpenFaaS image-classification row, with explicit Docker preflight: `qemu_openfaas_image_parity`.
-28. owner-isolated QEMU teardown classification with mocked local and external physical-host command boundaries.
+28. owner-isolated QEMU teardown classification with mocked local and external physical-host command boundaries,
+29. remote resume and automatic teardown on `dd744c2` for the November 6 node2→node3 engineering case. [Physical evidence](rework_release_handoff.md#physical-validation-after-direct-mcs-approval)
 
-Deferred after the active rework:
-
-1. no new reproducibility-package or database architecture is authorized,
-2. live external-QEMU teardown coverage; current owner isolation is exercised only with mocks,
-3. policy decisions for which slow scenario regressions are mandatory in local development, CI, and release certification.
+Use the selected case manifest for mandatory release runs. The external-QEMU teardown result above stays attributed to its engineering source. For release, check teardown where requested and verify that the selected seven-VM serverless case retains its guests. [Release cases](reproduction_inventory.md#br23-projects-and-case-manifest)
 
 ## 9. Operational Follow-Up Policy
 
@@ -359,7 +366,7 @@ Cache-integrity note:
 2. cache validation occurs on the owning host and checks readable image data, exact schema-v1 ready metadata, expected fields, and content fingerprints,
 3. participating ready markers are invalidated durably before cache modification begins,
 4. ready metadata is published atomically only after image preparation and bounded shutdown confirmation complete successfully,
-5. external-owner behavior currently has mocked and static coverage, but no live external-host certification.
+5. external-owner cache lifecycle rules have focused mock and static checks. Report live cache evidence by exact source and scenario. Remote teardown evidence covers the lifecycle of the guests in its recorded case.
 
 QEMU alone decides reuse/rebuild per physical owner and profile slot; the test runner never deletes guessed legacy base-image names. The retired CLI options `--rebuild-base-images` / `--use-cache` and root/suite JSON keys `base_image_rebuild_frequency`, `rebuild_base_images`, `use_cache` fail explicitly. The historical `base_images_rebuilt` result field remains `[]`, not a runtime cache claim. Missing artifacts invalidate a cache, but access/inspection errors abort before invalidation and require operator inspection of the exact path, numeric ownership/mode, parent sticky bit and ACLs. Cleanup preserves the current run's user-data YAML; mode and ACL initialization apply only to newly created disks.
 

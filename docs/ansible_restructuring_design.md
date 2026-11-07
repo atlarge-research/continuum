@@ -30,7 +30,7 @@ isProject: false
 
 ## 0. Authority and Scope
 
-This is a historical record of the completed restructuring phases, not the current program roadmap or execution queue. Approved scope and ordered gates are in `docs/rework_milestone_release_plan.md`; authority is mapped by `docs/rework_plan_stack.md`. Current evidence is factual status in `docs/release_certification_matrix.md`, and the restart point is `docs/rework_release_handoff.md`. Historical phase completion does not renew candidate runtime evidence.
+This is a historical record of the completed restructuring phases. The [Continuum rework plan](rework_kickoff.md) sets current scope and sequence, the [handoff](rework_release_handoff.md) preserves dated checkpoints, and the [certification matrix](release_certification_matrix.md) records factual status.
 
 ## 1. Program Objectives
 

@@ -1,16 +1,16 @@
 # Continuum Release Certification Matrix
 
-The 2026-10-27 policy in `docs/rework_milestone_release_plan.md` replaces full old-main parity as a pre-main gate. Existing row statuses, dates and evidence below are unchanged historical facts, not refreshed normal-user certification. The transitional legacy inventory remains complete pending final scope review. For current host commands and migrated-root exports use `docs/smoke_runner_isolation.md`. No merge/push/tag/release is authorized.
+This matrix records factual row statuses, dates and source-bound evidence. Use the [Continuum rework plan](rework_kickoff.md) for release scope and the [release policy](rework_milestone_release_plan.md) for approval and evidence rules. The legacy inventory remains available for disposition review. [Host commands](smoke_runner_isolation.md)
 
 ## Current selected engineering checkpoint — 2026-11-03
 
-Frozen runtime `1f1980e1e0b4d5828059f646d768edaaaa611525` has all thirteen selected final groups independently reviewed and ROOT-accepted: two operational passes; infrastructure, network, Kubernetes image, endpoint image and observability; KubeEdge, Mist, five-invocation application reuse, strict Columbo, exact Kata startup and node4/node3 OpenFaaS last. The [checkpoint handoff](rework_release_handoff.md#earlier-checkpoint--2026-11-03) supplies every exact case root, acceptance/review hash, command/environment/result binding, failure/recovery and retention limit. All eight unrelated participating-host domains were preserved; seven intended OpenFaaS workload guests remain running. Accepted work was not rerun.
+Frozen runtime `1f1980e1e0b4d5828059f646d768edaaaa611525` has all thirteen selected final groups independently reviewed and ROOT-accepted: two operational passes; infrastructure, network, Kubernetes image, endpoint image and observability; KubeEdge, Mist, five-invocation application reuse, strict Columbo, exact Kata startup and node4/node3 OpenFaaS last. The [checkpoint handoff](rework_release_handoff.md#earlier-checkpoint--2026-11-03) supplies every exact case root, acceptance/review hash, command/environment/result binding, failure/recovery and retention limit. All eight unrelated participating-host domains were preserved; seven intended OpenFaaS workload guests were running at capture. Accepted work was not rerun.
 
 All twelve required static gates passed on clean H (986 unit, 173 local-e2e, 1,159 combined). Inventory v15 is bound to H with 359 rows+135 exclusions/494 source hashes/zero unaccounted paths. Its 257 pending historical dispositions and `final_configuration_gate_closed:false` remain factual. The later83-path reviewed-documentation import and four factual reconciliations have separate applicable doc-check/source/review receipts at `/mnt/sdc/continuum_migration_evidence/20261027T173000Z-node4/final-docs-1f1980e1e0b4/final-source-receipt.json`; they do not renew runtime/static/inventory attribution.
 
 This accepts the selected functional engineering checkpoint, not the historical July rows or complete scientific reproductions. Original operational1/2/observability/OpenFaaS stopped2 adapters remain preserved alongside separately accepted evidence-only/offline recoveries. Exact Kata is100 STARTs / 100 complete startup trace rows with only 61 retained ENDs, so all 100 sleep-job completion is unproven. OpenFaaS's600 outcomes took92.28–98.58 seconds per publisher; all 600 cannot-keep-up spans remain, without achieved 5 Hz / 30 s, calibrated timing, accuracy, continuous-health or build-provenance claims. Narrow reuse/Columbo/Kata/OpenFaaS evidence does not establish generic sweeps, wider provider/topology/research equivalence or thesis completion.
 
-No M1 row ID/status/date/action-cell primary evidence, release-note coupling or historical certification is promoted or renewed by this summary. Release-tagging checks below remain future prerequisites rather than an active execution queue. Human architecture/scope/process review is next; implementation, publication and the deferred proposal's coverage audit require separate authority.
+No M1 row ID/status/date/action-cell primary evidence, release-note coupling or historical certification is promoted or renewed by this summary. The M1 tagging checks below apply if that intermediate release is separately selected. [Current plan](rework_kickoff.md)
 
 <a id="current-engineering-development-checkpoint--2026-10-29"></a>
 
@@ -42,7 +42,7 @@ Certification policy and labels are defined in `docs/rework_milestone_release_pl
 
 ## 2. How To Use This Matrix
 
-1. Keep `docs/rework_milestone_release_plan.md` as the release strategy.
+1. Use the [rework plan](rework_kickoff.md) for release scope and sequence, and `docs/rework_milestone_release_plan.md` for release rules.
 2. Keep this document as the operational checklist for release rows.
 3. Update a row to `certified` only after the exact config/module set has passed a full VM-backed, cloud-backed, or host-backed run appropriate to the claim.
 4. Leave code-present but unproven rows as `ported-unverified`.
@@ -104,7 +104,7 @@ The artifact audit validates that the primary artifact paths named by release ev
 
 ## 3.5 Post-M1 Research Case-Study Rows
 
-These post-M1 rows demonstrate Continuum as a research and education platform. Their existing `M2-*` row IDs are retained for evidence compatibility, but the prefix does not denote the M2 Provider Parity milestone defined in `docs/rework_milestone_release_plan.md`. They do not participate in the M1 release-notes draft until they have their own publication path, and they must not be described as release-certified until retained runtime evidence exists.
+These post-M1 rows record research and education case studies. The existing `M2-*` row IDs preserve evidence references. Each row requires retained runtime evidence for its exact claim. Use the selected case manifest for the replacement release. [Case manifest](reproduction_inventory.md#br23-projects-and-case-manifest)
 
 | ID | Claim Boundary | Configs / Suites | Required Evidence | Current Status | Next Action |
 | --- | --- | --- | --- | --- | --- |
@@ -194,6 +194,8 @@ Use this template in release notes or a release-evidence document for every row 
 | Limitations |  |
 
 ## 7. Immediate Next Steps
+
+This checklist belongs to the earlier M1 intermediate tagging proposal. Use the [current release packets](rework_kickoff.md#integration-and-release) for the replacement release.
 
 1. Keep the M1 cloud-safe audit fresh on the tree being tagged.
 2. Rerun affected M1 VM-backed rows if runtime, runner, verifier, profile, playbook, or config code changes after the recorded VM-evidence source commit.

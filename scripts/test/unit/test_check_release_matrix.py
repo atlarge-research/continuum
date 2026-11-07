@@ -152,7 +152,7 @@ sh scripts/test/run_smoke_host.sh qemu_openfaas_image_parity
 1. Core/module boundary:
    - Continuum core owns planning, validation, selector/scope resolution,
      module contracts, runtime handoff, state, and evidence contracts.
-   - Provider/software/application stacks are modules.
+   - Infrastructure, software and benchmark procedures are modules.
    - qemu is a provider module and must not be described as core.
 2. Runtime claims require VM-backed or cloud-backed evidence.
 3. Intermediate rework milestones may certify smaller module sets before the
